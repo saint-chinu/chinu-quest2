@@ -287,6 +287,8 @@ html, body {
   text-align: center;
   min-width: 240px;
   max-width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
@@ -357,6 +359,8 @@ html, body {
   flex-wrap: wrap;
   justify-content: center;
   margin-bottom: 16px;
+  max-height: 45vh;
+  overflow-y: auto;
 }
 
 #monster-picker-choices .card {
@@ -559,6 +563,8 @@ html, body {
   flex-direction: column;
   align-items: center;
   gap: 14px;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 #card-reveal-title {
@@ -632,6 +638,8 @@ html, body {
   text-align: center;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   max-width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
 }
 
 #discard-box p {
@@ -644,6 +652,8 @@ html, body {
   gap: 10px;
   flex-wrap: wrap;
   justify-content: center;
+  max-height: 45vh;
+  overflow-y: auto;
 }
 
 #discard-choices .card {
