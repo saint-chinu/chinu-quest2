@@ -20,6 +20,14 @@ const TILE_PAN_THRESHOLD = 3;
 const CPU_PRE_ROLL_MS = 1400;
 const CPU_DECISION_MS = 900;
 
+// Culdcept-accurate land economy: 地価 = 基本地価(tile.price) × レベル倍率 ×
+// 連鎖倍率, 通行料 = 地価 × 通行料倍率. Both multiplier tables only go up to
+// Lv5, so land level is capped there too (レベルアップ can't push past it).
+const LEVEL_CAP = 5;
+// カルドセプト ビギンズ系
+const CHAIN_MULTIPLIER = { 1: 1.0, 2: 1.5, 3: 2.0, 4: 2.5, 5: 3.0 };
+const TOLL_RATE = { 1: 0.2, 2: 0.3, 3: 0.4, 4: 0.6, 5: 0.8 };
+
 export class Game {
   constructor({
     tiles,
@@ -244,9 +252,10 @@ export class Game {
       this.onLog(`${player.name}はチェックポイントに止まった`);
     } else if (tile.type === TileType.LAND && tile.owner != null && tile.owner !== player.id) {
       const owner = this.players.find((p) => p.id === tile.owner);
-      player.currency -= tile.toll;
-      owner.currency += tile.toll;
-      this.onLog(`${player.name}は通行料を支払った (-${tile.toll}G → ${owner.name})`);
+      const toll = this._tollOfTile(tile);
+      player.currency -= toll;
+      owner.currency += toll;
+      this.onLog(`${player.name}は通行料を支払った (-${toll}G → ${owner.name})`);
     }
 
     await delay(200);
@@ -270,7 +279,7 @@ export class Game {
     for (;;) {
       const choice = await this.onLandCommand(this.getTileSummary(tile), {
         canSummon: this._affordableMonsterCards(player).length > 0,
-        canLevelUp: this._ownedTiles(player).length > 0,
+        canLevelUp: this._levelableTiles(player).length > 0,
       });
       if (choice === 'end') return;
 
@@ -290,6 +299,31 @@ export class Game {
 
   _ownedTiles(player) {
     return this.tiles.filter((t) => t.owner === player.id);
+  }
+
+  _levelableTiles(player) {
+    return this._ownedTiles(player).filter((t) => t.level < LEVEL_CAP);
+  }
+
+  /**
+   * 連鎖倍率: how many tiles of this element the owner holds (same-element
+   * lands count as one 連鎖 today, since every element already forms a
+   * single contiguous edge on this board). Unowned tiles preview at 連鎖1.
+   */
+  _chainMultiplier(ownerId, element) {
+    if (ownerId == null) return CHAIN_MULTIPLIER[1];
+    const count = this.tiles.filter((t) => t.owner === ownerId && t.element === element).length;
+    return CHAIN_MULTIPLIER[Math.min(Math.max(count, 1), LEVEL_CAP)];
+  }
+
+  /** 地価 = 基本地価 × レベル倍率 × 連鎖倍率 */
+  _landValueOfTile(tile) {
+    return Math.round(tile.price * tile.level * this._chainMultiplier(tile.owner, tile.element));
+  }
+
+  /** 通行料 = 地価 × 通行料倍率 */
+  _tollOfTile(tile) {
+    return Math.round(this._landValueOfTile(tile) * TOLL_RATE[tile.level]);
   }
 
   /** Returns true if a summon/invade/swap actually went through (vs. being cancelled). */
@@ -321,15 +355,15 @@ export class Game {
     return true;
   }
 
-  /** Returns true if a level-up actually went through (vs. no owned tiles / cancelled / unaffordable). */
+  /** Returns true if a level-up actually went through (vs. no levelable tiles / cancelled / unaffordable). */
   async _humanLevelUpFlow(player) {
-    const owned = this._ownedTiles(player);
+    const owned = this._levelableTiles(player);
     if (owned.length === 0) return false;
 
     const targetId = await this.onPickLandForLevelUp(owned.map((t) => this.getTileSummary(t)));
     if (targetId == null) return false;
     const target = this.tiles.find((t) => t.id === targetId);
-    if (!target) return false;
+    if (!target || target.level >= LEVEL_CAP) return false;
 
     const cost = target.price * target.level;
     const confirmed = await this.onConfirmAction({ actionType: 'levelup', cost, tile: this.getTileSummary(target) });
@@ -341,7 +375,6 @@ export class Game {
 
     player.currency -= cost;
     target.level += 1;
-    target.toll = target.baseToll * target.level;
     this.onLog(`${player.name}は土地をLv${target.level}にアップグレードした (-${cost}G)`);
     this._notifyState();
     return true;
@@ -423,7 +456,8 @@ export class Game {
       type: tile.type,
       element: tile.element,
       level: tile.level,
-      toll: tile.toll,
+      landValue: this._landValueOfTile(tile),
+      toll: this._tollOfTile(tile),
       price: tile.price,
       ownerName: owner ? owner.name : null,
       ownerColor: owner ? owner.color : null,
@@ -452,17 +486,11 @@ export class Game {
     this.rollDice(steps);
   }
 
-  /**
-   * Culdcept has no land resale market - a land's worth is purely the toll
-   * income it can extract from opponents, which is exactly what `toll`
-   * already tracks (base rate x current level). Summing that, rather than
-   * the flat purchase `price`, means leveling up actually raises the
-   * displayed total assets instead of only ever costing currency.
-   */
+  /** Total assets' land component: sum of 地価 (see _landValueOfTile) across owned tiles. */
   _landValueOf(playerId) {
     return this.tiles
       .filter((t) => t.owner === playerId)
-      .reduce((sum, t) => sum + (t.toll || 0), 0);
+      .reduce((sum, t) => sum + this._landValueOfTile(t), 0);
   }
 
   _summonCountOf(playerId) {

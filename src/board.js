@@ -48,7 +48,6 @@ export function createBoard({ width = 6, height = 5 } = {}) {
     else if (i % 5 === 0) type = TileType.EVENT;
 
     const isLand = type === TileType.LAND;
-    const baseToll = isLand ? 20 + (i % 4) * 10 : null;
     const position = {
       x: (gx - offsetX) * SPACING,
       z: (gz - offsetZ) * SPACING,
@@ -64,9 +63,9 @@ export function createBoard({ width = 6, height = 5 } = {}) {
       owner: isLand ? null : undefined,
       unit: isLand ? null : undefined,
       level: isLand ? 1 : undefined,
+      // 基本地価 (base land price) - see Game._landValueOfTile/_tollOfTile
+      // for how level/chain multipliers turn this into 地価 and 通行料.
       price: isLand ? 100 + (i % 4) * 50 : null,
-      baseToll,
-      toll: baseToll,
     };
   });
 }

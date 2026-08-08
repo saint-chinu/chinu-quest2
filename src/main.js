@@ -68,7 +68,7 @@ function tileSummaryText(tile) {
     lines.push(`属性: ${ELEMENT_LABEL[tile.element]} / Lv${tile.level}`);
     lines.push(tile.ownerName ? `所有者: ${tile.ownerName}` : '所有者: なし');
     if (tile.unitName) lines.push(`配置モンスター: ${tile.unitName} (ATK${tile.unitAtk}/HP${tile.unitHp})`);
-    lines.push(`通行料: ${tile.toll}G`);
+    lines.push(`地価: ${tile.landValue}G / 通行料: ${tile.toll}G`);
   }
   return lines.join('\n');
 }
