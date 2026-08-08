@@ -1,6 +1,8 @@
 import { TileType } from './board.js';
 import { PIECE_REST_Y } from './scene.js';
-import { CardType, Deck } from './cards.js';
+import { CardType, CARD_COLOR, Deck } from './cards.js';
+import { buildStarterExtraCards } from './battleCards.js';
+import { createFieldUnit, resolveBattle } from './battle.js';
 import { tween, easeInOutQuad, delay } from './utils.js';
 
 const STEP_DURATION_MS = 300;
@@ -24,30 +26,36 @@ export class Game {
     scene,
     onLog,
     onStateChange,
-    onPurchasePrompt,
     onCardReveal,
     onDiscardChoice,
     onSpellUse,
     onCpuRoll,
     onMoveComplete,
+    onLandCommand,
+    onPickMonsterCard,
+    onConfirmAction,
+    onTileInfo,
   }) {
     this.tiles = tiles;
     this.scene = scene;
     this.onLog = onLog;
     this.onStateChange = onStateChange;
-    this.onPurchasePrompt = onPurchasePrompt;
     this.onCardReveal = onCardReveal;
     this.onDiscardChoice = onDiscardChoice;
     this.onSpellUse = onSpellUse;
     this.onCpuRoll = onCpuRoll;
     this.onMoveComplete = onMoveComplete;
+    this.onLandCommand = onLandCommand;
+    this.onPickMonsterCard = onPickMonsterCard;
+    this.onConfirmAction = onConfirmAction;
+    this.onTileInfo = onTileInfo;
 
     // allianceId is unused today (only 2 players, no alliance mode yet) but
     // the state payload already carries it so the UI's slot layout - which
     // groups same-alliance players together - is ready when that lands.
     this.players = [
-      { id: 0, name: 'プレイヤー', isCPU: false, currency: 500, tileIndex: 0, color: 0x2ec4b6, allianceId: null, deck: new Deck(), hand: [], spellUsedThisTurn: false },
-      { id: 1, name: 'CPU', isCPU: true, currency: 500, tileIndex: 0, color: 0xe63946, allianceId: null, deck: new Deck(), hand: [], spellUsedThisTurn: false },
+      { id: 0, name: 'プレイヤー', isCPU: false, currency: 500, tileIndex: 0, color: 0x2ec4b6, allianceId: null, deck: new Deck(buildStarterExtraCards()), hand: [], spellUsedThisTurn: false },
+      { id: 1, name: 'CPU', isCPU: true, currency: 500, tileIndex: 0, color: 0xe63946, allianceId: null, deck: new Deck(buildStarterExtraCards()), hand: [], spellUsedThisTurn: false },
     ];
     this.currentPlayerIndex = 0;
     this.isBusy = false;
@@ -115,7 +123,12 @@ export class Game {
     this._notifyState();
   }
 
-  /** `steps` is the already-determined dice result (from the UI's spin-and-stop, or CPU's own roll). */
+  /**
+   * `steps` is the already-determined dice result (from the UI's
+   * spin-and-stop, or CPU's own roll). Turn order: ① move ② resolve a
+   * special tile (goal/checkpoint) if landed on one ③ land command menu
+   * if landed on a land tile.
+   */
   async rollDice(steps) {
     if (this.isBusy || !this.awaitingRoll) return;
     this.isBusy = true;
@@ -127,7 +140,8 @@ export class Game {
 
     await this._movePlayer(player, steps);
     this.onMoveComplete?.();
-    await this._resolveTile(player);
+    await this._resolveSpecialTile(player);
+    await this._runLandCommand(player);
     await delay(400);
 
     this._nextTurn();
@@ -206,51 +220,186 @@ export class Game {
     });
   }
 
-  async _resolveTile(player) {
+  /** ② Goal/checkpoint handling, plus the toll auto-charge for stopping on someone else's land. */
+  async _resolveSpecialTile(player) {
     const tile = this.tiles[player.tileIndex];
 
     if (tile.type === TileType.START) {
       player.currency += START_BONUS;
-      this.onLog(`${player.name}はスタートに到着！ +${START_BONUS}`);
-    } else if (tile.type === TileType.LAND) {
-      await this._resolveLand(player, tile);
+      this.onLog(`${player.name}はゴールに到着！ +${START_BONUS}`);
     } else if (tile.type === TileType.EVENT) {
-      this.onLog(`${player.name}はイベントマスに止まった`);
-    }
-
-    await delay(200);
-  }
-
-  async _resolveLand(player, tile) {
-    if (tile.owner === null || tile.owner === undefined) {
-      const canAfford = player.currency >= tile.price;
-      let wantsToBuy;
-      if (player.isCPU) {
-        await delay(CPU_DECISION_MS);
-        wantsToBuy = canAfford;
-      } else {
-        wantsToBuy = canAfford && (await this.onPurchasePrompt(tile));
-      }
-
-      if (wantsToBuy) {
-        player.currency -= tile.price;
-        tile.owner = player.id;
-        this._paintTile(tile, player.color);
-        this.onLog(`${player.name}は土地を購入 (-${tile.price}G)`);
-      }
-      return;
-    }
-
-    if (tile.owner !== player.id) {
+      this.onLog(`${player.name}はチェックポイントに止まった`);
+    } else if (tile.type === TileType.LAND && tile.owner != null && tile.owner !== player.id) {
       const owner = this.players.find((p) => p.id === tile.owner);
       player.currency -= tile.toll;
       owner.currency += tile.toll;
       this.onLog(`${player.name}は通行料を支払った (-${tile.toll}G → ${owner.name})`);
     }
+
+    await delay(200);
   }
 
-  _paintTile(tile, color) {
-    tile.mesh.material.color.setHex(color);
+  /** ③ The A(summon/invade/swap) / B(level up) / C(info) menu for whichever land tile was landed on. */
+  async _runLandCommand(player) {
+    const tile = this.tiles[player.tileIndex];
+    if (tile.type !== TileType.LAND) return;
+
+    if (player.isCPU) {
+      await this._cpuLandCommand(player, tile);
+      return;
+    }
+
+    // Loops so the player can e.g. check info, then summon, before ending.
+    for (;;) {
+      const choice = await this.onLandCommand(this._tileSummary(tile), {
+        canSummon: this._affordableMonsterCards(player).length > 0,
+        canLevelUp: tile.owner === player.id,
+      });
+      if (choice === 'end') break;
+      if (choice === 'summon') await this._humanSummonFlow(player, tile);
+      else if (choice === 'levelup') await this._humanLevelUpFlow(player, tile);
+      else if (choice === 'info') await this.onTileInfo(this._tileSummary(tile));
+    }
+  }
+
+  _affordableMonsterCards(player) {
+    return player.hand.filter((c) => c.type === CardType.MONSTER && c.cost <= player.currency);
+  }
+
+  async _humanSummonFlow(player, tile) {
+    const options = this._affordableMonsterCards(player);
+    if (options.length === 0) {
+      this.onLog('召喚できるモンスターカードがありません');
+      return;
+    }
+
+    const card = await this.onPickMonsterCard(options);
+    if (!card) return;
+
+    const actionType = tile.owner == null ? 'summon' : tile.owner === player.id ? 'swap' : 'invade';
+    const confirmed = await this.onConfirmAction({ actionType, card, cost: card.cost, tile: this._tileSummary(tile) });
+    if (!confirmed) return;
+
+    player.hand = player.hand.filter((c) => c.id !== card.id);
+    player.deck.discard(card);
+    player.currency -= card.cost;
+
+    if (actionType === 'summon' || actionType === 'swap') {
+      this._placeUnit(tile, player, card);
+      this.onLog(`${player.name}は${card.name}を${actionType === 'summon' ? '召喚' : '入れ替え'}した (-${card.cost}G)`);
+    } else {
+      await this._runInvasion(player, tile, card);
+    }
+    this._notifyState();
+  }
+
+  async _humanLevelUpFlow(player, tile) {
+    if (tile.owner !== player.id) return;
+    const cost = tile.price * tile.level;
+    const confirmed = await this.onConfirmAction({ actionType: 'levelup', cost, tile: this._tileSummary(tile) });
+    if (!confirmed) return;
+    if (player.currency < cost) {
+      this.onLog('ゴールドが足りません');
+      return;
+    }
+
+    player.currency -= cost;
+    tile.level += 1;
+    tile.toll = tile.baseToll * tile.level;
+    this.onLog(`${player.name}は土地をLv${tile.level}にアップグレードした (-${cost}G)`);
+    this._notifyState();
+  }
+
+  async _cpuLandCommand(player, tile) {
+    await delay(CPU_DECISION_MS);
+    if (tile.owner === player.id) return; // CPU doesn't bother swapping its own land yet
+
+    const options = this._affordableMonsterCards(player);
+    if (options.length === 0) return;
+    const card = options[0];
+    const actionType = tile.owner == null ? 'summon' : 'invade';
+
+    player.hand = player.hand.filter((c) => c.id !== card.id);
+    player.deck.discard(card);
+    player.currency -= card.cost;
+
+    if (actionType === 'summon') {
+      this._placeUnit(tile, player, card);
+      this.onLog(`${player.name}は${card.name}を召喚した (-${card.cost}G)`);
+    } else {
+      await this._runInvasion(player, tile, card);
+    }
+    this._notifyState();
+  }
+
+  async _runInvasion(player, tile, card) {
+    const defenderPlayer = this.players.find((p) => p.id === tile.owner);
+    const attackerUnit = createFieldUnit(card, player.id);
+    const defenderUnit = tile.unit;
+    const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter());
+    result.log.forEach((line) => this.onLog(line));
+
+    if (!result.defenderSurvived) {
+      if (result.attackerSurvived) {
+        tile.unit = attackerUnit;
+        tile.owner = player.id;
+        this._paintTile(tile, player.color);
+        this.onLog(`${player.name}が土地を奪取した！`);
+      } else {
+        tile.unit = null;
+        tile.owner = null;
+        this._repaintTileToElement(tile);
+        this.onLog('両者相打ちで土地は無人になった');
+      }
+    } else {
+      this.onLog(`${defenderPlayer.name}の${defenderUnit.def.name}が防衛に成功した`);
+    }
+  }
+
+  _placeUnit(tile, player, card) {
+    tile.unit = createFieldUnit(card, player.id);
+    tile.owner = player.id;
+    this._paintTile(tile, player.color);
+  }
+
+  _goldAdapter() {
+    const findPlayer = (id) => this.players.find((p) => p.id === id);
+    return {
+      add: (ownerId, amount) => {
+        const p = findPlayer(ownerId);
+        if (p) p.currency += amount;
+      },
+      transfer: (fromId, toId, amount) => {
+        const from = findPlayer(fromId);
+        const to = findPlayer(toId);
+        if (from) from.currency -= amount;
+        if (to) to.currency += amount;
+      },
+    };
+  }
+
+  _tileSummary(tile) {
+    const owner = tile.owner != null ? this.players.find((p) => p.id === tile.owner) : null;
+    return {
+      type: tile.type,
+      element: tile.element,
+      level: tile.level,
+      toll: tile.toll,
+      price: tile.price,
+      ownerName: owner ? owner.name : null,
+      ownerColor: owner ? owner.color : null,
+      unitName: tile.unit ? tile.unit.def.name : null,
+      unitAtk: tile.unit ? tile.unit.def.atk : null,
+      unitHp: tile.unit ? tile.unit.currentHp ?? tile.unit.def.hp : null,
+    };
+  }
+
+  _paintTile(tile, colorHexInt) {
+    tile.mesh.material.color.setHex(colorHexInt);
+  }
+
+  _repaintTileToElement(tile) {
+    tile.mesh.material.color.set(CARD_COLOR[tile.element]);
   }
 
   _nextTurn() {

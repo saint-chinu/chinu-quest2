@@ -1,3 +1,5 @@
+import { Element } from './cards.js';
+
 export const TileType = {
   START: 'start',
   LAND: 'land',
@@ -5,6 +7,11 @@ export const TileType = {
 };
 
 const SPACING = 3.2;
+
+// Land element is fixed by column (gridX) and never changes outside of
+// special effects - cycling through all 4 elements keeps roughly equal
+// counts of each as the map grows.
+const COLUMN_ELEMENTS = [Element.FIRE, Element.WATER, Element.WIND, Element.EARTH];
 
 /**
  * Walks the perimeter of a width x height grid (no diagonals, no duplicate
@@ -29,6 +36,9 @@ export function createBoard({ width = 6, height = 5 } = {}) {
     if (i === 0) type = TileType.START;
     else if (i % 5 === 0) type = TileType.EVENT;
 
+    const isLand = type === TileType.LAND;
+    const baseToll = isLand ? 20 + (i % 4) * 10 : null;
+
     return {
       id: i,
       type,
@@ -38,9 +48,13 @@ export function createBoard({ width = 6, height = 5 } = {}) {
         x: (gx - offsetX) * SPACING,
         z: (gz - offsetZ) * SPACING,
       },
-      owner: type === TileType.LAND ? null : undefined,
-      price: type === TileType.LAND ? 100 + (i % 4) * 50 : null,
-      toll: type === TileType.LAND ? 20 + (i % 4) * 10 : null,
+      element: isLand ? COLUMN_ELEMENTS[gx % COLUMN_ELEMENTS.length] : null,
+      owner: isLand ? null : undefined,
+      unit: isLand ? null : undefined,
+      level: isLand ? 1 : undefined,
+      price: isLand ? 100 + (i % 4) * 50 : null,
+      baseToll,
+      toll: baseToll,
     };
   });
 }

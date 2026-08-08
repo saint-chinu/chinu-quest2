@@ -27,10 +27,12 @@ export const CARD_COLOR = {
   spell: '#8e5ce6',
 };
 
-// 40-card book: 6 monsters per element (24) + 8 gear + 8 spells.
-const MONSTERS_PER_ELEMENT = 6;
-const GEAR_COUNT = 8;
-const SPELL_COUNT = 8;
+// 40-card book total. Real, named cards (see battleCards.js) take up some
+// of each category's slots; the rest are generic placeholders with modest
+// baseline stats so every monster in the deck is actually summonable.
+const DEFAULT_MONSTER_COUNT = 24;
+const DEFAULT_GEAR_COUNT = 8;
+const DEFAULT_SPELL_COUNT = 8;
 
 let cardIdCounter = 0;
 function nextId() {
@@ -38,25 +40,41 @@ function nextId() {
   return `card-${cardIdCounter}`;
 }
 
-function buildCardPool() {
+function buildCardPool({
+  monsterCount = DEFAULT_MONSTER_COUNT,
+  gearCount = DEFAULT_GEAR_COUNT,
+  spellCount = DEFAULT_SPELL_COUNT,
+} = {}) {
   const cards = [];
+  const elements = Object.values(Element);
 
-  for (const element of Object.values(Element)) {
-    for (let i = 1; i <= MONSTERS_PER_ELEMENT; i++) {
-      cards.push({
-        id: nextId(),
-        type: CardType.MONSTER,
-        element,
-        name: `${ELEMENT_LABEL[element]}のモンスター${i}`,
-      });
-    }
+  for (let i = 0; i < monsterCount; i++) {
+    const element = elements[i % elements.length];
+    const rank = Math.floor(i / elements.length) + 1;
+    cards.push({
+      id: nextId(),
+      type: CardType.MONSTER,
+      element,
+      name: `${ELEMENT_LABEL[element]}のモンスター${rank}`,
+      atk: 10 + rank * 3,
+      hp: 15 + rank * 3,
+      cost: 15 + rank * 5,
+    });
   }
 
-  for (let i = 1; i <= GEAR_COUNT; i++) {
-    cards.push({ id: nextId(), type: CardType.GEAR, element: null, name: `武器防具${i}` });
+  for (let i = 1; i <= gearCount; i++) {
+    cards.push({
+      id: nextId(),
+      type: CardType.GEAR,
+      element: null,
+      name: `武器防具${i}`,
+      atkBonus: 5,
+      hpBonus: 5,
+      cost: 10,
+    });
   }
 
-  for (let i = 1; i <= SPELL_COUNT; i++) {
+  for (let i = 1; i <= spellCount; i++) {
     cards.push({ id: nextId(), type: CardType.SPELL, element: null, name: `スペル${i}` });
   }
 
@@ -73,8 +91,15 @@ function shuffle(cards) {
 }
 
 export class Deck {
-  constructor() {
-    this.drawPile = shuffle(buildCardPool());
+  /** `extraCards` are mixed in alongside the generic pool, trimming an equal number of generic slots per category so the total stays fixed. */
+  constructor(extraCards = []) {
+    const countOf = (type) => extraCards.filter((c) => c.type === type).length;
+    const generic = buildCardPool({
+      monsterCount: DEFAULT_MONSTER_COUNT - countOf(CardType.MONSTER),
+      gearCount: DEFAULT_GEAR_COUNT - countOf(CardType.GEAR),
+      spellCount: DEFAULT_SPELL_COUNT - countOf(CardType.SPELL),
+    });
+    this.drawPile = shuffle([...generic, ...extraCards]);
     this.discardPile = [];
   }
 

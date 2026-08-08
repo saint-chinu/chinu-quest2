@@ -247,7 +247,10 @@ html, body {
   }
 }
 
-#purchase-modal {
+#land-command-modal,
+#monster-picker-modal,
+#confirm-modal,
+#tile-info-modal {
   position: absolute;
   inset: 0;
   z-index: 20;
@@ -257,47 +260,91 @@ html, body {
   background: rgba(0, 0, 0, 0.5);
 }
 
-#purchase-modal.hidden {
+#land-command-modal.hidden,
+#monster-picker-modal.hidden,
+#confirm-modal.hidden,
+#tile-info-modal.hidden {
   display: none;
 }
 
-#purchase-box {
+#land-command-box,
+#monster-picker-box,
+#confirm-box,
+#tile-info-box {
   background: #22223b;
   border-radius: 12px;
   padding: 20px 24px;
   color: #fff;
   text-align: center;
   min-width: 240px;
+  max-width: 90%;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
-#purchase-text {
+#land-command-title,
+#confirm-text,
+#tile-info-text {
   margin-bottom: 16px;
-  font-size: 15px;
+  font-size: 14px;
+  white-space: pre-line;
 }
 
-#purchase-actions {
+#land-command-actions,
+#confirm-actions {
   display: flex;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 10px;
   justify-content: center;
 }
 
-#purchase-actions button {
+#land-command-actions button,
+#confirm-actions button,
+#monster-picker-cancel,
+#tile-info-close {
   border: none;
   border-radius: 8px;
   padding: 10px 18px;
   font-size: 14px;
   font-weight: bold;
+  background: #444;
+  color: #fff;
 }
 
-#purchase-yes {
+#land-command-actions button:disabled {
+  opacity: 0.4;
+}
+
+#confirm-yes {
   background: #2ec4b6;
   color: #06231f;
 }
 
-#purchase-no {
+#confirm-no {
   background: #555;
-  color: #fff;
+}
+
+#monster-picker-choices {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+#monster-picker-choices .card {
+  cursor: pointer;
+  width: 74px;
+  height: 102px;
+  font-size: 11px;
+}
+
+@keyframes card-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.15; }
+}
+
+.card.blinking {
+  animation: card-blink 300ms ease-in-out 2;
 }
 
 #card-reveal-modal,

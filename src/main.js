@@ -15,10 +15,22 @@ const playerPanelEls = [
 const logEl = document.getElementById('log');
 const handPanel = document.getElementById('hand-panel');
 const diceButton = document.getElementById('dice-button');
-const purchaseModal = document.getElementById('purchase-modal');
-const purchaseText = document.getElementById('purchase-text');
-const purchaseYes = document.getElementById('purchase-yes');
-const purchaseNo = document.getElementById('purchase-no');
+const landCommandModal = document.getElementById('land-command-modal');
+const landCommandTitle = document.getElementById('land-command-title');
+const landCommandSummon = document.getElementById('land-command-summon');
+const landCommandLevelup = document.getElementById('land-command-levelup');
+const landCommandInfo = document.getElementById('land-command-info');
+const landCommandEnd = document.getElementById('land-command-end');
+const monsterPickerModal = document.getElementById('monster-picker-modal');
+const monsterPickerChoices = document.getElementById('monster-picker-choices');
+const monsterPickerCancel = document.getElementById('monster-picker-cancel');
+const confirmModal = document.getElementById('confirm-modal');
+const confirmText = document.getElementById('confirm-text');
+const confirmYes = document.getElementById('confirm-yes');
+const confirmNo = document.getElementById('confirm-no');
+const tileInfoModal = document.getElementById('tile-info-modal');
+const tileInfoText = document.getElementById('tile-info-text');
+const tileInfoClose = document.getElementById('tile-info-close');
 const cardRevealModal = document.getElementById('card-reveal-modal');
 const cardRevealCard = document.getElementById('card-reveal-card');
 const discardModal = document.getElementById('discard-modal');
@@ -33,15 +45,96 @@ const centerHandEl = document.getElementById('center-hand');
 const spellEffectModal = document.getElementById('spell-effect-modal');
 const spellEffectText = document.getElementById('spell-effect-text');
 
-function promptPurchase(tile) {
+const BLINK_MS = 600;
+
+const TILE_TYPE_LABEL = { start: 'ゴール', land: '土地', event: 'チェックポイント' };
+
+function tileSummaryText(tile) {
+  const lines = [`【${TILE_TYPE_LABEL[tile.type]}】`];
+  if (tile.type === 'land') {
+    lines.push(`属性: ${ELEMENT_LABEL[tile.element]} / Lv${tile.level}`);
+    lines.push(tile.ownerName ? `所有者: ${tile.ownerName}` : '所有者: なし');
+    if (tile.unitName) lines.push(`配置モンスター: ${tile.unitName} (ATK${tile.unitAtk}/HP${tile.unitHp})`);
+    lines.push(`通行料: ${tile.toll}G`);
+  }
+  return lines.join('\n');
+}
+
+function promptLandCommand(tile, { canSummon, canLevelUp }) {
   return new Promise((resolve) => {
-    purchaseText.textContent = `この土地を購入しますか？ (${tile.price}G)`;
-    purchaseModal.classList.remove('hidden');
+    landCommandTitle.textContent = tileSummaryText(tile);
+    landCommandSummon.disabled = !canSummon;
+    landCommandLevelup.disabled = !canLevelUp;
+    landCommandModal.classList.remove('hidden');
 
     function cleanup(result) {
-      purchaseModal.classList.add('hidden');
-      purchaseYes.removeEventListener('click', onYes);
-      purchaseNo.removeEventListener('click', onNo);
+      landCommandModal.classList.add('hidden');
+      landCommandSummon.removeEventListener('click', onSummon);
+      landCommandLevelup.removeEventListener('click', onLevelup);
+      landCommandInfo.removeEventListener('click', onInfo);
+      landCommandEnd.removeEventListener('click', onEnd);
+      resolve(result);
+    }
+    function onSummon() {
+      cleanup('summon');
+    }
+    function onLevelup() {
+      cleanup('levelup');
+    }
+    function onInfo() {
+      cleanup('info');
+    }
+    function onEnd() {
+      cleanup('end');
+    }
+    landCommandSummon.addEventListener('click', onSummon);
+    landCommandLevelup.addEventListener('click', onLevelup);
+    landCommandInfo.addEventListener('click', onInfo);
+    landCommandEnd.addEventListener('click', onEnd);
+  });
+}
+
+/** Shows the hand's monster cards; clicking one blinks it twice before resolving. */
+function promptPickMonsterCard(options) {
+  return new Promise((resolve) => {
+    monsterPickerChoices.replaceChildren();
+    for (const card of options) {
+      const el = document.createElement('div');
+      el.className = 'card';
+      renderCardEl(el, card);
+      el.addEventListener('click', () => {
+        el.classList.add('blinking');
+        setTimeout(() => {
+          monsterPickerModal.classList.add('hidden');
+          resolve(card);
+        }, BLINK_MS);
+      });
+      monsterPickerChoices.appendChild(el);
+    }
+    monsterPickerModal.classList.remove('hidden');
+
+    function onCancel() {
+      monsterPickerModal.classList.add('hidden');
+      monsterPickerCancel.removeEventListener('click', onCancel);
+      resolve(null);
+    }
+    monsterPickerCancel.addEventListener('click', onCancel);
+  });
+}
+
+const ACTION_LABEL = { summon: '召喚', invade: '侵略', swap: '入れ替え', levelup: 'レベルアップ' };
+
+function promptConfirmAction({ actionType, card, cost, tile }) {
+  return new Promise((resolve) => {
+    const subject = card ? `「${card.name}」で` : '';
+    const extra = actionType === 'levelup' && tile ? `（Lv${tile.level}→Lv${tile.level + 1}）` : '';
+    confirmText.textContent = `${subject}${ACTION_LABEL[actionType]}${extra}しますか？ コスト${cost}G`;
+    confirmModal.classList.remove('hidden');
+
+    function cleanup(result) {
+      confirmModal.classList.add('hidden');
+      confirmYes.removeEventListener('click', onYes);
+      confirmNo.removeEventListener('click', onNo);
       resolve(result);
     }
     function onYes() {
@@ -50,8 +143,22 @@ function promptPurchase(tile) {
     function onNo() {
       cleanup(false);
     }
-    purchaseYes.addEventListener('click', onYes);
-    purchaseNo.addEventListener('click', onNo);
+    confirmYes.addEventListener('click', onYes);
+    confirmNo.addEventListener('click', onNo);
+  });
+}
+
+function promptTileInfo(tile) {
+  return new Promise((resolve) => {
+    tileInfoText.textContent = tileSummaryText(tile);
+    tileInfoModal.classList.remove('hidden');
+
+    function onClose() {
+      tileInfoModal.classList.add('hidden');
+      tileInfoClose.removeEventListener('click', onClose);
+      resolve();
+    }
+    tileInfoClose.addEventListener('click', onClose);
   });
 }
 
@@ -179,7 +286,10 @@ function renderCenterHand(hand, isCPU, spellUsable) {
       const isSpell = card.type === CardType.SPELL;
       const canUseThis = isSpell && spellUsable;
       el.addEventListener('click', () => {
-        showCardDetail(card, canUseThis ? () => game.useSpell(card) : null);
+        showCardDetail(card, canUseThis ? () => {
+          el.classList.add('blinking');
+          setTimeout(() => game.useSpell(card), BLINK_MS);
+        } : null);
       });
     }
 
@@ -406,12 +516,15 @@ const game = new Game({
       renderCenterHand(centerHand, currentPlayerIsCPU, !spellUsedThisTurn);
     }
   },
-  onPurchasePrompt: promptPurchase,
   onCardReveal: promptCardReveal,
   onDiscardChoice: promptDiscardChoice,
   onSpellUse: promptSpellUse,
   onCpuRoll: cpuRollDice,
   onMoveComplete,
+  onLandCommand: promptLandCommand,
+  onPickMonsterCard: promptPickMonsterCard,
+  onConfirmAction: promptConfirmAction,
+  onTileInfo: promptTileInfo,
 });
 
 game.init();

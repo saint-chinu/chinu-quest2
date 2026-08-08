@@ -30,13 +30,37 @@
         <div id="center-hand"></div>
       </div>
       <div id="rotate-notice">画面を横向きにしてください</div>
-      <div id="purchase-modal" class="hidden">
-        <div id="purchase-box">
-          <p id="purchase-text"></p>
-          <div id="purchase-actions">
-            <button id="purchase-yes">購入する</button>
-            <button id="purchase-no">スキップ</button>
+      <div id="land-command-modal" class="hidden">
+        <div id="land-command-box">
+          <p id="land-command-title"></p>
+          <div id="land-command-actions">
+            <button id="land-command-summon">A: 召喚／侵略</button>
+            <button id="land-command-levelup">B: 土地レベルアップ</button>
+            <button id="land-command-info">C: 土地情報</button>
+            <button id="land-command-end">ターン終了</button>
           </div>
+        </div>
+      </div>
+      <div id="monster-picker-modal" class="hidden">
+        <div id="monster-picker-box">
+          <p>モンスターカードを選んでください</p>
+          <div id="monster-picker-choices"></div>
+          <button id="monster-picker-cancel">やめる</button>
+        </div>
+      </div>
+      <div id="confirm-modal" class="hidden">
+        <div id="confirm-box">
+          <p id="confirm-text"></p>
+          <div id="confirm-actions">
+            <button id="confirm-yes">はい</button>
+            <button id="confirm-no">いいえ</button>
+          </div>
+        </div>
+      </div>
+      <div id="tile-info-modal" class="hidden">
+        <div id="tile-info-box">
+          <p id="tile-info-text"></p>
+          <button id="tile-info-close">閉じる</button>
         </div>
       </div>
       <div id="card-reveal-modal" class="hidden">

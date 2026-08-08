@@ -1,4 +1,4 @@
-import { WEAK_AGAINST } from './battleCards.js';
+import { WEAK_AGAINST, catalogIdOf } from './battleCards.js';
 
 /** A monster once it's on the board: base stats plus equipped items/curses. */
 export function createFieldUnit(monsterDef, ownerId) {
@@ -47,7 +47,7 @@ function incomingDamageMultiplier(defenderUnit, attackerElement) {
   const weakness = WEAK_AGAINST[defenderUnit.def.element];
   const isWeaknessHit = attackerElement === weakness;
 
-  if (defenderUnit.def.id === 'minatoJoshi') {
+  if (catalogIdOf(defenderUnit.def) === 'minatoJoshi') {
     return isWeaknessHit ? 1.2 : 0.8;
   }
   return isWeaknessHit ? 1.2 : 1.0;
@@ -97,21 +97,21 @@ export function resolveBattle(attacker, defender, gold) {
   const attackerSurvived = attacker.currentHp > 0;
   const defenderSurvived = defender.currentHp > 0;
 
-  if (attacker.def.id === 'minatoJoshi' && dmgToDefender > 0) {
+  if (catalogIdOf(attacker.def) === 'minatoJoshi' && dmgToDefender > 0) {
     gold.transfer(defender.ownerId, attacker.ownerId, dmgToDefender);
     log.push(`${attacker.def.name}が${dmgToDefender}Gを奪った`);
   }
-  if (defender.def.id === 'minatoJoshi' && dmgToAttacker > 0) {
+  if (catalogIdOf(defender.def) === 'minatoJoshi' && dmgToAttacker > 0) {
     gold.transfer(attacker.ownerId, defender.ownerId, dmgToAttacker);
     log.push(`${defender.def.name}が${dmgToAttacker}Gを奪った`);
   }
 
-  if (defenderSurvived && defender.def.id === 'salarymander') {
+  if (defenderSurvived && catalogIdOf(defender.def) === 'salarymander') {
     const bonus = defender.currentHp * 4;
     gold.add(defender.ownerId, bonus);
     log.push(`${defender.def.name}は土地に生き残り${bonus}Gを獲得`);
   }
-  if (attackerSurvived && attacker.def.id === 'salarymander') {
+  if (attackerSurvived && catalogIdOf(attacker.def) === 'salarymander') {
     const bonus = attacker.currentHp * 4;
     gold.add(attacker.ownerId, bonus);
     log.push(`${attacker.def.name}は土地に生き残り${bonus}Gを獲得`);

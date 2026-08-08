@@ -1,10 +1,10 @@
 import * as THREE from 'three';
 import { TileType } from './board.js';
+import { CARD_COLOR } from './cards.js';
 import { tween, easeInOutQuad } from './utils.js';
 
 const TILE_COLOR = {
   [TileType.START]: 0xffd166,
-  [TileType.LAND]: 0x4a90d9,
   [TileType.EVENT]: 0x9b5de5,
 };
 
@@ -155,7 +155,8 @@ export class GameScene {
   buildBoard(tiles) {
     const tileGeo = new THREE.BoxGeometry(2.6, 0.4, 2.6);
     for (const tile of tiles) {
-      const mat = new THREE.MeshStandardMaterial({ color: TILE_COLOR[tile.type] });
+      const color = tile.type === TileType.LAND ? CARD_COLOR[tile.element] : TILE_COLOR[tile.type];
+      const mat = new THREE.MeshStandardMaterial({ color });
       const mesh = new THREE.Mesh(tileGeo, mat);
       mesh.position.set(tile.position.x, -0.2, tile.position.z);
       this.scene.add(mesh);

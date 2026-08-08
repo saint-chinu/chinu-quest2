@@ -17,8 +17,9 @@ export const ItemType = {
 
 /**
  * Named monster catalog - unlike the generic placeholder monsters in
- * cards.js, these carry real stats and battle abilities. `id` doubles as
- * the ability lookup key in battle.js.
+ * cards.js, these carry real stats and battle abilities. `id` here is the
+ * catalog/ability-lookup key; deck copies get their own unique instance
+ * `id` (see duplicateForDeck) plus a `catalogId` pointing back to this.
  */
 export const MONSTER_CATALOG = {
   salarymander: {
@@ -37,8 +38,6 @@ export const MONSTER_CATALOG = {
     element: Element.WATER,
     atk: 15,
     hp: 30,
-    // Not specified by design - estimated from salarymander's stat-total-
-    // to-cost ratio (50/50). Flagged for confirmation.
     cost: 45,
   },
 };
@@ -75,3 +74,31 @@ export const SPELL_CATALOG = {
     addedHp: 20,
   },
 };
+
+let instanceCounter = 0;
+
+/** N unique deck/hand copies of a catalog definition, each with its own id. */
+function duplicateForDeck(def, count) {
+  const copies = [];
+  for (let i = 0; i < count; i++) {
+    instanceCounter += 1;
+    copies.push({ ...def, id: `${def.id}-${instanceCounter}`, catalogId: def.id });
+  }
+  return copies;
+}
+
+/** The real cards to mix into every player's starting book, 2 copies each. */
+export function buildStarterExtraCards() {
+  return [
+    ...duplicateForDeck(MONSTER_CATALOG.salarymander, 2),
+    ...duplicateForDeck(MONSTER_CATALOG.minatoJoshi, 2),
+    ...duplicateForDeck(ITEM_CATALOG.knife, 2),
+    ...duplicateForDeck(ITEM_CATALOG.potLid, 2),
+    ...duplicateForDeck(SPELL_CATALOG.manjaro, 2),
+  ];
+}
+
+/** The stable catalog key for ability/effect lookups, for both raw catalog defs and deck copies. */
+export function catalogIdOf(def) {
+  return def.catalogId || def.id;
+}
