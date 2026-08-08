@@ -199,7 +199,7 @@ const DICE_SPIN_INTERVAL_MS = 90;
 // Time from the stop trigger (2nd click, or CPU's auto-stop) until the face
 // actually locks - the dice keeps spinning through this window, so it's a
 // timing/skill stop rather than an instant one.
-const DICE_STOP_DELAY_MS = 300;
+const DICE_STOP_DELAY_MS = 1500;
 // How long the locked face stays on screen before the roll actually proceeds.
 const DICE_RESULT_HOLD_MS = 1000;
 
