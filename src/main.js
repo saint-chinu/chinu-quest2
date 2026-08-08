@@ -403,7 +403,6 @@ function renderPlayerPanels(players) {
     lines.innerHTML = `
       <div class="player-name">${player.name}</div>
       <div class="player-stat">所持 ${player.currency}G / 総資産 ${player.totalAssets}G</div>
-      <div class="player-stat">召喚数 ${player.summonCount}</div>
     `;
 
     el.append(icon, lines);
@@ -524,30 +523,49 @@ function promptSpellUse(card) {
   });
 }
 
-const DISCARD_HINT_DEFAULT = '手札が7枚になりました。捨てるカードを選んでください';
-const DISCARD_HINT_ARMED = 'もう一度タップで捨てる';
+/** "「card.name」を捨てますか？" yes/no, reusing the same confirm modal as land-command actions. */
+function confirmDiscard(card) {
+  return new Promise((resolve) => {
+    confirmText.textContent = `「${card.name}」を捨てますか？`;
+    confirmModal.classList.remove('hidden');
 
-/** Tapping a card arms it (blinks + hint text changes); tapping the armed card again discards it. Tapping a different card just re-arms onto that one. */
+    function cleanup(result) {
+      confirmModal.classList.add('hidden');
+      confirmYes.removeEventListener('click', onYes);
+      confirmNo.removeEventListener('click', onNo);
+      resolve(result);
+    }
+    function onYes() {
+      cleanup(true);
+    }
+    function onNo() {
+      cleanup(false);
+    }
+    confirmYes.addEventListener('click', onYes);
+    confirmNo.addEventListener('click', onNo);
+  });
+}
+
+/** Tapping a card blinks it, then asks "捨てますか？" - yes discards, no returns to the discard picker. */
 function promptDiscardChoice(hand) {
   return new Promise((resolve) => {
-    discardHint.textContent = DISCARD_HINT_DEFAULT;
+    discardHint.textContent = '手札が7枚になりました。捨てるカードを選んでください';
     discardChoices.replaceChildren();
-    let armedEl = null;
 
     for (const card of hand) {
       const el = document.createElement('div');
       el.className = 'card';
       renderCardEl(el, card);
       el.addEventListener('click', () => {
-        if (armedEl === el) {
-          discardModal.classList.add('hidden');
-          resolve(card);
-          return;
-        }
-        armedEl?.classList.remove('armed');
-        armedEl = el;
-        el.classList.add('armed');
-        discardHint.textContent = DISCARD_HINT_ARMED;
+        el.classList.add('blinking');
+        setTimeout(async () => {
+          el.classList.remove('blinking');
+          const confirmed = await confirmDiscard(card);
+          if (confirmed) {
+            discardModal.classList.add('hidden');
+            resolve(card);
+          }
+        }, BLINK_MS);
       });
       discardChoices.appendChild(el);
     }
