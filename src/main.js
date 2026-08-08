@@ -102,7 +102,7 @@ function renderHand(hand) {
   }
 }
 
-/** Center hand: whoever's turn it is, shown face-up (spell "use" only applies on the human's own turn). */
+/** Center hand: whoever's turn it is, shown face-up. Only the human's own cards are interactive. */
 function renderCenterHand(hand, isCPU, spellUsable) {
   centerHandEl.replaceChildren();
   for (const card of hand) {
@@ -110,11 +110,15 @@ function renderCenterHand(hand, isCPU, spellUsable) {
     el.className = 'card';
     renderCardEl(el, card);
 
-    const isSpell = card.type === CardType.SPELL;
-    const canUseThis = !isCPU && isSpell && spellUsable;
-    el.addEventListener('click', () => {
-      showCardDetail(card, canUseThis ? () => game.useSpell(card) : null);
-    });
+    if (isCPU) {
+      el.style.cursor = 'default';
+    } else {
+      const isSpell = card.type === CardType.SPELL;
+      const canUseThis = isSpell && spellUsable;
+      el.addEventListener('click', () => {
+        showCardDetail(card, canUseThis ? () => game.useSpell(card) : null);
+      });
+    }
 
     centerHandEl.appendChild(el);
   }
