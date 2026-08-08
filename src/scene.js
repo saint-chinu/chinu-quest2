@@ -21,6 +21,25 @@ const CAMERA_FOLLOW_SPEED = 2.2;
 
 export const PIECE_REST_Y = 0.7;
 
+function createTokenTexture(color) {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+
+  const hex = `#${color.toString(16).padStart(6, '0')}`;
+  ctx.beginPath();
+  ctx.arc(size / 2, size / 2, size / 2 - 8, 0, Math.PI * 2);
+  ctx.fillStyle = hex;
+  ctx.fill();
+  ctx.lineWidth = 8;
+  ctx.strokeStyle = '#ffffff';
+  ctx.stroke();
+
+  return new THREE.CanvasTexture(canvas);
+}
+
 export class GameScene {
   constructor(canvas) {
     this.canvas = canvas;
@@ -82,14 +101,19 @@ export class GameScene {
     this.scene.add(ground);
   }
 
+  /**
+   * Player/monster tokens are 2D art on this 3D stage: a billboard sprite
+   * that always faces the camera, so it reads correctly regardless of the
+   * board's angle. `color` is a placeholder circle until real artwork
+   * (spec calls for per-card WebP illustrations) is swapped into the
+   * texture.
+   */
   createPiece(color, tilePosition) {
-    const mesh = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.55, 0.75, 4, 8),
-      new THREE.MeshStandardMaterial({ color })
-    );
-    mesh.position.set(tilePosition.x, PIECE_REST_Y, tilePosition.z);
-    this.scene.add(mesh);
-    return mesh;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: createTokenTexture(color) }));
+    sprite.scale.set(1.6, 1.6, 1);
+    sprite.position.set(tilePosition.x, PIECE_REST_Y, tilePosition.z);
+    this.scene.add(sprite);
+    return sprite;
   }
 
   setFocusImmediate(x, z) {
