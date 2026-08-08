@@ -591,9 +591,10 @@ function promptSpellUse(card) {
 }
 
 /** "「card.name」を捨てますか？" yes/no, reusing the same confirm modal as land-command actions. */
-function confirmDiscard(card) {
+/** Generic はい/いいえ confirm, reusing the same confirm-modal DOM as land-command actions (never active at the same time as those). */
+function confirmYesNo(text) {
   return new Promise((resolve) => {
-    confirmText.textContent = `「${card.name}」を捨てますか？`;
+    confirmText.textContent = text;
     confirmModal.classList.remove('hidden');
 
     function cleanup(result) {
@@ -611,6 +612,10 @@ function confirmDiscard(card) {
     confirmYes.addEventListener('click', onYes);
     confirmNo.addEventListener('click', onNo);
   });
+}
+
+function confirmDiscard(card) {
+  return confirmYesNo(`「${card.name}」を捨てますか？`);
 }
 
 /** Tapping a card blinks it, then asks "捨てますか？" - yes discards, no returns to the discard picker. */
@@ -775,6 +780,10 @@ let tiles;
 let game;
 
 function animate() {
+  // Stops this loop for good once the battle is exited (see
+  // exitBattleButton) - startBattle() kicks off a fresh loop next time, so
+  // loops never pile up across repeated enter/exit cycles.
+  if (!game) return;
   scene.render();
   requestAnimationFrame(animate);
 }
@@ -846,6 +855,7 @@ function startBattle(character) {
 
 const preGame = document.getElementById('pre-game');
 const appEl = document.getElementById('app');
+const exitBattleButton = document.getElementById('exit-battle-button');
 const loginScreen = document.getElementById('login-screen');
 const loginId = document.getElementById('login-id');
 const loginPassword = document.getElementById('login-password');
@@ -883,7 +893,12 @@ function showScreen(el) {
 // color) - the icon image itself is the actual selectable "character",
 // this is just cosmetic trim to keep player panels distinguishable.
 const ICON_COLORS = [0x2ec4b6, 0xe63946, 0xffd166, 0x8e5ce6, 0x4caf6e, 0x3a86e6];
-const STARTING_CURRENCY = 300;
+// M is the persistent menu-side currency (character.m) - entirely separate
+// from the in-battle G (player.currency, resets to 500 every match). Earned
+// by cashing out a battle's ending G at 20% (see settleBattleEnd), min 50.
+const STARTING_M = 300;
+const M_CONVERSION_RATE = 0.2;
+const M_CONVERSION_MIN = 50;
 
 let currentUserId = null;
 let currentCharacter = null;
@@ -934,7 +949,7 @@ async function showCharmakeScreen() {
 }
 
 function showHubScreen() {
-  hubWelcome.textContent = `ようこそ、${currentCharacter.name}（所持G: ${currentCharacter.currency}）`;
+  hubWelcome.textContent = `ようこそ、${currentCharacter.name}（所持M: ${currentCharacter.m}）`;
   showScreen(hubScreen);
 }
 
@@ -969,7 +984,7 @@ charmakeSubmit.addEventListener('click', () => {
     deckVariant: selectedDeckVariant,
     deckList,
     ownedCards,
-    currency: STARTING_CURRENCY,
+    m: STARTING_M,
   };
   saveCharacter(currentUserId, currentCharacter);
   showHubScreen();
@@ -1133,7 +1148,7 @@ function inDeckCountOf(key) {
 function showShopScreen() {
   const catalog = getCardCatalog();
   const byKey = new Map(catalog.map((def) => [cardKey(def), def]));
-  shopCurrency.textContent = `所持G: ${currentCharacter.currency}`;
+  shopCurrency.textContent = `所持M: ${currentCharacter.m}`;
   shopList.replaceChildren();
 
   for (const [key, owned] of Object.entries(currentCharacter.ownedCards || {})) {
@@ -1159,7 +1174,7 @@ function showShopScreen() {
     const meta = document.createElement('div');
     meta.className = 'deck-row-meta';
     meta.textContent = price != null
-      ? `所持${owned} / 余り${Math.max(surplus, 0)} / 売却${price}G`
+      ? `所持${owned} / 余り${Math.max(surplus, 0)} / 売却${price}M`
       : `所持${owned} / ${def.rarity}は売却不可`;
     info.append(nameEl, meta);
 
@@ -1169,7 +1184,7 @@ function showShopScreen() {
     sellBtn.disabled = price == null || surplus <= 0;
     sellBtn.addEventListener('click', () => {
       currentCharacter.ownedCards[key] -= 1;
-      currentCharacter.currency += price;
+      currentCharacter.m += price;
       saveCharacter(currentUserId, currentCharacter);
       showShopScreen();
     });
@@ -1190,4 +1205,21 @@ battleCpuButton.addEventListener('click', async () => {
     iconImage = icons[currentCharacter.iconIndex]?.canvas ?? null;
   }
   startBattle({ ...currentCharacter, iconImage });
+});
+
+// ---- Leaving a battle: cash out the ending in-battle G into persistent M (20%, 50 minimum) ----
+
+exitBattleButton.addEventListener('click', async () => {
+  if (!game) return;
+  const endingG = game.players[0].currency;
+  const earnedM = Math.max(Math.round(endingG * M_CONVERSION_RATE), M_CONVERSION_MIN);
+  const confirmed = await confirmYesNo(`対戦をやめますか？\n所持${endingG}Gの20%（${earnedM}M、下限50M）を獲得します。`);
+  if (!confirmed) return;
+
+  currentCharacter.m += earnedM;
+  saveCharacter(currentUserId, currentCharacter);
+  game = undefined;
+  appEl.classList.add('hidden');
+  preGame.classList.remove('hidden');
+  showHubScreen();
 });
