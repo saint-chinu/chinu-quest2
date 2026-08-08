@@ -5,6 +5,15 @@ import { tween, easeInOutQuad, delay, randomInt } from './utils.js';
 const STEP_DURATION_MS = 300;
 const START_BONUS = 100;
 
+// The camera doesn't chase every step - it only pans once movement adds up
+// to this many tiles since its last pan (across turns, not reset per
+// roll), so small moves leave it completely still.
+const TILE_PAN_THRESHOLD = 3;
+// If a step would otherwise leave the piece off-screen, the camera pan
+// starts this many ms before the piece itself starts moving into that
+// tile, so it leads rather than reacts.
+const LOOKAHEAD_LEAD_MS = 150;
+
 export class Game {
   constructor({ tiles, scene, onLog, onStateChange, onPurchasePrompt }) {
     this.tiles = tiles;
@@ -19,6 +28,7 @@ export class Game {
     ];
     this.currentPlayerIndex = 0;
     this.isBusy = false;
+    this.tilesSincePan = 0;
   }
 
   get currentPlayer() {
@@ -40,9 +50,6 @@ export class Game {
     this._notifyState();
 
     const player = this.currentPlayer;
-    const startPos = this.tiles[player.tileIndex].position;
-    this.scene.setChaseTarget(startPos.x, startPos.z);
-
     const steps = randomInt(1, 6);
     this.onLog(`${player.name}のサイコロ: ${steps}`);
 
@@ -64,13 +71,34 @@ export class Game {
       const fromTile = this.tiles[player.tileIndex];
       player.tileIndex = (player.tileIndex + 1) % this.tiles.length;
       const toTile = this.tiles[player.tileIndex];
-      await this._tweenStep(player, fromTile.position, toTile.position);
+      await this._stepWithCamera(player, fromTile.position, toTile.position);
 
       if (player.tileIndex === 0 && i < steps - 1) {
         player.currency += START_BONUS;
         this.onLog(`${player.name}はスタートを通過！ +${START_BONUS}`);
       }
     }
+  }
+
+  async _stepWithCamera(player, from, to) {
+    let pan = null;
+
+    if (this.scene.isOutsideSafeView(to.x, to.z)) {
+      // The piece is about to leave the visible area - lead with the
+      // camera instead of reacting after it's already off-screen.
+      pan = this.scene.panTo(to.x, to.z);
+      this.tilesSincePan = 0;
+      await delay(LOOKAHEAD_LEAD_MS);
+    } else {
+      this.tilesSincePan += 1;
+      if (this.tilesSincePan >= TILE_PAN_THRESHOLD) {
+        pan = this.scene.panTo(to.x, to.z);
+        this.tilesSincePan = 0;
+      }
+    }
+
+    const move = this._tweenStep(player, from, to);
+    await (pan ? Promise.all([move, pan]) : move);
   }
 
   _tweenStep(player, from, to) {
@@ -80,7 +108,6 @@ export class Game {
       const z = from.z + (to.z - from.z) * eased;
       const hop = Math.sin(Math.PI * t) * 0.5;
       player.mesh.position.set(x, PIECE_REST_Y + hop, z);
-      this.scene.setChaseTarget(x, z);
     });
   }
 

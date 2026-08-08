@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TileType } from './board.js';
+import { tween, easeInOutQuad } from './utils.js';
 
 const TILE_COLOR = {
   [TileType.START]: 0xffd166,
@@ -13,13 +14,42 @@ const TILE_COLOR = {
 // themselves stay plain squares.
 const CAMERA_OFFSET = new THREE.Vector3(14.5, 25, 14.5);
 const CAMERA_FOV = 45;
+const PAN_DURATION_MS = 900;
 
-// Exponential smoothing rate for the camera chasing its target (world x/z
-// only — vertical piece motion never feeds into this). Lower = slower,
-// lazier follow.
-const CAMERA_FOLLOW_SPEED = 2.2;
+// Fraction of the geometrically-visible ground area that counts as "safe".
+// Leaves margin for the piece's own size and for HUD elements overlapping
+// the edges of the screen.
+const DEADZONE_MARGIN = 0.65;
 
 export const PIECE_REST_Y = 0.7;
+
+const raycaster = new THREE.Raycaster();
+const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+const NDC_CORNERS = [
+  [-1, -1], // bottom-left (nearest to camera)
+  [1, -1], // bottom-right (nearest to camera)
+  [-1, 1], // top-left (farthest from camera)
+  [1, 1], // top-right (farthest from camera)
+];
+
+// The camera looks at the focus diagonally (see CAMERA_OFFSET), so the
+// screen's actual left/right and near/far axes on the ground are rotated
+// ~45° away from world X/Z. These are the ground-plane unit vectors for
+// "screen right" and "screen forward" (camera → focus), used to measure
+// the deadzone in the frame the screen is actually drawn in.
+const offsetGroundLen = Math.hypot(CAMERA_OFFSET.x, CAMERA_OFFSET.z);
+const FORWARD = {
+  x: -CAMERA_OFFSET.x / offsetGroundLen,
+  z: -CAMERA_OFFSET.z / offsetGroundLen,
+};
+const RIGHT = { x: FORWARD.z, z: -FORWARD.x };
+
+function toScreenLocal(dx, dz) {
+  return {
+    right: dx * RIGHT.x + dz * RIGHT.z,
+    forward: dx * FORWARD.x + dz * FORWARD.z,
+  };
+}
 
 function createTokenTexture(color) {
   const size = 128;
@@ -59,7 +89,12 @@ export class GameScene {
     this._setupLights();
 
     this.focus = new THREE.Vector3(0, 0, 0);
-    this.chaseTarget = new THREE.Vector3(0, 0, 0);
+    // Safe area around the current focus, in screen-local (right, forward)
+    // units - see toScreenLocal - derived from the actual camera frustum
+    // by resize(). The near (bottom of screen) and far (top of screen)
+    // edges sit at different distances under this oblique angle, so
+    // they're tracked separately.
+    this.deadzone = { halfRight: 0, nearForward: 0, farForward: 0 };
     this._applyCamera();
 
     this.resize();
@@ -80,6 +115,41 @@ export class GameScene {
     this.camera.aspect = clientWidth / clientHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(clientWidth, clientHeight, false);
+    this._recomputeDeadzone();
+  }
+
+  /**
+   * Casts rays through the four viewport corners onto the ground plane to
+   * find what's actually visible, evaluated with focus at the origin so
+   * the resulting offsets apply no matter where focus currently is.
+   */
+  _recomputeDeadzone() {
+    const savedFocus = this.focus.clone();
+    this.focus.set(0, 0, 0);
+    this._applyCamera();
+    this.camera.updateMatrixWorld(true);
+
+    const points = NDC_CORNERS.map(([nx, ny]) => {
+      raycaster.setFromCamera(new THREE.Vector2(nx, ny), this.camera);
+      const point = new THREE.Vector3();
+      raycaster.ray.intersectPlane(groundPlane, point);
+      return point ?? new THREE.Vector3();
+    });
+    const [bottomLeft, bottomRight, topLeft, topRight] = points.map((p) =>
+      toScreenLocal(p.x, p.z)
+    );
+
+    const halfRight = Math.min(Math.abs(bottomLeft.right), Math.abs(bottomRight.right));
+    const nearForward = Math.min(bottomLeft.forward, bottomRight.forward);
+    const farForward = Math.max(topLeft.forward, topRight.forward);
+    this.deadzone = {
+      halfRight: halfRight * DEADZONE_MARGIN,
+      nearForward: nearForward * DEADZONE_MARGIN,
+      farForward: farForward * DEADZONE_MARGIN,
+    };
+
+    this.focus.copy(savedFocus);
+    this._applyCamera();
   }
 
   buildBoard(tiles) {
@@ -118,19 +188,29 @@ export class GameScene {
 
   setFocusImmediate(x, z) {
     this.focus.set(x, 0, z);
-    this.chaseTarget.set(x, 0, z);
     this._applyCamera();
   }
 
-  /** Horizontal-only chase target; call continuously as a piece moves. */
-  setChaseTarget(x, z) {
-    this.chaseTarget.set(x, 0, z);
+  /** True if (x, z) would fall outside the safe viewing area right now. */
+  isOutsideSafeView(x, z) {
+    const local = toScreenLocal(x - this.focus.x, z - this.focus.z);
+    const { halfRight, nearForward, farForward } = this.deadzone;
+    return !(
+      Math.abs(local.right) <= halfRight &&
+      local.forward >= nearForward &&
+      local.forward <= farForward
+    );
   }
 
-  update(delta) {
-    const alpha = 1 - Math.exp(-CAMERA_FOLLOW_SPEED * delta);
-    this.focus.lerp(this.chaseTarget, alpha);
-    this._applyCamera();
+  /** Slow, deliberate pan (no zoom/angle change) to center on (x, z). */
+  panTo(x, z) {
+    const from = this.focus.clone();
+    const to = new THREE.Vector3(x, 0, z);
+    if (from.distanceTo(to) < 0.01) return null;
+    return tween(PAN_DURATION_MS, (t) => {
+      this.focus.lerpVectors(from, to, easeInOutQuad(t));
+      this._applyCamera();
+    });
   }
 
   _applyCamera() {
