@@ -61,11 +61,15 @@ export class GameScene {
   }
 
   buildBoard(tiles) {
-    const tileGeo = new THREE.BoxGeometry(2.6, 0.4, 2.6);
+    // Rotated 45° so each square tile reads as a diamond from the angled
+    // camera, à la Cardcaptor-style board games. Sized so the rotated
+    // diagonal still fits within the tile spacing without overlapping.
+    const tileGeo = new THREE.BoxGeometry(2.2, 0.4, 2.2);
     for (const tile of tiles) {
       const mat = new THREE.MeshStandardMaterial({ color: TILE_COLOR[tile.type] });
       const mesh = new THREE.Mesh(tileGeo, mat);
       mesh.position.set(tile.position.x, -0.2, tile.position.z);
+      mesh.rotation.y = Math.PI / 4;
       this.scene.add(mesh);
       tile.mesh = mesh;
     }
