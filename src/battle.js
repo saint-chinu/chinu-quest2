@@ -1,0 +1,126 @@
+import { WEAK_AGAINST } from './battleCards.js';
+
+/** A monster once it's on the board: base stats plus equipped items/curses. */
+export function createFieldUnit(monsterDef, ownerId) {
+  return {
+    ownerId,
+    def: monsterDef,
+    items: [], // weapon/armor - removed after every battle
+    curses: [], // spell effects - removed only when the unit dies
+    currentHp: monsterDef.hp,
+  };
+}
+
+export function equipItem(unit, itemDef) {
+  unit.items.push(itemDef);
+}
+
+/** Casts a spell onto a monster already on the field ("curse" status). */
+export function applyCurse(unit, spellDef) {
+  unit.curses.push({
+    name: spellDef.name,
+    addedAtk: spellDef.addedAtk || 0,
+    addedHp: spellDef.addedHp || 0,
+  });
+}
+
+function statTotals(unit) {
+  const itemAtk = unit.items.reduce((sum, i) => sum + (i.atkBonus || 0), 0);
+  const itemHp = unit.items.reduce((sum, i) => sum + (i.hpBonus || 0), 0);
+  const curseAtk = unit.curses.reduce((sum, c) => sum + (c.addedAtk || 0), 0);
+  const curseHp = unit.curses.reduce((sum, c) => sum + (c.addedHp || 0), 0);
+  return {
+    atk: unit.def.atk + curseAtk + itemAtk,
+    maxHp: unit.def.hp + curseHp + itemHp,
+  };
+}
+
+/** Call once right before a battle to lock in this fight's max HP. */
+export function prepareForBattle(unit) {
+  unit.currentHp = statTotals(unit).maxHp;
+}
+
+// Per-monster incoming-damage multiplier. Only 港区女子 has a declared
+// weakness/resistance trait so far; everyone else just takes the standard
+// weakness bonus (1.2x) or a neutral 1x otherwise.
+function incomingDamageMultiplier(defenderUnit, attackerElement) {
+  const weakness = WEAK_AGAINST[defenderUnit.def.element];
+  const isWeaknessHit = attackerElement === weakness;
+
+  if (defenderUnit.def.id === 'minatoJoshi') {
+    return isWeaknessHit ? 1.2 : 0.8;
+  }
+  return isWeaknessHit ? 1.2 : 1.0;
+}
+
+function dealDamage(attacker, defender, log) {
+  const atkStats = statTotals(attacker);
+  const multiplier = incomingDamageMultiplier(defender, attacker.def.element);
+  const damage = Math.round(atkStats.atk * multiplier);
+  defender.currentHp -= damage;
+  log.push(`${attacker.def.name} → ${defender.def.name} に${damage}ダメージ（倍率${multiplier}）`);
+  return damage;
+}
+
+/** Minimal gold ledger so battle abilities have somewhere to move currency. */
+export class GoldLedger {
+  constructor(initialBalances = {}) {
+    this.balances = { ...initialBalances };
+  }
+  add(ownerId, amount) {
+    this.balances[ownerId] = (this.balances[ownerId] || 0) + amount;
+  }
+  transfer(fromOwnerId, toOwnerId, amount) {
+    this.add(fromOwnerId, -amount);
+    this.add(toOwnerId, amount);
+  }
+}
+
+/**
+ * One-round simultaneous battle: both units deal damage based on their
+ * pre-battle stats, then survival/ability triggers resolve off the damage
+ * actually dealt. Items are consumed regardless of outcome; curses persist
+ * unless their unit died.
+ */
+export function resolveBattle(attacker, defender, gold) {
+  const log = [];
+  prepareForBattle(attacker);
+  prepareForBattle(defender);
+  log.push(
+    `${attacker.def.name}(ATK${statTotals(attacker).atk}/HP${attacker.currentHp}) vs ` +
+      `${defender.def.name}(ATK${statTotals(defender).atk}/HP${defender.currentHp})`
+  );
+
+  const dmgToDefender = dealDamage(attacker, defender, log);
+  const dmgToAttacker = dealDamage(defender, attacker, log);
+
+  const attackerSurvived = attacker.currentHp > 0;
+  const defenderSurvived = defender.currentHp > 0;
+
+  if (attacker.def.id === 'minatoJoshi' && dmgToDefender > 0) {
+    gold.transfer(defender.ownerId, attacker.ownerId, dmgToDefender);
+    log.push(`${attacker.def.name}が${dmgToDefender}Gを奪った`);
+  }
+  if (defender.def.id === 'minatoJoshi' && dmgToAttacker > 0) {
+    gold.transfer(attacker.ownerId, defender.ownerId, dmgToAttacker);
+    log.push(`${defender.def.name}が${dmgToAttacker}Gを奪った`);
+  }
+
+  if (defenderSurvived && defender.def.id === 'salarymander') {
+    const bonus = defender.currentHp * 4;
+    gold.add(defender.ownerId, bonus);
+    log.push(`${defender.def.name}は土地に生き残り${bonus}Gを獲得`);
+  }
+  if (attackerSurvived && attacker.def.id === 'salarymander') {
+    const bonus = attacker.currentHp * 4;
+    gold.add(attacker.ownerId, bonus);
+    log.push(`${attacker.def.name}は土地に生き残り${bonus}Gを獲得`);
+  }
+
+  attacker.items = [];
+  defender.items = [];
+  if (!attackerSurvived) attacker.curses = [];
+  if (!defenderSurvived) defender.curses = [];
+
+  return { log, dmgToAttacker, dmgToDefender, attackerSurvived, defenderSurvived };
+}
