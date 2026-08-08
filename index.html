@@ -12,12 +12,17 @@
       <canvas id="game-canvas"></canvas>
       <div id="hud">
         <div id="top-row">
-          <div id="turn-indicator">プレイヤーのターン</div>
+          <div id="top-left">
+            <button id="dice-button" aria-label="サイコロを振る">
+              <span class="pip"></span><span class="pip"></span><span class="pip"></span>
+              <span class="pip"></span><span class="pip"></span>
+            </button>
+            <div id="turn-indicator">プレイヤーのターン</div>
+          </div>
           <div id="currency-panel"></div>
         </div>
         <div id="log"></div>
         <div id="hand-panel"></div>
-        <button id="dice-button">サイコロを振る</button>
       </div>
       <div id="rotate-notice">画面を横向きにしてください</div>
       <div id="purchase-modal" class="hidden">
