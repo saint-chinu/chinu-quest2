@@ -7,8 +7,11 @@ const TILE_COLOR = {
   [TileType.EVENT]: 0x9b5de5,
 };
 
-// Pulled back and flattened for a wide, "見下ろし" overview of the board.
-const CAMERA_OFFSET = new THREE.Vector3(0, 25, 20);
+// Offset diagonally (not straight along Z) so the camera looks at the
+// board from a corner angle. This is what makes the axis-aligned square
+// tiles read as diamonds on screen, isometric-style — the tiles
+// themselves stay plain squares.
+const CAMERA_OFFSET = new THREE.Vector3(14.5, 25, 14.5);
 const CAMERA_FOV = 45;
 
 // Exponential smoothing rate for the camera chasing its target (world x/z
@@ -61,15 +64,11 @@ export class GameScene {
   }
 
   buildBoard(tiles) {
-    // Rotated 45° so each square tile reads as a diamond from the angled
-    // camera, à la Cardcaptor-style board games. Sized so the rotated
-    // diagonal still fits within the tile spacing without overlapping.
-    const tileGeo = new THREE.BoxGeometry(2.2, 0.4, 2.2);
+    const tileGeo = new THREE.BoxGeometry(2.6, 0.4, 2.6);
     for (const tile of tiles) {
       const mat = new THREE.MeshStandardMaterial({ color: TILE_COLOR[tile.type] });
       const mesh = new THREE.Mesh(tileGeo, mat);
       mesh.position.set(tile.position.x, -0.2, tile.position.z);
-      mesh.rotation.y = Math.PI / 4;
       this.scene.add(mesh);
       tile.mesh = mesh;
     }
