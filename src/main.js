@@ -24,13 +24,23 @@ const landCommandEnd = document.getElementById('land-command-end');
 const monsterPickerModal = document.getElementById('monster-picker-modal');
 const monsterPickerChoices = document.getElementById('monster-picker-choices');
 const monsterPickerCancel = document.getElementById('monster-picker-cancel');
+const landPickerModal = document.getElementById('land-picker-modal');
+const landPickerChoices = document.getElementById('land-picker-choices');
+const landPickerCancel = document.getElementById('land-picker-cancel');
 const confirmModal = document.getElementById('confirm-modal');
 const confirmText = document.getElementById('confirm-text');
 const confirmYes = document.getElementById('confirm-yes');
 const confirmNo = document.getElementById('confirm-no');
+const cameraWorkOverlay = document.getElementById('camera-work-overlay');
+const camArrowUp = document.getElementById('cam-arrow-up');
+const camArrowDown = document.getElementById('cam-arrow-down');
+const camArrowLeft = document.getElementById('cam-arrow-left');
+const camArrowRight = document.getElementById('cam-arrow-right');
+const camWorkBack = document.getElementById('cam-work-back');
 const tileInfoModal = document.getElementById('tile-info-modal');
 const tileInfoText = document.getElementById('tile-info-text');
 const tileInfoClose = document.getElementById('tile-info-close');
+const tileInfoBack = document.getElementById('tile-info-back');
 const cardRevealModal = document.getElementById('card-reveal-modal');
 const cardRevealCard = document.getElementById('card-reveal-card');
 const discardModal = document.getElementById('discard-modal');
@@ -148,17 +158,99 @@ function promptConfirmAction({ actionType, card, cost, tile }) {
   });
 }
 
-function promptTileInfo(tile) {
-  return new Promise((resolve) => {
-    tileInfoText.textContent = tileSummaryText(tile);
-    tileInfoModal.classList.remove('hidden');
+function landChoiceText(tile) {
+  return `${ELEMENT_LABEL[tile.element]} / Lv${tile.level} / 通行料${tile.toll}G`;
+}
 
-    function onClose() {
+/** Picks which owned tile to level up; resolves the tile's id, or null if cancelled. */
+function promptPickLandForLevelUp(summaries) {
+  return new Promise((resolve) => {
+    landPickerChoices.replaceChildren();
+    for (const tile of summaries) {
+      const el = document.createElement('div');
+      el.className = 'land-choice';
+      el.textContent = landChoiceText(tile);
+      el.addEventListener('click', () => {
+        landPickerModal.classList.add('hidden');
+        resolve(tile.id);
+      });
+      landPickerChoices.appendChild(el);
+    }
+    landPickerModal.classList.remove('hidden');
+
+    function onCancel() {
+      landPickerModal.classList.add('hidden');
+      landPickerCancel.removeEventListener('click', onCancel);
+      resolve(null);
+    }
+    landPickerCancel.addEventListener('click', onCancel);
+  });
+}
+
+/**
+ * "土地情報" mode: free-look camera (4 edge arrows) over the actual board,
+ * click any tile for its info. Camera position is restored to wherever it
+ * was before entering, once the player backs all the way out.
+ */
+function promptTileInfo() {
+  return new Promise((resolve) => {
+    const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+    cameraWorkOverlay.classList.remove('hidden');
+
+    function onCanvasClick(e) {
+      const rect = canvas.getBoundingClientRect();
+      const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      const tile = scene.pickTileAt(ndcX, ndcY, tiles);
+      if (tile) {
+        tileInfoText.textContent = tileSummaryText(game.getTileSummary(tile));
+        tileInfoModal.classList.remove('hidden');
+      }
+    }
+    function onUp() {
+      scene.panByDirection('up');
+    }
+    function onDown() {
+      scene.panByDirection('down');
+    }
+    function onLeft() {
+      scene.panByDirection('left');
+    }
+    function onRight() {
+      scene.panByDirection('right');
+    }
+    function onInfoClose() {
       tileInfoModal.classList.add('hidden');
-      tileInfoClose.removeEventListener('click', onClose);
+    }
+    function onInfoBack() {
+      tileInfoModal.classList.add('hidden');
+      finish();
+    }
+    function onWorkBack() {
+      finish();
+    }
+    function finish() {
+      cameraWorkOverlay.classList.add('hidden');
+      canvas.removeEventListener('click', onCanvasClick);
+      camArrowUp.removeEventListener('click', onUp);
+      camArrowDown.removeEventListener('click', onDown);
+      camArrowLeft.removeEventListener('click', onLeft);
+      camArrowRight.removeEventListener('click', onRight);
+      camWorkBack.removeEventListener('click', onWorkBack);
+      tileInfoClose.removeEventListener('click', onInfoClose);
+      tileInfoBack.removeEventListener('click', onInfoBack);
+      scene.setFocusImmediate(savedFocus.x, savedFocus.z);
       resolve();
     }
-    tileInfoClose.addEventListener('click', onClose);
+
+    canvas.addEventListener('click', onCanvasClick);
+    camArrowUp.addEventListener('click', onUp);
+    camArrowDown.addEventListener('click', onDown);
+    camArrowLeft.addEventListener('click', onLeft);
+    camArrowRight.addEventListener('click', onRight);
+    camWorkBack.addEventListener('click', onWorkBack);
+    tileInfoClose.addEventListener('click', onInfoClose);
+    tileInfoBack.addEventListener('click', onInfoBack);
   });
 }
 
@@ -525,6 +617,7 @@ const game = new Game({
   onPickMonsterCard: promptPickMonsterCard,
   onConfirmAction: promptConfirmAction,
   onTileInfo: promptTileInfo,
+  onPickLandForLevelUp: promptPickLandForLevelUp,
 });
 
 game.init();

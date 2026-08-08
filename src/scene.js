@@ -16,6 +16,11 @@ const CAMERA_OFFSET = new THREE.Vector3(14.5, 25, 14.5);
 const CAMERA_FOV = 45;
 const PAN_DURATION_MS = 900;
 
+// Manual free-look camera (land-info mode): one arrow press moves this far,
+// smoothly, in that screen direction.
+const FREE_PAN_STEP = 4;
+const FREE_PAN_DURATION_MS = 350;
+
 // Fraction of the geometrically-visible ground area that counts as "safe".
 // Leaves margin for the piece's own size and for HUD elements overlapping
 // the edges of the screen.
@@ -212,6 +217,29 @@ export class GameScene {
       this.focus.lerpVectors(from, to, easeInOutQuad(t));
       this._applyCamera();
     });
+  }
+
+  /** Manual free-look pan for the land-info camera mode: one screen-relative step per call. */
+  panByDirection(direction) {
+    const axis = { up: FORWARD, down: FORWARD, left: RIGHT, right: RIGHT }[direction];
+    const sign = direction === 'down' || direction === 'left' ? -1 : 1;
+    const from = this.focus.clone();
+    const to = from
+      .clone()
+      .add(new THREE.Vector3(axis.x, 0, axis.z).multiplyScalar(FREE_PAN_STEP * sign));
+    return tween(FREE_PAN_DURATION_MS, (t) => {
+      this.focus.lerpVectors(from, to, easeInOutQuad(t));
+      this._applyCamera();
+    });
+  }
+
+  /** Raycasts a click (in normalized -1..1 device coords) against tile meshes; returns the hit tile or null. */
+  pickTileAt(ndcX, ndcY, tiles) {
+    raycaster.setFromCamera(new THREE.Vector2(ndcX, ndcY), this.camera);
+    const meshes = tiles.map((t) => t.mesh).filter(Boolean);
+    const hits = raycaster.intersectObjects(meshes);
+    if (hits.length === 0) return null;
+    return tiles.find((t) => t.mesh === hits[0].object) ?? null;
   }
 
   _applyCamera() {

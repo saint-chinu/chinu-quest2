@@ -34,9 +34,9 @@
         <div id="land-command-box">
           <p id="land-command-title"></p>
           <div id="land-command-actions">
-            <button id="land-command-summon">A: 召喚／侵略</button>
-            <button id="land-command-levelup">B: 土地レベルアップ</button>
-            <button id="land-command-info">C: 土地情報</button>
+            <button id="land-command-summon">召喚／侵略</button>
+            <button id="land-command-levelup">土地レベルアップ</button>
+            <button id="land-command-info">土地情報</button>
             <button id="land-command-end">ターン終了</button>
           </div>
         </div>
@@ -48,6 +48,13 @@
           <button id="monster-picker-cancel">やめる</button>
         </div>
       </div>
+      <div id="land-picker-modal" class="hidden">
+        <div id="land-picker-box">
+          <p>レベルアップする土地を選んでください</p>
+          <div id="land-picker-choices"></div>
+          <button id="land-picker-cancel">やめる</button>
+        </div>
+      </div>
       <div id="confirm-modal" class="hidden">
         <div id="confirm-box">
           <p id="confirm-text"></p>
@@ -57,10 +64,20 @@
           </div>
         </div>
       </div>
+      <div id="camera-work-overlay" class="hidden">
+        <button id="cam-arrow-up" class="cam-arrow cam-arrow-up" aria-label="上へ">▲</button>
+        <button id="cam-arrow-down" class="cam-arrow cam-arrow-down" aria-label="下へ">▼</button>
+        <button id="cam-arrow-left" class="cam-arrow cam-arrow-left" aria-label="左へ">◀</button>
+        <button id="cam-arrow-right" class="cam-arrow cam-arrow-right" aria-label="右へ">▶</button>
+        <button id="cam-work-back">戻る</button>
+      </div>
       <div id="tile-info-modal" class="hidden">
         <div id="tile-info-box">
           <p id="tile-info-text"></p>
-          <button id="tile-info-close">閉じる</button>
+          <div id="tile-info-actions">
+            <button id="tile-info-close">閉じる</button>
+            <button id="tile-info-back">土地コマンドに戻る</button>
+          </div>
         </div>
       </div>
       <div id="card-reveal-modal" class="hidden">

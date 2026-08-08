@@ -35,6 +35,7 @@ export class Game {
     onPickMonsterCard,
     onConfirmAction,
     onTileInfo,
+    onPickLandForLevelUp,
   }) {
     this.tiles = tiles;
     this.scene = scene;
@@ -49,6 +50,7 @@ export class Game {
     this.onPickMonsterCard = onPickMonsterCard;
     this.onConfirmAction = onConfirmAction;
     this.onTileInfo = onTileInfo;
+    this.onPickLandForLevelUp = onPickLandForLevelUp;
 
     // allianceId is unused today (only 2 players, no alliance mode yet) but
     // the state payload already carries it so the UI's slot layout - which
@@ -239,7 +241,12 @@ export class Game {
     await delay(200);
   }
 
-  /** ③ The A(summon/invade/swap) / B(level up) / C(info) menu for whichever land tile was landed on. */
+  /**
+   * ③ The summon/invade/swap, level-up, and info menu for whichever land
+   * tile was landed on. Summon/invade/swap and level-up both end the turn
+   * as soon as they actually go through; info just loops back to the menu
+   * (nothing about it commits to anything), and so does a cancelled action.
+   */
   async _runLandCommand(player) {
     const tile = this.tiles[player.tileIndex];
     if (tile.type !== TileType.LAND) return;
@@ -249,16 +256,20 @@ export class Game {
       return;
     }
 
-    // Loops so the player can e.g. check info, then summon, before ending.
     for (;;) {
-      const choice = await this.onLandCommand(this._tileSummary(tile), {
+      const choice = await this.onLandCommand(this.getTileSummary(tile), {
         canSummon: this._affordableMonsterCards(player).length > 0,
-        canLevelUp: tile.owner === player.id,
+        canLevelUp: this._ownedTiles(player).length > 0,
       });
-      if (choice === 'end') break;
-      if (choice === 'summon') await this._humanSummonFlow(player, tile);
-      else if (choice === 'levelup') await this._humanLevelUpFlow(player, tile);
-      else if (choice === 'info') await this.onTileInfo(this._tileSummary(tile));
+      if (choice === 'end') return;
+
+      if (choice === 'summon') {
+        if (await this._humanSummonFlow(player, tile)) return;
+      } else if (choice === 'levelup') {
+        if (await this._humanLevelUpFlow(player)) return;
+      } else if (choice === 'info') {
+        await this.onTileInfo();
+      }
     }
   }
 
@@ -266,19 +277,24 @@ export class Game {
     return player.hand.filter((c) => c.type === CardType.MONSTER && c.cost <= player.currency);
   }
 
+  _ownedTiles(player) {
+    return this.tiles.filter((t) => t.owner === player.id);
+  }
+
+  /** Returns true if a summon/invade/swap actually went through (vs. being cancelled). */
   async _humanSummonFlow(player, tile) {
     const options = this._affordableMonsterCards(player);
     if (options.length === 0) {
       this.onLog('召喚できるモンスターカードがありません');
-      return;
+      return false;
     }
 
     const card = await this.onPickMonsterCard(options);
-    if (!card) return;
+    if (!card) return false;
 
     const actionType = tile.owner == null ? 'summon' : tile.owner === player.id ? 'swap' : 'invade';
-    const confirmed = await this.onConfirmAction({ actionType, card, cost: card.cost, tile: this._tileSummary(tile) });
-    if (!confirmed) return;
+    const confirmed = await this.onConfirmAction({ actionType, card, cost: card.cost, tile: this.getTileSummary(tile) });
+    if (!confirmed) return false;
 
     player.hand = player.hand.filter((c) => c.id !== card.id);
     player.deck.discard(card);
@@ -291,23 +307,33 @@ export class Game {
       await this._runInvasion(player, tile, card);
     }
     this._notifyState();
+    return true;
   }
 
-  async _humanLevelUpFlow(player, tile) {
-    if (tile.owner !== player.id) return;
-    const cost = tile.price * tile.level;
-    const confirmed = await this.onConfirmAction({ actionType: 'levelup', cost, tile: this._tileSummary(tile) });
-    if (!confirmed) return;
+  /** Returns true if a level-up actually went through (vs. no owned tiles / cancelled / unaffordable). */
+  async _humanLevelUpFlow(player) {
+    const owned = this._ownedTiles(player);
+    if (owned.length === 0) return false;
+
+    const targetId = await this.onPickLandForLevelUp(owned.map((t) => this.getTileSummary(t)));
+    if (targetId == null) return false;
+    const target = this.tiles.find((t) => t.id === targetId);
+    if (!target) return false;
+
+    const cost = target.price * target.level;
+    const confirmed = await this.onConfirmAction({ actionType: 'levelup', cost, tile: this.getTileSummary(target) });
+    if (!confirmed) return false;
     if (player.currency < cost) {
       this.onLog('ゴールドが足りません');
-      return;
+      return false;
     }
 
     player.currency -= cost;
-    tile.level += 1;
-    tile.toll = tile.baseToll * tile.level;
-    this.onLog(`${player.name}は土地をLv${tile.level}にアップグレードした (-${cost}G)`);
+    target.level += 1;
+    target.toll = target.baseToll * target.level;
+    this.onLog(`${player.name}は土地をLv${target.level}にアップグレードした (-${cost}G)`);
     this._notifyState();
+    return true;
   }
 
   async _cpuLandCommand(player, tile) {
@@ -378,9 +404,11 @@ export class Game {
     };
   }
 
-  _tileSummary(tile) {
+  /** Plain-data snapshot of a tile for the UI - safe to hand to main.js, no mesh/internal refs. */
+  getTileSummary(tile) {
     const owner = tile.owner != null ? this.players.find((p) => p.id === tile.owner) : null;
     return {
+      id: tile.id,
       type: tile.type,
       element: tile.element,
       level: tile.level,
