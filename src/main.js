@@ -22,6 +22,11 @@ const cardDetailModal = document.getElementById('card-detail-modal');
 const cardDetailCard = document.getElementById('card-detail-card');
 const cardDetailText = document.getElementById('card-detail-text');
 const cardDetailClose = document.getElementById('card-detail-close');
+const cardDetailUse = document.getElementById('card-detail-use');
+const centerPanel = document.getElementById('center-panel');
+const centerHandEl = document.getElementById('center-hand');
+const spellEffectModal = document.getElementById('spell-effect-modal');
+const spellEffectText = document.getElementById('spell-effect-text');
 
 function promptPurchase(tile) {
   return new Promise((resolve) => {
@@ -66,14 +71,23 @@ function describeCard(card) {
     : TYPE_LABEL[card.type];
 }
 
-function showCardDetail(card) {
+let cardDetailUseHandler = null;
+
+function showCardDetail(card, onUse) {
   renderCardEl(cardDetailCard, card);
   cardDetailText.textContent = describeCard(card);
+  cardDetailUseHandler = onUse ?? null;
+  cardDetailUse.classList.toggle('hidden', !onUse);
   cardDetailModal.classList.remove('hidden');
 }
 
 cardDetailClose.addEventListener('click', () => {
   cardDetailModal.classList.add('hidden');
+});
+
+cardDetailUse.addEventListener('click', () => {
+  cardDetailModal.classList.add('hidden');
+  cardDetailUseHandler?.();
 });
 
 function renderHand(hand) {
@@ -85,6 +99,26 @@ function renderHand(hand) {
     renderCardEl(el, card);
     el.addEventListener('click', () => showCardDetail(card));
     handPanel.appendChild(el);
+  }
+}
+
+/** Center hand: the current turn's player. CPU's cards render face-down - only the count is real. */
+function renderCenterHand(hand, isCPU, spellUsable) {
+  centerHandEl.replaceChildren();
+  for (const card of hand) {
+    const el = document.createElement('div');
+    el.className = 'card';
+
+    if (isCPU) {
+      el.classList.add('card-back');
+    } else {
+      renderCardEl(el, card);
+      const isSpell = card.type === CardType.SPELL;
+      el.addEventListener('click', () => {
+        showCardDetail(card, isSpell && spellUsable ? () => game.useSpell(card) : null);
+      });
+    }
+    centerHandEl.appendChild(el);
   }
 }
 
@@ -115,6 +149,20 @@ function promptCardReveal(card) {
   });
 }
 
+const SPELL_EFFECT_MS = 1200;
+
+/** Placeholder for spell resolution - actual effects land with battle design in phase 2. */
+function promptSpellUse(card) {
+  return new Promise((resolve) => {
+    spellEffectText.textContent = `『${card.name}』発動！`;
+    spellEffectModal.classList.remove('hidden');
+    setTimeout(() => {
+      spellEffectModal.classList.add('hidden');
+      resolve();
+    }, SPELL_EFFECT_MS);
+  });
+}
+
 function promptDiscardChoice(hand) {
   return new Promise((resolve) => {
     discardChoices.replaceChildren();
@@ -142,17 +190,32 @@ const game = new Game({
   onLog: (message) => {
     logEl.textContent = message;
   },
-  onStateChange: ({ turnText, canRoll, players, hand }) => {
+  onStateChange: ({
+    turnText,
+    canRoll,
+    players,
+    hand,
+    showCenter,
+    centerHand,
+    currentPlayerIsCPU,
+    spellUsedThisTurn,
+  }) => {
     turnIndicator.textContent = turnText;
     diceButton.disabled = !canRoll;
     currencyPanel.textContent = players
       .map((p) => `${p.name}: ${p.currency}G / 手札${p.handCount}枚`)
       .join('\n');
     renderHand(hand);
+
+    centerPanel.classList.toggle('hidden', !showCenter);
+    if (showCenter) {
+      renderCenterHand(centerHand, currentPlayerIsCPU, !spellUsedThisTurn);
+    }
   },
   onPurchasePrompt: promptPurchase,
   onCardReveal: promptCardReveal,
   onDiscardChoice: promptDiscardChoice,
+  onSpellUse: promptSpellUse,
 });
 
 diceButton.addEventListener('click', () => game.rollDice());

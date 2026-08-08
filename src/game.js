@@ -1,6 +1,6 @@
 import { TileType } from './board.js';
 import { PIECE_REST_Y } from './scene.js';
-import { Deck } from './cards.js';
+import { CardType, Deck } from './cards.js';
 import { tween, easeInOutQuad, delay, randomInt } from './utils.js';
 
 const STEP_DURATION_MS = 300;
@@ -19,7 +19,16 @@ const TILE_PAN_THRESHOLD = 3;
 const LOOKAHEAD_LEAD_MS = 150;
 
 export class Game {
-  constructor({ tiles, scene, onLog, onStateChange, onPurchasePrompt, onCardReveal, onDiscardChoice }) {
+  constructor({
+    tiles,
+    scene,
+    onLog,
+    onStateChange,
+    onPurchasePrompt,
+    onCardReveal,
+    onDiscardChoice,
+    onSpellUse,
+  }) {
     this.tiles = tiles;
     this.scene = scene;
     this.onLog = onLog;
@@ -27,14 +36,19 @@ export class Game {
     this.onPurchasePrompt = onPurchasePrompt;
     this.onCardReveal = onCardReveal;
     this.onDiscardChoice = onDiscardChoice;
+    this.onSpellUse = onSpellUse;
 
     this.players = [
-      { id: 0, name: 'プレイヤー', isCPU: false, currency: 500, tileIndex: 0, color: 0x2ec4b6, deck: new Deck(), hand: [] },
-      { id: 1, name: 'CPU', isCPU: true, currency: 500, tileIndex: 0, color: 0xe63946, deck: new Deck(), hand: [] },
+      { id: 0, name: 'プレイヤー', isCPU: false, currency: 500, tileIndex: 0, color: 0x2ec4b6, deck: new Deck(), hand: [], spellUsedThisTurn: false },
+      { id: 1, name: 'CPU', isCPU: true, currency: 500, tileIndex: 0, color: 0xe63946, deck: new Deck(), hand: [], spellUsedThisTurn: false },
     ];
     this.currentPlayerIndex = 0;
     this.isBusy = false;
     this.tilesSincePan = 0;
+    // True from the moment a turn's draw finishes until the dice is
+    // rolled - the window where the center hand+dice is shown and a
+    // spell may be used.
+    this.awaitingRoll = false;
   }
 
   get currentPlayer() {
@@ -57,11 +71,14 @@ export class Game {
   /** Runs automatically whenever a turn starts: draw, then hand control to the player (or CPU). */
   async _beginTurn() {
     this.isBusy = true;
+    this.awaitingRoll = false;
+    this.currentPlayer.spellUsedThisTurn = false;
     this._notifyState();
 
     await this._drawForTurn(this.currentPlayer);
 
     this.isBusy = false;
+    this.awaitingRoll = true;
     this._notifyState();
 
     if (this.currentPlayer.isCPU) {
@@ -69,9 +86,32 @@ export class Game {
     }
   }
 
-  async rollDice() {
-    if (this.isBusy) return;
+  /** Uses a spell from the current (human) player's hand, once per turn, before rolling. */
+  async useSpell(card) {
+    if (this.isBusy || !this.awaitingRoll || this.currentPlayer.isCPU) return;
+    const player = this.currentPlayer;
+    if (player.spellUsedThisTurn) return;
+    if (card.type !== CardType.SPELL) return;
+    if (!player.hand.some((c) => c.id === card.id)) return;
+
     this.isBusy = true;
+    this._notifyState();
+
+    player.hand = player.hand.filter((c) => c.id !== card.id);
+    player.deck.discard(card);
+    player.spellUsedThisTurn = true;
+    this.onLog(`${player.name}は「${card.name}」を使用した`);
+
+    await this.onSpellUse(card);
+
+    this.isBusy = false;
+    this._notifyState();
+  }
+
+  async rollDice() {
+    if (this.isBusy || !this.awaitingRoll) return;
+    this.isBusy = true;
+    this.awaitingRoll = false;
     this._notifyState();
 
     const player = this.currentPlayer;
@@ -210,11 +250,16 @@ export class Game {
 
   _notifyState() {
     const human = this.players.find((p) => !p.isCPU);
+    const showCenter = this.awaitingRoll && !this.isBusy;
     this.onStateChange({
       turnText: `${this.currentPlayer.name}のターン`,
-      canRoll: !this.isBusy && !this.currentPlayer.isCPU,
+      canRoll: showCenter && !this.currentPlayer.isCPU,
       players: this.players.map((p) => ({ name: p.name, currency: p.currency, handCount: p.hand.length })),
       hand: human.hand,
+      showCenter,
+      centerHand: this.currentPlayer.hand,
+      currentPlayerIsCPU: this.currentPlayer.isCPU,
+      spellUsedThisTurn: this.currentPlayer.spellUsedThisTurn,
     });
   }
 }

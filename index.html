@@ -16,13 +16,14 @@
           <div id="currency-panel"></div>
         </div>
         <div id="log"></div>
-        <div id="action-bar">
-          <div id="hand-panel"></div>
-          <button id="dice-button" aria-label="サイコロを振る">
-            <span class="pip"></span><span class="pip"></span><span class="pip"></span>
-            <span class="pip"></span><span class="pip"></span>
-          </button>
-        </div>
+        <div id="hand-panel"></div>
+      </div>
+      <div id="center-panel" class="hidden">
+        <div id="center-hand"></div>
+        <button id="dice-button" aria-label="サイコロを振る">
+          <span class="pip"></span><span class="pip"></span><span class="pip"></span>
+          <span class="pip"></span><span class="pip"></span>
+        </button>
       </div>
       <div id="rotate-notice">画面を横向きにしてください</div>
       <div id="purchase-modal" class="hidden">
@@ -50,8 +51,14 @@
         <div id="card-detail-box">
           <div id="card-detail-card" class="card card-large"></div>
           <p id="card-detail-text"></p>
-          <button id="card-detail-close">閉じる</button>
+          <div id="card-detail-actions">
+            <button id="card-detail-use" class="hidden">使用する</button>
+            <button id="card-detail-close">閉じる</button>
+          </div>
         </div>
+      </div>
+      <div id="spell-effect-modal" class="hidden">
+        <p id="spell-effect-text"></p>
       </div>
     </div>
     <script type="module" src="/src/main.js"></script>
