@@ -10,8 +10,8 @@ const SPACING = 3.2;
 
 /**
  * Land element is fixed by which screen quadrant the tile falls in (never
- * changes outside of special effects) - 火 top-right, 水 bottom-right, 地
- * bottom-left, 風 top-left. The camera looks at the board diagonally (see
+ * changes outside of special effects) - 火 top-right, 水 bottom-right, 森
+ * bottom-left, 雷 top-left. The camera looks at the board diagonally (see
  * scene.js's CAMERA_OFFSET), so "screen right" is world (x - z) > 0 and
  * "screen top" is world (x + z) < 0 - the boundaries are the board's own
  * diagonals, which is what actually reads as clean screen-aligned
@@ -20,8 +20,8 @@ const SPACING = 3.2;
 function elementForPosition(x, z) {
   const right = x - z >= 0;
   const top = x + z < 0;
-  if (top) return right ? Element.FIRE : Element.WIND;
-  return right ? Element.WATER : Element.EARTH;
+  if (top) return right ? Element.FIRE : Element.THUNDER;
+  return right ? Element.WATER : Element.FOREST;
 }
 
 /** The rectangular loop's own corners (excluding START) sit right on a quadrant boundary, so they're 無色 (neutral, non-chaining) instead of being arbitrarily assigned to one side's element. */

@@ -1,13 +1,14 @@
-import { CardType, Element } from './cards.js';
+import { CardType, Element, Deck } from './cards.js';
 
 // Elemental weakness cycle: each element takes bonus damage from the next
-// one. 火→水→地→風→火 (fire is weak to water, water to earth, earth to
-// wind, wind to fire). First-pass design choice, easy to revisit.
+// one. 火→水→雷→森→火 (fire is weak to water, water to thunder, thunder to
+// forest, forest to fire). NEUTRAL (無属性) sits outside this cycle entirely
+// - no entry here means no weakness bonus either way.
 export const WEAK_AGAINST = {
   [Element.FIRE]: Element.WATER,
-  [Element.WATER]: Element.EARTH,
-  [Element.EARTH]: Element.WIND,
-  [Element.WIND]: Element.FIRE,
+  [Element.WATER]: Element.THUNDER,
+  [Element.THUNDER]: Element.FOREST,
+  [Element.FOREST]: Element.FIRE,
 };
 
 export const ItemType = {
@@ -88,26 +89,44 @@ function duplicateForDeck(def, count) {
 }
 
 /**
- * The two character-creation starter decks - same battle mechanics
- * (WEAK_AGAINST cycle etc.) but a different named-card lean, since the
- * catalog only has two named monsters so far. `salarymander` is the
- * fire-aggro pick (weapon-backed), `minatoJoshi` is the water-defensive
- * pick (armor-backed). Both still mix in SPELL_CATALOG.manjaro.
+ * The two character-creation starter books. Each leans on 2 of the 4
+ * elements - the generic monster fill (see buildCardPool's `elements`
+ * option) is restricted to just those two, plus whichever named catalog
+ * monster/item matches, so the two books actually play differently instead
+ * of just swapping which named card is mixed in.
  */
 export const STARTER_DECKS = {
-  salarymander: { id: 'salarymander', name: 'サラリーマンダー編成（炎・攻撃寄り）' },
-  minatoJoshi: { id: 'minatoJoshi', name: '港区女子編成（水・防御寄り）' },
+  fireForest: {
+    id: 'fireForest',
+    name: '火・森ブック',
+    elements: [Element.FIRE, Element.FOREST],
+    featuredMonster: MONSTER_CATALOG.salarymander,
+    featuredItem: ITEM_CATALOG.knife,
+  },
+  waterThunder: {
+    id: 'waterThunder',
+    name: '水・雷ブック',
+    elements: [Element.WATER, Element.THUNDER],
+    featuredMonster: MONSTER_CATALOG.minatoJoshi,
+    featuredItem: ITEM_CATALOG.potLid,
+  },
 };
 
-/** The real cards to mix into a player's starting book, 2 copies each. `variant` picks which of STARTER_DECKS to lean on; defaults to the fire deck. */
-export function buildStarterExtraCards(variant = 'salarymander') {
-  const monster = variant === 'minatoJoshi' ? MONSTER_CATALOG.minatoJoshi : MONSTER_CATALOG.salarymander;
-  const item = variant === 'minatoJoshi' ? ITEM_CATALOG.potLid : ITEM_CATALOG.knife;
+/** The named cards to mix into a starter book, 4 copies of the monster/item and 2 of the shared spell. `bookId` picks which of STARTER_DECKS; defaults to the fire/forest book. */
+export function buildStarterExtraCards(bookId = 'fireForest') {
+  const book = STARTER_DECKS[bookId] || STARTER_DECKS.fireForest;
   return [
-    ...duplicateForDeck(monster, 4),
-    ...duplicateForDeck(item, 4),
+    ...duplicateForDeck(book.featuredMonster, 4),
+    ...duplicateForDeck(book.featuredItem, 4),
     ...duplicateForDeck(SPELL_CATALOG.manjaro, 2),
   ];
+}
+
+/** The full 40-card starter book as a plain, persistable card-definition list (not a live Deck) - what character creation saves as the player's initial deckList. */
+export function buildStarterDeckList(bookId = 'fireForest') {
+  const book = STARTER_DECKS[bookId] || STARTER_DECKS.fireForest;
+  const extra = buildStarterExtraCards(bookId);
+  return new Deck(extra, { elements: book.elements }).drawPile;
 }
 
 /** The stable catalog key for ability/effect lookups, for both raw catalog defs and deck copies. */

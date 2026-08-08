@@ -190,6 +190,87 @@ html, body {
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
 }
 
+.pg-actions-row {
+  display: flex;
+  gap: 12px;
+}
+
+#deck-catalog-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: min(600px, 90vw);
+  max-height: 45vh;
+  overflow-y: auto;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 10px;
+}
+
+.deck-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: #1c1c2c;
+}
+
+.deck-row-swatch {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.deck-row-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.deck-row-name {
+  color: #fff;
+  font-size: 13px;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.deck-row-meta {
+  color: #9a9ab0;
+  font-size: 11px;
+}
+
+.deck-row-stepper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.deck-row-stepper button {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: none;
+  background: #444;
+  color: #fff;
+  font-size: 15px;
+  font-weight: bold;
+}
+
+.deck-row-stepper button:disabled {
+  opacity: 0.35;
+}
+
+.deck-row-stepper span {
+  color: #fff;
+  font-size: 13px;
+  min-width: 16px;
+  text-align: center;
+}
+
 #hud {
   position: absolute;
   inset: 0;

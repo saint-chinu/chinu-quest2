@@ -32,7 +32,7 @@ const LEVEL_UP_COST = { 1: 50, 2: 200, 3: 400, 4: 600 };
 // 属性変更コスト = 現レベル×100（無色マスからの変更は半額）
 const ELEMENT_CHANGE_COST_PER_LEVEL = 100;
 const NEUTRAL_ELEMENT_CHANGE_DISCOUNT = 0.5;
-const CHANGEABLE_ELEMENTS = [Element.FIRE, Element.WATER, Element.WIND, Element.EARTH, Element.NEUTRAL];
+const CHANGEABLE_ELEMENTS = [Element.FIRE, Element.WATER, Element.THUNDER, Element.FOREST, Element.NEUTRAL];
 
 export class Game {
   constructor({
@@ -90,7 +90,9 @@ export class Game {
         direction: null,
         color: humanPlayer?.color ?? 0x2ec4b6,
         allianceId: null,
-        deck: new Deck(buildStarterExtraCards(humanPlayer?.deckVariant)),
+        deck: humanPlayer?.deckList
+          ? Deck.fromCardList(humanPlayer.deckList)
+          : new Deck(buildStarterExtraCards(humanPlayer?.deckVariant)),
         hand: [],
         spellUsedThisTurn: false,
       },

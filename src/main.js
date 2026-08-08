@@ -3,8 +3,9 @@ import { GameScene } from './scene.js';
 import { createBoard } from './board.js';
 import { Game } from './game.js';
 import { CardType, CARD_COLOR, ELEMENT_LABEL } from './cards.js';
-import { STARTER_DECKS } from './battleCards.js';
+import { STARTER_DECKS, buildStarterDeckList } from './battleCards.js';
 import { loginOrRegister, saveCharacter } from './auth.js';
+import { getCardCatalog } from './cardCatalog.js';
 
 const canvas = document.getElementById('game-canvas');
 const turnIndicator = document.getElementById('turn-indicator');
@@ -819,6 +820,11 @@ const charmakeDecks = document.getElementById('charmake-decks');
 const charmakeSubmit = document.getElementById('charmake-submit');
 const hubScreen = document.getElementById('hub-screen');
 const hubWelcome = document.getElementById('hub-welcome');
+const deckScreen = document.getElementById('deck-screen');
+const deckCount = document.getElementById('deck-count');
+const deckCatalogList = document.getElementById('deck-catalog-list');
+const deckSave = document.getElementById('deck-save');
+const deckBack = document.getElementById('deck-back');
 const battleMenuScreen = document.getElementById('battle-menu-screen');
 const battleCpuButton = document.getElementById('battle-cpu');
 const battleBackButton = document.getElementById('battle-back');
@@ -826,7 +832,7 @@ const stubScreen = document.getElementById('stub-screen');
 const stubText = document.getElementById('stub-text');
 const stubBackButton = document.getElementById('stub-back');
 
-const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, battleMenuScreen, stubScreen];
+const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, deckScreen, battleMenuScreen, stubScreen];
 function showScreen(el) {
   ALL_PG_SCREENS.forEach((s) => s.classList.toggle('hidden', s !== el));
 }
@@ -907,18 +913,21 @@ charmakeName.addEventListener('input', updateCharmakeValidity);
 
 charmakeSubmit.addEventListener('click', () => {
   if (charmakeSubmit.disabled) return;
-  currentCharacter = { name: charmakeName.value.trim(), color: selectedIconColor, deckVariant: selectedDeckVariant };
+  const deckList = buildStarterDeckList(selectedDeckVariant);
+  currentCharacter = { name: charmakeName.value.trim(), color: selectedIconColor, deckVariant: selectedDeckVariant, deckList };
   saveCharacter(currentUserId, currentCharacter);
   showHubScreen();
 });
 
-const STUB_MODE_LABEL = { story: 'ストーリー', deck: 'デッキ', shop: 'ショップ', breed: 'ブリード' };
+const STUB_MODE_LABEL = { story: 'ストーリー', shop: 'ショップ', breed: 'ブリード' };
 
 document.querySelectorAll('.hub-tile').forEach((tile) => {
   tile.addEventListener('click', () => {
     const mode = tile.dataset.mode;
     if (mode === 'battle') {
       showScreen(battleMenuScreen);
+    } else if (mode === 'deck') {
+      showDeckScreen();
     } else {
       stubText.textContent = `${STUB_MODE_LABEL[mode]}は準備中です`;
       showScreen(stubScreen);
@@ -928,6 +937,117 @@ document.querySelectorAll('.hub-tile').forEach((tile) => {
 
 battleBackButton.addEventListener('click', showHubScreen);
 stubBackButton.addEventListener('click', showHubScreen);
+
+// ---- Deck editor: browse the card catalog, +/- copies (max 4 each) until exactly 40, then save ----
+
+const MAX_COPIES_PER_CARD = 4;
+const DECK_SIZE = 40;
+
+/** Every card's `name` is unique across the catalog (named flavor cards and formulaic generic names never collide), so it's the simplest stable key for grouping deck copies against catalog entries - `catalogId` doesn't help here since raw catalog entries don't carry one (only deck-instantiated copies do), and `id` isn't stable across separate buildCardPool() calls for generic cards. */
+function cardKey(card) {
+  return card.name;
+}
+
+let deckWorkingCounts = null;
+
+function deckTotal() {
+  let total = 0;
+  for (const count of deckWorkingCounts.values()) total += count;
+  return total;
+}
+
+function updateDeckTotalDisplay() {
+  const total = deckTotal();
+  deckCount.textContent = `${total} / ${DECK_SIZE}`;
+  deckSave.disabled = total !== DECK_SIZE;
+}
+
+function showDeckScreen() {
+  const catalog = getCardCatalog();
+  deckWorkingCounts = new Map();
+  for (const card of currentCharacter.deckList || []) {
+    const key = cardKey(card);
+    deckWorkingCounts.set(key, (deckWorkingCounts.get(key) || 0) + 1);
+  }
+
+  // The DECK_SIZE-reached cap on every "＋" button is a global constraint
+  // (depends on the grand total, not just that row's own count), so
+  // changing any one row must refresh every row's button state, not just
+  // the one that was clicked.
+  const rowRefreshers = [];
+  function refreshAll() {
+    rowRefreshers.forEach((fn) => fn());
+    updateDeckTotalDisplay();
+  }
+
+  deckCatalogList.replaceChildren();
+  for (const def of catalog) {
+    const key = cardKey(def);
+    const row = document.createElement('div');
+    row.className = 'deck-row';
+
+    const swatch = document.createElement('div');
+    swatch.className = 'deck-row-swatch';
+    swatch.style.background = cardColor(def);
+
+    const info = document.createElement('div');
+    info.className = 'deck-row-info';
+    const costText = def.cost != null ? ` / コスト${def.cost}` : '';
+    info.innerHTML = `<div class="deck-row-name">${def.name}</div><div class="deck-row-meta">${describeCard(def)}${costText}</div>`;
+
+    const minusBtn = document.createElement('button');
+    minusBtn.textContent = '−';
+    const countEl = document.createElement('span');
+    const plusBtn = document.createElement('button');
+    plusBtn.textContent = '＋';
+
+    function refreshRow() {
+      const count = deckWorkingCounts.get(key) || 0;
+      countEl.textContent = String(count);
+      minusBtn.disabled = count <= 0;
+      plusBtn.disabled = count >= MAX_COPIES_PER_CARD || deckTotal() >= DECK_SIZE;
+    }
+    rowRefreshers.push(refreshRow);
+
+    minusBtn.addEventListener('click', () => {
+      const count = deckWorkingCounts.get(key) || 0;
+      if (count <= 0) return;
+      deckWorkingCounts.set(key, count - 1);
+      refreshAll();
+    });
+    plusBtn.addEventListener('click', () => {
+      const count = deckWorkingCounts.get(key) || 0;
+      if (count >= MAX_COPIES_PER_CARD || deckTotal() >= DECK_SIZE) return;
+      deckWorkingCounts.set(key, count + 1);
+      refreshAll();
+    });
+
+    const stepper = document.createElement('div');
+    stepper.className = 'deck-row-stepper';
+    stepper.append(minusBtn, countEl, plusBtn);
+    row.append(swatch, info, stepper);
+    deckCatalogList.appendChild(row);
+  }
+
+  refreshAll();
+  showScreen(deckScreen);
+}
+
+deckSave.addEventListener('click', () => {
+  if (deckSave.disabled) return;
+  const catalog = getCardCatalog();
+  const byKey = new Map(catalog.map((def) => [cardKey(def), def]));
+  const newList = [];
+  for (const [key, count] of deckWorkingCounts.entries()) {
+    const def = byKey.get(key);
+    for (let i = 0; i < count; i++) newList.push({ ...def });
+  }
+  currentCharacter = { ...currentCharacter, deckList: newList };
+  saveCharacter(currentUserId, currentCharacter);
+  showHubScreen();
+});
+
+deckBack.addEventListener('click', showHubScreen);
 
 battleCpuButton.addEventListener('click', () => {
   preGame.classList.add('hidden');
