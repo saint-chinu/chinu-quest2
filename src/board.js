@@ -4,7 +4,7 @@ export const TileType = {
   EVENT: 'event',
 };
 
-const SPACING = 4;
+const SPACING = 3.2;
 
 /**
  * Walks the perimeter of a width x height grid (no diagonals, no duplicate

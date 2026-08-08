@@ -1,4 +1,5 @@
 import { TileType } from './board.js';
+import { PIECE_REST_Y } from './scene.js';
 import { tween, easeInOutQuad, delay, randomInt } from './utils.js';
 
 const STEP_DURATION_MS = 300;
@@ -78,7 +79,7 @@ export class Game {
       const x = from.x + (to.x - from.x) * eased;
       const z = from.z + (to.z - from.z) * eased;
       const hop = Math.sin(Math.PI * t) * 0.5;
-      player.mesh.position.set(x, 0.5 + hop, z);
+      player.mesh.position.set(x, PIECE_REST_Y + hop, z);
       this.scene.setChaseTarget(x, z);
     });
   }

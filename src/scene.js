@@ -8,13 +8,15 @@ const TILE_COLOR = {
 };
 
 // Pulled back and flattened for a wide, "見下ろし" overview of the board.
-const CAMERA_OFFSET = new THREE.Vector3(0, 21, 17);
+const CAMERA_OFFSET = new THREE.Vector3(0, 25, 20);
 const CAMERA_FOV = 45;
 
 // Exponential smoothing rate for the camera chasing its target (world x/z
 // only — vertical piece motion never feeds into this). Lower = slower,
 // lazier follow.
 const CAMERA_FOLLOW_SPEED = 2.2;
+
+export const PIECE_REST_Y = 0.7;
 
 export class GameScene {
   constructor(canvas) {
@@ -59,7 +61,7 @@ export class GameScene {
   }
 
   buildBoard(tiles) {
-    const tileGeo = new THREE.BoxGeometry(3, 0.4, 3);
+    const tileGeo = new THREE.BoxGeometry(2.6, 0.4, 2.6);
     for (const tile of tiles) {
       const mat = new THREE.MeshStandardMaterial({ color: TILE_COLOR[tile.type] });
       const mesh = new THREE.Mesh(tileGeo, mat);
@@ -79,10 +81,10 @@ export class GameScene {
 
   createPiece(color, tilePosition) {
     const mesh = new THREE.Mesh(
-      new THREE.CapsuleGeometry(0.4, 0.6, 4, 8),
+      new THREE.CapsuleGeometry(0.55, 0.75, 4, 8),
       new THREE.MeshStandardMaterial({ color })
     );
-    mesh.position.set(tilePosition.x, 0.5, tilePosition.z);
+    mesh.position.set(tilePosition.x, PIECE_REST_Y, tilePosition.z);
     this.scene.add(mesh);
     return mesh;
   }
