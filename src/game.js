@@ -452,10 +452,17 @@ export class Game {
     this.rollDice(steps);
   }
 
+  /**
+   * Culdcept has no land resale market - a land's worth is purely the toll
+   * income it can extract from opponents, which is exactly what `toll`
+   * already tracks (base rate x current level). Summing that, rather than
+   * the flat purchase `price`, means leveling up actually raises the
+   * displayed total assets instead of only ever costing currency.
+   */
   _landValueOf(playerId) {
     return this.tiles
       .filter((t) => t.owner === playerId)
-      .reduce((sum, t) => sum + (t.price || 0), 0);
+      .reduce((sum, t) => sum + (t.toll || 0), 0);
   }
 
   _summonCountOf(playerId) {
