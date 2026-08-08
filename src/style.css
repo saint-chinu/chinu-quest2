@@ -128,6 +128,9 @@ html, body {
 
 #hand-panel .card {
   cursor: pointer;
+  width: 74px;
+  height: 102px;
+  font-size: 14px;
 }
 
 .card-large {

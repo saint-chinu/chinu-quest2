@@ -13,10 +13,6 @@ const HAND_LIMIT = 6;
 // to this many tiles since its last pan (across turns, not reset per
 // roll), so small moves leave it completely still.
 const TILE_PAN_THRESHOLD = 3;
-// If a step would otherwise leave the piece off-screen, the camera pan
-// starts this many ms before the piece itself starts moving into that
-// tile, so it leads rather than reacts.
-const LOOKAHEAD_LEAD_MS = 150;
 
 // CPU "thinking" pauses so its turns don't blow by instantly.
 const CPU_PRE_ROLL_MS = 1400;
@@ -177,25 +173,24 @@ export class Game {
     }
   }
 
-  async _stepWithCamera(player, from, to) {
-    let pan = null;
-
+  /**
+   * The piece moves at a constant, uninterrupted pace - the camera pan (if
+   * any) is fired off in the background and never awaited, so a slower
+   * multi-hundred-ms pan can never stall the next tile's step.
+   */
+  _stepWithCamera(player, from, to) {
     if (this.scene.isOutsideSafeView(to.x, to.z)) {
-      // The piece is about to leave the visible area - lead with the
-      // camera instead of reacting after it's already off-screen.
-      pan = this.scene.panTo(to.x, to.z);
+      this.scene.panTo(to.x, to.z);
       this.tilesSincePan = 0;
-      await delay(LOOKAHEAD_LEAD_MS);
     } else {
       this.tilesSincePan += 1;
       if (this.tilesSincePan >= TILE_PAN_THRESHOLD) {
-        pan = this.scene.panTo(to.x, to.z);
+        this.scene.panTo(to.x, to.z);
         this.tilesSincePan = 0;
       }
     }
 
-    const move = this._tweenStep(player, from, to);
-    await (pan ? Promise.all([move, pan]) : move);
+    return this._tweenStep(player, from, to);
   }
 
   _tweenStep(player, from, to) {
