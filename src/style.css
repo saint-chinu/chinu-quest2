@@ -86,19 +86,23 @@ html, body {
 }
 
 .card {
-  width: 92px;
-  height: 128px;
-  border-radius: 8px;
+  width: 46px;
+  height: 64px;
+  border-radius: 6px;
   border: 2px solid rgba(255, 255, 255, 0.8);
   display: flex;
   align-items: center;
   justify-content: center;
   text-align: center;
   color: #fff;
-  font-size: 13px;
+  font-size: 9px;
   line-height: 1.2;
-  padding: 5px;
+  padding: 3px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+#hand-panel .card {
+  cursor: pointer;
 }
 
 .card-large {
@@ -214,7 +218,8 @@ html, body {
 }
 
 #card-reveal-modal,
-#discard-modal {
+#discard-modal,
+#card-detail-modal {
   position: absolute;
   inset: 0;
   z-index: 20;
@@ -225,11 +230,18 @@ html, body {
 }
 
 #card-reveal-modal.hidden,
-#discard-modal.hidden {
+#discard-modal.hidden,
+#card-detail-modal.hidden {
   display: none;
 }
 
-#card-reveal-box {
+#card-detail-text {
+  color: #fff;
+  font-size: 13px;
+}
+
+#card-reveal-box,
+#card-detail-box {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -241,7 +253,8 @@ html, body {
   font-size: 14px;
 }
 
-#card-reveal-ok {
+#card-reveal-ok,
+#card-detail-close {
   border: none;
   border-radius: 8px;
   padding: 8px 28px;

@@ -2,7 +2,7 @@ import './style.css';
 import { GameScene } from './scene.js';
 import { createBoard } from './board.js';
 import { Game } from './game.js';
-import { CardType, CARD_COLOR } from './cards.js';
+import { CardType, CARD_COLOR, ELEMENT_LABEL } from './cards.js';
 
 const canvas = document.getElementById('game-canvas');
 const turnIndicator = document.getElementById('turn-indicator');
@@ -19,6 +19,10 @@ const cardRevealCard = document.getElementById('card-reveal-card');
 const cardRevealOk = document.getElementById('card-reveal-ok');
 const discardModal = document.getElementById('discard-modal');
 const discardChoices = document.getElementById('discard-choices');
+const cardDetailModal = document.getElementById('card-detail-modal');
+const cardDetailCard = document.getElementById('card-detail-card');
+const cardDetailText = document.getElementById('card-detail-text');
+const cardDetailClose = document.getElementById('card-detail-close');
 
 function promptPurchase(tile) {
   return new Promise((resolve) => {
@@ -51,12 +55,36 @@ function renderCardEl(el, card) {
   el.textContent = card.name;
 }
 
+const TYPE_LABEL = {
+  [CardType.MONSTER]: 'モンスター',
+  [CardType.GEAR]: '武器防具',
+  [CardType.SPELL]: 'スペル',
+};
+
+function describeCard(card) {
+  return card.type === CardType.MONSTER
+    ? `モンスター（${ELEMENT_LABEL[card.element]}属性）`
+    : TYPE_LABEL[card.type];
+}
+
+function showCardDetail(card) {
+  renderCardEl(cardDetailCard, card);
+  cardDetailText.textContent = describeCard(card);
+  cardDetailModal.classList.remove('hidden');
+}
+
+cardDetailClose.addEventListener('click', () => {
+  cardDetailModal.classList.add('hidden');
+});
+
 function renderHand(hand) {
   handPanel.replaceChildren();
   for (const card of hand) {
     const el = document.createElement('div');
     el.className = 'card';
+    el.style.pointerEvents = 'auto';
     renderCardEl(el, card);
+    el.addEventListener('click', () => showCardDetail(card));
     handPanel.appendChild(el);
   }
 }
