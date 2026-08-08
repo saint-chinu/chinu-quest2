@@ -3,7 +3,20 @@ import { PIECE_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck } from './cards.js';
 import { buildStarterExtraCards } from './battleCards.js';
 import { createFieldUnit, resolveBattle } from './battle.js';
+import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay } from './utils.js';
+
+const SHOP_OPTION_COUNT = 3;
+
+function randomSample(list, count) {
+  const pool = [...list];
+  const picked = [];
+  for (let i = 0; i < count && pool.length > 0; i++) {
+    const index = Math.floor(Math.random() * pool.length);
+    picked.push(pool.splice(index, 1)[0]);
+  }
+  return picked;
+}
 
 const STEP_DURATION_MS = 300;
 const START_BONUS = 100;
@@ -50,9 +63,10 @@ export class Game {
     onConfirmAction,
     onTileInfo,
     onPickLandForLevelUp,
-    onChooseDirection,
+    onChooseBranch,
     onPickLandForElementChange,
     onPickElement,
+    onShopPurchase,
     humanPlayer,
   }) {
     this.tiles = tiles;
@@ -69,9 +83,10 @@ export class Game {
     this.onConfirmAction = onConfirmAction;
     this.onTileInfo = onTileInfo;
     this.onPickLandForLevelUp = onPickLandForLevelUp;
-    this.onChooseDirection = onChooseDirection;
+    this.onChooseBranch = onChooseBranch;
     this.onPickLandForElementChange = onPickLandForElementChange;
     this.onPickElement = onPickElement;
+    this.onShopPurchase = onShopPurchase;
     // A canvas cropped from the player-icon sheet (see iconSheet.js) for
     // the human player's board piece - null falls back to the plain
     // colored-circle token (always true for CPU, which has no character).
@@ -80,18 +95,18 @@ export class Game {
     // allianceId is unused today (only 2 players, no alliance mode yet) but
     // the state payload already carries it so the UI's slot layout - which
     // groups same-alliance players together - is ready when that lands.
-    // direction is +1 (clockwise, tile index increases) or -1
-    // (counterclockwise); null means "not chosen yet" - resolved lazily on
-    // that player's first rollDice (CPU defaults to +1, no prompt), and
-    // later flippable mid-game by a special card effect.
+    // tileId indexes into `tiles` (ids are assigned sequentially at parse
+    // time, so id === array index). previousTileId excludes backtracking
+    // when picking the next step at a branch (see _movePlayer) - null at
+    // game start, when every neighbor of the start tile is a fair option.
     this.players = [
       {
         id: 0,
         name: humanPlayer?.name || 'プレイヤー',
         isCPU: false,
         currency: 500,
-        tileIndex: 0,
-        direction: null,
+        tileId: 0,
+        previousTileId: null,
         color: humanPlayer?.color ?? 0x2ec4b6,
         allianceId: null,
         deck: humanPlayer?.deckList
@@ -100,7 +115,7 @@ export class Game {
         hand: [],
         spellUsedThisTurn: false,
       },
-      { id: 1, name: 'CPU', isCPU: true, currency: 500, tileIndex: 0, direction: null, color: 0xe63946, allianceId: null, deck: new Deck(buildStarterExtraCards()), hand: [], spellUsedThisTurn: false },
+      { id: 1, name: 'CPU', isCPU: true, currency: 500, tileId: 0, previousTileId: null, color: 0xe63946, allianceId: null, deck: new Deck(buildStarterExtraCards()), hand: [], spellUsedThisTurn: false },
     ];
     this.currentPlayerIndex = 0;
     this.isBusy = false;
@@ -117,7 +132,7 @@ export class Game {
 
   init() {
     for (const player of this.players) {
-      const pos = this.tiles[player.tileIndex].position;
+      const pos = this.tiles[player.tileId].position;
       player.mesh = !player.isCPU && this.humanIconImage
         ? this.scene.createPieceFromImage(this.humanIconImage, pos)
         : this.scene.createPiece(player.color, pos);
@@ -126,7 +141,7 @@ export class Game {
         if (card) player.hand.push(card);
       }
     }
-    const startPos = this.tiles[this.currentPlayer.tileIndex].position;
+    const startPos = this.tiles[this.currentPlayer.tileId].position;
     this.scene.setFocusImmediate(startPos.x, startPos.z);
     this._beginTurn();
   }
@@ -186,10 +201,6 @@ export class Game {
     const player = this.currentPlayer;
     this.onLog(`${player.name}のサイコロ: ${steps}`);
 
-    if (player.direction == null) {
-      player.direction = player.isCPU ? 1 : await this.onChooseDirection();
-    }
-
     await this._movePlayer(player, steps);
     this.onMoveComplete?.();
     await this._resolveSpecialTile(player);
@@ -228,18 +239,46 @@ export class Game {
     }
   }
 
+  /**
+   * The board is a graph (see board.js - the outer loop plus a "+"-shaped
+   * inner cross), not a simple loop, so each step picks the next tile from
+   * `fromTile.neighbors` rather than a fixed +1/-1. A tile with exactly one
+   * forward option (excluding wherever the player just came from) just
+   * continues automatically; a branch (2+ options - the 4 edge-midpoints
+   * and the center) prompts a choice every time it's reached, not just
+   * once at game start.
+   */
   async _movePlayer(player, steps) {
     for (let i = 0; i < steps; i++) {
-      const fromTile = this.tiles[player.tileIndex];
-      player.tileIndex = (player.tileIndex + player.direction + this.tiles.length) % this.tiles.length;
-      const toTile = this.tiles[player.tileIndex];
+      const fromTile = this.tiles[player.tileId];
+      const forward = fromTile.neighbors.filter((id) => id !== player.previousTileId);
+      const options = forward.length > 0 ? forward : fromTile.neighbors;
+
+      const nextId = options.length === 1 ? options[0] : await this._chooseNextTile(player, fromTile, options);
+      const toTile = this.tiles[nextId];
+      player.previousTileId = player.tileId;
+      player.tileId = nextId;
       await this._stepWithCamera(player, fromTile.position, toTile.position);
 
-      if (player.tileIndex === 0 && i < steps - 1) {
+      if (toTile.type === TileType.START && i < steps - 1) {
         player.currency += START_BONUS;
         this.onLog(`${player.name}はスタートを通過！ +${START_BONUS}`);
       }
     }
+  }
+
+  /** CPU just picks randomly; the human is prompted (camera-work + diagonal arrows toward whichever screen direction each option actually sits in). */
+  async _chooseNextTile(player, fromTile, optionIds) {
+    if (player.isCPU) return optionIds[Math.floor(Math.random() * optionIds.length)];
+
+    const options = optionIds.map((id) => {
+      const tile = this.tiles[id];
+      const dgx = tile.gridX - fromTile.gridX;
+      const dgz = tile.gridZ - fromTile.gridZ;
+      const screenDir = dgx === 1 ? 'downright' : dgx === -1 ? 'upleft' : dgz === 1 ? 'downleft' : 'upright';
+      return { tileId: id, screenDir };
+    });
+    return this.onChooseBranch(options);
   }
 
   /**
@@ -272,15 +311,17 @@ export class Game {
     });
   }
 
-  /** ② Goal/checkpoint handling, plus the toll auto-charge for stopping on someone else's land. */
+  /** ② Goal/checkpoint/shop handling, plus the toll auto-charge for stopping on someone else's land. */
   async _resolveSpecialTile(player) {
-    const tile = this.tiles[player.tileIndex];
+    const tile = this.tiles[player.tileId];
 
     if (tile.type === TileType.START) {
       player.currency += START_BONUS;
       this.onLog(`${player.name}はゴールに到着！ +${START_BONUS}`);
     } else if (tile.type === TileType.EVENT) {
       this.onLog(`${player.name}はチェックポイントに止まった`);
+    } else if (tile.type === TileType.SHOP) {
+      await this._resolveShopTile(player);
     } else if (tile.type === TileType.LAND && tile.owner != null && tile.owner !== player.id) {
       const owner = this.players.find((p) => p.id === tile.owner);
       const toll = this._tollOfTile(tile);
@@ -293,13 +334,38 @@ export class Game {
   }
 
   /**
+   * ショップマス: offers 3 random catalog cards (paid for with in-battle G,
+   * added straight to hand). This is intentionally disconnected from
+   * character.ownedCards - it's a one-match-only pickup, not a permanent
+   * acquisition, so it must never touch the persistent collection (that's
+   * the hub's ショップ screen's job, a completely separate system).
+   */
+  async _resolveShopTile(player) {
+    if (player.isCPU) return; // CPU doesn't shop
+    // Spells have no cost field at all today (useSpell has always been
+    // free once drawn) - excluded here rather than pretending they cost 0G.
+    const sellable = getCardCatalog().filter((c) => c.cost != null);
+    const options = randomSample(sellable, SHOP_OPTION_COUNT);
+    const card = await this.onShopPurchase(options, player.currency);
+    if (!card) return;
+    if (player.currency < card.cost) {
+      this.onLog('ゴールドが足りません');
+      return;
+    }
+    player.currency -= card.cost;
+    player.hand.push({ ...card, id: `shop-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}` });
+    this.onLog(`${player.name}はショップで「${card.name}」を購入した (-${card.cost}G)`);
+    this._notifyState();
+  }
+
+  /**
    * ③ The summon/invade/swap, level-up, and info menu for whichever land
    * tile was landed on. Summon/invade/swap and level-up both end the turn
    * as soon as they actually go through; info just loops back to the menu
    * (nothing about it commits to anything), and so does a cancelled action.
    */
   async _runLandCommand(player) {
-    const tile = this.tiles[player.tileIndex];
+    const tile = this.tiles[player.tileId];
     if (tile.type !== TileType.LAND) return;
 
     if (player.isCPU) {

@@ -579,6 +579,7 @@ html, body {
 
 #land-command-modal,
 #monster-picker-modal,
+#shop-tile-modal,
 #land-picker-modal,
 #element-picker-modal,
 #confirm-modal,
@@ -594,6 +595,7 @@ html, body {
 
 #land-command-modal.hidden,
 #monster-picker-modal.hidden,
+#shop-tile-modal.hidden,
 #land-picker-modal.hidden,
 #element-picker-modal.hidden,
 #confirm-modal.hidden,
@@ -603,6 +605,7 @@ html, body {
 
 #land-command-box,
 #monster-picker-box,
+#shop-tile-box,
 #land-picker-box,
 #element-picker-box,
 #confirm-box,
@@ -643,6 +646,7 @@ html, body {
 #land-command-actions button,
 #confirm-actions button,
 #monster-picker-cancel,
+#shop-tile-cancel,
 #land-picker-cancel,
 #element-picker-cancel,
 #tile-info-close,
@@ -680,7 +684,8 @@ html, body {
   background: #555;
 }
 
-#monster-picker-choices {
+#monster-picker-choices,
+#shop-tile-choices {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
@@ -690,7 +695,8 @@ html, body {
   overflow-y: auto;
 }
 
-#monster-picker-choices .card {
+#monster-picker-choices .card,
+#shop-tile-choices .card {
   cursor: pointer;
   width: 74px;
   height: 102px;
@@ -801,34 +807,45 @@ html, body {
 
 .dir-arrow {
   position: absolute;
-  top: 42%;
   pointer-events: auto;
-  width: 72px;
-  height: 72px;
+  width: 64px;
+  height: 64px;
   border-radius: 50%;
   border: none;
-  background: rgba(255, 255, 255, 0.85);
-  color: #22223b;
-  font-size: 30px;
+  background: rgba(46, 196, 182, 0.9);
+  color: #06231f;
+  font-size: 26px;
   font-weight: bold;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  animation: arrow-blink 1.1s ease-in-out infinite;
 }
 
-#dir-arrow-left {
-  left: calc(50% - 96px);
+.dir-arrow.hidden {
+  display: none;
 }
 
-#dir-arrow-right {
-  left: calc(50% + 24px);
+/* One arrow per screen-diagonal a branch option can actually sit in (see Game._chooseNextTile) - arranged like the 4 points of a diamond around the board's center. */
+.dir-arrow-upleft {
+  top: 32%;
+  left: calc(50% - 92px);
 }
 
-.dir-arrow.armed {
-  background: #2ec4b6;
-  color: #06231f;
-  animation: arrow-blink 0.5s ease-in-out infinite;
+.dir-arrow-upright {
+  top: 32%;
+  left: calc(50% + 28px);
+}
+
+.dir-arrow-downleft {
+  top: 54%;
+  left: calc(50% - 92px);
+}
+
+.dir-arrow-downright {
+  top: 54%;
+  left: calc(50% + 28px);
 }
 
 #cam-work-back {

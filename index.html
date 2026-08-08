@@ -100,8 +100,10 @@
       </div>
       <div id="rotate-notice">画面を横向きにしてください</div>
       <div id="direction-arrows-overlay" class="hidden">
-        <button id="dir-arrow-left" class="dir-arrow" aria-label="反時計回りで進む">↙</button>
-        <button id="dir-arrow-right" class="dir-arrow" aria-label="時計回りで進む">↘</button>
+        <button id="dir-arrow-upleft" class="dir-arrow dir-arrow-upleft hidden" aria-label="左上へ進む">↖</button>
+        <button id="dir-arrow-upright" class="dir-arrow dir-arrow-upright hidden" aria-label="右上へ進む">↗</button>
+        <button id="dir-arrow-downleft" class="dir-arrow dir-arrow-downleft hidden" aria-label="左下へ進む">↙</button>
+        <button id="dir-arrow-downright" class="dir-arrow dir-arrow-downright hidden" aria-label="右下へ進む">↘</button>
       </div>
       <div id="land-command-modal" class="hidden">
         <div id="land-command-box">
@@ -120,6 +122,13 @@
           <p>モンスターカードを選んでください</p>
           <div id="monster-picker-choices"></div>
           <button id="monster-picker-cancel">やめる</button>
+        </div>
+      </div>
+      <div id="shop-tile-modal" class="hidden">
+        <div id="shop-tile-box">
+          <p>購入するカードを選んでください</p>
+          <div id="shop-tile-choices"></div>
+          <button id="shop-tile-cancel">やめる</button>
         </div>
       </div>
       <div id="land-picker-modal" class="hidden">

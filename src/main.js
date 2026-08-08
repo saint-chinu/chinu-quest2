@@ -20,8 +20,10 @@ const logEl = document.getElementById('log');
 const handPanel = document.getElementById('hand-panel');
 const diceButton = document.getElementById('dice-button');
 const directionArrowsOverlay = document.getElementById('direction-arrows-overlay');
-const dirArrowRight = document.getElementById('dir-arrow-right');
-const dirArrowLeft = document.getElementById('dir-arrow-left');
+const dirArrowUpleft = document.getElementById('dir-arrow-upleft');
+const dirArrowUpright = document.getElementById('dir-arrow-upright');
+const dirArrowDownleft = document.getElementById('dir-arrow-downleft');
+const dirArrowDownright = document.getElementById('dir-arrow-downright');
 const landCommandModal = document.getElementById('land-command-modal');
 const landCommandTitle = document.getElementById('land-command-title');
 const landCommandSummon = document.getElementById('land-command-summon');
@@ -32,6 +34,9 @@ const landCommandEnd = document.getElementById('land-command-end');
 const monsterPickerModal = document.getElementById('monster-picker-modal');
 const monsterPickerChoices = document.getElementById('monster-picker-choices');
 const monsterPickerCancel = document.getElementById('monster-picker-cancel');
+const shopTileModal = document.getElementById('shop-tile-modal');
+const shopTileChoices = document.getElementById('shop-tile-choices');
+const shopTileCancel = document.getElementById('shop-tile-cancel');
 const landPickerModal = document.getElementById('land-picker-modal');
 const landPickerTitle = document.getElementById('land-picker-title');
 const landPickerChoices = document.getElementById('land-picker-choices');
@@ -70,7 +75,7 @@ const spellEffectText = document.getElementById('spell-effect-text');
 
 const BLINK_MS = 600;
 
-const TILE_TYPE_LABEL = { start: 'ゴール', land: '土地', event: 'チェックポイント' };
+const TILE_TYPE_LABEL = { start: 'ゴール', land: '土地', event: 'チェックポイント', shop: 'ショップ' };
 
 function tileSummaryText(tile) {
   const lines = [`【${TILE_TYPE_LABEL[tile.type]}】`];
@@ -83,26 +88,35 @@ function tileSummaryText(tile) {
   return lines.join('\n');
 }
 
+const BRANCH_ARROW_BY_DIR = {
+  upleft: dirArrowUpleft,
+  upright: dirArrowUpright,
+  downleft: dirArrowDownleft,
+  downright: dirArrowDownright,
+};
+
 /**
- * Once, right after the first dice roll of the game: two diagonal arrows
- * appear (↘ clockwise/+1, ↙ counterclockwise/-1) alongside the same 4-way
- * camera-work pan overlay used by 土地情報, so the player can look around
- * the board (useful once branching tiles exist) before deciding. First
- * click on a diagonal arrow arms it (it starts blinking); a second click on
- * that same (already-armed) arrow confirms and resolves. Clicking the other
- * arrow just re-arms onto that one instead. The camera-work "戻る" button is
- * hidden here (via .no-back) since there's nothing to cancel back to - the
- * choice is mandatory. Camera position is restored once resolved, before
- * movement starts.
+ * Every time movement reaches a tile with more than one way forward (the
+ * board's 4 edge-midpoints and its center - see board.js), not just once at
+ * game start: up to 4 diagonal arrows appear, one per available option, in
+ * whichever screen direction that neighbor actually sits (see
+ * Game._chooseNextTile - a world +X/-X/+Z/-Z step reads as screen
+ * ↘/↖/↙/↗ respectively under this board's fixed diagonal camera). The same
+ * camera-work pan overlay used by 土地情報 comes along so the player can
+ * look around before deciding. One tap picks - no arm/confirm step, since
+ * this now fires often rather than being a single big one-time decision.
+ * The camera-work "戻る" button is hidden (.no-back) since the choice is
+ * mandatory; camera position is restored once resolved, before movement
+ * continues.
  */
-function promptChooseDirection() {
+function promptChooseBranch(options) {
   return new Promise((resolve) => {
     const savedFocus = { x: scene.focus.x, z: scene.focus.z };
     cameraWorkOverlay.classList.add('no-back');
     cameraWorkOverlay.classList.remove('hidden');
     directionArrowsOverlay.classList.remove('hidden');
-    let armed = null;
 
+    const listeners = [];
     function onPanUp() {
       scene.panByDirection('up');
     }
@@ -115,37 +129,27 @@ function promptChooseDirection() {
     function onPanRight() {
       scene.panByDirection('right');
     }
-
-    function setArmed(which) {
-      armed = which;
-      dirArrowRight.classList.toggle('armed', which === 'right');
-      dirArrowLeft.classList.toggle('armed', which === 'left');
-    }
-    function cleanup(direction) {
+    function cleanup(tileId) {
       cameraWorkOverlay.classList.add('hidden');
       cameraWorkOverlay.classList.remove('no-back');
       directionArrowsOverlay.classList.add('hidden');
-      dirArrowRight.classList.remove('armed');
-      dirArrowLeft.classList.remove('armed');
-      dirArrowRight.removeEventListener('click', onSelectRight);
-      dirArrowLeft.removeEventListener('click', onSelectLeft);
+      Object.values(BRANCH_ARROW_BY_DIR).forEach((el) => el.classList.add('hidden'));
+      listeners.forEach(([el, fn]) => el.removeEventListener('click', fn));
       camArrowUp.removeEventListener('click', onPanUp);
       camArrowDown.removeEventListener('click', onPanDown);
       camArrowLeft.removeEventListener('click', onPanLeft);
       camArrowRight.removeEventListener('click', onPanRight);
       scene.setFocusImmediate(savedFocus.x, savedFocus.z);
-      resolve(direction);
+      resolve(tileId);
     }
-    function onSelectRight() {
-      if (armed === 'right') cleanup(1);
-      else setArmed('right');
+
+    for (const option of options) {
+      const arrow = BRANCH_ARROW_BY_DIR[option.screenDir];
+      arrow.classList.remove('hidden');
+      const onClick = () => cleanup(option.tileId);
+      listeners.push([arrow, onClick]);
+      arrow.addEventListener('click', onClick);
     }
-    function onSelectLeft() {
-      if (armed === 'left') cleanup(-1);
-      else setArmed('left');
-    }
-    dirArrowRight.addEventListener('click', onSelectRight);
-    dirArrowLeft.addEventListener('click', onSelectLeft);
     camArrowUp.addEventListener('click', onPanUp);
     camArrowDown.addEventListener('click', onPanDown);
     camArrowLeft.addEventListener('click', onPanLeft);
@@ -218,6 +222,45 @@ function promptPickMonsterCard(options) {
       resolve(null);
     }
     monsterPickerCancel.addEventListener('click', onCancel);
+  });
+}
+
+/**
+ * ショップマス: 3 random cards, paid for with in-battle G, land straight in
+ * hand for this match only (see Game._resolveShopTile - never touches
+ * character.ownedCards, the permanent collection). Picking one blinks it,
+ * then confirms the cost like every other spend in this game; declining
+ * the confirm returns to the 3-card picker rather than closing outright.
+ */
+function promptShopPurchase(options) {
+  return new Promise((resolve) => {
+    function cleanup(result) {
+      shopTileModal.classList.add('hidden');
+      shopTileCancel.removeEventListener('click', onCancel);
+      resolve(result);
+    }
+    function onCancel() {
+      cleanup(null);
+    }
+
+    shopTileChoices.replaceChildren();
+    for (const card of options) {
+      const el = document.createElement('div');
+      el.className = 'card';
+      renderCardEl(el, card);
+      el.addEventListener('click', () => {
+        el.classList.add('blinking');
+        setTimeout(async () => {
+          el.classList.remove('blinking');
+          const confirmed = await confirmYesNo(`「${card.name}」を購入しますか？ コスト${card.cost}G`);
+          if (confirmed) cleanup(card);
+          // declined: stay on the picker, nothing to reset
+        }, BLINK_MS);
+      });
+      shopTileChoices.appendChild(el);
+    }
+    shopTileModal.classList.remove('hidden');
+    shopTileCancel.addEventListener('click', onCancel);
   });
 }
 
@@ -791,7 +834,7 @@ function animate() {
 /** `character` is { name, color, deckVariant } from character creation (or null pre-フェーズ0 fallback). */
 function startBattle(character) {
   scene = new GameScene(canvas);
-  tiles = createBoard({ width: 6, height: 5 });
+  tiles = createBoard();
   scene.buildBoard(tiles);
 
   game = new Game({
@@ -833,9 +876,10 @@ function startBattle(character) {
     onConfirmAction: promptConfirmAction,
     onTileInfo: promptTileInfo,
     onPickLandForLevelUp: promptPickLandForLevelUp,
-    onChooseDirection: promptChooseDirection,
+    onChooseBranch: promptChooseBranch,
     onPickLandForElementChange: promptPickLandForElementChange,
     onPickElement: promptPickElement,
+    onShopPurchase: promptShopPurchase,
     humanPlayer: character
       ? {
           name: character.name,
