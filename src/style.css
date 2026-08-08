@@ -172,7 +172,7 @@ html, body {
 #dice-button .pip[data-pos="bl"] { grid-area: 3 / 1; }
 #dice-button .pip[data-pos="br"] { grid-area: 3 / 3; }
 
-#dice-button:disabled {
+#dice-button.moving {
   opacity: 0.4;
 }
 

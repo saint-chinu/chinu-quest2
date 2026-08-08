@@ -224,6 +224,10 @@ function syncCenterVisibility() {
   // visibility (not display) so the hand keeps reserving its layout space -
   // hiding it must never shift the dice button's position.
   centerHandEl.style.visibility = showCenterState ? '' : 'hidden';
+  // The faded look means "riding along with the move", not "not your turn"
+  // - CPU's dice looks perfectly normal through its own spin/hold, same as
+  // the player's, and only dims once the piece is actually moving.
+  diceButton.classList.toggle('moving', diceMoving);
 }
 
 function resetDice() {
