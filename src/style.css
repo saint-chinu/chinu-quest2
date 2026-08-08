@@ -1,0 +1,163 @@
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: #101018;
+  font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+  touch-action: none;
+}
+
+#app {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+#game-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#hud {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 12px 16px;
+}
+
+#top-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+#turn-indicator {
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+#currency-panel {
+  background: rgba(0, 0, 0, 0.55);
+  color: #ffd166;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  text-align: right;
+  white-space: pre-line;
+}
+
+#log {
+  align-self: center;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 4px 12px;
+  border-radius: 8px;
+  font-size: 13px;
+  min-height: 20px;
+  max-width: 80%;
+  text-align: center;
+}
+
+#dice-button {
+  align-self: flex-end;
+  pointer-events: auto;
+  background: #ff6b35;
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 14px 28px;
+  font-size: 16px;
+  font-weight: bold;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+#dice-button:disabled {
+  background: #555;
+  opacity: 0.6;
+}
+
+#rotate-notice {
+  display: none;
+  position: absolute;
+  inset: 0;
+  background: #101018;
+  color: #fff;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  text-align: center;
+  z-index: 10;
+}
+
+@media (orientation: portrait) and (max-width: 900px) {
+  #rotate-notice {
+    display: flex;
+  }
+}
+
+#purchase-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+#purchase-modal.hidden {
+  display: none;
+}
+
+#purchase-box {
+  background: #22223b;
+  border-radius: 12px;
+  padding: 20px 24px;
+  color: #fff;
+  text-align: center;
+  min-width: 240px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+#purchase-text {
+  margin-bottom: 16px;
+  font-size: 15px;
+}
+
+#purchase-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+#purchase-actions button {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: bold;
+}
+
+#purchase-yes {
+  background: #2ec4b6;
+  color: #06231f;
+}
+
+#purchase-no {
+  background: #555;
+  color: #fff;
+}
