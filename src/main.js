@@ -81,15 +81,36 @@ function tileSummaryText(tile) {
 
 /**
  * Once, right after the first dice roll of the game: two diagonal arrows
- * appear (↘ clockwise/+1, ↙ counterclockwise/-1). First click on an arrow
- * arms it (it starts blinking); a second click on that same (already-armed)
- * arrow confirms and resolves. Clicking the other arrow just re-arms onto
- * that one instead.
+ * appear (↘ clockwise/+1, ↙ counterclockwise/-1) alongside the same 4-way
+ * camera-work pan overlay used by 土地情報, so the player can look around
+ * the board (useful once branching tiles exist) before deciding. First
+ * click on a diagonal arrow arms it (it starts blinking); a second click on
+ * that same (already-armed) arrow confirms and resolves. Clicking the other
+ * arrow just re-arms onto that one instead. The camera-work "戻る" button is
+ * hidden here (via .no-back) since there's nothing to cancel back to - the
+ * choice is mandatory. Camera position is restored once resolved, before
+ * movement starts.
  */
 function promptChooseDirection() {
   return new Promise((resolve) => {
+    const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+    cameraWorkOverlay.classList.add('no-back');
+    cameraWorkOverlay.classList.remove('hidden');
     directionArrowsOverlay.classList.remove('hidden');
     let armed = null;
+
+    function onPanUp() {
+      scene.panByDirection('up');
+    }
+    function onPanDown() {
+      scene.panByDirection('down');
+    }
+    function onPanLeft() {
+      scene.panByDirection('left');
+    }
+    function onPanRight() {
+      scene.panByDirection('right');
+    }
 
     function setArmed(which) {
       armed = which;
@@ -97,23 +118,34 @@ function promptChooseDirection() {
       dirArrowLeft.classList.toggle('armed', which === 'left');
     }
     function cleanup(direction) {
+      cameraWorkOverlay.classList.add('hidden');
+      cameraWorkOverlay.classList.remove('no-back');
       directionArrowsOverlay.classList.add('hidden');
       dirArrowRight.classList.remove('armed');
       dirArrowLeft.classList.remove('armed');
-      dirArrowRight.removeEventListener('click', onRight);
-      dirArrowLeft.removeEventListener('click', onLeft);
+      dirArrowRight.removeEventListener('click', onSelectRight);
+      dirArrowLeft.removeEventListener('click', onSelectLeft);
+      camArrowUp.removeEventListener('click', onPanUp);
+      camArrowDown.removeEventListener('click', onPanDown);
+      camArrowLeft.removeEventListener('click', onPanLeft);
+      camArrowRight.removeEventListener('click', onPanRight);
+      scene.setFocusImmediate(savedFocus.x, savedFocus.z);
       resolve(direction);
     }
-    function onRight() {
+    function onSelectRight() {
       if (armed === 'right') cleanup(1);
       else setArmed('right');
     }
-    function onLeft() {
+    function onSelectLeft() {
       if (armed === 'left') cleanup(-1);
       else setArmed('left');
     }
-    dirArrowRight.addEventListener('click', onRight);
-    dirArrowLeft.addEventListener('click', onLeft);
+    dirArrowRight.addEventListener('click', onSelectRight);
+    dirArrowLeft.addEventListener('click', onSelectLeft);
+    camArrowUp.addEventListener('click', onPanUp);
+    camArrowDown.addEventListener('click', onPanDown);
+    camArrowLeft.addEventListener('click', onPanLeft);
+    camArrowRight.addEventListener('click', onPanRight);
   });
 }
 

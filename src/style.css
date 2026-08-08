@@ -519,6 +519,11 @@ html, body {
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
 }
 
+/* Direction-choice reuses the camera-work pan overlay, but the choice is mandatory - there's nothing to back out to. */
+#camera-work-overlay.no-back #cam-work-back {
+  display: none;
+}
+
 @keyframes card-blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.15; }

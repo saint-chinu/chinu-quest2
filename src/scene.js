@@ -12,7 +12,10 @@ const TILE_COLOR = {
 // board from a corner angle. This is what makes the axis-aligned square
 // tiles read as diamonds on screen, isometric-style — the tiles
 // themselves stay plain squares.
-const CAMERA_OFFSET = new THREE.Vector3(14.5, 25, 14.5);
+// 15% closer than the original (14.5, 25, 14.5) - board was reading too
+// distant/small. Scaling this vector uniformly zooms in without touching
+// the diagonal viewing angle that makes tiles read as diamonds.
+const CAMERA_OFFSET = new THREE.Vector3(14.5, 25, 14.5).multiplyScalar(0.85);
 const CAMERA_FOV = 45;
 const PAN_DURATION_MS = 900;
 
