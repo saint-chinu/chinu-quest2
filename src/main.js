@@ -3,6 +3,8 @@ import { GameScene } from './scene.js';
 import { createBoard } from './board.js';
 import { Game } from './game.js';
 import { CardType, CARD_COLOR, ELEMENT_LABEL } from './cards.js';
+import { STARTER_DECKS } from './battleCards.js';
+import { loginOrRegister, saveCharacter } from './auth.js';
 
 const canvas = document.getElementById('game-canvas');
 const turnIndicator = document.getElementById('turn-indicator');
@@ -733,58 +735,202 @@ function onMoveComplete() {
   syncCenterVisibility();
 }
 
-const scene = new GameScene(canvas);
-const tiles = createBoard({ width: 6, height: 5 });
-scene.buildBoard(tiles);
-
-const game = new Game({
-  tiles,
-  scene,
-  onLog: (message) => {
-    logEl.textContent = message;
-  },
-  onStateChange: ({
-    turnText,
-    canRoll,
-    players,
-    hand,
-    showCenter,
-    centerHand,
-    currentPlayerIsCPU,
-    spellUsedThisTurn,
-  }) => {
-    turnIndicator.textContent = turnText;
-    diceButton.disabled = !canRoll;
-    renderPlayerPanels(players);
-    renderHand(hand);
-
-    const enteringShowCenter = showCenter && !showCenterState;
-    showCenterState = showCenter;
-    if (enteringShowCenter) resetDice();
-    syncCenterVisibility();
-    if (showCenter) {
-      renderCenterHand(centerHand, currentPlayerIsCPU, !spellUsedThisTurn);
-    }
-  },
-  onCardReveal: promptCardReveal,
-  onDiscardChoice: promptDiscardChoice,
-  onSpellUse: promptSpellUse,
-  onCpuRoll: cpuRollDice,
-  onMoveComplete,
-  onLandCommand: promptLandCommand,
-  onPickMonsterCard: promptPickMonsterCard,
-  onConfirmAction: promptConfirmAction,
-  onTileInfo: promptTileInfo,
-  onPickLandForLevelUp: promptPickLandForLevelUp,
-  onChooseDirection: promptChooseDirection,
-  onPickLandForElementChange: promptPickLandForElementChange,
-  onPickElement: promptPickElement,
-});
-
-game.init();
+// Populated by startBattle() once the player reaches 対戦→CPU戦 through the
+// pre-game flow below - nothing here runs until then.
+let scene;
+let tiles;
+let game;
 
 function animate() {
   scene.render();
   requestAnimationFrame(animate);
 }
-requestAnimationFrame(animate);
+
+/** `character` is { name, color, deckVariant } from character creation (or null pre-フェーズ0 fallback). */
+function startBattle(character) {
+  scene = new GameScene(canvas);
+  tiles = createBoard({ width: 6, height: 5 });
+  scene.buildBoard(tiles);
+
+  game = new Game({
+    tiles,
+    scene,
+    onLog: (message) => {
+      logEl.textContent = message;
+    },
+    onStateChange: ({
+      turnText,
+      canRoll,
+      players,
+      hand,
+      showCenter,
+      centerHand,
+      currentPlayerIsCPU,
+      spellUsedThisTurn,
+    }) => {
+      turnIndicator.textContent = turnText;
+      diceButton.disabled = !canRoll;
+      renderPlayerPanels(players);
+      renderHand(hand);
+
+      const enteringShowCenter = showCenter && !showCenterState;
+      showCenterState = showCenter;
+      if (enteringShowCenter) resetDice();
+      syncCenterVisibility();
+      if (showCenter) {
+        renderCenterHand(centerHand, currentPlayerIsCPU, !spellUsedThisTurn);
+      }
+    },
+    onCardReveal: promptCardReveal,
+    onDiscardChoice: promptDiscardChoice,
+    onSpellUse: promptSpellUse,
+    onCpuRoll: cpuRollDice,
+    onMoveComplete,
+    onLandCommand: promptLandCommand,
+    onPickMonsterCard: promptPickMonsterCard,
+    onConfirmAction: promptConfirmAction,
+    onTileInfo: promptTileInfo,
+    onPickLandForLevelUp: promptPickLandForLevelUp,
+    onChooseDirection: promptChooseDirection,
+    onPickLandForElementChange: promptPickLandForElementChange,
+    onPickElement: promptPickElement,
+    humanPlayer: character
+      ? { name: character.name, color: character.color, deckVariant: character.deckVariant }
+      : undefined,
+  });
+
+  game.init();
+  requestAnimationFrame(animate);
+}
+
+// ---- Pre-game: login → (first time only) character creation → mode hub ----
+
+const preGame = document.getElementById('pre-game');
+const appEl = document.getElementById('app');
+const loginScreen = document.getElementById('login-screen');
+const loginId = document.getElementById('login-id');
+const loginPassword = document.getElementById('login-password');
+const loginError = document.getElementById('login-error');
+const loginSubmit = document.getElementById('login-submit');
+const charmakeScreen = document.getElementById('charmake-screen');
+const charmakeIcons = document.getElementById('charmake-icons');
+const charmakeName = document.getElementById('charmake-name');
+const charmakeDecks = document.getElementById('charmake-decks');
+const charmakeSubmit = document.getElementById('charmake-submit');
+const hubScreen = document.getElementById('hub-screen');
+const hubWelcome = document.getElementById('hub-welcome');
+const battleMenuScreen = document.getElementById('battle-menu-screen');
+const battleCpuButton = document.getElementById('battle-cpu');
+const battleBackButton = document.getElementById('battle-back');
+const stubScreen = document.getElementById('stub-screen');
+const stubText = document.getElementById('stub-text');
+const stubBackButton = document.getElementById('stub-back');
+
+const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, battleMenuScreen, stubScreen];
+function showScreen(el) {
+  ALL_PG_SCREENS.forEach((s) => s.classList.toggle('hidden', s !== el));
+}
+
+// Placeholder icon choices (colored circles, same style as the in-game
+// piece tokens) until real character art exists.
+const ICON_COLORS = [0x2ec4b6, 0xe63946, 0xffd166, 0x8e5ce6, 0x4caf6e, 0x3a86e6];
+
+let currentUserId = null;
+let currentCharacter = null;
+let selectedIconColor = null;
+let selectedDeckVariant = null;
+
+function updateCharmakeValidity() {
+  charmakeSubmit.disabled = !charmakeName.value.trim() || selectedIconColor == null || !selectedDeckVariant;
+}
+
+function showCharmakeScreen() {
+  selectedIconColor = null;
+  selectedDeckVariant = null;
+  charmakeName.value = '';
+
+  charmakeIcons.replaceChildren();
+  for (const color of ICON_COLORS) {
+    const el = document.createElement('div');
+    el.className = 'pg-icon-choice';
+    el.style.background = hexColor(color);
+    el.addEventListener('click', () => {
+      selectedIconColor = color;
+      [...charmakeIcons.children].forEach((c) => c.classList.remove('selected'));
+      el.classList.add('selected');
+      updateCharmakeValidity();
+    });
+    charmakeIcons.appendChild(el);
+  }
+
+  charmakeDecks.replaceChildren();
+  for (const deck of Object.values(STARTER_DECKS)) {
+    const el = document.createElement('div');
+    el.className = 'pg-deck-choice';
+    el.textContent = deck.name;
+    el.addEventListener('click', () => {
+      selectedDeckVariant = deck.id;
+      [...charmakeDecks.children].forEach((c) => c.classList.remove('selected'));
+      el.classList.add('selected');
+      updateCharmakeValidity();
+    });
+    charmakeDecks.appendChild(el);
+  }
+
+  updateCharmakeValidity();
+  showScreen(charmakeScreen);
+}
+
+function showHubScreen() {
+  hubWelcome.textContent = `ようこそ、${currentCharacter.name}`;
+  showScreen(hubScreen);
+}
+
+loginSubmit.addEventListener('click', () => {
+  const result = loginOrRegister(loginId.value.trim(), loginPassword.value);
+  if (!result.ok) {
+    loginError.textContent = result.error;
+    loginError.classList.remove('hidden');
+    return;
+  }
+  loginError.classList.add('hidden');
+  currentUserId = result.id;
+  if (result.isNew || !result.character) {
+    showCharmakeScreen();
+  } else {
+    currentCharacter = result.character;
+    showHubScreen();
+  }
+});
+
+charmakeName.addEventListener('input', updateCharmakeValidity);
+
+charmakeSubmit.addEventListener('click', () => {
+  if (charmakeSubmit.disabled) return;
+  currentCharacter = { name: charmakeName.value.trim(), color: selectedIconColor, deckVariant: selectedDeckVariant };
+  saveCharacter(currentUserId, currentCharacter);
+  showHubScreen();
+});
+
+const STUB_MODE_LABEL = { story: 'ストーリー', deck: 'デッキ', shop: 'ショップ', breed: 'ブリード' };
+
+document.querySelectorAll('.hub-tile').forEach((tile) => {
+  tile.addEventListener('click', () => {
+    const mode = tile.dataset.mode;
+    if (mode === 'battle') {
+      showScreen(battleMenuScreen);
+    } else {
+      stubText.textContent = `${STUB_MODE_LABEL[mode]}は準備中です`;
+      showScreen(stubScreen);
+    }
+  });
+});
+
+battleBackButton.addEventListener('click', showHubScreen);
+stubBackButton.addEventListener('click', showHubScreen);
+
+battleCpuButton.addEventListener('click', () => {
+  preGame.classList.add('hidden');
+  appEl.classList.remove('hidden');
+  startBattle(currentCharacter);
+});

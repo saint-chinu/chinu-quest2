@@ -19,10 +19,175 @@ html, body {
   height: 100vh;
 }
 
+#app.hidden {
+  display: none;
+}
+
 #game-canvas {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+/* ---- Pre-game: login / character creation / mode-select hub ---- */
+
+#pre-game {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+}
+
+#pre-game.hidden {
+  display: none;
+}
+
+.pg-screen {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  background: #101018;
+  overflow-y: auto;
+}
+
+.pg-screen.hidden {
+  display: none;
+}
+
+.pg-title {
+  color: #fff;
+  font-size: 22px;
+  font-weight: bold;
+  margin-bottom: 6px;
+}
+
+.pg-label {
+  color: #cfcfe0;
+  font-size: 13px;
+}
+
+.pg-error {
+  color: #ff6b6b;
+  font-size: 13px;
+}
+
+.pg-error.hidden {
+  display: none;
+}
+
+.pg-field {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 260px;
+}
+
+.pg-field label {
+  color: #cfcfe0;
+  font-size: 13px;
+  width: 70px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+.pg-field input {
+  flex: 1;
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  background: #1c1c2c;
+  color: #fff;
+  font-size: 14px;
+}
+
+.pg-field input:focus {
+  outline: none;
+  border-color: #2ec4b6;
+}
+
+.pg-button {
+  border: none;
+  border-radius: 10px;
+  padding: 12px 32px;
+  font-size: 16px;
+  font-weight: bold;
+  background: #2ec4b6;
+  color: #06231f;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+.pg-button:disabled {
+  opacity: 0.4;
+}
+
+.pg-button-secondary {
+  background: #444;
+  color: #fff;
+}
+
+.pg-choice-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: center;
+  max-width: 400px;
+}
+
+.pg-icon-choice {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 3px solid rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+}
+
+.pg-icon-choice.selected {
+  border-color: #ffd166;
+  box-shadow: 0 0 0 3px rgba(255, 209, 102, 0.4);
+}
+
+.pg-choice-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 300px;
+}
+
+.pg-deck-choice {
+  cursor: pointer;
+  border: 2px solid rgba(255, 255, 255, 0.4);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: #fff;
+  font-size: 13px;
+  text-align: left;
+}
+
+.pg-deck-choice.selected {
+  border-color: #2ec4b6;
+  background: rgba(46, 196, 182, 0.15);
+}
+
+#hub-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 140px);
+  gap: 14px;
+}
+
+.hub-tile {
+  border: none;
+  border-radius: 12px;
+  padding: 22px 10px;
+  font-size: 15px;
+  font-weight: bold;
+  background: #22223b;
+  color: #fff;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
 }
 
 #hud {

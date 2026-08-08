@@ -53,6 +53,7 @@ export class Game {
     onChooseDirection,
     onPickLandForElementChange,
     onPickElement,
+    humanPlayer,
   }) {
     this.tiles = tiles;
     this.scene = scene;
@@ -80,7 +81,19 @@ export class Game {
     // that player's first rollDice (CPU defaults to +1, no prompt), and
     // later flippable mid-game by a special card effect.
     this.players = [
-      { id: 0, name: 'プレイヤー', isCPU: false, currency: 500, tileIndex: 0, direction: null, color: 0x2ec4b6, allianceId: null, deck: new Deck(buildStarterExtraCards()), hand: [], spellUsedThisTurn: false },
+      {
+        id: 0,
+        name: humanPlayer?.name || 'プレイヤー',
+        isCPU: false,
+        currency: 500,
+        tileIndex: 0,
+        direction: null,
+        color: humanPlayer?.color ?? 0x2ec4b6,
+        allianceId: null,
+        deck: new Deck(buildStarterExtraCards(humanPlayer?.deckVariant)),
+        hand: [],
+        spellUsedThisTurn: false,
+      },
       { id: 1, name: 'CPU', isCPU: true, currency: 500, tileIndex: 0, direction: null, color: 0xe63946, allianceId: null, deck: new Deck(buildStarterExtraCards()), hand: [], spellUsedThisTurn: false },
     ];
     this.currentPlayerIndex = 0;

@@ -8,7 +8,58 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div id="app">
+    <div id="pre-game">
+      <div id="login-screen" class="pg-screen">
+        <h1 class="pg-title">チヌクエスト2</h1>
+        <div class="pg-field">
+          <label for="login-id">ID</label>
+          <input id="login-id" type="text" autocomplete="username" />
+        </div>
+        <div class="pg-field">
+          <label for="login-password">パスワード</label>
+          <input id="login-password" type="password" autocomplete="current-password" />
+        </div>
+        <p id="login-error" class="pg-error hidden"></p>
+        <button id="login-submit" class="pg-button">ログイン／新規登録</button>
+      </div>
+
+      <div id="charmake-screen" class="pg-screen hidden">
+        <h2 class="pg-title">キャラメイク</h2>
+        <p class="pg-label">アイコンを選んでください</p>
+        <div id="charmake-icons" class="pg-choice-row"></div>
+        <div class="pg-field">
+          <label for="charmake-name">名前</label>
+          <input id="charmake-name" type="text" maxlength="10" />
+        </div>
+        <p class="pg-label">初期デッキを選んでください</p>
+        <div id="charmake-decks" class="pg-choice-column"></div>
+        <button id="charmake-submit" class="pg-button">はじめる</button>
+      </div>
+
+      <div id="hub-screen" class="pg-screen hidden">
+        <h2 id="hub-welcome" class="pg-title"></h2>
+        <div id="hub-tiles">
+          <button class="hub-tile" data-mode="story">ストーリー</button>
+          <button class="hub-tile" data-mode="battle">対戦</button>
+          <button class="hub-tile" data-mode="deck">デッキ</button>
+          <button class="hub-tile" data-mode="shop">ショップ</button>
+          <button class="hub-tile" data-mode="breed">ブリード</button>
+        </div>
+      </div>
+
+      <div id="battle-menu-screen" class="pg-screen hidden">
+        <h2 class="pg-title">対戦</h2>
+        <button id="battle-cpu" class="pg-button">CPU戦</button>
+        <button id="battle-pvp" class="pg-button" disabled>対人戦（準備中）</button>
+        <button id="battle-back" class="pg-button pg-button-secondary">戻る</button>
+      </div>
+
+      <div id="stub-screen" class="pg-screen hidden">
+        <p id="stub-text" class="pg-label"></p>
+        <button id="stub-back" class="pg-button pg-button-secondary">戻る</button>
+      </div>
+    </div>
+    <div id="app" class="hidden">
       <canvas id="game-canvas"></canvas>
       <div id="hud">
         <div id="player-panel-0" class="player-panel corner-tl hidden"></div>
