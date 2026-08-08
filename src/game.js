@@ -27,6 +27,8 @@ const LEVEL_CAP = 5;
 // カルドセプト ビギンズ系
 const CHAIN_MULTIPLIER = { 1: 1.0, 2: 1.5, 3: 2.0, 4: 2.5, 5: 3.0 };
 const TOLL_RATE = { 1: 0.2, 2: 0.3, 3: 0.4, 4: 0.6, 5: 0.8 };
+// Flat cost to level up FROM the given level (not a formula) - keyed by current level.
+const LEVEL_UP_COST = { 1: 50, 2: 200, 3: 400, 4: 600 };
 
 export class Game {
   constructor({
@@ -365,7 +367,7 @@ export class Game {
     const target = this.tiles.find((t) => t.id === targetId);
     if (!target || target.level >= LEVEL_CAP) return false;
 
-    const cost = target.price * target.level;
+    const cost = LEVEL_UP_COST[target.level];
     const confirmed = await this.onConfirmAction({ actionType: 'levelup', cost, tile: this.getTileSummary(target) });
     if (!confirmed) return false;
     if (player.currency < cost) {

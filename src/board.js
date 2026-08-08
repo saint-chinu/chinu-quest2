@@ -63,9 +63,10 @@ export function createBoard({ width = 6, height = 5 } = {}) {
       owner: isLand ? null : undefined,
       unit: isLand ? null : undefined,
       level: isLand ? 1 : undefined,
-      // 基本地価 (base land price) - see Game._landValueOfTile/_tollOfTile
-      // for how level/chain multipliers turn this into 地価 and 通行料.
-      price: isLand ? 100 + (i % 4) * 50 : null,
+      // 基本地価 (base land price) - flat across all tiles for now. See
+      // Game._landValueOfTile/_tollOfTile for how level/chain multipliers
+      // turn this into 地価 and 通行料.
+      price: isLand ? 75 : null,
     };
   });
 }
