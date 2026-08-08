@@ -42,9 +42,12 @@ export class Game {
     this.onCpuRoll = onCpuRoll;
     this.onMoveComplete = onMoveComplete;
 
+    // allianceId is unused today (only 2 players, no alliance mode yet) but
+    // the state payload already carries it so the UI's slot layout - which
+    // groups same-alliance players together - is ready when that lands.
     this.players = [
-      { id: 0, name: 'プレイヤー', isCPU: false, currency: 500, tileIndex: 0, color: 0x2ec4b6, deck: new Deck(), hand: [], spellUsedThisTurn: false },
-      { id: 1, name: 'CPU', isCPU: true, currency: 500, tileIndex: 0, color: 0xe63946, deck: new Deck(), hand: [], spellUsedThisTurn: false },
+      { id: 0, name: 'プレイヤー', isCPU: false, currency: 500, tileIndex: 0, color: 0x2ec4b6, allianceId: null, deck: new Deck(), hand: [], spellUsedThisTurn: false },
+      { id: 1, name: 'CPU', isCPU: true, currency: 500, tileIndex: 0, color: 0xe63946, allianceId: null, deck: new Deck(), hand: [], spellUsedThisTurn: false },
     ];
     this.currentPlayerIndex = 0;
     this.isBusy = false;
@@ -261,13 +264,32 @@ export class Game {
     this.rollDice(steps);
   }
 
+  _landValueOf(playerId) {
+    return this.tiles
+      .filter((t) => t.owner === playerId)
+      .reduce((sum, t) => sum + (t.price || 0), 0);
+  }
+
+  _summonCountOf(playerId) {
+    return this.tiles.filter((t) => t.owner === playerId).length;
+  }
+
   _notifyState() {
     const human = this.players.find((p) => !p.isCPU);
     const showCenter = this.awaitingRoll && !this.isBusy;
     this.onStateChange({
       turnText: `${this.currentPlayer.name}のターン`,
       canRoll: showCenter && !this.currentPlayer.isCPU,
-      players: this.players.map((p) => ({ name: p.name, currency: p.currency, handCount: p.hand.length })),
+      players: this.players.map((p) => ({
+        id: p.id,
+        name: p.name,
+        color: p.color,
+        allianceId: p.allianceId,
+        currency: p.currency,
+        totalAssets: p.currency + this._landValueOf(p.id),
+        summonCount: this._summonCountOf(p.id),
+        handCount: p.hand.length,
+      })),
       hand: human.hand,
       showCenter,
       centerHand: this.currentPlayer.hand,

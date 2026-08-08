@@ -6,7 +6,12 @@ import { CardType, CARD_COLOR, ELEMENT_LABEL } from './cards.js';
 
 const canvas = document.getElementById('game-canvas');
 const turnIndicator = document.getElementById('turn-indicator');
-const currencyPanel = document.getElementById('currency-panel');
+const playerPanelEls = [
+  document.getElementById('player-panel-0'),
+  document.getElementById('player-panel-1'),
+  document.getElementById('player-panel-2'),
+  document.getElementById('player-panel-3'),
+];
 const logEl = document.getElementById('log');
 const handPanel = document.getElementById('hand-panel');
 const diceButton = document.getElementById('dice-button');
@@ -52,6 +57,64 @@ function promptPurchase(tile) {
 
 function cardColor(card) {
   return card.type === CardType.MONSTER ? CARD_COLOR[card.element] : CARD_COLOR[card.type];
+}
+
+function hexColor(colorInt) {
+  return `#${colorInt.toString(16).padStart(6, '0')}`;
+}
+
+/**
+ * Maps players to the 4 HUD corner slots [TL, TR, BL, BR].
+ * No alliances: turn order fills TL, TR, then wraps to BL (under TL) and
+ * BR (under TR). With alliances: the team containing the first-turn player
+ * takes the left column (leader TL, teammates stacked under at BL), the
+ * next team takes the right column the same way - turn order within a
+ * team doesn't matter for placement.
+ */
+function computePlayerSlots(players) {
+  const hasAlliances = players.some((p) => p.allianceId != null);
+  if (!hasAlliances) {
+    return [players[0], players[1], players[2], players[3]];
+  }
+
+  const teams = [];
+  const teamIndexByKey = new Map();
+  for (const p of players) {
+    const key = p.allianceId ?? `solo-${p.id}`;
+    if (!teamIndexByKey.has(key)) {
+      teamIndexByKey.set(key, teams.length);
+      teams.push([]);
+    }
+    teams[teamIndexByKey.get(key)].push(p);
+  }
+
+  const [left = [], right = []] = teams;
+  return [left[0], right[0], left[1], right[1]];
+}
+
+function renderPlayerPanels(players) {
+  const slots = computePlayerSlots(players);
+  slots.forEach((player, i) => {
+    const el = playerPanelEls[i];
+    el.classList.toggle('hidden', !player);
+    if (!player) return;
+
+    el.style.setProperty('--player-color', hexColor(player.color));
+    el.replaceChildren();
+
+    const icon = document.createElement('div');
+    icon.className = 'player-icon';
+
+    const lines = document.createElement('div');
+    lines.className = 'player-info-lines';
+    lines.innerHTML = `
+      <div class="player-name">${player.name}</div>
+      <div class="player-stat">所持 ${player.currency}G / 総資産 ${player.totalAssets}G</div>
+      <div class="player-stat">召喚数 ${player.summonCount}</div>
+    `;
+
+    el.append(icon, lines);
+  });
 }
 
 function renderCardEl(el, card) {
@@ -332,9 +395,7 @@ const game = new Game({
   }) => {
     turnIndicator.textContent = turnText;
     diceButton.disabled = !canRoll;
-    currencyPanel.textContent = players
-      .map((p) => `${p.name}: ${p.currency}G / 手札${p.handCount}枚`)
-      .join('\n');
+    renderPlayerPanels(players);
     renderHand(hand);
 
     const enteringShowCenter = showCenter && !showCenterState;
