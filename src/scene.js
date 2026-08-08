@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { TileType } from './board.js';
+import { tween, easeInOutQuad } from './utils.js';
 
 const TILE_COLOR = {
   [TileType.START]: 0xffd166,
@@ -7,8 +8,20 @@ const TILE_COLOR = {
   [TileType.EVENT]: 0x9b5de5,
 };
 
-const CAMERA_OFFSET = new THREE.Vector3(0, 9, 7);
-const CAMERA_FOLLOW_SPEED = 4.5; // higher = snappier follow
+// Pulled back and flattened for a wide, "見下ろし" overview of the board.
+const CAMERA_OFFSET = new THREE.Vector3(0, 17, 14);
+const CAMERA_FOV = 45;
+
+// Half-size (world units) of the area around the current camera focus that
+// the piece can move within without the camera reacting. Kept larger than
+// the phase-1 board so the camera stays completely still during normal
+// play; once a board's tiles reach past this, the camera pans just enough
+// to bring the destination back into view. This is what keeps camera
+// motion "最低限" — it only ever moves when the piece would otherwise go
+// off-screen, never as a continuous per-frame chase.
+const DEADZONE_HALF_X = 11;
+const DEADZONE_HALF_Z = 9;
+const PAN_DURATION_MS = 350;
 
 export class GameScene {
   constructor(canvas) {
@@ -17,10 +30,10 @@ export class GameScene {
     this.scene.background = new THREE.Color(0x1a1a2e);
 
     this.camera = new THREE.PerspectiveCamera(
-      45,
+      CAMERA_FOV,
       canvas.clientWidth / canvas.clientHeight,
       0.1,
-      100
+      200
     );
 
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
@@ -28,10 +41,8 @@ export class GameScene {
 
     this._setupLights();
 
-    this.currentFocus = new THREE.Vector3(0, 0, 0);
-    this.focusTarget = new THREE.Vector3(0, 0, 0);
-    this.camera.position.copy(this.currentFocus).add(CAMERA_OFFSET);
-    this.camera.lookAt(this.currentFocus);
+    this.focus = new THREE.Vector3(0, 0, 0);
+    this._applyCamera();
 
     this.resize();
     window.addEventListener('resize', () => this.resize());
@@ -64,7 +75,7 @@ export class GameScene {
     }
 
     const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(200, 200),
+      new THREE.PlaneGeometry(400, 400),
       new THREE.MeshStandardMaterial({ color: 0x14141f })
     );
     ground.rotation.x = -Math.PI / 2;
@@ -82,20 +93,34 @@ export class GameScene {
     return mesh;
   }
 
-  setFocusTarget(x, z) {
-    this.focusTarget.set(x, 0, z);
-  }
-
   setFocusImmediate(x, z) {
-    this.focusTarget.set(x, 0, z);
-    this.currentFocus.copy(this.focusTarget);
+    this.focus.set(x, 0, z);
+    this._applyCamera();
   }
 
-  update(delta) {
-    const alpha = 1 - Math.exp(-CAMERA_FOLLOW_SPEED * delta);
-    this.currentFocus.lerp(this.focusTarget, alpha);
-    this.camera.position.copy(this.currentFocus).add(CAMERA_OFFSET);
-    this.camera.lookAt(this.currentFocus);
+  /**
+   * If (x, z) lies outside the deadzone around the current focus, pans the
+   * camera to recenter on it and returns the pan's promise. Otherwise
+   * returns null and the camera does not move at all.
+   */
+  panIfNeeded(x, z) {
+    const dx = x - this.focus.x;
+    const dz = z - this.focus.z;
+    if (Math.abs(dx) <= DEADZONE_HALF_X && Math.abs(dz) <= DEADZONE_HALF_Z) {
+      return null;
+    }
+
+    const from = this.focus.clone();
+    const to = new THREE.Vector3(x, 0, z);
+    return tween(PAN_DURATION_MS, (t) => {
+      this.focus.lerpVectors(from, to, easeInOutQuad(t));
+      this._applyCamera();
+    });
+  }
+
+  _applyCamera() {
+    this.camera.position.copy(this.focus).add(CAMERA_OFFSET);
+    this.camera.lookAt(this.focus);
   }
 
   render() {

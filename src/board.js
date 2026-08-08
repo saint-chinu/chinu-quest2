@@ -19,6 +19,15 @@ function generateLoopGridCoords(width, height) {
   return coords;
 }
 
+export function getBoardCenter(tiles) {
+  const xs = tiles.map((t) => t.position.x);
+  const zs = tiles.map((t) => t.position.z);
+  return {
+    x: (Math.min(...xs) + Math.max(...xs)) / 2,
+    z: (Math.min(...zs) + Math.max(...zs)) / 2,
+  };
+}
+
 export function createBoard({ width = 6, height = 5 } = {}) {
   const coords = generateLoopGridCoords(width, height);
   const offsetX = (width - 1) / 2;

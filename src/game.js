@@ -1,4 +1,4 @@
-import { TileType } from './board.js';
+import { TileType, getBoardCenter } from './board.js';
 import { tween, easeInOutQuad, delay, randomInt } from './utils.js';
 
 const STEP_DURATION_MS = 300;
@@ -28,8 +28,8 @@ export class Game {
     for (const player of this.players) {
       player.mesh = this.scene.createPiece(player.color, this.tiles[player.tileIndex].position);
     }
-    const startPos = this.tiles[0].position;
-    this.scene.setFocusImmediate(startPos.x, startPos.z);
+    const center = getBoardCenter(this.tiles);
+    this.scene.setFocusImmediate(center.x, center.z);
     this._notifyState();
   }
 
@@ -70,14 +70,17 @@ export class Game {
   }
 
   _tweenStep(player, from, to) {
-    return tween(STEP_DURATION_MS, (t) => {
+    const pan = this.scene.panIfNeeded(to.x, to.z);
+
+    const move = tween(STEP_DURATION_MS, (t) => {
       const eased = easeInOutQuad(t);
       const x = from.x + (to.x - from.x) * eased;
       const z = from.z + (to.z - from.z) * eased;
       const hop = Math.sin(Math.PI * t) * 0.5;
       player.mesh.position.set(x, 0.5 + hop, z);
-      this.scene.setFocusTarget(x, z);
     });
+
+    return pan ? Promise.all([move, pan]) : move;
   }
 
   async _resolveTile(player) {
