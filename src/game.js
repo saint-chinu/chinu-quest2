@@ -1,4 +1,4 @@
-import { TileType, getBoardCenter } from './board.js';
+import { TileType } from './board.js';
 import { tween, easeInOutQuad, delay, randomInt } from './utils.js';
 
 const STEP_DURATION_MS = 300;
@@ -28,8 +28,8 @@ export class Game {
     for (const player of this.players) {
       player.mesh = this.scene.createPiece(player.color, this.tiles[player.tileIndex].position);
     }
-    const center = getBoardCenter(this.tiles);
-    this.scene.setFocusImmediate(center.x, center.z);
+    const startPos = this.tiles[this.currentPlayer.tileIndex].position;
+    this.scene.setFocusImmediate(startPos.x, startPos.z);
     this._notifyState();
   }
 
@@ -39,6 +39,9 @@ export class Game {
     this._notifyState();
 
     const player = this.currentPlayer;
+    const startPos = this.tiles[player.tileIndex].position;
+    await this.scene.centerOn(startPos.x, startPos.z);
+
     const steps = randomInt(1, 6);
     this.onLog(`${player.name}のサイコロ: ${steps}`);
 
