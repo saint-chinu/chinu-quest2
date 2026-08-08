@@ -203,9 +203,12 @@ const DICE_SPIN_INTERVAL_MS = 90;
 // Time from the stop trigger (2nd click, or CPU's auto-stop) until the face
 // actually locks - the dice keeps spinning through this window, so it's a
 // timing/skill stop rather than an instant one.
-const DICE_STOP_DELAY_MS = 1500;
+const DICE_STOP_DELAY_MS = 300;
+// How long the locked face sits on screen (hand and dice both unchanged)
+// before the move actually starts.
+const DICE_RESULT_HOLD_MS = 1500;
 
-// idle -> (click) -> spinning -> (click) -> locking -> settles, then rollDice() fires
+// idle -> (click) -> spinning -> (click) -> locking -> settles + holds, then rollDice() fires
 let diceState = 'idle';
 let diceValue = 1;
 let diceSpinTimer = null;
@@ -218,7 +221,9 @@ let diceMoving = false;
 
 function syncCenterVisibility() {
   centerPanel.classList.toggle('hidden', !(showCenterState || diceMoving));
-  centerHandEl.style.display = showCenterState ? '' : 'none';
+  // visibility (not display) so the hand keeps reserving its layout space -
+  // hiding it must never shift the dice button's position.
+  centerHandEl.style.visibility = showCenterState ? '' : 'hidden';
 }
 
 function resetDice() {
@@ -243,8 +248,10 @@ function startDiceSpin() {
 
 /**
  * Stops the spin DICE_STOP_DELAY_MS from now, landing on `forcedValue` if
- * given (CPU's predetermined roll) or whatever's currently showing
- * (the player's case).
+ * given (CPU's predetermined roll) or whatever's currently showing (the
+ * player's case). Then holds that result - hand and dice both unchanged -
+ * for DICE_RESULT_HOLD_MS before resolving, so there's a beat to actually
+ * see the number before the piece starts moving.
  */
 function settleDiceSpin(forcedValue) {
   diceState = 'locking';
@@ -255,7 +262,8 @@ function settleDiceSpin(forcedValue) {
       if (forcedValue !== undefined) diceValue = forcedValue;
       setDiceFace(diceValue);
       diceState = 'idle';
-      resolve(diceValue);
+
+      setTimeout(() => resolve(diceValue), DICE_RESULT_HOLD_MS);
     }, DICE_STOP_DELAY_MS);
   });
 }
