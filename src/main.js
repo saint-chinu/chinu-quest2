@@ -52,6 +52,7 @@ const tileInfoBack = document.getElementById('tile-info-back');
 const cardRevealModal = document.getElementById('card-reveal-modal');
 const cardRevealCard = document.getElementById('card-reveal-card');
 const discardModal = document.getElementById('discard-modal');
+const discardHint = document.getElementById('discard-hint');
 const discardChoices = document.getElementById('discard-choices');
 const cardDetailModal = document.getElementById('card-detail-modal');
 const cardDetailCard = document.getElementById('card-detail-card');
@@ -523,16 +524,30 @@ function promptSpellUse(card) {
   });
 }
 
+const DISCARD_HINT_DEFAULT = '手札が7枚になりました。捨てるカードを選んでください';
+const DISCARD_HINT_ARMED = 'もう一度タップで捨てる';
+
+/** Tapping a card arms it (blinks + hint text changes); tapping the armed card again discards it. Tapping a different card just re-arms onto that one. */
 function promptDiscardChoice(hand) {
   return new Promise((resolve) => {
+    discardHint.textContent = DISCARD_HINT_DEFAULT;
     discardChoices.replaceChildren();
+    let armedEl = null;
+
     for (const card of hand) {
       const el = document.createElement('div');
       el.className = 'card';
       renderCardEl(el, card);
       el.addEventListener('click', () => {
-        discardModal.classList.add('hidden');
-        resolve(card);
+        if (armedEl === el) {
+          discardModal.classList.add('hidden');
+          resolve(card);
+          return;
+        }
+        armedEl?.classList.remove('armed');
+        armedEl = el;
+        el.classList.add('armed');
+        discardHint.textContent = DISCARD_HINT_ARMED;
       });
       discardChoices.appendChild(el);
     }

@@ -521,6 +521,12 @@ html, body {
   animation: card-blink 300ms ease-in-out 2;
 }
 
+/* Continuous version of card-blink for "armed, waiting for a confirming second tap" states (as opposed to .blinking's fire-twice-and-stop). */
+.card.armed {
+  animation: card-blink 700ms ease-in-out infinite;
+  border-color: #2ec4b6;
+}
+
 #card-reveal-modal,
 #discard-modal,
 #card-detail-modal {
@@ -632,14 +638,14 @@ html, body {
 
 #discard-choices {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   justify-content: center;
 }
 
 #discard-choices .card {
   cursor: pointer;
-  width: 56px;
-  height: 78px;
-  font-size: 10px;
+  width: 88px;
+  height: 122px;
+  font-size: 14px;
 }
