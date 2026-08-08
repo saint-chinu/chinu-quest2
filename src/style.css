@@ -247,10 +247,10 @@ html, body {
   }
 }
 
-#direction-choice-modal,
 #land-command-modal,
 #monster-picker-modal,
 #land-picker-modal,
+#element-picker-modal,
 #confirm-modal,
 #tile-info-modal {
   position: absolute;
@@ -262,19 +262,19 @@ html, body {
   background: rgba(0, 0, 0, 0.5);
 }
 
-#direction-choice-modal.hidden,
 #land-command-modal.hidden,
 #monster-picker-modal.hidden,
 #land-picker-modal.hidden,
+#element-picker-modal.hidden,
 #confirm-modal.hidden,
 #tile-info-modal.hidden {
   display: none;
 }
 
-#direction-choice-box,
 #land-command-box,
 #monster-picker-box,
 #land-picker-box,
+#element-picker-box,
 #confirm-box,
 #tile-info-box {
   background: #22223b;
@@ -295,12 +295,11 @@ html, body {
   white-space: pre-line;
 }
 
-#direction-choice-box p {
+#element-picker-box p {
   margin-bottom: 16px;
   font-size: 14px;
 }
 
-#direction-choice-actions,
 #land-command-actions,
 #confirm-actions {
   display: flex;
@@ -309,11 +308,11 @@ html, body {
   justify-content: center;
 }
 
-#direction-choice-actions button,
 #land-command-actions button,
 #confirm-actions button,
 #monster-picker-cancel,
 #land-picker-cancel,
+#element-picker-cancel,
 #tile-info-close,
 #tile-info-back {
   border: none;
@@ -362,6 +361,21 @@ html, body {
   width: 74px;
   height: 102px;
   font-size: 11px;
+}
+
+#element-picker-choices {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+#element-picker-choices .card {
+  cursor: pointer;
+  width: 74px;
+  height: 74px;
+  font-size: 13px;
 }
 
 #land-picker-choices {
@@ -438,6 +452,49 @@ html, body {
   right: 16px;
   top: 50%;
   transform: translateY(-50%);
+}
+
+#direction-arrows-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 18;
+  pointer-events: none;
+}
+
+#direction-arrows-overlay.hidden {
+  display: none;
+}
+
+.dir-arrow {
+  position: absolute;
+  top: 42%;
+  pointer-events: auto;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.85);
+  color: #22223b;
+  font-size: 30px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+}
+
+#dir-arrow-left {
+  left: calc(50% - 96px);
+}
+
+#dir-arrow-right {
+  left: calc(50% + 24px);
+}
+
+.dir-arrow.armed {
+  background: #2ec4b6;
+  color: #06231f;
+  animation: arrow-blink 0.5s ease-in-out infinite;
 }
 
 #cam-work-back {

@@ -9,6 +9,9 @@ export const Element = {
   WATER: 'water',
   WIND: 'wind',
   EARTH: 'earth',
+  // Land-only - never assigned to a monster card (see buildCardPool, which
+  // enumerates monster elements explicitly rather than via Object.values).
+  NEUTRAL: 'neutral',
 };
 
 export const ELEMENT_LABEL = {
@@ -16,6 +19,7 @@ export const ELEMENT_LABEL = {
   [Element.WATER]: '水',
   [Element.WIND]: '風',
   [Element.EARTH]: '地',
+  [Element.NEUTRAL]: '無色',
 };
 
 export const CARD_COLOR = {
@@ -23,9 +27,13 @@ export const CARD_COLOR = {
   [Element.WATER]: '#3a86e6',
   [Element.WIND]: '#4caf6e',
   [Element.EARTH]: '#c8963e',
+  [Element.NEUTRAL]: '#b8b8b8',
   gear: '#9aa0a6',
   spell: '#8e5ce6',
 };
+
+// Monster cards only ever roll these 4 elements - NEUTRAL is land-only.
+const MONSTER_ELEMENTS = [Element.FIRE, Element.WATER, Element.WIND, Element.EARTH];
 
 // 40-card book total. Real, named cards (see battleCards.js) take up some
 // of each category's slots; the rest are generic placeholders with modest
@@ -46,7 +54,7 @@ function buildCardPool({
   spellCount = DEFAULT_SPELL_COUNT,
 } = {}) {
   const cards = [];
-  const elements = Object.values(Element);
+  const elements = MONSTER_ELEMENTS;
 
   for (let i = 0; i < monsterCount; i++) {
     const element = elements[i % elements.length];

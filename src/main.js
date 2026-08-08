@@ -15,21 +15,26 @@ const playerPanelEls = [
 const logEl = document.getElementById('log');
 const handPanel = document.getElementById('hand-panel');
 const diceButton = document.getElementById('dice-button');
-const directionChoiceModal = document.getElementById('direction-choice-modal');
-const directionChoiceRight = document.getElementById('direction-choice-right');
-const directionChoiceLeft = document.getElementById('direction-choice-left');
+const directionArrowsOverlay = document.getElementById('direction-arrows-overlay');
+const dirArrowRight = document.getElementById('dir-arrow-right');
+const dirArrowLeft = document.getElementById('dir-arrow-left');
 const landCommandModal = document.getElementById('land-command-modal');
 const landCommandTitle = document.getElementById('land-command-title');
 const landCommandSummon = document.getElementById('land-command-summon');
 const landCommandLevelup = document.getElementById('land-command-levelup');
+const landCommandElement = document.getElementById('land-command-element');
 const landCommandInfo = document.getElementById('land-command-info');
 const landCommandEnd = document.getElementById('land-command-end');
 const monsterPickerModal = document.getElementById('monster-picker-modal');
 const monsterPickerChoices = document.getElementById('monster-picker-choices');
 const monsterPickerCancel = document.getElementById('monster-picker-cancel');
 const landPickerModal = document.getElementById('land-picker-modal');
+const landPickerTitle = document.getElementById('land-picker-title');
 const landPickerChoices = document.getElementById('land-picker-choices');
 const landPickerCancel = document.getElementById('land-picker-cancel');
+const elementPickerModal = document.getElementById('element-picker-modal');
+const elementPickerChoices = document.getElementById('element-picker-choices');
+const elementPickerCancel = document.getElementById('element-picker-cancel');
 const confirmModal = document.getElementById('confirm-modal');
 const confirmText = document.getElementById('confirm-text');
 const confirmYes = document.getElementById('confirm-yes');
@@ -73,39 +78,57 @@ function tileSummaryText(tile) {
   return lines.join('\n');
 }
 
-/** Once at game start: resolves +1 (clockwise / "right") or -1 (counterclockwise / "left"). */
+/**
+ * Once, right after the first dice roll of the game: two diagonal arrows
+ * appear (↘ clockwise/+1, ↙ counterclockwise/-1). First click on an arrow
+ * arms it (it starts blinking); a second click on that same (already-armed)
+ * arrow confirms and resolves. Clicking the other arrow just re-arms onto
+ * that one instead.
+ */
 function promptChooseDirection() {
   return new Promise((resolve) => {
-    directionChoiceModal.classList.remove('hidden');
+    directionArrowsOverlay.classList.remove('hidden');
+    let armed = null;
 
-    function cleanup(result) {
-      directionChoiceModal.classList.add('hidden');
-      directionChoiceRight.removeEventListener('click', onRight);
-      directionChoiceLeft.removeEventListener('click', onLeft);
-      resolve(result);
+    function setArmed(which) {
+      armed = which;
+      dirArrowRight.classList.toggle('armed', which === 'right');
+      dirArrowLeft.classList.toggle('armed', which === 'left');
+    }
+    function cleanup(direction) {
+      directionArrowsOverlay.classList.add('hidden');
+      dirArrowRight.classList.remove('armed');
+      dirArrowLeft.classList.remove('armed');
+      dirArrowRight.removeEventListener('click', onRight);
+      dirArrowLeft.removeEventListener('click', onLeft);
+      resolve(direction);
     }
     function onRight() {
-      cleanup(1);
+      if (armed === 'right') cleanup(1);
+      else setArmed('right');
     }
     function onLeft() {
-      cleanup(-1);
+      if (armed === 'left') cleanup(-1);
+      else setArmed('left');
     }
-    directionChoiceRight.addEventListener('click', onRight);
-    directionChoiceLeft.addEventListener('click', onLeft);
+    dirArrowRight.addEventListener('click', onRight);
+    dirArrowLeft.addEventListener('click', onLeft);
   });
 }
 
-function promptLandCommand(tile, { canSummon, canLevelUp }) {
+function promptLandCommand(tile, { canSummon, canLevelUp, canChangeElement }) {
   return new Promise((resolve) => {
     landCommandTitle.textContent = tileSummaryText(tile);
     landCommandSummon.disabled = !canSummon;
     landCommandLevelup.disabled = !canLevelUp;
+    landCommandElement.disabled = !canChangeElement;
     landCommandModal.classList.remove('hidden');
 
     function cleanup(result) {
       landCommandModal.classList.add('hidden');
       landCommandSummon.removeEventListener('click', onSummon);
       landCommandLevelup.removeEventListener('click', onLevelup);
+      landCommandElement.removeEventListener('click', onElement);
       landCommandInfo.removeEventListener('click', onInfo);
       landCommandEnd.removeEventListener('click', onEnd);
       resolve(result);
@@ -116,6 +139,9 @@ function promptLandCommand(tile, { canSummon, canLevelUp }) {
     function onLevelup() {
       cleanup('levelup');
     }
+    function onElement() {
+      cleanup('element');
+    }
     function onInfo() {
       cleanup('info');
     }
@@ -124,6 +150,7 @@ function promptLandCommand(tile, { canSummon, canLevelUp }) {
     }
     landCommandSummon.addEventListener('click', onSummon);
     landCommandLevelup.addEventListener('click', onLevelup);
+    landCommandElement.addEventListener('click', onElement);
     landCommandInfo.addEventListener('click', onInfo);
     landCommandEnd.addEventListener('click', onEnd);
   });
@@ -157,13 +184,19 @@ function promptPickMonsterCard(options) {
   });
 }
 
-const ACTION_LABEL = { summon: '召喚', invade: '侵略', swap: '入れ替え', levelup: 'レベルアップ' };
+const ACTION_LABEL = { summon: '召喚', invade: '侵略', swap: '入れ替え', levelup: 'レベルアップ', element: '属性変更' };
 
-function promptConfirmAction({ actionType, card, cost, tile }) {
+function promptConfirmAction({ actionType, card, cost, tile, targetElement }) {
   return new Promise((resolve) => {
-    const subject = card ? `「${card.name}」で` : '';
-    const extra = actionType === 'levelup' && tile ? `（Lv${tile.level}→Lv${tile.level + 1}）` : '';
-    confirmText.textContent = `${subject}${ACTION_LABEL[actionType]}${extra}しますか？ コスト${cost}G`;
+    let text;
+    if (actionType === 'element') {
+      text = `属性を${ELEMENT_LABEL[targetElement]}に変更しますか？ コスト${cost}G`;
+    } else {
+      const subject = card ? `「${card.name}」で` : '';
+      const extra = actionType === 'levelup' && tile ? `（Lv${tile.level}→Lv${tile.level + 1}）` : '';
+      text = `${subject}${ACTION_LABEL[actionType]}${extra}しますか？ コスト${cost}G`;
+    }
+    confirmText.textContent = text;
     confirmModal.classList.remove('hidden');
 
     function cleanup(result) {
@@ -187,9 +220,10 @@ function landChoiceText(tile) {
   return `${ELEMENT_LABEL[tile.element]} / Lv${tile.level} / 通行料${tile.toll}G`;
 }
 
-/** Picks which owned tile to level up; resolves the tile's id, or null if cancelled. */
-function promptPickLandForLevelUp(summaries) {
+/** Picks one of the given owned tiles; resolves the tile's id, or null if cancelled. */
+function promptPickLand(summaries, title) {
   return new Promise((resolve) => {
+    landPickerTitle.textContent = title;
     landPickerChoices.replaceChildren();
     for (const tile of summaries) {
       const el = document.createElement('div');
@@ -209,6 +243,40 @@ function promptPickLandForLevelUp(summaries) {
       resolve(null);
     }
     landPickerCancel.addEventListener('click', onCancel);
+  });
+}
+
+function promptPickLandForLevelUp(summaries) {
+  return promptPickLand(summaries, 'レベルアップする土地を選んでください');
+}
+
+function promptPickLandForElementChange(summaries) {
+  return promptPickLand(summaries, '属性を変更する土地を選んでください');
+}
+
+/** Picks a target element from the given options (colored swatches); resolves the element, or null if cancelled. */
+function promptPickElement(options) {
+  return new Promise((resolve) => {
+    elementPickerChoices.replaceChildren();
+    for (const element of options) {
+      const el = document.createElement('div');
+      el.className = 'card';
+      el.style.background = CARD_COLOR[element];
+      el.textContent = ELEMENT_LABEL[element];
+      el.addEventListener('click', () => {
+        elementPickerModal.classList.add('hidden');
+        resolve(element);
+      });
+      elementPickerChoices.appendChild(el);
+    }
+    elementPickerModal.classList.remove('hidden');
+
+    function onCancel() {
+      elementPickerModal.classList.add('hidden');
+      elementPickerCancel.removeEventListener('click', onCancel);
+      resolve(null);
+    }
+    elementPickerCancel.addEventListener('click', onCancel);
   });
 }
 
@@ -644,6 +712,8 @@ const game = new Game({
   onTileInfo: promptTileInfo,
   onPickLandForLevelUp: promptPickLandForLevelUp,
   onChooseDirection: promptChooseDirection,
+  onPickLandForElementChange: promptPickLandForElementChange,
+  onPickElement: promptPickElement,
 });
 
 game.init();

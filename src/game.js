@@ -1,6 +1,6 @@
 import { TileType } from './board.js';
 import { PIECE_REST_Y } from './scene.js';
-import { CardType, CARD_COLOR, Deck } from './cards.js';
+import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck } from './cards.js';
 import { buildStarterExtraCards } from './battleCards.js';
 import { createFieldUnit, resolveBattle } from './battle.js';
 import { tween, easeInOutQuad, delay } from './utils.js';
@@ -29,6 +29,10 @@ const CHAIN_MULTIPLIER = { 1: 1.0, 2: 1.5, 3: 2.0, 4: 2.5, 5: 3.0 };
 const TOLL_RATE = { 1: 0.3, 2: 0.3, 3: 0.4, 4: 0.6, 5: 0.8 };
 // Flat cost to level up FROM the given level (not a formula) - keyed by current level.
 const LEVEL_UP_COST = { 1: 50, 2: 200, 3: 400, 4: 600 };
+// 属性変更コスト = 現レベル×100（無色マスからの変更は半額）
+const ELEMENT_CHANGE_COST_PER_LEVEL = 100;
+const NEUTRAL_ELEMENT_CHANGE_DISCOUNT = 0.5;
+const CHANGEABLE_ELEMENTS = [Element.FIRE, Element.WATER, Element.WIND, Element.EARTH, Element.NEUTRAL];
 
 export class Game {
   constructor({
@@ -47,6 +51,8 @@ export class Game {
     onTileInfo,
     onPickLandForLevelUp,
     onChooseDirection,
+    onPickLandForElementChange,
+    onPickElement,
   }) {
     this.tiles = tiles;
     this.scene = scene;
@@ -63,16 +69,19 @@ export class Game {
     this.onTileInfo = onTileInfo;
     this.onPickLandForLevelUp = onPickLandForLevelUp;
     this.onChooseDirection = onChooseDirection;
+    this.onPickLandForElementChange = onPickLandForElementChange;
+    this.onPickElement = onPickElement;
 
     // allianceId is unused today (only 2 players, no alliance mode yet) but
     // the state payload already carries it so the UI's slot layout - which
     // groups same-alliance players together - is ready when that lands.
     // direction is +1 (clockwise, tile index increases) or -1
-    // (counterclockwise); chosen once at game start and, later, also
-    // flippable mid-game by a special card effect.
+    // (counterclockwise); null means "not chosen yet" - resolved lazily on
+    // that player's first rollDice (CPU defaults to +1, no prompt), and
+    // later flippable mid-game by a special card effect.
     this.players = [
-      { id: 0, name: 'プレイヤー', isCPU: false, currency: 500, tileIndex: 0, direction: 1, color: 0x2ec4b6, allianceId: null, deck: new Deck(buildStarterExtraCards()), hand: [], spellUsedThisTurn: false },
-      { id: 1, name: 'CPU', isCPU: true, currency: 500, tileIndex: 0, direction: 1, color: 0xe63946, allianceId: null, deck: new Deck(buildStarterExtraCards()), hand: [], spellUsedThisTurn: false },
+      { id: 0, name: 'プレイヤー', isCPU: false, currency: 500, tileIndex: 0, direction: null, color: 0x2ec4b6, allianceId: null, deck: new Deck(buildStarterExtraCards()), hand: [], spellUsedThisTurn: false },
+      { id: 1, name: 'CPU', isCPU: true, currency: 500, tileIndex: 0, direction: null, color: 0xe63946, allianceId: null, deck: new Deck(buildStarterExtraCards()), hand: [], spellUsedThisTurn: false },
     ];
     this.currentPlayerIndex = 0;
     this.isBusy = false;
@@ -87,7 +96,7 @@ export class Game {
     return this.players[this.currentPlayerIndex];
   }
 
-  async init() {
+  init() {
     for (const player of this.players) {
       player.mesh = this.scene.createPiece(player.color, this.tiles[player.tileIndex].position);
       for (let i = 0; i < STARTING_HAND_SIZE; i++) {
@@ -97,12 +106,6 @@ export class Game {
     }
     const startPos = this.tiles[this.currentPlayer.tileIndex].position;
     this.scene.setFocusImmediate(startPos.x, startPos.z);
-
-    const human = this.players.find((p) => !p.isCPU);
-    if (human && this.onChooseDirection) {
-      human.direction = await this.onChooseDirection();
-    }
-
     this._beginTurn();
   }
 
@@ -160,6 +163,10 @@ export class Game {
 
     const player = this.currentPlayer;
     this.onLog(`${player.name}のサイコロ: ${steps}`);
+
+    if (player.direction == null) {
+      player.direction = player.isCPU ? 1 : await this.onChooseDirection();
+    }
 
     await this._movePlayer(player, steps);
     this.onMoveComplete?.();
@@ -282,6 +289,7 @@ export class Game {
       const choice = await this.onLandCommand(this.getTileSummary(tile), {
         canSummon: this._affordableMonsterCards(player).length > 0,
         canLevelUp: this._levelableTiles(player).length > 0,
+        canChangeElement: this._ownedTiles(player).length > 0,
       });
       if (choice === 'end') return;
 
@@ -289,6 +297,8 @@ export class Game {
         if (await this._humanSummonFlow(player, tile)) return;
       } else if (choice === 'levelup') {
         if (await this._humanLevelUpFlow(player)) return;
+      } else if (choice === 'element') {
+        if (await this._humanChangeElementFlow(player)) return;
       } else if (choice === 'info') {
         await this.onTileInfo();
       }
@@ -311,9 +321,10 @@ export class Game {
    * 連鎖倍率: how many tiles of this element the owner holds (same-element
    * lands count as one 連鎖 today, since every element already forms a
    * single contiguous edge on this board). Unowned tiles preview at 連鎖1.
+   * 無色 never chains, even with other 無色 tiles.
    */
   _chainMultiplier(ownerId, element) {
-    if (ownerId == null) return CHAIN_MULTIPLIER[1];
+    if (ownerId == null || element === Element.NEUTRAL) return CHAIN_MULTIPLIER[1];
     const count = this.tiles.filter((t) => t.owner === ownerId && t.element === element).length;
     return CHAIN_MULTIPLIER[Math.min(Math.max(count, 1), LEVEL_CAP)];
   }
@@ -378,6 +389,40 @@ export class Game {
     player.currency -= cost;
     target.level += 1;
     this.onLog(`${player.name}は土地をLv${target.level}にアップグレードした (-${cost}G)`);
+    this._notifyState();
+    return true;
+  }
+
+  /** Returns true if an element change actually went through (vs. no owned tiles / cancelled / unaffordable). */
+  async _humanChangeElementFlow(player) {
+    const owned = this._ownedTiles(player);
+    if (owned.length === 0) return false;
+
+    const targetId = await this.onPickLandForElementChange(owned.map((t) => this.getTileSummary(t)));
+    if (targetId == null) return false;
+    const target = this.tiles.find((t) => t.id === targetId);
+    if (!target) return false;
+
+    const newElement = await this.onPickElement(CHANGEABLE_ELEMENTS.filter((e) => e !== target.element));
+    if (!newElement) return false;
+
+    const rate = target.element === Element.NEUTRAL ? NEUTRAL_ELEMENT_CHANGE_DISCOUNT : 1;
+    const cost = Math.round(ELEMENT_CHANGE_COST_PER_LEVEL * target.level * rate);
+    const confirmed = await this.onConfirmAction({
+      actionType: 'element',
+      cost,
+      tile: this.getTileSummary(target),
+      targetElement: newElement,
+    });
+    if (!confirmed) return false;
+    if (player.currency < cost) {
+      this.onLog('ゴールドが足りません');
+      return false;
+    }
+
+    player.currency -= cost;
+    target.element = newElement;
+    this.onLog(`${player.name}は土地属性を${ELEMENT_LABEL[newElement]}に変更した (-${cost}G)`);
     this._notifyState();
     return true;
   }

@@ -30,14 +30,9 @@
         <div id="center-hand"></div>
       </div>
       <div id="rotate-notice">画面を横向きにしてください</div>
-      <div id="direction-choice-modal" class="hidden">
-        <div id="direction-choice-box">
-          <p>周る方向を選んでください</p>
-          <div id="direction-choice-actions">
-            <button id="direction-choice-right">右から回る</button>
-            <button id="direction-choice-left">左から回る</button>
-          </div>
-        </div>
+      <div id="direction-arrows-overlay" class="hidden">
+        <button id="dir-arrow-left" class="dir-arrow" aria-label="反時計回りで進む">↙</button>
+        <button id="dir-arrow-right" class="dir-arrow" aria-label="時計回りで進む">↘</button>
       </div>
       <div id="land-command-modal" class="hidden">
         <div id="land-command-box">
@@ -45,6 +40,7 @@
           <div id="land-command-actions">
             <button id="land-command-summon">召喚／侵略</button>
             <button id="land-command-levelup">土地レベルアップ</button>
+            <button id="land-command-element">土地属性変更</button>
             <button id="land-command-info">土地情報</button>
             <button id="land-command-end">ターン終了</button>
           </div>
@@ -59,9 +55,16 @@
       </div>
       <div id="land-picker-modal" class="hidden">
         <div id="land-picker-box">
-          <p>レベルアップする土地を選んでください</p>
+          <p id="land-picker-title">レベルアップする土地を選んでください</p>
           <div id="land-picker-choices"></div>
           <button id="land-picker-cancel">やめる</button>
+        </div>
+      </div>
+      <div id="element-picker-modal" class="hidden">
+        <div id="element-picker-box">
+          <p>変更する属性を選んでください</p>
+          <div id="element-picker-choices"></div>
+          <button id="element-picker-cancel">やめる</button>
         </div>
       </div>
       <div id="confirm-modal" class="hidden">

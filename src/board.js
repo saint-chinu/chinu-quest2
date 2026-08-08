@@ -24,6 +24,11 @@ function elementForPosition(x, z) {
   return right ? Element.WATER : Element.EARTH;
 }
 
+/** The rectangular loop's own corners (excluding START) sit right on a quadrant boundary, so they're 無色 (neutral, non-chaining) instead of being arbitrarily assigned to one side's element. */
+function isLoopCorner(gx, gz, width, height) {
+  return (gx === 0 || gx === width - 1) && (gz === 0 || gz === height - 1);
+}
+
 /**
  * Walks the perimeter of a width x height grid (no diagonals, no duplicate
  * corners) so the course reads as a simple rectangular loop.
@@ -59,7 +64,11 @@ export function createBoard({ width = 6, height = 5 } = {}) {
       gridX: gx,
       gridZ: gz,
       position,
-      element: isLand ? elementForPosition(position.x, position.z) : null,
+      element: isLand
+        ? isLoopCorner(gx, gz, width, height)
+          ? Element.NEUTRAL
+          : elementForPosition(position.x, position.z)
+        : null,
       owner: isLand ? null : undefined,
       unit: isLand ? null : undefined,
       level: isLand ? 1 : undefined,
