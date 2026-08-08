@@ -66,7 +66,7 @@ export function createBoard({ width = 6, height = 5 } = {}) {
       // 基本地価 (base land price) - flat across all tiles for now. See
       // Game._landValueOfTile/_tollOfTile for how level/chain multipliers
       // turn this into 地価 and 通行料.
-      price: isLand ? 75 : null,
+      price: isLand ? 150 : null,
     };
   });
 }

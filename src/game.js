@@ -26,7 +26,7 @@ const CPU_DECISION_MS = 900;
 const LEVEL_CAP = 5;
 // カルドセプト ビギンズ系
 const CHAIN_MULTIPLIER = { 1: 1.0, 2: 1.5, 3: 2.0, 4: 2.5, 5: 3.0 };
-const TOLL_RATE = { 1: 0.2, 2: 0.3, 3: 0.4, 4: 0.6, 5: 0.8 };
+const TOLL_RATE = { 1: 0.3, 2: 0.3, 3: 0.4, 4: 0.6, 5: 0.8 };
 // Flat cost to level up FROM the given level (not a formula) - keyed by current level.
 const LEVEL_UP_COST = { 1: 50, 2: 200, 3: 400, 4: 600 };
 
