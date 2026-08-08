@@ -200,23 +200,34 @@ const DICE_SPIN_INTERVAL_MS = 90;
 // actually locks - the dice keeps spinning through this window, so it's a
 // timing/skill stop rather than an instant one.
 const DICE_STOP_DELAY_MS = 1500;
-// How long the locked face stays on screen before the roll actually proceeds.
-const DICE_RESULT_HOLD_MS = 1000;
 
-// idle -> (click) -> spinning -> (click) -> locking -> settles, holds, resolves
+// idle -> (click) -> spinning -> (click) -> locking -> settles, then rollDice() fires
 let diceState = 'idle';
 let diceValue = 1;
 let diceSpinTimer = null;
+
+// The hand hides the moment the roll starts (game's showCenter goes false),
+// but the dice itself stays up through the whole move animation and only
+// clears once the piece actually reaches its tile.
+let showCenterState = false;
+let diceMoving = false;
+
+function syncCenterVisibility() {
+  centerPanel.classList.toggle('hidden', !(showCenterState || diceMoving));
+  centerHandEl.style.display = showCenterState ? '' : 'none';
+}
 
 function resetDice() {
   clearInterval(diceSpinTimer);
   diceSpinTimer = null;
   diceState = 'idle';
   diceValue = 1;
+  diceMoving = false;
   setDiceFace(diceValue);
 }
 
 resetDice();
+syncCenterVisibility();
 
 function startDiceSpin() {
   diceState = 'spinning';
@@ -229,7 +240,7 @@ function startDiceSpin() {
 /**
  * Stops the spin DICE_STOP_DELAY_MS from now, landing on `forcedValue` if
  * given (CPU's predetermined roll) or whatever's currently showing
- * (the player's case). Holds the result on screen before resolving.
+ * (the player's case).
  */
 function settleDiceSpin(forcedValue) {
   diceState = 'locking';
@@ -239,13 +250,17 @@ function settleDiceSpin(forcedValue) {
       diceSpinTimer = null;
       if (forcedValue !== undefined) diceValue = forcedValue;
       setDiceFace(diceValue);
-
-      setTimeout(() => {
-        diceState = 'idle';
-        resolve(diceValue);
-      }, DICE_RESULT_HOLD_MS);
+      diceState = 'idle';
+      resolve(diceValue);
     }, DICE_STOP_DELAY_MS);
   });
+}
+
+/** Marks the dice as "riding along with the move" - kept visible until onMoveComplete fires. */
+function beginDiceMove(result) {
+  diceMoving = true;
+  syncCenterVisibility();
+  game.rollDice(result);
 }
 
 diceButton.addEventListener('click', () => {
@@ -257,15 +272,26 @@ diceButton.addEventListener('click', () => {
   }
 
   if (diceState === 'spinning') {
-    settleDiceSpin().then((result) => game.rollDice(result));
+    settleDiceSpin().then(beginDiceMove);
   }
 });
 
-/** CPU's roll: same spin/settle/hold rhythm as the player's, just auto-triggered. */
+/** CPU's roll: same spin/settle rhythm as the player's, just auto-triggered. */
 function cpuRollDice() {
-  const finalValue = Math.floor(Math.random() * 6) + 1;
-  startDiceSpin();
-  return settleDiceSpin(finalValue);
+  return new Promise((resolve) => {
+    const finalValue = Math.floor(Math.random() * 6) + 1;
+    startDiceSpin();
+    settleDiceSpin(finalValue).then((result) => {
+      diceMoving = true;
+      syncCenterVisibility();
+      resolve(result);
+    });
+  });
+}
+
+function onMoveComplete() {
+  diceMoving = false;
+  syncCenterVisibility();
 }
 
 const scene = new GameScene(canvas);
@@ -295,10 +321,11 @@ const game = new Game({
       .join('\n');
     renderHand(hand);
 
-    const centerWasHidden = centerPanel.classList.contains('hidden');
-    centerPanel.classList.toggle('hidden', !showCenter);
+    const enteringShowCenter = showCenter && !showCenterState;
+    showCenterState = showCenter;
+    if (enteringShowCenter) resetDice();
+    syncCenterVisibility();
     if (showCenter) {
-      if (centerWasHidden) resetDice();
       renderCenterHand(centerHand, currentPlayerIsCPU, !spellUsedThisTurn);
     }
   },
@@ -307,6 +334,7 @@ const game = new Game({
   onDiscardChoice: promptDiscardChoice,
   onSpellUse: promptSpellUse,
   onCpuRoll: cpuRollDice,
+  onMoveComplete,
 });
 
 game.init();

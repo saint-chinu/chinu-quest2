@@ -33,6 +33,7 @@ export class Game {
     onDiscardChoice,
     onSpellUse,
     onCpuRoll,
+    onMoveComplete,
   }) {
     this.tiles = tiles;
     this.scene = scene;
@@ -43,6 +44,7 @@ export class Game {
     this.onDiscardChoice = onDiscardChoice;
     this.onSpellUse = onSpellUse;
     this.onCpuRoll = onCpuRoll;
+    this.onMoveComplete = onMoveComplete;
 
     this.players = [
       { id: 0, name: 'プレイヤー', isCPU: false, currency: 500, tileIndex: 0, color: 0x2ec4b6, deck: new Deck(), hand: [], spellUsedThisTurn: false },
@@ -125,6 +127,7 @@ export class Game {
     this.onLog(`${player.name}のサイコロ: ${steps}`);
 
     await this._movePlayer(player, steps);
+    this.onMoveComplete?.();
     await this._resolveTile(player);
     await delay(400);
 
