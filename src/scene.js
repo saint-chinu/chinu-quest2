@@ -80,15 +80,25 @@ function createTokenTexture(color) {
   return new THREE.CanvasTexture(canvas);
 }
 
-const textureLoader = new THREE.TextureLoader();
+// How far the free-look camera (land-info mode) can pan away from wherever
+// it started, in world units - keeps the player from wandering the focus
+// off into empty space indefinitely. The board itself only spans roughly
+// ±10, so this leaves a generous look-around margin beyond the tiles.
+const FREE_PAN_MAX_DISTANCE = 18;
 
 export class GameScene {
   constructor(canvas) {
     this.canvas = canvas;
     this.scene = new THREE.Scene();
-    // Deep-water blue, matching the underwater stage art's darkest tone -
-    // shows past the edge of the (finite) textured ground plane.
-    this.scene.background = new THREE.Color(0x0b2436);
+    // No scene.background, and the renderer clears to transparent (below) -
+    // the stage art is a plain CSS background-image on the page behind the
+    // canvas instead (see style.css #app). A THREE background/ground
+    // texture would either get warped into a diamond by the diagonal
+    // camera (like the tiles) or - since the 400x400 ground plane fills
+    // the entire frustum from this angle - never actually show through at
+    // all. Pure CSS sidesteps both: it's flat, always right-way-up, and
+    // covers the viewport (overflow is fine) regardless of camera/pan.
+    this.scene.background = null;
 
     this.camera = new THREE.PerspectiveCamera(
       CAMERA_FOV,
@@ -97,7 +107,8 @@ export class GameScene {
       200
     );
 
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+    this.renderer.setClearColor(0x000000, 0);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 
     this._setupLights();
@@ -176,19 +187,11 @@ export class GameScene {
       this.scene.add(mesh);
       tile.mesh = mesh;
     }
-
-    const groundTexture = textureLoader.load('/images/stage/stage1.png');
-    groundTexture.wrapS = THREE.RepeatWrapping;
-    groundTexture.wrapT = THREE.RepeatWrapping;
-    groundTexture.repeat.set(20, 20);
-    groundTexture.colorSpace = THREE.SRGBColorSpace;
-    const ground = new THREE.Mesh(
-      new THREE.PlaneGeometry(400, 400),
-      new THREE.MeshStandardMaterial({ map: groundTexture })
-    );
-    ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -0.6;
-    this.scene.add(ground);
+    // No ground-plane mesh anymore - it used to fill the entire frustum
+    // from this camera angle (400x400 is far bigger than what's ever
+    // visible), which meant it fully occluded the CSS stage background
+    // sitting behind the (now transparent) canvas. Tiles now float
+    // directly over that backdrop instead of a separate 3D floor.
   }
 
   /**
@@ -244,7 +247,7 @@ export class GameScene {
     });
   }
 
-  /** Manual free-look pan for the land-info camera mode: one screen-relative step per call. */
+  /** Manual free-look pan for the land-info camera mode: one screen-relative step per call, clamped so the focus can't wander indefinitely far from the board. */
   panByDirection(direction) {
     const axis = { up: FORWARD, down: FORWARD, left: RIGHT, right: RIGHT }[direction];
     const sign = direction === 'down' || direction === 'left' ? -1 : 1;
@@ -252,6 +255,9 @@ export class GameScene {
     const to = from
       .clone()
       .add(new THREE.Vector3(axis.x, 0, axis.z).multiplyScalar(FREE_PAN_STEP * sign));
+    to.x = THREE.MathUtils.clamp(to.x, -FREE_PAN_MAX_DISTANCE, FREE_PAN_MAX_DISTANCE);
+    to.z = THREE.MathUtils.clamp(to.z, -FREE_PAN_MAX_DISTANCE, FREE_PAN_MAX_DISTANCE);
+    if (from.distanceTo(to) < 0.01) return null;
     return tween(FREE_PAN_DURATION_MS, (t) => {
       this.focus.lerpVectors(from, to, easeInOutQuad(t));
       this._applyCamera();

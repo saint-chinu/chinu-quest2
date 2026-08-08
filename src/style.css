@@ -17,6 +17,14 @@ html, body {
   position: relative;
   width: 100vw;
   height: 100vh;
+  /* The stage art sits here (plain CSS, always right-way-up) instead of in
+     the 3D scene - the canvas above it is transparent, so tiles/pieces
+     float directly over this backdrop. cover + center: it's fine for the
+     image to overflow/crop at the edges, it must never look stretched. */
+  background-image: url('/images/stage/stage1.png');
+  background-size: cover;
+  background-position: center;
+  background-color: #0b2436;
 }
 
 #app.hidden {
