@@ -196,9 +196,14 @@ function setDiceFace(value) {
 }
 
 const DICE_SPIN_INTERVAL_MS = 90;
-const DICE_LOCK_DELAY_MS = 700;
+// Time from the stop trigger (2nd click, or CPU's auto-stop) until the face
+// actually locks - the dice keeps spinning through this window, so it's a
+// timing/skill stop rather than an instant one.
+const DICE_STOP_DELAY_MS = 300;
+// How long the locked face stays on screen before the roll actually proceeds.
+const DICE_RESULT_HOLD_MS = 1000;
 
-// idle -> (click) -> spinning -> (click) -> locking -> (700ms) -> idle, then game.rollDice(value)
+// idle -> (click) -> spinning -> (click) -> locking -> settles, holds, resolves
 let diceState = 'idle';
 let diceValue = 1;
 let diceSpinTimer = null;
@@ -213,32 +218,55 @@ function resetDice() {
 
 resetDice();
 
+function startDiceSpin() {
+  diceState = 'spinning';
+  diceSpinTimer = setInterval(() => {
+    diceValue = (diceValue % 6) + 1;
+    setDiceFace(diceValue);
+  }, DICE_SPIN_INTERVAL_MS);
+}
+
+/**
+ * Stops the spin DICE_STOP_DELAY_MS from now, landing on `forcedValue` if
+ * given (CPU's predetermined roll) or whatever's currently showing
+ * (the player's case). Holds the result on screen before resolving.
+ */
+function settleDiceSpin(forcedValue) {
+  diceState = 'locking';
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      clearInterval(diceSpinTimer);
+      diceSpinTimer = null;
+      if (forcedValue !== undefined) diceValue = forcedValue;
+      setDiceFace(diceValue);
+
+      setTimeout(() => {
+        diceState = 'idle';
+        resolve(diceValue);
+      }, DICE_RESULT_HOLD_MS);
+    }, DICE_STOP_DELAY_MS);
+  });
+}
+
 diceButton.addEventListener('click', () => {
   if (diceButton.disabled) return;
 
   if (diceState === 'idle') {
-    diceState = 'spinning';
-    diceSpinTimer = setInterval(() => {
-      diceValue = (diceValue % 6) + 1;
-      setDiceFace(diceValue);
-    }, DICE_SPIN_INTERVAL_MS);
+    startDiceSpin();
     return;
   }
 
   if (diceState === 'spinning') {
-    // Locks in whatever face happens to land 0.7s after this click - the
-    // dice keeps spinning through the delay, so it's a timing/skill stop
-    // rather than an instant one.
-    diceState = 'locking';
-    setTimeout(() => {
-      clearInterval(diceSpinTimer);
-      diceSpinTimer = null;
-      const result = diceValue;
-      diceState = 'idle';
-      game.rollDice(result);
-    }, DICE_LOCK_DELAY_MS);
+    settleDiceSpin().then((result) => game.rollDice(result));
   }
 });
+
+/** CPU's roll: same spin/settle/hold rhythm as the player's, just auto-triggered. */
+function cpuRollDice() {
+  const finalValue = Math.floor(Math.random() * 6) + 1;
+  startDiceSpin();
+  return settleDiceSpin(finalValue);
+}
 
 const scene = new GameScene(canvas);
 const tiles = createBoard({ width: 6, height: 5 });
@@ -278,6 +306,7 @@ const game = new Game({
   onCardReveal: promptCardReveal,
   onDiscardChoice: promptDiscardChoice,
   onSpellUse: promptSpellUse,
+  onCpuRoll: cpuRollDice,
 });
 
 game.init();

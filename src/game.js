@@ -1,7 +1,7 @@
 import { TileType } from './board.js';
 import { PIECE_REST_Y } from './scene.js';
 import { CardType, Deck } from './cards.js';
-import { tween, easeInOutQuad, delay, randomInt } from './utils.js';
+import { tween, easeInOutQuad, delay } from './utils.js';
 
 const STEP_DURATION_MS = 300;
 const START_BONUS = 100;
@@ -32,6 +32,7 @@ export class Game {
     onCardReveal,
     onDiscardChoice,
     onSpellUse,
+    onCpuRoll,
   }) {
     this.tiles = tiles;
     this.scene = scene;
@@ -41,6 +42,7 @@ export class Game {
     this.onCardReveal = onCardReveal;
     this.onDiscardChoice = onDiscardChoice;
     this.onSpellUse = onSpellUse;
+    this.onCpuRoll = onCpuRoll;
 
     this.players = [
       { id: 0, name: 'プレイヤー', isCPU: false, currency: 500, tileIndex: 0, color: 0x2ec4b6, deck: new Deck(), hand: [], spellUsedThisTurn: false },
@@ -257,7 +259,8 @@ export class Game {
   async _runCPUTurn() {
     await delay(CPU_PRE_ROLL_MS);
     if (!this.currentPlayer.isCPU) return;
-    this.rollDice(randomInt(1, 6));
+    const steps = await this.onCpuRoll();
+    this.rollDice(steps);
   }
 
   _notifyState() {
