@@ -47,7 +47,9 @@ const FORWARD = {
   x: -CAMERA_OFFSET.x / offsetGroundLen,
   z: -CAMERA_OFFSET.z / offsetGroundLen,
 };
-const RIGHT = { x: FORWARD.z, z: -FORWARD.x };
+// Verified against the camera's actual world-space local-X axis - the
+// other 90° rotation of FORWARD pointed screen-left, not right.
+const RIGHT = { x: -FORWARD.z, z: FORWARD.x };
 
 function toScreenLocal(dx, dz) {
   return {

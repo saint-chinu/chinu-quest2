@@ -15,6 +15,9 @@ const playerPanelEls = [
 const logEl = document.getElementById('log');
 const handPanel = document.getElementById('hand-panel');
 const diceButton = document.getElementById('dice-button');
+const directionChoiceModal = document.getElementById('direction-choice-modal');
+const directionChoiceRight = document.getElementById('direction-choice-right');
+const directionChoiceLeft = document.getElementById('direction-choice-left');
 const landCommandModal = document.getElementById('land-command-modal');
 const landCommandTitle = document.getElementById('land-command-title');
 const landCommandSummon = document.getElementById('land-command-summon');
@@ -68,6 +71,28 @@ function tileSummaryText(tile) {
     lines.push(`通行料: ${tile.toll}G`);
   }
   return lines.join('\n');
+}
+
+/** Once at game start: resolves +1 (clockwise / "right") or -1 (counterclockwise / "left"). */
+function promptChooseDirection() {
+  return new Promise((resolve) => {
+    directionChoiceModal.classList.remove('hidden');
+
+    function cleanup(result) {
+      directionChoiceModal.classList.add('hidden');
+      directionChoiceRight.removeEventListener('click', onRight);
+      directionChoiceLeft.removeEventListener('click', onLeft);
+      resolve(result);
+    }
+    function onRight() {
+      cleanup(1);
+    }
+    function onLeft() {
+      cleanup(-1);
+    }
+    directionChoiceRight.addEventListener('click', onRight);
+    directionChoiceLeft.addEventListener('click', onLeft);
+  });
 }
 
 function promptLandCommand(tile, { canSummon, canLevelUp }) {
@@ -618,6 +643,7 @@ const game = new Game({
   onConfirmAction: promptConfirmAction,
   onTileInfo: promptTileInfo,
   onPickLandForLevelUp: promptPickLandForLevelUp,
+  onChooseDirection: promptChooseDirection,
 });
 
 game.init();

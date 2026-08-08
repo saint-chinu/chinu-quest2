@@ -36,6 +36,7 @@ export class Game {
     onConfirmAction,
     onTileInfo,
     onPickLandForLevelUp,
+    onChooseDirection,
   }) {
     this.tiles = tiles;
     this.scene = scene;
@@ -51,13 +52,17 @@ export class Game {
     this.onConfirmAction = onConfirmAction;
     this.onTileInfo = onTileInfo;
     this.onPickLandForLevelUp = onPickLandForLevelUp;
+    this.onChooseDirection = onChooseDirection;
 
     // allianceId is unused today (only 2 players, no alliance mode yet) but
     // the state payload already carries it so the UI's slot layout - which
     // groups same-alliance players together - is ready when that lands.
+    // direction is +1 (clockwise, tile index increases) or -1
+    // (counterclockwise); chosen once at game start and, later, also
+    // flippable mid-game by a special card effect.
     this.players = [
-      { id: 0, name: 'プレイヤー', isCPU: false, currency: 500, tileIndex: 0, color: 0x2ec4b6, allianceId: null, deck: new Deck(buildStarterExtraCards()), hand: [], spellUsedThisTurn: false },
-      { id: 1, name: 'CPU', isCPU: true, currency: 500, tileIndex: 0, color: 0xe63946, allianceId: null, deck: new Deck(buildStarterExtraCards()), hand: [], spellUsedThisTurn: false },
+      { id: 0, name: 'プレイヤー', isCPU: false, currency: 500, tileIndex: 0, direction: 1, color: 0x2ec4b6, allianceId: null, deck: new Deck(buildStarterExtraCards()), hand: [], spellUsedThisTurn: false },
+      { id: 1, name: 'CPU', isCPU: true, currency: 500, tileIndex: 0, direction: 1, color: 0xe63946, allianceId: null, deck: new Deck(buildStarterExtraCards()), hand: [], spellUsedThisTurn: false },
     ];
     this.currentPlayerIndex = 0;
     this.isBusy = false;
@@ -72,7 +77,7 @@ export class Game {
     return this.players[this.currentPlayerIndex];
   }
 
-  init() {
+  async init() {
     for (const player of this.players) {
       player.mesh = this.scene.createPiece(player.color, this.tiles[player.tileIndex].position);
       for (let i = 0; i < STARTING_HAND_SIZE; i++) {
@@ -82,6 +87,12 @@ export class Game {
     }
     const startPos = this.tiles[this.currentPlayer.tileIndex].position;
     this.scene.setFocusImmediate(startPos.x, startPos.z);
+
+    const human = this.players.find((p) => !p.isCPU);
+    if (human && this.onChooseDirection) {
+      human.direction = await this.onChooseDirection();
+    }
+
     this._beginTurn();
   }
 
@@ -181,7 +192,7 @@ export class Game {
   async _movePlayer(player, steps) {
     for (let i = 0; i < steps; i++) {
       const fromTile = this.tiles[player.tileIndex];
-      player.tileIndex = (player.tileIndex + 1) % this.tiles.length;
+      player.tileIndex = (player.tileIndex + player.direction + this.tiles.length) % this.tiles.length;
       const toTile = this.tiles[player.tileIndex];
       await this._stepWithCamera(player, fromTile.position, toTile.position);
 

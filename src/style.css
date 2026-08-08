@@ -247,6 +247,7 @@ html, body {
   }
 }
 
+#direction-choice-modal,
 #land-command-modal,
 #monster-picker-modal,
 #land-picker-modal,
@@ -261,6 +262,7 @@ html, body {
   background: rgba(0, 0, 0, 0.5);
 }
 
+#direction-choice-modal.hidden,
 #land-command-modal.hidden,
 #monster-picker-modal.hidden,
 #land-picker-modal.hidden,
@@ -269,6 +271,7 @@ html, body {
   display: none;
 }
 
+#direction-choice-box,
 #land-command-box,
 #monster-picker-box,
 #land-picker-box,
@@ -292,6 +295,12 @@ html, body {
   white-space: pre-line;
 }
 
+#direction-choice-box p {
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
+#direction-choice-actions,
 #land-command-actions,
 #confirm-actions {
   display: flex;
@@ -300,6 +309,7 @@ html, body {
   justify-content: center;
 }
 
+#direction-choice-actions button,
 #land-command-actions button,
 #confirm-actions button,
 #monster-picker-cancel,
