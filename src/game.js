@@ -1,9 +1,13 @@
 import { TileType } from './board.js';
 import { PIECE_REST_Y } from './scene.js';
+import { Deck } from './cards.js';
 import { tween, easeInOutQuad, delay, randomInt } from './utils.js';
 
 const STEP_DURATION_MS = 300;
 const START_BONUS = 100;
+
+const STARTING_HAND_SIZE = 4;
+const HAND_LIMIT = 6;
 
 // The camera doesn't chase every step - it only pans once movement adds up
 // to this many tiles since its last pan (across turns, not reset per
@@ -15,16 +19,18 @@ const TILE_PAN_THRESHOLD = 3;
 const LOOKAHEAD_LEAD_MS = 150;
 
 export class Game {
-  constructor({ tiles, scene, onLog, onStateChange, onPurchasePrompt }) {
+  constructor({ tiles, scene, onLog, onStateChange, onPurchasePrompt, onCardReveal, onDiscardChoice }) {
     this.tiles = tiles;
     this.scene = scene;
     this.onLog = onLog;
     this.onStateChange = onStateChange;
     this.onPurchasePrompt = onPurchasePrompt;
+    this.onCardReveal = onCardReveal;
+    this.onDiscardChoice = onDiscardChoice;
 
     this.players = [
-      { id: 0, name: 'プレイヤー', isCPU: false, currency: 500, tileIndex: 0, color: 0x2ec4b6 },
-      { id: 1, name: 'CPU', isCPU: true, currency: 500, tileIndex: 0, color: 0xe63946 },
+      { id: 0, name: 'プレイヤー', isCPU: false, currency: 500, tileIndex: 0, color: 0x2ec4b6, deck: new Deck(), hand: [] },
+      { id: 1, name: 'CPU', isCPU: true, currency: 500, tileIndex: 0, color: 0xe63946, deck: new Deck(), hand: [] },
     ];
     this.currentPlayerIndex = 0;
     this.isBusy = false;
@@ -38,6 +44,10 @@ export class Game {
   init() {
     for (const player of this.players) {
       player.mesh = this.scene.createPiece(player.color, this.tiles[player.tileIndex].position);
+      for (let i = 0; i < STARTING_HAND_SIZE; i++) {
+        const card = player.deck.draw();
+        if (card) player.hand.push(card);
+      }
     }
     const startPos = this.tiles[this.currentPlayer.tileIndex].position;
     this.scene.setFocusImmediate(startPos.x, startPos.z);
@@ -50,6 +60,8 @@ export class Game {
     this._notifyState();
 
     const player = this.currentPlayer;
+    await this._drawForTurn(player);
+
     const steps = randomInt(1, 6);
     this.onLog(`${player.name}のサイコロ: ${steps}`);
 
@@ -63,6 +75,30 @@ export class Game {
 
     if (this.currentPlayer.isCPU) {
       this._runCPUTurn();
+    }
+  }
+
+  async _drawForTurn(player) {
+    const card = player.deck.draw();
+    if (!card) return;
+
+    if (player.isCPU) {
+      this.onLog(`${player.name}はカードを1枚引いた`);
+    } else {
+      await this.onCardReveal(card);
+    }
+
+    player.hand.push(card);
+    this._notifyState();
+
+    if (player.hand.length > HAND_LIMIT) {
+      const discarded = player.isCPU
+        ? player.hand[0]
+        : await this.onDiscardChoice(player.hand);
+      player.hand = player.hand.filter((c) => c.id !== discarded.id);
+      player.deck.discard(discarded);
+      if (player.isCPU) this.onLog(`${player.name}は手札を1枚捨てた`);
+      this._notifyState();
     }
   }
 
@@ -165,10 +201,12 @@ export class Game {
   }
 
   _notifyState() {
+    const human = this.players.find((p) => !p.isCPU);
     this.onStateChange({
       turnText: `${this.currentPlayer.name}のターン`,
       canRoll: !this.isBusy && !this.currentPlayer.isCPU,
-      players: this.players.map((p) => ({ name: p.name, currency: p.currency })),
+      players: this.players.map((p) => ({ name: p.name, currency: p.currency, handCount: p.hand.length })),
+      hand: human.hand,
     });
   }
 }

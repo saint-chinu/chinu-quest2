@@ -16,6 +16,7 @@
           <div id="currency-panel"></div>
         </div>
         <div id="log"></div>
+        <div id="hand-panel"></div>
         <button id="dice-button">サイコロを振る</button>
       </div>
       <div id="rotate-notice">画面を横向きにしてください</div>
@@ -26,6 +27,19 @@
             <button id="purchase-yes">購入する</button>
             <button id="purchase-no">スキップ</button>
           </div>
+        </div>
+      </div>
+      <div id="card-reveal-modal" class="hidden">
+        <div id="card-reveal-box">
+          <p id="card-reveal-title">カードを引いた</p>
+          <div id="card-reveal-card" class="card card-large"></div>
+          <button id="card-reveal-ok">OK</button>
+        </div>
+      </div>
+      <div id="discard-modal" class="hidden">
+        <div id="discard-box">
+          <p>手札が7枚になりました。捨てるカードを選んでください</p>
+          <div id="discard-choices"></div>
         </div>
       </div>
     </div>

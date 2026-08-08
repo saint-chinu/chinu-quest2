@@ -72,6 +72,36 @@ html, body {
   text-align: center;
 }
 
+#hand-panel {
+  align-self: center;
+  display: flex;
+  gap: 6px;
+  pointer-events: none;
+}
+
+.card {
+  width: 46px;
+  height: 64px;
+  border-radius: 6px;
+  border: 2px solid rgba(255, 255, 255, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  color: #fff;
+  font-size: 9px;
+  line-height: 1.2;
+  padding: 3px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.card-large {
+  width: 140px;
+  height: 196px;
+  font-size: 16px;
+  border-width: 3px;
+}
+
 #dice-button {
   align-self: flex-end;
   pointer-events: auto;
@@ -160,4 +190,71 @@ html, body {
 #purchase-no {
   background: #555;
   color: #fff;
+}
+
+#card-reveal-modal,
+#discard-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+#card-reveal-modal.hidden,
+#discard-modal.hidden {
+  display: none;
+}
+
+#card-reveal-box {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+#card-reveal-title {
+  color: #fff;
+  font-size: 14px;
+}
+
+#card-reveal-ok {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 28px;
+  font-size: 14px;
+  font-weight: bold;
+  background: #2ec4b6;
+  color: #06231f;
+}
+
+#discard-box {
+  background: #22223b;
+  border-radius: 12px;
+  padding: 20px 24px;
+  color: #fff;
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  max-width: 90%;
+}
+
+#discard-box p {
+  margin-bottom: 14px;
+  font-size: 14px;
+}
+
+#discard-choices {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+#discard-choices .card {
+  cursor: pointer;
+  width: 56px;
+  height: 78px;
+  font-size: 10px;
 }
