@@ -9,7 +9,7 @@ const TILE_COLOR = {
 };
 
 // Pulled back and flattened for a wide, "見下ろし" overview of the board.
-const CAMERA_OFFSET = new THREE.Vector3(0, 17, 14);
+const CAMERA_OFFSET = new THREE.Vector3(0, 21, 17);
 const CAMERA_FOV = 45;
 const PAN_DURATION_MS = 350;
 
