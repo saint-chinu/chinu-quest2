@@ -1,4 +1,4 @@
-import { CardType, Element, Deck } from './cards.js';
+import { CardType, Element, Rarity, Deck } from './cards.js';
 
 // Elemental weakness cycle: each element takes bonus damage from the next
 // one. 火→水→雷→森→火 (fire is weak to water, water to thunder, thunder to
@@ -28,6 +28,7 @@ export const MONSTER_CATALOG = {
     type: CardType.MONSTER,
     name: 'サラリーマンダー',
     element: Element.FIRE,
+    rarity: Rarity.R,
     atk: 30,
     hp: 20,
     cost: 50,
@@ -37,6 +38,7 @@ export const MONSTER_CATALOG = {
     type: CardType.MONSTER,
     name: '港区女子',
     element: Element.WATER,
+    rarity: Rarity.R,
     atk: 15,
     hp: 30,
     cost: 45,
@@ -49,6 +51,7 @@ export const ITEM_CATALOG = {
     type: CardType.GEAR,
     itemType: ItemType.WEAPON,
     name: 'ナイフ',
+    rarity: Rarity.N,
     cost: 5,
     atkBonus: 10,
     hpBonus: 0,
@@ -58,6 +61,7 @@ export const ITEM_CATALOG = {
     type: CardType.GEAR,
     itemType: ItemType.ARMOR,
     name: 'なべのふた',
+    rarity: Rarity.N,
     cost: 5,
     atkBonus: 0,
     hpBonus: 10,
@@ -69,6 +73,7 @@ export const SPELL_CATALOG = {
     id: 'manjaro',
     type: CardType.SPELL,
     name: 'マ〇ジャロ',
+    rarity: Rarity.S,
     target: 'monster',
     permanent: true, // a "curse" - stays until the monster it's on dies
     addedAtk: 10,

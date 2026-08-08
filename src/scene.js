@@ -80,11 +80,15 @@ function createTokenTexture(color) {
   return new THREE.CanvasTexture(canvas);
 }
 
+const textureLoader = new THREE.TextureLoader();
+
 export class GameScene {
   constructor(canvas) {
     this.canvas = canvas;
     this.scene = new THREE.Scene();
-    this.scene.background = new THREE.Color(0x1a1a2e);
+    // Deep-water blue, matching the underwater stage art's darkest tone -
+    // shows past the edge of the (finite) textured ground plane.
+    this.scene.background = new THREE.Color(0x0b2436);
 
     this.camera = new THREE.PerspectiveCamera(
       CAMERA_FOV,
@@ -173,9 +177,14 @@ export class GameScene {
       tile.mesh = mesh;
     }
 
+    const groundTexture = textureLoader.load('/images/stage/stage1.png');
+    groundTexture.wrapS = THREE.RepeatWrapping;
+    groundTexture.wrapT = THREE.RepeatWrapping;
+    groundTexture.repeat.set(20, 20);
+    groundTexture.colorSpace = THREE.SRGBColorSpace;
     const ground = new THREE.Mesh(
       new THREE.PlaneGeometry(400, 400),
-      new THREE.MeshStandardMaterial({ color: 0x14141f })
+      new THREE.MeshStandardMaterial({ map: groundTexture })
     );
     ground.rotation.x = -Math.PI / 2;
     ground.position.y = -0.6;
@@ -191,6 +200,17 @@ export class GameScene {
    */
   createPiece(color, tilePosition) {
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: createTokenTexture(color) }));
+    sprite.scale.set(1.6, 1.6, 1);
+    sprite.position.set(tilePosition.x, PIECE_REST_Y, tilePosition.z);
+    this.scene.add(sprite);
+    return sprite;
+  }
+
+  /** Same billboard-sprite piece, but textured from a real character icon (a canvas cropped from the player-icon sheet - see iconSheet.js) instead of the placeholder colored circle. */
+  createPieceFromImage(imageSource, tilePosition) {
+    const texture = new THREE.CanvasTexture(imageSource);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
     sprite.scale.set(1.6, 1.6, 1);
     sprite.position.set(tilePosition.x, PIECE_REST_Y, tilePosition.z);
     this.scene.add(sprite);

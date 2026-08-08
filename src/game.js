@@ -72,6 +72,10 @@ export class Game {
     this.onChooseDirection = onChooseDirection;
     this.onPickLandForElementChange = onPickLandForElementChange;
     this.onPickElement = onPickElement;
+    // A canvas cropped from the player-icon sheet (see iconSheet.js) for
+    // the human player's board piece - null falls back to the plain
+    // colored-circle token (always true for CPU, which has no character).
+    this.humanIconImage = humanPlayer?.iconImage ?? null;
 
     // allianceId is unused today (only 2 players, no alliance mode yet) but
     // the state payload already carries it so the UI's slot layout - which
@@ -113,7 +117,10 @@ export class Game {
 
   init() {
     for (const player of this.players) {
-      player.mesh = this.scene.createPiece(player.color, this.tiles[player.tileIndex].position);
+      const pos = this.tiles[player.tileIndex].position;
+      player.mesh = !player.isCPU && this.humanIconImage
+        ? this.scene.createPieceFromImage(this.humanIconImage, pos)
+        : this.scene.createPiece(player.color, pos);
       for (let i = 0; i < STARTING_HAND_SIZE; i++) {
         const card = player.deck.draw();
         if (card) player.hand.push(card);

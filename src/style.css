@@ -139,11 +139,13 @@ html, body {
 }
 
 .pg-icon-choice {
-  width: 44px;
-  height: 44px;
+  width: 60px;
+  height: 60px;
   border-radius: 50%;
   border: 3px solid rgba(255, 255, 255, 0.5);
   cursor: pointer;
+  background: #1c1c2c;
+  object-fit: cover;
 }
 
 .pg-icon-choice.selected {
@@ -195,7 +197,8 @@ html, body {
   gap: 12px;
 }
 
-#deck-catalog-list {
+#deck-catalog-list,
+#shop-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -235,6 +238,10 @@ html, body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: rgba(255, 255, 255, 0.35);
+  text-underline-offset: 2px;
 }
 
 .deck-row-meta {
@@ -269,6 +276,23 @@ html, body {
   font-size: 13px;
   min-width: 16px;
   text-align: center;
+}
+
+.deck-row-sell {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: bold;
+  background: #2ec4b6;
+  color: #06231f;
+}
+
+.deck-row-sell:disabled {
+  opacity: 0.35;
+  background: #444;
+  color: #fff;
 }
 
 #hud {
@@ -412,6 +436,7 @@ html, body {
 }
 
 .card {
+  position: relative;
   width: 46px;
   height: 64px;
   border-radius: 6px;
@@ -425,6 +450,39 @@ html, body {
   line-height: 1.2;
   padding: 3px;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+}
+
+.card-rarity {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  font-size: 7px;
+  font-weight: bold;
+  line-height: 1;
+  color: #101018;
+  padding: 1px 3px;
+  border-radius: 3px;
+}
+
+.card-type-icon {
+  position: absolute;
+  top: 1px;
+  right: 2px;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.card-name-text {
+  width: 100%;
+}
+
+.card-large .card-rarity {
+  font-size: 11px;
+  padding: 2px 6px;
+}
+
+.card-large .card-type-icon {
+  font-size: 18px;
 }
 
 #hand-panel .card {
@@ -806,6 +864,7 @@ html, body {
 #card-detail-text {
   color: #fff;
   font-size: 13px;
+  white-space: pre-line;
 }
 
 #card-reveal-box,

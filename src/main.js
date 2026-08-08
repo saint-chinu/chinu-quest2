@@ -2,10 +2,11 @@ import './style.css';
 import { GameScene } from './scene.js';
 import { createBoard } from './board.js';
 import { Game } from './game.js';
-import { CardType, CARD_COLOR, ELEMENT_LABEL } from './cards.js';
+import { CardType, CARD_COLOR, ELEMENT_LABEL, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
 import { STARTER_DECKS, buildStarterDeckList } from './battleCards.js';
 import { loginOrRegister, saveCharacter } from './auth.js';
 import { getCardCatalog } from './cardCatalog.js';
+import { loadPlayerIcons } from './iconSheet.js';
 
 const canvas = document.getElementById('game-canvas');
 const turnIndicator = document.getElementById('turn-indicator');
@@ -444,9 +445,25 @@ function renderPlayerPanels(players) {
   });
 }
 
+/** Rarity badge (top-left) + type icon (top-right) + name, over the element/type background color. */
 function renderCardEl(el, card) {
   el.style.background = cardColor(card);
-  el.textContent = card.name;
+  el.replaceChildren();
+
+  const rarity = document.createElement('span');
+  rarity.className = 'card-rarity';
+  rarity.textContent = card.rarity || Rarity.N;
+  rarity.style.background = RARITY_COLOR[card.rarity] || RARITY_COLOR[Rarity.N];
+
+  const typeIcon = document.createElement('span');
+  typeIcon.className = 'card-type-icon';
+  typeIcon.textContent = TYPE_ICON[card.type] || '';
+
+  const name = document.createElement('span');
+  name.className = 'card-name-text';
+  name.textContent = card.name;
+
+  el.append(rarity, typeIcon, name);
 }
 
 const TYPE_LABEL = {
@@ -461,11 +478,26 @@ function describeCard(card) {
     : TYPE_LABEL[card.type];
 }
 
+/** Richer, multi-line version for the card detail popup (image + description) - stats, not just the type/element blurb. */
+function describeCardDetail(card) {
+  const rarityText = `レア度: ${card.rarity || Rarity.N}`;
+  const lines = [`${TYPE_LABEL[card.type]} / ${rarityText}`];
+  if (card.type === CardType.MONSTER) {
+    lines.push(`属性: ${card.element ? ELEMENT_LABEL[card.element] : '無属性'}`);
+    lines.push(`ATK ${card.atk} / HP ${card.hp} / コスト ${card.cost}`);
+  } else if (card.type === CardType.GEAR) {
+    lines.push(`ATK+${card.atkBonus} / HP+${card.hpBonus} / コスト ${card.cost}`);
+  } else if (card.type === CardType.SPELL) {
+    if (card.addedAtk != null) lines.push(`ATK+${card.addedAtk} / HP+${card.addedHp}（永続）`);
+  }
+  return lines.join('\n');
+}
+
 let cardDetailUseHandler = null;
 
 function showCardDetail(card, onUse) {
   renderCardEl(cardDetailCard, card);
-  cardDetailText.textContent = describeCard(card);
+  cardDetailText.textContent = describeCardDetail(card);
   cardDetailUseHandler = onUse ?? null;
   cardDetailUse.classList.toggle('hidden', !onUse);
   cardDetailModal.classList.remove('hidden');
@@ -796,7 +828,13 @@ function startBattle(character) {
     onPickLandForElementChange: promptPickLandForElementChange,
     onPickElement: promptPickElement,
     humanPlayer: character
-      ? { name: character.name, color: character.color, deckVariant: character.deckVariant }
+      ? {
+          name: character.name,
+          color: character.color,
+          deckVariant: character.deckVariant,
+          deckList: character.deckList,
+          iconImage: character.iconImage,
+        }
       : undefined,
   });
 
@@ -825,6 +863,10 @@ const deckCount = document.getElementById('deck-count');
 const deckCatalogList = document.getElementById('deck-catalog-list');
 const deckSave = document.getElementById('deck-save');
 const deckBack = document.getElementById('deck-back');
+const shopScreen = document.getElementById('shop-screen');
+const shopCurrency = document.getElementById('shop-currency');
+const shopList = document.getElementById('shop-list');
+const shopBackButton = document.getElementById('shop-back');
 const battleMenuScreen = document.getElementById('battle-menu-screen');
 const battleCpuButton = document.getElementById('battle-cpu');
 const battleBackButton = document.getElementById('battle-back');
@@ -832,42 +874,46 @@ const stubScreen = document.getElementById('stub-screen');
 const stubText = document.getElementById('stub-text');
 const stubBackButton = document.getElementById('stub-back');
 
-const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, deckScreen, battleMenuScreen, stubScreen];
+const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, deckScreen, shopScreen, battleMenuScreen, stubScreen];
 function showScreen(el) {
   ALL_PG_SCREENS.forEach((s) => s.classList.toggle('hidden', s !== el));
 }
 
-// Placeholder icon choices (colored circles, same style as the in-game
-// piece tokens) until real character art exists.
+// Accent color paired 1:1 with the 6 split icons (panel border / UI chrome
+// color) - the icon image itself is the actual selectable "character",
+// this is just cosmetic trim to keep player panels distinguishable.
 const ICON_COLORS = [0x2ec4b6, 0xe63946, 0xffd166, 0x8e5ce6, 0x4caf6e, 0x3a86e6];
+const STARTING_CURRENCY = 300;
 
 let currentUserId = null;
 let currentCharacter = null;
-let selectedIconColor = null;
+let selectedIconIndex = null;
 let selectedDeckVariant = null;
 
 function updateCharmakeValidity() {
-  charmakeSubmit.disabled = !charmakeName.value.trim() || selectedIconColor == null || !selectedDeckVariant;
+  charmakeSubmit.disabled = !charmakeName.value.trim() || selectedIconIndex == null || !selectedDeckVariant;
 }
 
-function showCharmakeScreen() {
-  selectedIconColor = null;
+async function showCharmakeScreen() {
+  selectedIconIndex = null;
   selectedDeckVariant = null;
   charmakeName.value = '';
 
   charmakeIcons.replaceChildren();
-  for (const color of ICON_COLORS) {
-    const el = document.createElement('div');
+  const icons = await loadPlayerIcons();
+  icons.forEach((icon, index) => {
+    const el = document.createElement('img');
     el.className = 'pg-icon-choice';
-    el.style.background = hexColor(color);
+    el.src = icon.dataUrl;
+    el.alt = `アイコン${index + 1}`;
     el.addEventListener('click', () => {
-      selectedIconColor = color;
+      selectedIconIndex = index;
       [...charmakeIcons.children].forEach((c) => c.classList.remove('selected'));
       el.classList.add('selected');
       updateCharmakeValidity();
     });
     charmakeIcons.appendChild(el);
-  }
+  });
 
   charmakeDecks.replaceChildren();
   for (const deck of Object.values(STARTER_DECKS)) {
@@ -888,7 +934,7 @@ function showCharmakeScreen() {
 }
 
 function showHubScreen() {
-  hubWelcome.textContent = `ようこそ、${currentCharacter.name}`;
+  hubWelcome.textContent = `ようこそ、${currentCharacter.name}（所持G: ${currentCharacter.currency}）`;
   showScreen(hubScreen);
 }
 
@@ -914,12 +960,22 @@ charmakeName.addEventListener('input', updateCharmakeValidity);
 charmakeSubmit.addEventListener('click', () => {
   if (charmakeSubmit.disabled) return;
   const deckList = buildStarterDeckList(selectedDeckVariant);
-  currentCharacter = { name: charmakeName.value.trim(), color: selectedIconColor, deckVariant: selectedDeckVariant, deckList };
+  const ownedCards = {};
+  for (const card of deckList) ownedCards[card.name] = (ownedCards[card.name] || 0) + 1;
+  currentCharacter = {
+    name: charmakeName.value.trim(),
+    iconIndex: selectedIconIndex,
+    color: ICON_COLORS[selectedIconIndex],
+    deckVariant: selectedDeckVariant,
+    deckList,
+    ownedCards,
+    currency: STARTING_CURRENCY,
+  };
   saveCharacter(currentUserId, currentCharacter);
   showHubScreen();
 });
 
-const STUB_MODE_LABEL = { story: 'ストーリー', shop: 'ショップ', breed: 'ブリード' };
+const STUB_MODE_LABEL = { story: 'ストーリー', breed: 'ブリード' };
 
 document.querySelectorAll('.hub-tile').forEach((tile) => {
   tile.addEventListener('click', () => {
@@ -928,6 +984,8 @@ document.querySelectorAll('.hub-tile').forEach((tile) => {
       showScreen(battleMenuScreen);
     } else if (mode === 'deck') {
       showDeckScreen();
+    } else if (mode === 'shop') {
+      showShopScreen();
     } else {
       stubText.textContent = `${STUB_MODE_LABEL[mode]}は準備中です`;
       showScreen(stubScreen);
@@ -962,6 +1020,10 @@ function updateDeckTotalDisplay() {
   deckSave.disabled = total !== DECK_SIZE;
 }
 
+function ownedCountOf(key) {
+  return (currentCharacter.ownedCards || {})[key] || 0;
+}
+
 function showDeckScreen() {
   const catalog = getCardCatalog();
   deckWorkingCounts = new Map();
@@ -983,6 +1045,8 @@ function showDeckScreen() {
   deckCatalogList.replaceChildren();
   for (const def of catalog) {
     const key = cardKey(def);
+    const owned = ownedCountOf(key);
+    const copyCap = Math.min(MAX_COPIES_PER_CARD, owned);
     const row = document.createElement('div');
     row.className = 'deck-row';
 
@@ -992,8 +1056,15 @@ function showDeckScreen() {
 
     const info = document.createElement('div');
     info.className = 'deck-row-info';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'deck-row-name';
+    nameEl.textContent = def.name;
+    nameEl.addEventListener('click', () => showCardDetail(def));
     const costText = def.cost != null ? ` / コスト${def.cost}` : '';
-    info.innerHTML = `<div class="deck-row-name">${def.name}</div><div class="deck-row-meta">${describeCard(def)}${costText}</div>`;
+    const meta = document.createElement('div');
+    meta.className = 'deck-row-meta';
+    meta.textContent = `${describeCard(def)}${costText} / 所持${owned}`;
+    info.append(nameEl, meta);
 
     const minusBtn = document.createElement('button');
     minusBtn.textContent = '−';
@@ -1005,7 +1076,7 @@ function showDeckScreen() {
       const count = deckWorkingCounts.get(key) || 0;
       countEl.textContent = String(count);
       minusBtn.disabled = count <= 0;
-      plusBtn.disabled = count >= MAX_COPIES_PER_CARD || deckTotal() >= DECK_SIZE;
+      plusBtn.disabled = count >= copyCap || deckTotal() >= DECK_SIZE;
     }
     rowRefreshers.push(refreshRow);
 
@@ -1017,7 +1088,7 @@ function showDeckScreen() {
     });
     plusBtn.addEventListener('click', () => {
       const count = deckWorkingCounts.get(key) || 0;
-      if (count >= MAX_COPIES_PER_CARD || deckTotal() >= DECK_SIZE) return;
+      if (count >= copyCap || deckTotal() >= DECK_SIZE) return;
       deckWorkingCounts.set(key, count + 1);
       refreshAll();
     });
@@ -1049,8 +1120,74 @@ deckSave.addEventListener('click', () => {
 
 deckBack.addEventListener('click', showHubScreen);
 
-battleCpuButton.addEventListener('click', () => {
+// ---- Shop: sell spare cards (owned but not currently in the deck) for G. EX rarity never sells. ----
+
+function inDeckCountOf(key) {
+  let count = 0;
+  for (const card of currentCharacter.deckList || []) {
+    if (cardKey(card) === key) count += 1;
+  }
+  return count;
+}
+
+function showShopScreen() {
+  const catalog = getCardCatalog();
+  const byKey = new Map(catalog.map((def) => [cardKey(def), def]));
+  shopCurrency.textContent = `所持G: ${currentCharacter.currency}`;
+  shopList.replaceChildren();
+
+  for (const [key, owned] of Object.entries(currentCharacter.ownedCards || {})) {
+    if (owned <= 0) continue;
+    const def = byKey.get(key);
+    if (!def) continue;
+    const surplus = owned - inDeckCountOf(key);
+    const price = RARITY_SELL_PRICE[def.rarity];
+
+    const row = document.createElement('div');
+    row.className = 'deck-row';
+
+    const swatch = document.createElement('div');
+    swatch.className = 'deck-row-swatch';
+    swatch.style.background = cardColor(def);
+
+    const info = document.createElement('div');
+    info.className = 'deck-row-info';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'deck-row-name';
+    nameEl.textContent = def.name;
+    nameEl.addEventListener('click', () => showCardDetail(def));
+    const meta = document.createElement('div');
+    meta.className = 'deck-row-meta';
+    meta.textContent = price != null
+      ? `所持${owned} / 余り${Math.max(surplus, 0)} / 売却${price}G`
+      : `所持${owned} / ${def.rarity}は売却不可`;
+    info.append(nameEl, meta);
+
+    const sellBtn = document.createElement('button');
+    sellBtn.className = 'deck-row-sell';
+    sellBtn.textContent = '売る';
+    sellBtn.disabled = price == null || surplus <= 0;
+    sellBtn.addEventListener('click', () => {
+      currentCharacter.ownedCards[key] -= 1;
+      currentCharacter.currency += price;
+      saveCharacter(currentUserId, currentCharacter);
+      showShopScreen();
+    });
+
+    row.append(swatch, info, sellBtn);
+    shopList.appendChild(row);
+  }
+}
+
+shopBackButton.addEventListener('click', showHubScreen);
+
+battleCpuButton.addEventListener('click', async () => {
   preGame.classList.add('hidden');
   appEl.classList.remove('hidden');
-  startBattle(currentCharacter);
+  let iconImage = null;
+  if (currentCharacter.iconIndex != null) {
+    const icons = await loadPlayerIcons();
+    iconImage = icons[currentCharacter.iconIndex]?.canvas ?? null;
+  }
+  startBattle({ ...currentCharacter, iconImage });
 });

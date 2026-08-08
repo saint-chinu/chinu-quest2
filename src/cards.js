@@ -39,6 +39,30 @@ export const CARD_COLOR = {
 // buildCardPool's `elements` option).
 export const MONSTER_ELEMENTS = [Element.FIRE, Element.WATER, Element.THUNDER, Element.FOREST];
 
+export const Rarity = { N: 'N', S: 'S', R: 'R', EX: 'EX' };
+
+// EX never sells (null price) - it's the top tier, meant to stay collected.
+export const RARITY_SELL_PRICE = {
+  [Rarity.N]: 15,
+  [Rarity.S]: 30,
+  [Rarity.R]: 100,
+  [Rarity.EX]: null,
+};
+
+export const RARITY_COLOR = {
+  [Rarity.N]: '#9aa0a6',
+  [Rarity.S]: '#3a9ee6',
+  [Rarity.R]: '#c98be6',
+  [Rarity.EX]: '#ffd166',
+};
+
+// Shown top-right on every card face. 怪獣=monster, 稲妻=spell, 剣=weapon/armor.
+export const TYPE_ICON = {
+  [CardType.MONSTER]: '👹',
+  [CardType.SPELL]: '⚡',
+  [CardType.GEAR]: '⚔️',
+};
+
 // 40-card book total. Real, named cards (see battleCards.js) take up some
 // of each category's slots; the rest are generic placeholders with modest
 // baseline stats so every monster in the deck is actually summonable.
@@ -68,6 +92,7 @@ export function buildCardPool({
       id: nextId(),
       type: CardType.MONSTER,
       element,
+      rarity: Rarity.N,
       name: `${ELEMENT_LABEL[element]}のモンスター${rank}`,
       atk: 10 + rank * 3,
       hp: 15 + rank * 3,
@@ -80,6 +105,7 @@ export function buildCardPool({
       id: nextId(),
       type: CardType.GEAR,
       element: null,
+      rarity: Rarity.N,
       name: `武器防具${i}`,
       atkBonus: 5,
       hpBonus: 5,
@@ -88,7 +114,7 @@ export function buildCardPool({
   }
 
   for (let i = 1; i <= spellCount; i++) {
-    cards.push({ id: nextId(), type: CardType.SPELL, element: null, name: `スペル${i}` });
+    cards.push({ id: nextId(), type: CardType.SPELL, element: null, rarity: Rarity.N, name: `スペル${i}` });
   }
 
   return cards;
