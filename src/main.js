@@ -102,22 +102,20 @@ function renderHand(hand) {
   }
 }
 
-/** Center hand: the current turn's player. CPU's cards render face-down - only the count is real. */
+/** Center hand: whoever's turn it is, shown face-up (spell "use" only applies on the human's own turn). */
 function renderCenterHand(hand, isCPU, spellUsable) {
   centerHandEl.replaceChildren();
   for (const card of hand) {
     const el = document.createElement('div');
     el.className = 'card';
+    renderCardEl(el, card);
 
-    if (isCPU) {
-      el.classList.add('card-back');
-    } else {
-      renderCardEl(el, card);
-      const isSpell = card.type === CardType.SPELL;
-      el.addEventListener('click', () => {
-        showCardDetail(card, isSpell && spellUsable ? () => game.useSpell(card) : null);
-      });
-    }
+    const isSpell = card.type === CardType.SPELL;
+    const canUseThis = !isCPU && isSpell && spellUsable;
+    el.addEventListener('click', () => {
+      showCardDetail(card, canUseThis ? () => game.useSpell(card) : null);
+    });
+
     centerHandEl.appendChild(el);
   }
 }
@@ -180,6 +178,68 @@ function promptDiscardChoice(hand) {
   });
 }
 
+const DICE_FACES = {
+  1: ['c'],
+  2: ['tl', 'br'],
+  3: ['tl', 'c', 'br'],
+  4: ['tl', 'tr', 'bl', 'br'],
+  5: ['tl', 'tr', 'c', 'bl', 'br'],
+  6: ['tl', 'tr', 'ml', 'mr', 'bl', 'br'],
+};
+const dicePips = diceButton.querySelectorAll('.pip');
+
+function setDiceFace(value) {
+  const active = new Set(DICE_FACES[value]);
+  dicePips.forEach((pip) => {
+    pip.style.opacity = active.has(pip.dataset.pos) ? '1' : '0';
+  });
+}
+
+const DICE_SPIN_INTERVAL_MS = 90;
+const DICE_LOCK_DELAY_MS = 700;
+
+// idle -> (click) -> spinning -> (click) -> locking -> (700ms) -> idle, then game.rollDice(value)
+let diceState = 'idle';
+let diceValue = 1;
+let diceSpinTimer = null;
+
+function resetDice() {
+  clearInterval(diceSpinTimer);
+  diceSpinTimer = null;
+  diceState = 'idle';
+  diceValue = 1;
+  setDiceFace(diceValue);
+}
+
+resetDice();
+
+diceButton.addEventListener('click', () => {
+  if (diceButton.disabled) return;
+
+  if (diceState === 'idle') {
+    diceState = 'spinning';
+    diceSpinTimer = setInterval(() => {
+      diceValue = (diceValue % 6) + 1;
+      setDiceFace(diceValue);
+    }, DICE_SPIN_INTERVAL_MS);
+    return;
+  }
+
+  if (diceState === 'spinning') {
+    // Locks in whatever face happens to land 0.7s after this click - the
+    // dice keeps spinning through the delay, so it's a timing/skill stop
+    // rather than an instant one.
+    diceState = 'locking';
+    setTimeout(() => {
+      clearInterval(diceSpinTimer);
+      diceSpinTimer = null;
+      const result = diceValue;
+      diceState = 'idle';
+      game.rollDice(result);
+    }, DICE_LOCK_DELAY_MS);
+  }
+});
+
 const scene = new GameScene(canvas);
 const tiles = createBoard({ width: 6, height: 5 });
 scene.buildBoard(tiles);
@@ -207,8 +267,10 @@ const game = new Game({
       .join('\n');
     renderHand(hand);
 
+    const centerWasHidden = centerPanel.classList.contains('hidden');
     centerPanel.classList.toggle('hidden', !showCenter);
     if (showCenter) {
+      if (centerWasHidden) resetDice();
       renderCenterHand(centerHand, currentPlayerIsCPU, !spellUsedThisTurn);
     }
   },
@@ -217,8 +279,6 @@ const game = new Game({
   onDiscardChoice: promptDiscardChoice,
   onSpellUse: promptSpellUse,
 });
-
-diceButton.addEventListener('click', () => game.rollDice());
 
 game.init();
 

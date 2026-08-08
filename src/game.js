@@ -18,6 +18,10 @@ const TILE_PAN_THRESHOLD = 3;
 // tile, so it leads rather than reacts.
 const LOOKAHEAD_LEAD_MS = 150;
 
+// CPU "thinking" pauses so its turns don't blow by instantly.
+const CPU_PRE_ROLL_MS = 1400;
+const CPU_DECISION_MS = 900;
+
 export class Game {
   constructor({
     tiles,
@@ -108,14 +112,14 @@ export class Game {
     this._notifyState();
   }
 
-  async rollDice() {
+  /** `steps` is the already-determined dice result (from the UI's spin-and-stop, or CPU's own roll). */
+  async rollDice(steps) {
     if (this.isBusy || !this.awaitingRoll) return;
     this.isBusy = true;
     this.awaitingRoll = false;
     this._notifyState();
 
     const player = this.currentPlayer;
-    const steps = randomInt(1, 6);
     this.onLog(`${player.name}のサイコロ: ${steps}`);
 
     await this._movePlayer(player, steps);
@@ -140,9 +144,13 @@ export class Game {
     this._notifyState();
 
     if (player.hand.length > HAND_LIMIT) {
-      const discarded = player.isCPU
-        ? player.hand[0]
-        : await this.onDiscardChoice(player.hand);
+      let discarded;
+      if (player.isCPU) {
+        await delay(CPU_DECISION_MS);
+        discarded = player.hand[0];
+      } else {
+        discarded = await this.onDiscardChoice(player.hand);
+      }
       player.hand = player.hand.filter((c) => c.id !== discarded.id);
       player.deck.discard(discarded);
       if (player.isCPU) this.onLog(`${player.name}は手札を1枚捨てた`);
@@ -213,9 +221,13 @@ export class Game {
   async _resolveLand(player, tile) {
     if (tile.owner === null || tile.owner === undefined) {
       const canAfford = player.currency >= tile.price;
-      const wantsToBuy = player.isCPU
-        ? canAfford
-        : canAfford && (await this.onPurchasePrompt(tile));
+      let wantsToBuy;
+      if (player.isCPU) {
+        await delay(CPU_DECISION_MS);
+        wantsToBuy = canAfford;
+      } else {
+        wantsToBuy = canAfford && (await this.onPurchasePrompt(tile));
+      }
 
       if (wantsToBuy) {
         player.currency -= tile.price;
@@ -243,9 +255,9 @@ export class Game {
   }
 
   async _runCPUTurn() {
-    await delay(700);
+    await delay(CPU_PRE_ROLL_MS);
     if (!this.currentPlayer.isCPU) return;
-    this.rollDice();
+    this.rollDice(randomInt(1, 6));
   }
 
   _notifyState() {
