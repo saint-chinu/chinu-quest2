@@ -114,13 +114,16 @@ html, body {
   display: flex;
   gap: 8px;
   pointer-events: none;
+  transform: translateY(14px) scale(0.95);
+  transform-origin: bottom left;
 }
 
 #center-panel {
   position: absolute;
   top: 50%;
   left: 50%;
-  transform: translate(-50%, calc(-50% - 38px));
+  /* -38px was ~1cm up; +5mm (~19px) back down leaves it ~5mm up overall. */
+  transform: translate(-50%, calc(-50% - 19px)) scale(0.95);
   z-index: 15;
   display: flex;
   flex-direction: column;
