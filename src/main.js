@@ -16,7 +16,6 @@ const purchaseYes = document.getElementById('purchase-yes');
 const purchaseNo = document.getElementById('purchase-no');
 const cardRevealModal = document.getElementById('card-reveal-modal');
 const cardRevealCard = document.getElementById('card-reveal-card');
-const cardRevealOk = document.getElementById('card-reveal-ok');
 const discardModal = document.getElementById('discard-modal');
 const discardChoices = document.getElementById('discard-choices');
 const cardDetailModal = document.getElementById('card-detail-modal');
@@ -89,17 +88,30 @@ function renderHand(hand) {
   }
 }
 
+// Matches the CSS transition durations on #card-reveal-card.
+const REVEAL_GROW_MS = 400;
+const REVEAL_HOLD_MS = 2000;
+const REVEAL_SHRINK_MS = 400;
+
+/** Auto-advancing draw reveal: grows in from the center, holds, shrinks away. */
 function promptCardReveal(card) {
   return new Promise((resolve) => {
     renderCardEl(cardRevealCard, card);
+    cardRevealCard.classList.remove('show');
     cardRevealModal.classList.remove('hidden');
 
-    function onOk() {
-      cardRevealModal.classList.add('hidden');
-      cardRevealOk.removeEventListener('click', onOk);
-      resolve();
-    }
-    cardRevealOk.addEventListener('click', onOk);
+    // Force a reflow so the grow-in transition restarts cleanly even if a
+    // reveal was still mid-animation from a moment ago.
+    void cardRevealCard.offsetWidth;
+    requestAnimationFrame(() => cardRevealCard.classList.add('show'));
+
+    setTimeout(() => {
+      cardRevealCard.classList.remove('show');
+      setTimeout(() => {
+        cardRevealModal.classList.add('hidden');
+        resolve();
+      }, REVEAL_SHRINK_MS);
+    }, REVEAL_GROW_MS + REVEAL_HOLD_MS);
   });
 }
 

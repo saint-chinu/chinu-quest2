@@ -42,12 +42,6 @@ html, body {
   gap: 8px;
 }
 
-#top-left {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
 #turn-indicator {
   background: rgba(0, 0, 0, 0.55);
   color: #fff;
@@ -78,11 +72,23 @@ html, body {
   text-align: center;
 }
 
-#hand-panel {
-  align-self: flex-start;
+#action-bar {
+  align-self: center;
   display: flex;
-  gap: 10px;
+  align-items: center;
+  gap: 16px;
+}
+
+#hand-panel {
+  display: flex;
+  gap: 8px;
   pointer-events: none;
+}
+
+#action-bar .card {
+  width: 64px;
+  height: 90px;
+  font-size: 11px;
 }
 
 .card {
@@ -114,9 +120,9 @@ html, body {
 
 #dice-button {
   pointer-events: auto;
-  width: 52px;
-  height: 52px;
-  padding: 8px;
+  width: 64px;
+  height: 64px;
+  padding: 10px;
   background: #fff;
   border: none;
   border-radius: 12px;
@@ -253,7 +259,17 @@ html, body {
   font-size: 14px;
 }
 
-#card-reveal-ok,
+#card-reveal-card {
+  transform: scale(0.15);
+  opacity: 0;
+  transition: transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1), opacity 250ms ease-out;
+}
+
+#card-reveal-card.show {
+  transform: scale(1);
+  opacity: 1;
+}
+
 #card-detail-close {
   border: none;
   border-radius: 8px;

@@ -51,7 +51,22 @@ export class Game {
     }
     const startPos = this.tiles[this.currentPlayer.tileIndex].position;
     this.scene.setFocusImmediate(startPos.x, startPos.z);
+    this._beginTurn();
+  }
+
+  /** Runs automatically whenever a turn starts: draw, then hand control to the player (or CPU). */
+  async _beginTurn() {
+    this.isBusy = true;
     this._notifyState();
+
+    await this._drawForTurn(this.currentPlayer);
+
+    this.isBusy = false;
+    this._notifyState();
+
+    if (this.currentPlayer.isCPU) {
+      this._runCPUTurn();
+    }
   }
 
   async rollDice() {
@@ -60,8 +75,6 @@ export class Game {
     this._notifyState();
 
     const player = this.currentPlayer;
-    await this._drawForTurn(player);
-
     const steps = randomInt(1, 6);
     this.onLog(`${player.name}のサイコロ: ${steps}`);
 
@@ -70,12 +83,7 @@ export class Game {
     await delay(400);
 
     this._nextTurn();
-    this.isBusy = false;
-    this._notifyState();
-
-    if (this.currentPlayer.isCPU) {
-      this._runCPUTurn();
-    }
+    await this._beginTurn();
   }
 
   async _drawForTurn(player) {
