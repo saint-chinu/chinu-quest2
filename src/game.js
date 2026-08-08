@@ -40,7 +40,7 @@ export class Game {
 
     const player = this.currentPlayer;
     const startPos = this.tiles[player.tileIndex].position;
-    await this.scene.centerOn(startPos.x, startPos.z);
+    this.scene.setChaseTarget(startPos.x, startPos.z);
 
     const steps = randomInt(1, 6);
     this.onLog(`${player.name}のサイコロ: ${steps}`);
@@ -73,17 +73,14 @@ export class Game {
   }
 
   _tweenStep(player, from, to) {
-    const pan = this.scene.panIfNeeded(to.x, to.z);
-
-    const move = tween(STEP_DURATION_MS, (t) => {
+    return tween(STEP_DURATION_MS, (t) => {
       const eased = easeInOutQuad(t);
       const x = from.x + (to.x - from.x) * eased;
       const z = from.z + (to.z - from.z) * eased;
       const hop = Math.sin(Math.PI * t) * 0.5;
       player.mesh.position.set(x, 0.5 + hop, z);
+      this.scene.setChaseTarget(x, z);
     });
-
-    return pan ? Promise.all([move, pan]) : move;
   }
 
   async _resolveTile(player) {

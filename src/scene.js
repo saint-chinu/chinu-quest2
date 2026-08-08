@@ -1,6 +1,5 @@
 import * as THREE from 'three';
 import { TileType } from './board.js';
-import { tween, easeInOutQuad } from './utils.js';
 
 const TILE_COLOR = {
   [TileType.START]: 0xffd166,
@@ -11,21 +10,11 @@ const TILE_COLOR = {
 // Pulled back and flattened for a wide, "見下ろし" overview of the board.
 const CAMERA_OFFSET = new THREE.Vector3(0, 21, 17);
 const CAMERA_FOV = 45;
-const PAN_DURATION_MS = 350;
 
-// Fraction of the geometrically-visible ground area that counts as "safe".
-// Leaves margin for the piece's own size and for HUD elements overlapping
-// the edges of the screen.
-const DEADZONE_MARGIN = 0.65;
-
-const raycaster = new THREE.Raycaster();
-const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
-const NDC_CORNERS = [
-  [-1, -1], // bottom-left (nearest to camera)
-  [1, -1], // bottom-right (nearest to camera)
-  [-1, 1], // top-left (farthest from camera)
-  [1, 1], // top-right (farthest from camera)
-];
+// Exponential smoothing rate for the camera chasing its target (world x/z
+// only — vertical piece motion never feeds into this). Lower = slower,
+// lazier follow.
+const CAMERA_FOLLOW_SPEED = 2.2;
 
 export class GameScene {
   constructor(canvas) {
@@ -46,12 +35,7 @@ export class GameScene {
     this._setupLights();
 
     this.focus = new THREE.Vector3(0, 0, 0);
-    // Safe (x, z) offsets from the current focus, in world units, derived
-    // from the actual camera frustum by resize(). The near (bottom of
-    // screen) and far (top of screen) edges sit at different distances
-    // under this oblique angle, so they're tracked separately rather than
-    // assumed symmetric.
-    this.deadzone = { halfX: 0, nearZ: 0, farZ: 0 };
+    this.chaseTarget = new THREE.Vector3(0, 0, 0);
     this._applyCamera();
 
     this.resize();
@@ -72,39 +56,6 @@ export class GameScene {
     this.camera.aspect = clientWidth / clientHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(clientWidth, clientHeight, false);
-    this._recomputeDeadzone();
-  }
-
-  /**
-   * Casts rays through the four viewport corners onto the ground plane to
-   * find what's actually visible, evaluated with focus at the origin so
-   * the resulting offsets apply no matter where focus currently is.
-   */
-  _recomputeDeadzone() {
-    const savedFocus = this.focus.clone();
-    this.focus.set(0, 0, 0);
-    this._applyCamera();
-    this.camera.updateMatrixWorld(true);
-
-    const points = NDC_CORNERS.map(([nx, ny]) => {
-      raycaster.setFromCamera(new THREE.Vector2(nx, ny), this.camera);
-      const point = new THREE.Vector3();
-      raycaster.ray.intersectPlane(groundPlane, point);
-      return point ?? new THREE.Vector3();
-    });
-    const [bottomLeft, bottomRight, topLeft, topRight] = points;
-
-    const halfX = Math.min(Math.abs(bottomLeft.x), Math.abs(bottomRight.x));
-    const nearZ = Math.min(bottomLeft.z, bottomRight.z);
-    const farZ = Math.max(topLeft.z, topRight.z);
-    this.deadzone = {
-      halfX: halfX * DEADZONE_MARGIN,
-      nearZ: nearZ * DEADZONE_MARGIN,
-      farZ: farZ * DEADZONE_MARGIN,
-    };
-
-    this.focus.copy(savedFocus);
-    this._applyCamera();
   }
 
   buildBoard(tiles) {
@@ -138,35 +89,19 @@ export class GameScene {
 
   setFocusImmediate(x, z) {
     this.focus.set(x, 0, z);
+    this.chaseTarget.set(x, 0, z);
     this._applyCamera();
   }
 
-  /** Unconditionally pans (no zoom/angle change) to center on (x, z). */
-  centerOn(x, z) {
-    return this._panTo(x, z);
+  /** Horizontal-only chase target; call continuously as a piece moves. */
+  setChaseTarget(x, z) {
+    this.chaseTarget.set(x, 0, z);
   }
 
-  /**
-   * If (x, z) would fall outside the safe viewing area around the current
-   * focus, pans the camera to bring it back into view and returns the
-   * pan's promise. Otherwise returns null and the camera does not move.
-   */
-  panIfNeeded(x, z) {
-    const dx = x - this.focus.x;
-    const dz = z - this.focus.z;
-    const { halfX, nearZ, farZ } = this.deadzone;
-    const inView = Math.abs(dx) <= halfX && dz <= nearZ && dz >= farZ;
-    return inView ? null : this._panTo(x, z);
-  }
-
-  _panTo(x, z) {
-    const from = this.focus.clone();
-    const to = new THREE.Vector3(x, 0, z);
-    if (from.distanceTo(to) < 0.01) return null;
-    return tween(PAN_DURATION_MS, (t) => {
-      this.focus.lerpVectors(from, to, easeInOutQuad(t));
-      this._applyCamera();
-    });
+  update(delta) {
+    const alpha = 1 - Math.exp(-CAMERA_FOLLOW_SPEED * delta);
+    this.focus.lerp(this.chaseTarget, alpha);
+    this._applyCamera();
   }
 
   _applyCamera() {

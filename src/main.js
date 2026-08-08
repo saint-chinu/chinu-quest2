@@ -57,8 +57,14 @@ diceButton.addEventListener('click', () => game.rollDice());
 
 game.init();
 
-function animate() {
+let lastTime = performance.now();
+function animate(now) {
+  const delta = Math.min(0.1, (now - lastTime) / 1000);
+  lastTime = now;
+
+  scene.update(delta);
   scene.render();
+
   requestAnimationFrame(animate);
 }
 requestAnimationFrame(animate);
