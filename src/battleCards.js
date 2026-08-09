@@ -66,6 +66,18 @@ export const ITEM_CATALOG = {
     atkBonus: 0,
     hpBonus: 10,
   },
+  // ストーリー③クリア報酬（ぶどうからのお礼）。story.jsのSTORY_STAGES[2].rewardから参照。
+  peeStaff: {
+    id: 'peeStaff',
+    type: CardType.GEAR,
+    itemType: ItemType.WEAPON,
+    name: 'ペーの杖',
+    rarity: Rarity.EX,
+    cost: 20,
+    atkBonus: 25,
+    hpBonus: 10,
+    traits: ['firstStrike'],
+  },
 };
 
 export const SPELL_CATALOG = {

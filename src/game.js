@@ -62,6 +62,7 @@ export class Game {
     onPickMonsterCard,
     onConfirmAction,
     onConfirmMove,
+    onConfirmSellLand,
     onPickBrowseTile,
     onLandSubmenu,
     onShowTileInfo,
@@ -74,7 +75,10 @@ export class Game {
     onBattleAttack,
     onBattleRetreat,
     onBattleOutcome,
+    onStoryBattleEnd,
+    playerConfigs,
     humanPlayer,
+    storyMode = false,
   }) {
     this.tiles = tiles;
     this.scene = scene;
@@ -89,6 +93,7 @@ export class Game {
     this.onPickMonsterCard = onPickMonsterCard;
     this.onConfirmAction = onConfirmAction;
     this.onConfirmMove = onConfirmMove;
+    this.onConfirmSellLand = onConfirmSellLand;
     this.onPickBrowseTile = onPickBrowseTile;
     this.onLandSubmenu = onLandSubmenu;
     this.onShowTileInfo = onShowTileInfo;
@@ -101,36 +106,55 @@ export class Game {
     this.onBattleAttack = onBattleAttack;
     this.onBattleRetreat = onBattleRetreat;
     this.onBattleOutcome = onBattleOutcome;
+    this.onStoryBattleEnd = onStoryBattleEnd;
+    // ストーリーモードでは破産＝敗北（脱落）としてそのままバトル終了判定に
+    // つながる（_checkBankruptcy/_checkStoryWinCondition参照）。通常の対戦
+    // モードでは今まで通り500Gを渡されゴール地点から再スタートするだけ。
+    this.storyMode = storyMode;
+    this.storyEnded = false;
+
+    // 2人対戦（通常の対戦モード）呼び出し元との後方互換: playerConfigsが
+    // 渡されなければ、これまで通りhumanPlayer+固定CPUの2人構成を組む。
+    // ストーリーモード（1vs1vs1・2vs2同盟戦など）はplayerConfigsで任意の
+    // 人数・陣営を渡す - ターン進行/CPUロジック/同盟集計は元々players配列
+    // の長さやallianceIdだけを見て動く汎用実装なので、人数を増やすだけで
+    // そのまま機能する。
+    const resolvedConfigs = playerConfigs || [
+      {
+        name: humanPlayer?.name || 'プレイヤー',
+        isCPU: false,
+        color: humanPlayer?.color ?? 0x2ec4b6,
+        allianceId: null,
+        deckList: humanPlayer?.deckList,
+        deckVariant: humanPlayer?.deckVariant,
+        iconImage: humanPlayer?.iconImage,
+      },
+      { name: 'CPU', isCPU: true, color: 0xe63946, allianceId: null },
+    ];
+
     // A canvas cropped from the player-icon sheet (see iconSheet.js) for
     // the human player's board piece - null falls back to the plain
     // colored-circle token (always true for CPU, which has no character).
-    this.humanIconImage = humanPlayer?.iconImage ?? null;
+    this.humanIconImage = resolvedConfigs.find((c) => !c.isCPU)?.iconImage ?? null;
 
-    // allianceId is unused today (only 2 players, no alliance mode yet) but
-    // the state payload already carries it so the UI's slot layout - which
-    // groups same-alliance players together - is ready when that lands.
     // tileId indexes into `tiles` (ids are assigned sequentially at parse
     // time, so id === array index). previousTileId excludes backtracking
     // when picking the next step at a branch (see _movePlayer) - null at
     // game start, when every neighbor of the start tile is a fair option.
-    this.players = [
-      {
-        id: 0,
-        name: humanPlayer?.name || 'プレイヤー',
-        isCPU: false,
-        currency: 500,
-        tileId: 0,
-        previousTileId: null,
-        color: humanPlayer?.color ?? 0x2ec4b6,
-        allianceId: null,
-        deck: humanPlayer?.deckList
-          ? Deck.fromCardList(humanPlayer.deckList)
-          : new Deck(buildStarterExtraCards(humanPlayer?.deckVariant)),
-        hand: [],
-        spellUsedThisTurn: false,
-      },
-      { id: 1, name: 'CPU', isCPU: true, currency: 500, tileId: 0, previousTileId: null, color: 0xe63946, allianceId: null, deck: new Deck(buildStarterExtraCards()), hand: [], spellUsedThisTurn: false },
-    ];
+    this.players = resolvedConfigs.map((cfg, id) => ({
+      id,
+      name: cfg.name,
+      isCPU: !!cfg.isCPU,
+      currency: 500,
+      tileId: 0,
+      previousTileId: null,
+      color: cfg.color,
+      allianceId: cfg.allianceId ?? null,
+      deck: cfg.deckList ? Deck.fromCardList(cfg.deckList) : new Deck(buildStarterExtraCards(cfg.deckVariant)),
+      hand: [],
+      spellUsedThisTurn: false,
+      defeated: false,
+    }));
     this.currentPlayerIndex = 0;
     this.isBusy = false;
     this.tilesSincePan = 0;
@@ -226,8 +250,63 @@ export class Game {
     await this._runLandCommand(player);
     await delay(400);
 
+    // 相手側が戦闘中の略奪特性等でマイナスになっている可能性もあるので、
+    // 今操作したプレイヤーだけでなく全員をチェックする。
+    for (const p of this.players) this._checkBankruptcy(p);
+    if (this.storyEnded) return; // ストーリーモードで決着がついたらターン進行を止める
+
     this._nextTurn();
     await this._beginTurn();
+  }
+
+  /**
+   * 破産処理。通常の対戦モードでは所持Gがマイナスになったプレイヤーは
+   * 500Gを渡され、ゴール地点（スタートマス）から再スタートする（デッキ・
+   * 手札は変化しない。土地の所有権もこれだけでは失われない）。
+   * ストーリーモードでは破産＝脱落（敗北）として扱い、盤上から取り除いた
+   * 上で_checkStoryWinConditionに勝敗判定を委ねる。
+   */
+  _checkBankruptcy(player) {
+    if (player.currency >= 0 || player.defeated) return;
+    if (this.storyMode) {
+      player.defeated = true;
+      player.currency = 0;
+      if (player.mesh) player.mesh.visible = false;
+      for (const tile of this.tiles) {
+        if (tile.owner === player.id) {
+          tile.unit = null;
+          tile.owner = null;
+          this._repaintTileToElement(tile);
+        }
+      }
+      this.onLog(`${player.name}は脱落した！`);
+      this._notifyState();
+      this._checkStoryWinCondition();
+      return;
+    }
+    const startTile = this.tiles.find((t) => t.type === TileType.START);
+    player.currency = 500;
+    player.tileId = startTile.id;
+    player.previousTileId = null;
+    if (player.mesh) player.mesh.position.set(startTile.position.x, PIECE_REST_Y, startTile.position.z);
+    this.onLog(`${player.name}は破産した！500Gを渡されゴール地点から再スタート`);
+    this._notifyState();
+  }
+
+  /**
+   * ストーリーモード専用の勝敗判定: 生存中（未脱落）プレイヤーの陣営数を
+   * 数え、1陣営（同盟含む・ソロはp.id単位）まで絞られたらバトル終了。
+   * 2vs2同盟戦もFFAも同じロジックで判定できる（allianceIdの汎用集計）。
+   */
+  _checkStoryWinCondition() {
+    if (!this.storyMode || this.storyEnded) return;
+    const alive = this.players.filter((p) => !p.defeated);
+    const aliveSideIds = new Set(alive.map((p) => (p.allianceId != null ? `a${p.allianceId}` : `p${p.id}`)));
+    if (aliveSideIds.size > 1) return;
+    this.storyEnded = true;
+    const won = alive.some((p) => !p.isCPU);
+    this.onLog(won ? '勝利した！' : '敗北した…');
+    this.onStoryBattleEnd?.({ won, alivePlayerIds: alive.map((p) => p.id) });
   }
 
   async _drawForTurn(player) {
@@ -433,6 +512,8 @@ export class Game {
     if (!owesTollUnlessConquered) return;
     if (tile.owner == null || tile.owner === player.id) return;
     const owner = this.players.find((p) => p.id === tile.owner);
+    // 同盟戦: 仲間の土地に止まっても通行料は取られない。
+    if (owner.allianceId != null && owner.allianceId === player.allianceId) return;
     const toll = this._tollOfTile(tile);
     player.currency -= toll;
     owner.currency += toll;
@@ -468,6 +549,7 @@ export class Game {
         if (action === 'levelup' && (await this._humanLevelUpFlowForTile(player, tile))) return true;
         if (action === 'element' && (await this._humanChangeElementFlowForTile(player, tile))) return true;
         if (action === 'move' && (await this._humanMoveFlow(player, tile))) return true;
+        if (action === 'sell' && (await this._humanSellLandFlow(player, tile))) return true;
         // cancelled sub-action - loop back to the submenu for this same tile
       }
     }
@@ -489,11 +571,21 @@ export class Game {
    * 連鎖倍率: how many tiles of this element the owner holds (same-element
    * lands count as one 連鎖 today, since every element already forms a
    * single contiguous edge on this board). Unowned tiles preview at 連鎖1.
-   * 無色 never chains, even with other 無色 tiles.
+   * 無色 never chains, even with other 無色 tiles. 同盟戦では同盟仲間の
+   * 同属性所有地も連鎖にカウントする（土地の所有権自体は個人のまま - この
+   * カウント上だけ仲間の分も足し合わせる）。
    */
   _chainMultiplier(ownerId, element) {
     if (ownerId == null || element === Element.NEUTRAL) return CHAIN_MULTIPLIER[1];
-    const count = this.tiles.filter((t) => t.owner === ownerId && t.element === element).length;
+    const owner = this.players.find((p) => p.id === ownerId);
+    const allianceId = owner?.allianceId ?? null;
+    const count = this.tiles.filter((t) => {
+      if (t.element !== element || t.owner == null) return false;
+      if (t.owner === ownerId) return true;
+      if (allianceId == null) return false;
+      const tileOwner = this.players.find((p) => p.id === t.owner);
+      return tileOwner?.allianceId === allianceId;
+    }).length;
     return CHAIN_MULTIPLIER[Math.min(Math.max(count, 1), LEVEL_CAP)];
   }
 
@@ -653,6 +745,7 @@ export class Game {
         tile.owner = null;
         this._repaintTileToElement(tile);
         this.onLog(`${player.name}が土地を奪取した！`);
+        await this._handleUnitDeath(defenderUnit, defenderPlayer);
       } else if (result.attackerSurvived && result.defenderSurvived) {
         this.onLog(`${defenderPlayer.name}の${defenderUnit.def.name}が防衛に成功し、${attackerName}は元の土地に戻った`);
       } else {
@@ -664,11 +757,42 @@ export class Game {
           targetTile.owner = null;
           this._repaintTileToElement(targetTile);
           this.onLog('両者相打ちで両方の土地が無人になった');
+          await this._handleUnitDeath(defenderUnit, defenderPlayer);
         } else {
           this.onLog(`${attackerName}は倒された`);
         }
+        await this._handleUnitDeath(attackerUnit, player);
       }
     }
+    this._notifyState();
+    return true;
+  }
+
+  /**
+   * 土地コマンドの「土地を売る」: 唯一レベルをリセットする操作（それ以外は
+   * 所有権を失ってもレベルは保持されるのが確定仕様 - 売却だけが例外）。
+   * 売却額は地価の半額。配置されていたモンスターのカードは入れ替え同様
+   * 手札に戻る。実行したら自動でターン終了。同盟戦でもパートナーの土地は
+   * ここに来る前提として個人所有の土地しか_runLandBrowseの候補に出ない
+   * ので、他人の土地を誤って売る経路は無い。
+   */
+  async _humanSellLandFlow(player, tile) {
+    const salePrice = Math.round(this._landValueOfTile(tile) / 2);
+    const confirmed = await this.onConfirmSellLand({ tile: this.getTileSummary(tile), salePrice });
+    if (!confirmed) return false;
+
+    if (tile.unit) {
+      player.hand.push({
+        ...tile.unit.def,
+        id: `sell-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      });
+    }
+    tile.unit = null;
+    tile.owner = null;
+    tile.level = 1;
+    this._repaintTileToElement(tile);
+    player.currency += salePrice;
+    this.onLog(`${player.name}は土地を売却した (+${salePrice}G)`);
     this._notifyState();
     return true;
   }
@@ -833,29 +957,33 @@ export class Game {
         });
     this._consumeBattleItem(defenderPlayer, defenderUnit, defenderItem);
 
-    const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, defenderBonus);
+    // 貫通: nullifies the defender's 同属性ボーナス (land-added HP) for this
+    // battle's math specifically - the stat panel above already showed the
+    // "nominal" bonus, since traits (unlike items) aren't secret and the
+    // pierce interaction is meant to land as a damage-calc surprise, not an
+    // upfront display change. Item HP bonuses are untouched either way.
+    const battleDefenderBonus = attackerUnit.def.traits?.includes('pierce') ? { ...defenderBonus, hp: 0 } : defenderBonus;
+
+    const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, battleDefenderBonus);
     result.log.forEach((line) => this.onLog(line));
 
-    await this.onBattleAttack({
-      side: 'attacker',
-      item: attackerItem,
-      message: result.attackMessage,
-      targetHp: Math.max(defenderUnit.currentHp, 0),
-      targetDied: !result.defenderSurvived,
-    });
-    if (result.defenderSurvived) {
+    // `exchanges` is already in the order strikes actually happened (先制
+    // can flip it to defender-first) - just play them back in order.
+    for (const exchange of result.exchanges) {
+      const item = exchange.side === 'attacker' ? attackerItem : defenderItem;
+      const targetUnit = exchange.side === 'attacker' ? defenderUnit : attackerUnit;
       await this.onBattleAttack({
-        side: 'defender',
-        item: defenderItem,
-        message: result.counterMessage,
-        targetHp: Math.max(attackerUnit.currentHp, 0),
-        targetDied: !result.attackerSurvived,
+        side: exchange.side,
+        item,
+        message: exchange.message,
+        targetHp: Math.max(targetUnit.currentHp, 0),
+        targetDied: exchange.targetDied,
       });
-      // Neither died - a genuine draw (見た目上は防衛成功): both monsters
-      // retreat off-screen to their own side before the outcome message,
-      // rather than either one crumbling.
-      if (result.attackerSurvived) await this.onBattleRetreat();
     }
+    // Both sides got to strike and both survived - a genuine draw (見た目上
+    // は防衛成功): retreat off-screen before the outcome message, rather
+    // than either card crumbling.
+    if (result.attackerSurvived && result.defenderSurvived) await this.onBattleRetreat();
 
     const won = result.attackerSurvived && !result.defenderSurvived;
     await this.onBattleOutcome({
@@ -884,9 +1012,41 @@ export class Game {
         tile.owner = null;
         this._repaintTileToElement(tile);
         this.onLog('両者相打ちで土地は無人になった');
+        await this._handleUnitDeath(attackerUnit, player);
       }
+      await this._handleUnitDeath(defenderUnit, defenderPlayer);
     } else {
       this.onLog(`${defenderPlayer.name}の${defenderUnit.def.name}が防衛に成功した`);
+      if (!result.attackerSurvived) await this._handleUnitDeath(attackerUnit, player);
+    }
+  }
+
+  /**
+   * 不死鳥: 死亡したユニットにこの特性があれば、カードを（新しいidで）
+   * 持ち主の手札に戻す。手札上限を超える場合は通常の手札上限処理と同じ
+   * 流れで1枚捨てさせる（捨てたカードはもう戻ってこない）。この特性が
+   * 無ければ何もしない。
+   */
+  async _handleUnitDeath(unit, ownerPlayer) {
+    if (!unit.def.traits?.includes('phoenix')) return;
+
+    const card = { ...unit.def, id: `phoenix-${ownerPlayer.id}-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+    ownerPlayer.hand.push(card);
+    this.onLog(`${unit.def.name}は不死鳥の力で${ownerPlayer.name}の手札に戻った`);
+    this._notifyState();
+
+    if (ownerPlayer.hand.length > HAND_LIMIT) {
+      let discarded;
+      if (ownerPlayer.isCPU) {
+        await delay(CPU_DECISION_MS);
+        discarded = ownerPlayer.hand[0];
+      } else {
+        discarded = await this.onDiscardChoice(ownerPlayer.hand);
+      }
+      ownerPlayer.hand = ownerPlayer.hand.filter((c) => c.id !== discarded.id);
+      ownerPlayer.deck.discard(discarded);
+      if (ownerPlayer.isCPU) this.onLog(`${ownerPlayer.name}は手札を1枚捨てた`);
+      this._notifyState();
     }
   }
 
@@ -940,7 +1100,9 @@ export class Game {
   }
 
   _nextTurn() {
-    this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
+    do {
+      this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
+    } while (this.players[this.currentPlayerIndex].defeated);
   }
 
   async _runCPUTurn() {
@@ -961,6 +1123,18 @@ export class Game {
     return this.tiles.filter((t) => t.owner === playerId).length;
   }
 
+  /**
+   * 総資産（表示用）: 同盟戦では2人の合計（所持G＋地価、どちらも両者分を
+   * 合算）が両プレイヤーの表示に使われる。土地の所有権自体は個人のままな
+   * ので、合算するのはこの表示値だけ（_ownedTiles等はp.idだけを見続ける）。
+   * 同盟でなければ今まで通り本人単独の値。
+   */
+  _totalAssetsOf(player) {
+    const teammates =
+      player.allianceId != null ? this.players.filter((p) => p.allianceId === player.allianceId) : [player];
+    return teammates.reduce((sum, p) => sum + p.currency + this._landValueOf(p.id), 0);
+  }
+
   _notifyState() {
     const human = this.players.find((p) => !p.isCPU);
     const showCenter = this.awaitingRoll && !this.isBusy;
@@ -973,9 +1147,10 @@ export class Game {
         color: p.color,
         allianceId: p.allianceId,
         currency: p.currency,
-        totalAssets: p.currency + this._landValueOf(p.id),
+        totalAssets: this._totalAssetsOf(p),
         summonCount: this._summonCountOf(p.id),
         handCount: p.hand.length,
+        defeated: p.defeated,
       })),
       hand: human.hand,
       showCenter,

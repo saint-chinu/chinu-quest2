@@ -88,11 +88,12 @@ export function buildCardPool({
   for (let i = 0; i < monsterCount; i++) {
     const element = elements[i % elements.length];
     const rank = Math.floor(i / elements.length) + 1;
+    const rarity = rank >= 6 ? Rarity.R : rank >= 4 ? Rarity.S : Rarity.N;
     cards.push({
       id: nextId(),
       type: CardType.MONSTER,
       element,
-      rarity: Rarity.N,
+      rarity,
       name: `${ELEMENT_LABEL[element]}のモンスター${rank}`,
       atk: 10 + rank * 3,
       hp: 15 + rank * 3,
@@ -101,11 +102,12 @@ export function buildCardPool({
   }
 
   for (let i = 1; i <= gearCount; i++) {
+    const rarity = i >= 8 ? Rarity.R : i >= 5 ? Rarity.S : Rarity.N;
     cards.push({
       id: nextId(),
       type: CardType.GEAR,
       element: null,
-      rarity: Rarity.N,
+      rarity,
       name: `武器防具${i}`,
       atkBonus: 5,
       hpBonus: 5,
@@ -114,7 +116,8 @@ export function buildCardPool({
   }
 
   for (let i = 1; i <= spellCount; i++) {
-    cards.push({ id: nextId(), type: CardType.SPELL, element: null, rarity: Rarity.N, name: `スペル${i}` });
+    const rarity = i >= 8 ? Rarity.R : i >= 5 ? Rarity.S : Rarity.N;
+    cards.push({ id: nextId(), type: CardType.SPELL, element: null, rarity, name: `スペル${i}` });
   }
 
   return cards;

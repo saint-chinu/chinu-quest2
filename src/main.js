@@ -3,11 +3,22 @@ import { GameScene } from './scene.js';
 import { createBoard } from './board.js';
 import { Game } from './game.js';
 import { CardType, CARD_COLOR, ELEMENT_LABEL, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
-import { STARTER_DECKS, buildStarterDeckList } from './battleCards.js';
+import { STARTER_DECKS, buildStarterDeckList, ITEM_CATALOG } from './battleCards.js';
 import { loginOrRegister, saveCharacter } from './auth.js';
 import { getCardCatalog } from './cardCatalog.js';
+import { PACKS, drawPack } from './shopPacks.js';
+import { CARD_EFFECTS, saveCustomCard, validateCustomCard } from './customCards.js';
 import { loadPlayerIcons } from './iconSheet.js';
-import { BREED_BASE, BREED_PARTS, computeBreedStats, canEquipPart, describeBreedPart } from './breedParts.js';
+import {
+  BREED_BASE,
+  BREED_PARTS,
+  CHANGEABLE_BREED_ELEMENTS,
+  computeBreedStats,
+  canEquipPart,
+  breedPartBadges,
+  buildBreedCardDef,
+} from './breedParts.js';
+import { STORY_STAGES, isStageUnlocked, isStageCleared } from './story.js';
 
 const canvas = document.getElementById('game-canvas');
 const turnIndicator = document.getElementById('turn-indicator');
@@ -36,6 +47,7 @@ const landSubmenuSwap = document.getElementById('land-submenu-swap');
 const landSubmenuLevelup = document.getElementById('land-submenu-levelup');
 const landSubmenuElement = document.getElementById('land-submenu-element');
 const landSubmenuMove = document.getElementById('land-submenu-move');
+const landSubmenuSell = document.getElementById('land-submenu-sell');
 const landSubmenuInfo = document.getElementById('land-submenu-info');
 const landSubmenuBack = document.getElementById('land-submenu-back');
 const monsterPickerModal = document.getElementById('monster-picker-modal');
@@ -253,6 +265,7 @@ function promptLandSubmenu(tile) {
       landSubmenuLevelup.removeEventListener('click', onLevelup);
       landSubmenuElement.removeEventListener('click', onElement);
       landSubmenuMove.removeEventListener('click', onMove);
+      landSubmenuSell.removeEventListener('click', onSell);
       landSubmenuInfo.removeEventListener('click', onInfo);
       landSubmenuBack.removeEventListener('click', onBack);
       resolve(result);
@@ -269,6 +282,9 @@ function promptLandSubmenu(tile) {
     function onMove() {
       cleanup('move');
     }
+    function onSell() {
+      cleanup('sell');
+    }
     function onInfo() {
       cleanup('info');
     }
@@ -279,6 +295,7 @@ function promptLandSubmenu(tile) {
     landSubmenuLevelup.addEventListener('click', onLevelup);
     landSubmenuElement.addEventListener('click', onElement);
     landSubmenuMove.addEventListener('click', onMove);
+    landSubmenuSell.addEventListener('click', onSell);
     landSubmenuInfo.addEventListener('click', onInfo);
     landSubmenuBack.addEventListener('click', onBack);
   });
@@ -287,6 +304,11 @@ function promptLandSubmenu(tile) {
 /** "移動しますか？" はい/いいえ, reusing the generic confirm modal. */
 function promptConfirmMove() {
   return confirmYesNo('移動しますか？');
+}
+
+/** "この土地を売りますか？ 売却額+◯◯G" はい/いいえ - unlike every other confirm here this is a GAIN, not a cost, so it gets its own wording rather than reusing promptConfirmAction's "コスト" framing. */
+function promptConfirmSellLand({ salePrice }) {
+  return confirmYesNo(`この土地を売りますか？ 売却額+${salePrice}G`);
 }
 
 /** Shows the hand's monster cards; clicking one blinks it twice before resolving. */
@@ -574,6 +596,7 @@ function renderPlayerPanels(players) {
     if (!player) return;
 
     el.style.setProperty('--player-color', hexColor(player.color));
+    el.classList.toggle('player-defeated', !!player.defeated);
     el.replaceChildren();
 
     const icon = document.createElement('div');
@@ -582,7 +605,7 @@ function renderPlayerPanels(players) {
     const lines = document.createElement('div');
     lines.className = 'player-info-lines';
     lines.innerHTML = `
-      <div class="player-name">${player.name}</div>
+      <div class="player-name">${player.name}${player.defeated ? '（脱落）' : ''}</div>
       <div class="player-stat">所持 ${player.currency}G / 総資産 ${player.totalAssets}G</div>
     `;
 
@@ -592,7 +615,9 @@ function renderPlayerPanels(players) {
 
 /** Rarity badge (top-left) + type icon (top-right) + name, over the element/type background color. */
 function renderCardEl(el, card) {
-  el.style.background = cardColor(card);
+  el.style.background = card.imageDataUrl
+    ? `linear-gradient(rgba(0,0,0,.12), rgba(0,0,0,.72)), url("${card.imageDataUrl}") center / cover`
+    : cardColor(card);
   el.replaceChildren();
 
   const rarity = document.createElement('span');
@@ -635,6 +660,9 @@ function describeCardDetail(card) {
   } else if (card.type === CardType.SPELL) {
     if (card.addedAtk != null) lines.push(`ATK+${card.addedAtk} / HP+${card.addedHp}（永続）`);
   }
+  const effectLabels = (card.traits || []).map((id) => CARD_EFFECTS.find((effect) => effect.id === id)?.label || id);
+  if (effectLabels.length) lines.push(`特殊効果: ${effectLabels.join('・')}`);
+  if (card.effectDescription) lines.push(card.effectDescription);
   return lines.join('\n');
 }
 
@@ -1090,8 +1118,14 @@ function animate() {
   requestAnimationFrame(animate);
 }
 
-/** `character` is { name, color, deckVariant } from character creation (or null pre-フェーズ0 fallback). */
-function startBattle(character) {
+/**
+ * `character` is { name, color, deckVariant } from character creation (or
+ * null pre-フェーズ0 fallback). `storyOptions` (playerConfigs/storyMode/
+ * onStoryBattleEnd) is set only by playStoryStage() below for ストーリー
+ * バトル - when omitted this is the plain 2人対戦 path (humanPlayer + 固定
+ * CPU, Gameコンストラクタ側のフォールバックが組む)。
+ */
+function startBattle(character, storyOptions = {}) {
   scene = new GameScene(canvas);
   tiles = createBoard();
   scene.buildBoard(tiles);
@@ -1134,6 +1168,7 @@ function startBattle(character) {
     onPickMonsterCard: promptPickMonsterCard,
     onConfirmAction: promptConfirmAction,
     onConfirmMove: promptConfirmMove,
+    onConfirmSellLand: promptConfirmSellLand,
     onPickBrowseTile: promptPickBrowseTile,
     onLandSubmenu: promptLandSubmenu,
     onShowTileInfo: promptShowTileInfo,
@@ -1146,7 +1181,12 @@ function startBattle(character) {
     onBattleAttack: promptBattleAttack,
     onBattleRetreat: promptBattleRetreat,
     onBattleOutcome: promptBattleOutcome,
-    humanPlayer: character
+    onStoryBattleEnd: storyOptions.onStoryBattleEnd,
+    storyMode: storyOptions.storyMode ?? false,
+    playerConfigs: storyOptions.playerConfigs,
+    humanPlayer: storyOptions.playerConfigs
+      ? undefined
+      : character
       ? {
           name: character.name,
           color: character.color,
@@ -1178,6 +1218,27 @@ const charmakeDecks = document.getElementById('charmake-decks');
 const charmakeSubmit = document.getElementById('charmake-submit');
 const hubScreen = document.getElementById('hub-screen');
 const hubWelcome = document.getElementById('hub-welcome');
+const cardEditorHub = document.getElementById('card-editor-hub');
+const catalogScreen = document.getElementById('catalog-screen');
+const catalogList = document.getElementById('catalog-list');
+const catalogBack = document.getElementById('catalog-back');
+const cardEditorScreen = document.getElementById('card-editor-screen');
+const editorName = document.getElementById('editor-name');
+const editorImage = document.getElementById('editor-image');
+const editorImagePreview = document.getElementById('editor-image-preview');
+const editorType = document.getElementById('editor-type');
+const editorRarity = document.getElementById('editor-rarity');
+const editorStatsRow = document.getElementById('editor-stats-row');
+const editorAtk = document.getElementById('editor-atk');
+const editorHp = document.getElementById('editor-hp');
+const editorElementLabel = document.getElementById('editor-element-label');
+const editorElement = document.getElementById('editor-element');
+const editorCost = document.getElementById('editor-cost');
+const editorEffects = document.getElementById('editor-effects');
+const editorEffectDescription = document.getElementById('editor-effect-description');
+const editorError = document.getElementById('editor-error');
+const editorSave = document.getElementById('editor-save');
+const editorBack = document.getElementById('editor-back');
 const deckScreen = document.getElementById('deck-screen');
 const deckCount = document.getElementById('deck-count');
 const deckCatalogList = document.getElementById('deck-catalog-list');
@@ -1185,6 +1246,10 @@ const deckSave = document.getElementById('deck-save');
 const deckBack = document.getElementById('deck-back');
 const shopScreen = document.getElementById('shop-screen');
 const shopCurrency = document.getElementById('shop-currency');
+const shopPackList = document.getElementById('shop-pack-list');
+const shopPackResult = document.getElementById('shop-pack-result');
+const shopPackCards = document.getElementById('shop-pack-cards');
+const shopPackResultClose = document.getElementById('shop-pack-result-close');
 const shopList = document.getElementById('shop-list');
 const shopPartsList = document.getElementById('shop-parts-list');
 const shopBackButton = document.getElementById('shop-back');
@@ -1193,6 +1258,8 @@ const battleCpuButton = document.getElementById('battle-cpu');
 const battleBackButton = document.getElementById('battle-back');
 const breedScreen = document.getElementById('breed-screen');
 const breedName = document.getElementById('breed-name');
+const breedImage = document.getElementById('breed-image');
+const breedImagePreview = document.getElementById('breed-image-preview');
 const breedStats = document.getElementById('breed-stats');
 const breedError = document.getElementById('breed-error');
 const breedPartsList = document.getElementById('breed-parts-list');
@@ -1200,8 +1267,15 @@ const breedBackButton = document.getElementById('breed-back');
 const stubScreen = document.getElementById('stub-screen');
 const stubText = document.getElementById('stub-text');
 const stubBackButton = document.getElementById('stub-back');
+const storyScreen = document.getElementById('story-screen');
+const storyStageList = document.getElementById('story-stage-list');
+const storyBackButton = document.getElementById('story-back');
+const storyDialogueScreen = document.getElementById('story-dialogue-screen');
+const storyDialogueSpeaker = document.getElementById('story-dialogue-speaker');
+const storyDialogueText = document.getElementById('story-dialogue-text');
+const storyDialogueNext = document.getElementById('story-dialogue-next');
 
-const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, deckScreen, shopScreen, battleMenuScreen, breedScreen, stubScreen];
+const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, catalogScreen, cardEditorScreen, deckScreen, shopScreen, battleMenuScreen, breedScreen, stubScreen, storyScreen, storyDialogueScreen];
 function showScreen(el) {
   ALL_PG_SCREENS.forEach((s) => s.classList.toggle('hidden', s !== el));
 }
@@ -1216,6 +1290,7 @@ const ICON_COLORS = [0x2ec4b6, 0xe63946, 0xffd166, 0x8e5ce6, 0x4caf6e, 0x3a86e6]
 const STARTING_M = 300;
 const M_CONVERSION_RATE = 0.2;
 const M_CONVERSION_MIN = 50;
+const CARD_EDITOR_HASH = '#card-editor';
 
 let currentUserId = null;
 let currentCharacter = null;
@@ -1267,6 +1342,11 @@ async function showCharmakeScreen() {
 
 function showHubScreen() {
   hubWelcome.textContent = `ようこそ、${currentCharacter.name}（所持M: ${currentCharacter.m}）`;
+  cardEditorHub.classList.add('hidden');
+  if (location.hash === CARD_EDITOR_HASH) {
+    showCardEditor();
+    return;
+  }
   showScreen(hubScreen);
 }
 
@@ -1274,6 +1354,7 @@ function showHubScreen() {
 function ensureBreedFields(character) {
   if (!character.breedMonster) character.breedMonster = { name: BREED_BASE.defaultName, equippedPartIds: [] };
   if (!character.ownedPartIds) character.ownedPartIds = [];
+  if (character.storyProgress == null) character.storyProgress = 0;
   return character;
 }
 
@@ -1298,9 +1379,18 @@ charmakeName.addEventListener('input', updateCharmakeValidity);
 
 charmakeSubmit.addEventListener('click', () => {
   if (charmakeSubmit.disabled) return;
+  const breedMonster = { name: BREED_BASE.defaultName, equippedPartIds: [] };
+  const breedCard = { ...buildBreedCardDef({ breedMonster }), id: `breedMonster-${Date.now()}` };
+
   const deckList = buildStarterDeckList(selectedDeckVariant);
+  // ブリードモンスターはレアリティEXで初期デッキに常に1枚だけ入る - 汎用
+  // モンスターを1枚外して差し替え、合計40枚を維持する。
+  const genericMonsterIndex = deckList.findIndex((c) => c.type === CardType.MONSTER && !c.catalogId);
+  if (genericMonsterIndex !== -1) deckList.splice(genericMonsterIndex, 1);
+  deckList.push(breedCard);
+
   const ownedCards = {};
-  for (const card of deckList) ownedCards[card.name] = (ownedCards[card.name] || 0) + 1;
+  for (const card of deckList) ownedCards[cardKey(card)] = (ownedCards[cardKey(card)] || 0) + 1;
   currentCharacter = {
     name: charmakeName.value.trim(),
     iconIndex: selectedIconIndex,
@@ -1309,8 +1399,9 @@ charmakeSubmit.addEventListener('click', () => {
     deckList,
     ownedCards,
     m: STARTING_M,
-    breedMonster: { name: BREED_BASE.defaultName, equippedPartIds: [] },
+    breedMonster,
     ownedPartIds: [],
+    storyProgress: 0,
   };
   saveCharacter(currentUserId, currentCharacter);
   showHubScreen();
@@ -1318,13 +1409,165 @@ charmakeSubmit.addEventListener('click', () => {
 
 const STUB_MODE_LABEL = { story: 'ストーリー' };
 
+// ---- Story mode: stage select → intro dialogue → N人対戦（storyMode）→ outro dialogue ----
+// バトル自体は通常のstartBattle()と同じGameクラスを使う - playerConfigs/
+// storyMode/onStoryBattleEndを渡すだけで1vs1vs1・2vs2同盟戦も成立する
+// （#36で汎用化済み。Game側のターン進行/CPU/同盟集計はプレイヤー人数に
+// 依存しない実装のため、ここは「誰を何人渡すか」を組み立てるだけでいい）。
+
+let activeStoryStageIndex = null;
+
+function showStoryScreen() {
+  storyStageList.replaceChildren();
+  STORY_STAGES.forEach((stage, index) => {
+    const unlocked = isStageUnlocked(currentCharacter, index);
+    const cleared = isStageCleared(currentCharacter, index);
+
+    const row = document.createElement('div');
+    row.className = `deck-row${unlocked ? '' : ' story-stage-row-locked'}`;
+
+    const info = document.createElement('div');
+    info.className = 'deck-row-info';
+    const name = document.createElement('div');
+    name.className = 'deck-row-name';
+    name.textContent = stage.title;
+    if (unlocked) name.addEventListener('click', () => playStoryStage(index));
+    const meta = document.createElement('div');
+    meta.className = 'deck-row-meta';
+    meta.textContent = unlocked ? (cleared ? 'クリア済み' : `形式: ${stage.format}`) : 'ロック中';
+    info.append(name, meta);
+
+    row.append(info);
+    storyStageList.appendChild(row);
+  });
+  showScreen(storyScreen);
+}
+
+storyBackButton.addEventListener('click', showHubScreen);
+
+/** Shows `lines` one at a time (speaker + text), advancing on click of storyDialogueNext. Resolves once the last line has been dismissed. */
+function playDialogueLines(lines) {
+  return new Promise((resolve) => {
+    let i = 0;
+    function showLine() {
+      storyDialogueSpeaker.textContent = lines[i].speaker;
+      storyDialogueText.textContent = lines[i].text;
+    }
+    function onNext() {
+      i += 1;
+      if (i >= lines.length) {
+        storyDialogueNext.removeEventListener('click', onNext);
+        resolve();
+        return;
+      }
+      showLine();
+    }
+    storyDialogueNext.addEventListener('click', onNext);
+    showLine();
+  });
+}
+
+async function playStoryStage(index) {
+  showScreen(storyDialogueScreen);
+  await playDialogueLines(STORY_STAGES[index].intro);
+  await startStoryBattle(index);
+}
+
+/** hero(+ally) vs opponents, in Gameの playerConfigs 形式。陣営分けはallianceIdだけで表現 - stage.heroAllianceId/enemyAllianceIdがnullなら同盟なし（1vs1vs1のFFA）。 */
+function buildStoryPlayerConfigs(stage, iconImage) {
+  const configs = [
+    {
+      name: currentCharacter.name,
+      isCPU: false,
+      color: currentCharacter.color,
+      allianceId: stage.heroAllianceId ?? null,
+      deckList: currentCharacter.deckList,
+      deckVariant: currentCharacter.deckVariant,
+      iconImage,
+    },
+  ];
+  if (stage.ally) {
+    configs.push({
+      name: stage.ally.name,
+      isCPU: true,
+      color: stage.ally.color,
+      allianceId: stage.heroAllianceId ?? null,
+      deckVariant: stage.ally.deckVariant,
+    });
+  }
+  for (const opponent of stage.opponents) {
+    configs.push({
+      name: opponent.name,
+      isCPU: true,
+      color: opponent.color,
+      allianceId: stage.enemyAllianceId ?? null,
+      deckVariant: opponent.deckVariant,
+    });
+  }
+  return configs;
+}
+
+async function startStoryBattle(index) {
+  const stage = STORY_STAGES[index];
+  activeStoryStageIndex = index;
+
+  let iconImage = null;
+  if (currentCharacter.iconIndex != null) {
+    const icons = await loadPlayerIcons();
+    iconImage = icons[currentCharacter.iconIndex]?.canvas ?? null;
+  }
+
+  preGame.classList.add('hidden');
+  appEl.classList.remove('hidden');
+  startBattle(currentCharacter, {
+    storyMode: true,
+    playerConfigs: buildStoryPlayerConfigs(stage, iconImage),
+    onStoryBattleEnd: (result) => handleStoryBattleEnd(index, result),
+  });
+}
+
+async function handleStoryBattleEnd(index, { won }) {
+  const stage = STORY_STAGES[index];
+  game = undefined;
+  appEl.classList.add('hidden');
+  preGame.classList.remove('hidden');
+  activeStoryStageIndex = null;
+
+  if (!won) {
+    showScreen(storyDialogueScreen);
+    await playDialogueLines([{ speaker: '???', text: '力及ばず、敗れてしまった……もう一度挑もう。' }]);
+    showStoryScreen();
+    return;
+  }
+
+  if (stage.reward) {
+    const rewardDef = ITEM_CATALOG[stage.reward];
+    if (rewardDef) {
+      const key = cardKey(rewardDef);
+      currentCharacter.ownedCards[key] = (currentCharacter.ownedCards[key] || 0) + 1;
+    }
+  }
+  if (index + 1 > (currentCharacter.storyProgress || 0)) {
+    currentCharacter.storyProgress = index + 1;
+  }
+  saveCharacter(currentUserId, currentCharacter);
+
+  showScreen(storyDialogueScreen);
+  await playDialogueLines(stage.outro);
+  showStoryScreen();
+}
+
 document.querySelectorAll('.hub-tile').forEach((tile) => {
   tile.addEventListener('click', () => {
     const mode = tile.dataset.mode;
-    if (mode === 'battle') {
+    if (mode === 'story') {
+      showStoryScreen();
+    } else if (mode === 'battle') {
       showScreen(battleMenuScreen);
     } else if (mode === 'deck') {
       showDeckScreen();
+    } else if (mode === 'catalog') {
+      showCatalogScreen();
     } else if (mode === 'shop') {
       showShopScreen();
     } else if (mode === 'breed') {
@@ -1339,14 +1582,176 @@ document.querySelectorAll('.hub-tile').forEach((tile) => {
 battleBackButton.addEventListener('click', showHubScreen);
 stubBackButton.addEventListener('click', showHubScreen);
 
+// ---- Card catalog: unowned entries stay blank; owned entries reveal name/count/detail. ----
+
+const RARITY_ORDER = { [Rarity.N]: 0, [Rarity.S]: 1, [Rarity.R]: 2, [Rarity.EX]: 3 };
+
+function sortedCatalog() {
+  return effectiveCatalog().slice().sort((a, b) =>
+    (RARITY_ORDER[a.rarity] ?? 99) - (RARITY_ORDER[b.rarity] ?? 99)
+      || a.name.localeCompare(b.name, 'ja'));
+}
+
+function showCatalogScreen() {
+  catalogList.replaceChildren();
+  for (const card of sortedCatalog()) {
+    const owned = ownedCountOf(cardKey(card));
+    const row = document.createElement('div');
+    row.className = `catalog-row${owned ? '' : ' catalog-row-unknown'}`;
+    const rarity = document.createElement('span');
+    rarity.className = 'catalog-rarity';
+    rarity.textContent = card.rarity;
+    rarity.style.color = RARITY_COLOR[card.rarity];
+    const name = document.createElement(owned ? 'button' : 'span');
+    name.className = 'catalog-card-name';
+    name.textContent = owned ? card.name : '';
+    const count = document.createElement('span');
+    count.className = 'catalog-count';
+    count.textContent = owned ? `${owned}枚` : '';
+    if (owned) name.addEventListener('click', () => showCardDetail(card));
+    row.append(rarity, name, count);
+    catalogList.appendChild(row);
+  }
+  showScreen(catalogScreen);
+}
+
+catalogBack.addEventListener('click', showHubScreen);
+
+// ---- Secret URL card editor (#card-editor). Definitions persist in localStorage. ----
+
+let editorImageDataUrl = '';
+
+function updateEditorFields() {
+  const isMonster = editorType.value === CardType.MONSTER;
+  const hasStats = editorType.value !== CardType.SPELL;
+  editorStatsRow.classList.toggle('hidden', !hasStats);
+  editorElementLabel.classList.toggle('hidden', !isMonster);
+  for (const label of editorEffects.querySelectorAll('label')) {
+    label.classList.toggle('hidden', !label.dataset.types.split(',').includes(editorType.value));
+  }
+}
+
+function showCardEditor() {
+  if (!currentCharacter) return;
+  editorEffects.replaceChildren();
+  for (const effect of CARD_EFFECTS) {
+    const label = document.createElement('label');
+    label.dataset.types = effect.types.join(',');
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.value = effect.id;
+    label.append(input, document.createTextNode(effect.label));
+    editorEffects.appendChild(label);
+  }
+  updateEditorFields();
+  showScreen(cardEditorScreen);
+}
+
+editorType.addEventListener('change', updateEditorFields);
+
+editorImage.addEventListener('change', () => {
+  const file = editorImage.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    editorError.textContent = '画像ファイルを選択してください';
+    editorError.classList.remove('hidden');
+    return;
+  }
+  const reader = new FileReader();
+  reader.addEventListener('load', () => {
+    const image = new Image();
+    image.addEventListener('load', () => {
+      const maxSide = 768;
+      const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+      editorImageDataUrl = canvas.toDataURL('image/webp', 0.82);
+      editorImagePreview.src = editorImageDataUrl;
+      editorImagePreview.classList.remove('hidden');
+      editorError.classList.add('hidden');
+    });
+    image.src = String(reader.result);
+  });
+  reader.readAsDataURL(file);
+});
+
+editorSave.addEventListener('click', () => {
+  const input = {
+    name: editorName.value,
+    imageDataUrl: editorImageDataUrl,
+    type: editorType.value,
+    rarity: editorRarity.value,
+    atk: editorAtk.value,
+    hp: editorHp.value,
+    element: editorElement.value,
+    cost: editorCost.value,
+    traits: [...editorEffects.querySelectorAll('input:checked')].map((el) => el.value),
+    effectDescription: editorEffectDescription.value,
+  };
+  const error = validateCustomCard(currentUserId, input);
+  if (error) {
+    editorError.textContent = error;
+    editorError.classList.remove('hidden');
+    return;
+  }
+  if (getCardCatalog(currentUserId).some((card) => card.name === input.name.trim())) {
+    editorError.textContent = '同じ名前のカードが図鑑に既にあります';
+    editorError.classList.remove('hidden');
+    return;
+  }
+  let card;
+  try {
+    card = saveCustomCard(currentUserId, input);
+  } catch {
+    editorError.textContent = '画像またはカードデータを保存できませんでした。画像サイズを小さくしてください';
+    editorError.classList.remove('hidden');
+    return;
+  }
+  editorError.classList.add('hidden');
+  // 作っただけでは誰の持ち物にもならず、デッキに一切入れられなかった
+  // バグ（所持枚数0のまま固定）の修正: 作成者に1枚付与する。
+  const key = cardKey(card);
+  currentCharacter.ownedCards[key] = (currentCharacter.ownedCards[key] || 0) + 1;
+  saveCharacter(currentUserId, currentCharacter);
+  showCardDetail(card);
+  editorName.value = '';
+  editorImage.value = '';
+  editorImageDataUrl = '';
+  editorImagePreview.classList.add('hidden');
+  editorEffectDescription.value = '';
+  editorEffects.querySelectorAll('input').forEach((el) => { el.checked = false; });
+});
+
+editorBack.addEventListener('click', () => {
+  history.replaceState(null, '', `${location.pathname}${location.search}`);
+  showHubScreen();
+});
+
 // ---- Deck editor: browse the card catalog, +/- copies (max 4 each) until exactly 40, then save ----
 
 const MAX_COPIES_PER_CARD = 4;
 const DECK_SIZE = 40;
 
-/** Every card's `name` is unique across the catalog (named flavor cards and formulaic generic names never collide), so it's the simplest stable key for grouping deck copies against catalog entries - `catalogId` doesn't help here since raw catalog entries don't carry one (only deck-instantiated copies do), and `id` isn't stable across separate buildCardPool() calls for generic cards. */
+/**
+ * Every card's `name` is unique across the catalog (named flavor cards and
+ * formulaic generic names never collide), so it's the simplest stable key
+ * for grouping deck copies against catalog entries - `catalogId` doesn't
+ * help here since raw catalog entries don't carry one (only deck-
+ * instantiated copies do), and `id` isn't stable across separate
+ * buildCardPool() calls for generic cards. The one exception is the
+ * ブリードモンスター, which the player can rename anytime in the ブリード
+ * screen - it keys on its stable catalogId instead so a rename can't
+ * desync ownedCards/deck tracking from what's actually equipped.
+ */
 function cardKey(card) {
-  return card.name;
+  return card.catalogId === 'breedMonster' ? 'breedMonster' : card.name;
+}
+
+/** getCardCatalog() plus this character's live breed-monster card (not cached globally - it's per-character and its stats change as parts are equipped). */
+function effectiveCatalog() {
+  return [...getCardCatalog(currentUserId), buildBreedCardDef(currentCharacter)];
 }
 
 let deckWorkingCounts = null;
@@ -1368,7 +1773,7 @@ function ownedCountOf(key) {
 }
 
 function showDeckScreen() {
-  const catalog = getCardCatalog();
+  const catalog = effectiveCatalog();
   deckWorkingCounts = new Map();
   for (const card of currentCharacter.deckList || []) {
     const key = cardKey(card);
@@ -1449,7 +1854,7 @@ function showDeckScreen() {
 
 deckSave.addEventListener('click', () => {
   if (deckSave.disabled) return;
-  const catalog = getCardCatalog();
+  const catalog = effectiveCatalog();
   const byKey = new Map(catalog.map((def) => [cardKey(def), def]));
   const newList = [];
   for (const [key, count] of deckWorkingCounts.entries()) {
@@ -1463,7 +1868,7 @@ deckSave.addEventListener('click', () => {
 
 deckBack.addEventListener('click', showHubScreen);
 
-// ---- Shop: sell spare cards (owned but not currently in the deck) for G. EX rarity never sells. ----
+// ---- Shop: buy permanent card packs with M, or sell spare cards. EX never sells. ----
 
 function inDeckCountOf(key) {
   let count = 0;
@@ -1474,10 +1879,89 @@ function inDeckCountOf(key) {
 }
 
 function showShopScreen() {
-  const catalog = getCardCatalog();
+  const catalog = getCardCatalog(currentUserId);
   const byKey = new Map(catalog.map((def) => [cardKey(def), def]));
   shopCurrency.textContent = `所持M: ${currentCharacter.m}`;
+  shopPackResult.classList.add('hidden');
+  shopPackList.replaceChildren();
   shopList.replaceChildren();
+  shopPartsList.replaceChildren();
+
+  for (const pack of PACKS) {
+    const row = document.createElement('div');
+    row.className = 'shop-pack-row';
+    const info = document.createElement('div');
+    info.className = 'deck-row-info';
+    const name = document.createElement('div');
+    name.className = 'shop-pack-name';
+    name.textContent = pack.name;
+    const meta = document.createElement('div');
+    meta.className = 'deck-row-meta';
+    meta.textContent = `${pack.description} / 最低1枚S以上 / ${pack.cost}M`;
+    info.append(name, meta);
+
+    const buyButton = document.createElement('button');
+    buyButton.className = 'deck-row-sell';
+    buyButton.textContent = `${pack.cost}Mで引く`;
+    buyButton.disabled = currentCharacter.m < pack.cost;
+    buyButton.addEventListener('click', () => {
+      if (currentCharacter.m < pack.cost) return;
+      const cards = drawPack(pack, catalog);
+      currentCharacter.m -= pack.cost;
+      for (const card of cards) {
+        const key = cardKey(card);
+        currentCharacter.ownedCards[key] = (currentCharacter.ownedCards[key] || 0) + 1;
+      }
+      saveCharacter(currentUserId, currentCharacter);
+      showPackResult(cards);
+      shopCurrency.textContent = `所持M: ${currentCharacter.m}`;
+      renderPackButtons();
+    });
+    row.append(info, buyButton);
+    shopPackList.appendChild(row);
+  }
+
+  if (!currentCharacter.ownedPartIds) currentCharacter.ownedPartIds = [];
+  for (const part of BREED_PARTS) {
+    const owned = currentCharacter.ownedPartIds.includes(part.id);
+
+    const row = document.createElement('div');
+    row.className = 'shop-pack-row';
+
+    const info = document.createElement('div');
+    info.className = 'deck-row-info';
+    const name = document.createElement('div');
+    name.className = 'shop-pack-name';
+    name.textContent = part.name;
+    const badges = document.createElement('div');
+    badges.className = 'breed-part-badges';
+    for (const badge of breedPartBadges(part)) {
+      const badgeEl = document.createElement('span');
+      badgeEl.className = 'breed-part-badge';
+      badgeEl.textContent = `${badge.icon}${badge.text}`;
+      badges.appendChild(badgeEl);
+    }
+    info.append(name, badges);
+
+    const buyButton = document.createElement('button');
+    buyButton.className = 'deck-row-sell';
+    if (owned) {
+      buyButton.textContent = '購入済み';
+      buyButton.disabled = true;
+    } else {
+      buyButton.textContent = `${part.price}Mで購入`;
+      buyButton.disabled = currentCharacter.m < part.price;
+      buyButton.addEventListener('click', () => {
+        if (currentCharacter.m < part.price || currentCharacter.ownedPartIds.includes(part.id)) return;
+        currentCharacter.m -= part.price;
+        currentCharacter.ownedPartIds.push(part.id);
+        saveCharacter(currentUserId, currentCharacter);
+        showShopScreen();
+      });
+    }
+    row.append(info, buyButton);
+    shopPartsList.appendChild(row);
+  }
 
   for (const [key, owned] of Object.entries(currentCharacter.ownedCards || {})) {
     if (owned <= 0) continue;
@@ -1520,39 +2004,35 @@ function showShopScreen() {
     row.append(swatch, info, sellBtn);
     shopList.appendChild(row);
   }
+  showScreen(shopScreen);
+}
 
-  shopPartsList.replaceChildren();
-  for (const part of BREED_PARTS) {
-    const owned = (currentCharacter.ownedPartIds || []).includes(part.id);
-
-    const row = document.createElement('div');
-    row.className = 'deck-row';
-
-    const info = document.createElement('div');
-    info.className = 'deck-row-info';
-    const nameEl = document.createElement('div');
-    nameEl.className = 'deck-row-name';
-    nameEl.textContent = part.name;
-    const meta = document.createElement('div');
-    meta.className = 'deck-row-meta';
-    meta.textContent = `${describeBreedPart(part)} / 価格${part.price}M`;
-    info.append(nameEl, meta);
-
-    const buyBtn = document.createElement('button');
-    buyBtn.className = 'deck-row-sell';
-    buyBtn.textContent = owned ? '購入済み' : '購入';
-    buyBtn.disabled = owned || currentCharacter.m < part.price;
-    buyBtn.addEventListener('click', () => {
-      currentCharacter.m -= part.price;
-      currentCharacter.ownedPartIds.push(part.id);
-      saveCharacter(currentUserId, currentCharacter);
-      showShopScreen();
-    });
-
-    row.append(info, buyBtn);
-    shopPartsList.appendChild(row);
+function renderPackButtons() {
+  for (const button of shopPackList.querySelectorAll('button')) {
+    const price = Number.parseInt(button.textContent, 10);
+    button.disabled = currentCharacter.m < price;
   }
 }
+
+function showPackResult(cards) {
+  shopPackCards.replaceChildren();
+  for (const card of cards) {
+    const el = document.createElement('button');
+    el.className = 'shop-result-card';
+    el.style.borderColor = RARITY_COLOR[card.rarity];
+    const rarity = document.createElement('strong');
+    rarity.style.color = RARITY_COLOR[card.rarity];
+    rarity.textContent = card.rarity;
+    const name = document.createElement('span');
+    name.textContent = card.name;
+    el.append(rarity, name);
+    el.addEventListener('click', () => showCardDetail(card));
+    shopPackCards.appendChild(el);
+  }
+  shopPackResult.classList.remove('hidden');
+}
+
+shopPackResultClose.addEventListener('click', showShopScreen);
 
 shopBackButton.addEventListener('click', showHubScreen);
 
@@ -1560,6 +2040,13 @@ shopBackButton.addEventListener('click', showHubScreen);
 
 function showBreedScreen() {
   breedName.value = currentCharacter.breedMonster.name;
+  breedImage.value = '';
+  if (currentCharacter.breedMonster.imageDataUrl) {
+    breedImagePreview.src = currentCharacter.breedMonster.imageDataUrl;
+    breedImagePreview.classList.remove('hidden');
+  } else {
+    breedImagePreview.classList.add('hidden');
+  }
   breedError.classList.add('hidden');
   renderBreedScreen();
   showScreen(breedScreen);
@@ -1583,10 +2070,61 @@ function renderBreedScreen() {
     const nameEl = document.createElement('div');
     nameEl.className = 'deck-row-name';
     nameEl.textContent = def.name;
-    const meta = document.createElement('div');
-    meta.className = 'deck-row-meta';
-    meta.textContent = describeBreedPart(def);
-    info.append(nameEl, meta);
+    if (equipped && def.chooseElement && currentCharacter.breedMonster.elementPatchChoice) {
+      const meta = document.createElement('div');
+      meta.className = 'deck-row-meta';
+      meta.textContent = `属性→${ELEMENT_LABEL[currentCharacter.breedMonster.elementPatchChoice]}に上書き中`;
+      info.append(nameEl, meta);
+    } else {
+      const badges = document.createElement('div');
+      badges.className = 'breed-part-badges';
+      for (const badge of breedPartBadges(def)) {
+        const badgeEl = document.createElement('span');
+        badgeEl.className = 'breed-part-badge';
+        badgeEl.textContent = `${badge.icon}${badge.text}`;
+        badges.appendChild(badgeEl);
+      }
+      info.append(nameEl, badges);
+    }
+
+    function equip() {
+      currentCharacter.breedMonster.equippedPartIds.push(def.id);
+      saveCharacter(currentUserId, currentCharacter);
+      renderBreedScreen();
+    }
+
+    if (!equipped && def.chooseElement) {
+      // 属性パッチ: needs an element picked before it can actually equip -
+      // validate the numeric caps first (same as any other part), then show
+      // 4 element swatches in place of the toggle button.
+      const check = canEquipPart(currentCharacter.breedMonster, def);
+      if (!check.ok) {
+        const disabledBtn = document.createElement('button');
+        disabledBtn.className = 'deck-row-sell';
+        disabledBtn.textContent = '装着';
+        disabledBtn.disabled = true;
+        disabledBtn.title = check.error;
+        row.append(info, disabledBtn);
+      } else {
+        const choices = document.createElement('div');
+        choices.className = 'breed-element-choices';
+        for (const element of CHANGEABLE_BREED_ELEMENTS) {
+          const swatch = document.createElement('button');
+          swatch.className = 'breed-element-choice';
+          swatch.style.background = CARD_COLOR[element];
+          swatch.textContent = ELEMENT_LABEL[element];
+          swatch.addEventListener('click', () => {
+            breedError.classList.add('hidden');
+            currentCharacter.breedMonster.elementPatchChoice = element;
+            equip();
+          });
+          choices.appendChild(swatch);
+        }
+        row.append(info, choices);
+      }
+      breedPartsList.appendChild(row);
+      continue;
+    }
 
     const toggleBtn = document.createElement('button');
     toggleBtn.className = 'deck-row-sell';
@@ -1602,17 +2140,17 @@ function renderBreedScreen() {
         currentCharacter.breedMonster.equippedPartIds = currentCharacter.breedMonster.equippedPartIds.filter(
           (id) => id !== def.id
         );
-      } else {
-        const check = canEquipPart(currentCharacter.breedMonster, def);
-        if (!check.ok) {
-          breedError.textContent = check.error;
-          breedError.classList.remove('hidden');
-          return;
-        }
-        currentCharacter.breedMonster.equippedPartIds.push(def.id);
+        saveCharacter(currentUserId, currentCharacter);
+        renderBreedScreen();
+        return;
       }
-      saveCharacter(currentUserId, currentCharacter);
-      renderBreedScreen();
+      const check = canEquipPart(currentCharacter.breedMonster, def);
+      if (!check.ok) {
+        breedError.textContent = check.error;
+        breedError.classList.remove('hidden');
+        return;
+      }
+      equip();
     });
 
     row.append(info, toggleBtn);
@@ -1625,6 +2163,32 @@ breedName.addEventListener('change', () => {
   currentCharacter.breedMonster.name = trimmed || BREED_BASE.defaultName;
   breedName.value = currentCharacter.breedMonster.name;
   saveCharacter(currentUserId, currentCharacter);
+});
+
+breedImage.addEventListener('change', () => {
+  const file = breedImage.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    breedError.textContent = '画像ファイルを選択してください';
+    breedError.classList.remove('hidden');
+    return;
+  }
+  const reader = new FileReader();
+  reader.addEventListener('load', () => {
+    const dataUrl = String(reader.result);
+    try {
+      currentCharacter.breedMonster.imageDataUrl = dataUrl;
+      saveCharacter(currentUserId, currentCharacter);
+    } catch {
+      breedError.textContent = '画像を保存できませんでした。画像サイズを小さくしてください';
+      breedError.classList.remove('hidden');
+      return;
+    }
+    breedImagePreview.src = dataUrl;
+    breedImagePreview.classList.remove('hidden');
+    breedError.classList.add('hidden');
+  });
+  reader.readAsDataURL(file);
 });
 
 breedBackButton.addEventListener('click', showHubScreen);
@@ -1654,5 +2218,11 @@ exitBattleButton.addEventListener('click', async () => {
   game = undefined;
   appEl.classList.add('hidden');
   preGame.classList.remove('hidden');
-  showHubScreen();
+  const wasStoryBattle = activeStoryStageIndex != null;
+  activeStoryStageIndex = null;
+  if (wasStoryBattle) {
+    showStoryScreen();
+  } else {
+    showHubScreen();
+  }
 });

@@ -21,6 +21,7 @@ export function applyCurse(unit, spellDef) {
     name: spellDef.name,
     addedAtk: spellDef.addedAtk || 0,
     addedHp: spellDef.addedHp || 0,
+    traits: spellDef.traits || [],
   });
 }
 
@@ -44,6 +45,13 @@ export function prepareForBattle(unit, bonus = {}) {
   unit.currentHp = statTotals(unit, bonus).maxHp;
 }
 
+/** Traits may come from the monster itself, its one-use item, or a persistent spell curse. */
+function hasTrait(unit, trait) {
+  return !!unit.def.traits?.includes(trait)
+    || unit.items.some((item) => item.traits?.includes(trait))
+    || unit.curses.some((curse) => curse.traits?.includes(trait));
+}
+
 // Per-monster incoming-damage multiplier. Only 港区女子 has a declared
 // weakness/resistance trait so far; everyone else just takes the standard
 // weakness bonus (1.2x) or a neutral 1x otherwise.
@@ -57,12 +65,18 @@ function incomingDamageMultiplier(defenderUnit, attackerElement) {
   return isWeaknessHit ? 1.2 : 1.0;
 }
 
-function dealDamage(attacker, defender, log, attackerBonus) {
-  const atkStats = statTotals(attacker, attackerBonus);
-  const multiplier = incomingDamageMultiplier(defender, attacker.def.element);
+/** 被ダメージ半減 halves incoming damage - unless the attacker has 貫通, which nullifies it entirely. */
+function damageReductionMultiplier(defenderUnit, attackerUnit) {
+  if (hasTrait(defenderUnit, 'halfDamage') && !hasTrait(attackerUnit, 'pierce')) return 0.5;
+  return 1;
+}
+
+function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
+  const atkStats = statTotals(attackerUnit, attackerBonus);
+  const multiplier = incomingDamageMultiplier(defenderUnit, attackerUnit.def.element) * damageReductionMultiplier(defenderUnit, attackerUnit);
   const damage = Math.round(atkStats.atk * multiplier);
-  defender.currentHp -= damage;
-  const message = `${attacker.def.name} → ${defender.def.name} に${damage}ダメージ（倍率${multiplier}）`;
+  defenderUnit.currentHp -= damage;
+  const message = `${attackerUnit.def.name} → ${defenderUnit.def.name} に${damage}ダメージ（倍率${multiplier}）`;
   log.push(message);
   return { damage, message };
 }
@@ -82,17 +96,21 @@ export class GoldLedger {
 }
 
 /**
- * Sequential single exchange: the attacker strikes first; only if the
- * defender survives that hit does it get to strike back. A defender killed
- * outright never counters, so the attacker takes zero damage in that case
- * (this is why "mutual destruction" can no longer happen in ordinary
- * combat - it would need a special ability that damages the attacker
- * outside of a counter-attack, none of which exist yet). Unless a future
- * special grants 先制/後攻, the attacker always goes first. Items are
- * consumed regardless of outcome; curses persist unless their unit died.
- * `attackerBonus`/`defenderBonus` ({atk, hp}) carry this battle's 同属性
- * ボーナス/応援ボーナス (see Game._elementHpBonus/Game._cheerAtkBonus) -
- * purely situational, never stored on the unit.
+ * Sequential single exchange: whoever goes first strikes, and only if their
+ * target survives that hit does it get to strike back. A target killed
+ * outright never counters, so the first striker takes zero damage in that
+ * case (this is why "mutual destruction" can't happen in ordinary combat -
+ * it would need a special ability that damages the first striker outside of
+ * a counter-attack, none of which exist). The attacker goes first UNLESS
+ * the defender carries 先制 (firstStrike) and the attacker doesn't (if both
+ * do, it reverts to the normal attacker-first order - no concrete card has
+ * ever exercised that tie yet). Items are consumed regardless of outcome;
+ * curses persist unless their unit died. `attackerBonus`/`defenderBonus`
+ * ({atk, hp}) carry this battle's 同属性ボーナス/応援ボーナス (see
+ * Game._elementHpBonus/Game._cheerAtkBonus) - purely situational, never
+ * stored on the unit. `exchanges` lists each strike in the order it
+ * actually happened ({side, message, damage, targetDied}), so the caller's
+ * UI can animate them in the right sequence regardless of who went first.
  */
 export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defenderBonus = {}) {
   const log = [];
@@ -103,13 +121,33 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
       `${defender.def.name}(ATK${statTotals(defender, defenderBonus).atk}/HP${defender.currentHp})`
   );
 
-  const attackResult = dealDamage(attacker, defender, log, attackerBonus);
-  const dmgToDefender = attackResult.damage;
-  const defenderSurvived = defender.currentHp > 0;
+  const defenderGoesFirst = hasTrait(defender, 'firstStrike') && !hasTrait(attacker, 'firstStrike');
+  const first = defenderGoesFirst
+    ? { unit: defender, target: attacker, bonus: defenderBonus, side: 'defender' }
+    : { unit: attacker, target: defender, bonus: attackerBonus, side: 'attacker' };
+  const second = defenderGoesFirst
+    ? { unit: attacker, target: defender, bonus: attackerBonus, side: 'attacker' }
+    : { unit: defender, target: attacker, bonus: defenderBonus, side: 'defender' };
 
-  const counterResult = defenderSurvived ? dealDamage(defender, attacker, log, defenderBonus) : null;
-  const dmgToAttacker = counterResult ? counterResult.damage : 0;
+  const exchanges = [];
+  const firstStrike = dealDamage(first.unit, first.target, log, first.bonus);
+  const firstTargetSurvived = first.target.currentHp > 0;
+  exchanges.push({ side: first.side, message: firstStrike.message, damage: firstStrike.damage, targetDied: !firstTargetSurvived });
+
+  const secondStrike = firstTargetSurvived ? dealDamage(second.unit, second.target, log, second.bonus) : null;
+  if (secondStrike) {
+    exchanges.push({
+      side: second.side,
+      message: secondStrike.message,
+      damage: secondStrike.damage,
+      targetDied: second.target.currentHp <= 0,
+    });
+  }
+
   const attackerSurvived = attacker.currentHp > 0;
+  const defenderSurvived = defender.currentHp > 0;
+  const dmgToDefender = (first.side === 'attacker' ? firstStrike : second.side === 'attacker' ? secondStrike : null)?.damage ?? 0;
+  const dmgToAttacker = (first.side === 'defender' ? firstStrike : second.side === 'defender' ? secondStrike : null)?.damage ?? 0;
 
   if (catalogIdOf(attacker.def) === 'minatoJoshi' && dmgToDefender > 0) {
     gold.transfer(defender.ownerId, attacker.ownerId, dmgToDefender);
@@ -118,6 +156,18 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   if (catalogIdOf(defender.def) === 'minatoJoshi' && dmgToAttacker > 0) {
     gold.transfer(attacker.ownerId, defender.ownerId, dmgToAttacker);
     log.push(`${defender.def.name}が${dmgToAttacker}Gを奪った`);
+  }
+
+  // 強盗: steals 3x the damage it actually dealt (unlike 港区女子's 1x above) - works for either side, whichever carries the trait.
+  if (hasTrait(attacker, 'robber') && dmgToDefender > 0) {
+    const stolen = dmgToDefender * 3;
+    gold.transfer(defender.ownerId, attacker.ownerId, stolen);
+    log.push(`${attacker.def.name}が強盗で${stolen}Gを奪った`);
+  }
+  if (hasTrait(defender, 'robber') && dmgToAttacker > 0) {
+    const stolen = dmgToAttacker * 3;
+    gold.transfer(attacker.ownerId, defender.ownerId, stolen);
+    log.push(`${defender.def.name}が強盗で${stolen}Gを奪った`);
   }
 
   if (defenderSurvived && catalogIdOf(defender.def) === 'salarymander') {
@@ -136,13 +186,5 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   if (!attackerSurvived) attacker.curses = [];
   if (!defenderSurvived) defender.curses = [];
 
-  return {
-    log,
-    dmgToAttacker,
-    dmgToDefender,
-    attackerSurvived,
-    defenderSurvived,
-    attackMessage: attackResult.message,
-    counterMessage: counterResult ? counterResult.message : null,
-  };
+  return { log, dmgToAttacker, dmgToDefender, attackerSurvived, defenderSurvived, exchanges };
 }

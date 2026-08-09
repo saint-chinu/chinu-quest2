@@ -1,4 +1,4 @@
-import { Element, ELEMENT_LABEL } from './cards.js';
+import { CardType, Element, ELEMENT_LABEL, Rarity } from './cards.js';
 
 // ブリードモンスターの初期ステータス。名前だけがブリード画面で変更可能
 // (属性/ATK/HP/コストはパーツ装着でのみ変化する)。
@@ -14,35 +14,62 @@ export const BREED_BASE = {
 // ステータスがまだ上限未満なら、そちらを動かすパーツは引き続き装着できる）。
 export const BREED_CAPS = { atk: 70, hp: 70, cost: 200 };
 
+export const CHANGEABLE_BREED_ELEMENTS = [Element.FIRE, Element.WATER, Element.THUNDER, Element.FOREST];
+
+export const TRAIT_LABEL = {
+  firstStrike: '先制',
+  halfDamage: '被ダメージ半減',
+  pierce: '貫通',
+  phoenix: '不死鳥',
+  robber: '強盗',
+};
+
 /**
- * 初期実装パーツ（先行実装カード同様、少数の手作りデータ）。`price` は
- * ショップでの購入コスト（M）、`atkDelta`/`hpDelta`/`costDelta` はブリード
- * モンスターの召喚コスト(G)を含む各ステータスへの加算（減算パーツは負値）。
- * `element` を持つパーツは装着すると属性がそれに上書きされる。
+ * 初期実装パーツ。`atkDelta`/`hpDelta`/`costDelta` はブリードモンスターの
+ * ステータス（召喚コストはG）への加算（減算パーツは負値）。`element` を
+ * 持つパーツは装着すると属性がそれに上書きされる。`chooseElement` は
+ * 「属性パッチ」専用 - 装着時に無色を除く4属性から選ぶ（固定ではない）。
+ * `trait` は戦闘中の特殊効果キー（battle.js/game.jsが参照、下記参照）。
+ * `price` はショップでの購入M（レアリティ帯ごとの目安: N=40 / S=60 / R=90）。
  */
 export const BREED_PARTS = [
-  { id: 'part-fang', name: '鋭い牙', price: 40, atkDelta: 15, hpDelta: 0, costDelta: 10 },
-  { id: 'part-shell', name: '硬い甲羅', price: 40, atkDelta: 0, hpDelta: 20, costDelta: 10 },
-  { id: 'part-light-frame', name: '軽量化フレーム', price: 60, atkDelta: -5, hpDelta: -5, costDelta: -15 },
-  { id: 'part-fire-core', name: '火のコア', price: 50, atkDelta: 10, hpDelta: 0, costDelta: 10, element: Element.FIRE },
-  { id: 'part-water-core', name: '水のコア', price: 50, atkDelta: 0, hpDelta: 10, costDelta: 10, element: Element.WATER },
-  { id: 'part-amplifier', name: '暴走増幅器', price: 70, atkDelta: 25, hpDelta: -10, costDelta: 20 },
+  { id: 'part-element-patch', name: '属性パッチ', rarity: Rarity.S, costDelta: 30, chooseElement: true, price: 60 },
+  { id: 'part-atk-up', name: 'ATKアップ', rarity: Rarity.N, atkDelta: 10, costDelta: 20, price: 40 },
+  { id: 'part-hp-up', name: 'HPアップ', rarity: Rarity.N, hpDelta: 10, costDelta: 20, price: 40 },
+  { id: 'part-double-up', name: 'ダブルアップ', rarity: Rarity.R, atkDelta: 10, hpDelta: 10, costDelta: 35, price: 90 },
+  { id: 'part-atk-focus', name: '攻撃特化', rarity: Rarity.N, atkDelta: 20, hpDelta: -10, costDelta: 20, price: 40 },
+  { id: 'part-hp-focus', name: '防御特化', rarity: Rarity.N, atkDelta: -10, hpDelta: 20, costDelta: 20, price: 40 },
+  { id: 'part-first-strike', name: '先制付与', rarity: Rarity.S, costDelta: 30, trait: 'firstStrike', price: 60 },
+  { id: 'part-half-damage', name: '被ダメージ半減', rarity: Rarity.R, costDelta: 60, trait: 'halfDamage', price: 90 },
+  { id: 'part-pierce', name: '貫通', rarity: Rarity.R, costDelta: 70, trait: 'pierce', price: 90 },
+  { id: 'part-phoenix', name: '不死鳥', rarity: Rarity.S, costDelta: 40, trait: 'phoenix', price: 60 },
+  { id: 'part-robber', name: '強盗', rarity: Rarity.S, costDelta: 30, trait: 'robber', price: 60 },
 ];
 
 export function findBreedPart(id) {
   return BREED_PARTS.find((p) => p.id === id) || null;
 }
 
-/** Current computed stats: base + every currently-equipped part's deltas (later element-setting parts simply overwrite earlier ones, in equip order). */
+/**
+ * Current computed stats + traits: base + every currently-equipped part's
+ * deltas. `breedMonster.elementPatchChoice` supplies 属性パッチ's element
+ * (chosen at equip time - see main.js's equip flow) since that part itself
+ * carries no fixed `element`.
+ */
 export function computeBreedStats(breedMonster) {
-  const stats = { atk: BREED_BASE.atk, hp: BREED_BASE.hp, cost: BREED_BASE.cost, element: BREED_BASE.element };
+  const stats = { atk: BREED_BASE.atk, hp: BREED_BASE.hp, cost: BREED_BASE.cost, element: BREED_BASE.element, traits: [] };
   for (const partId of breedMonster.equippedPartIds || []) {
     const part = findBreedPart(partId);
     if (!part) continue;
     stats.atk += part.atkDelta || 0;
     stats.hp += part.hpDelta || 0;
     stats.cost += part.costDelta || 0;
-    if (part.element) stats.element = part.element;
+    if (part.chooseElement) {
+      if (breedMonster.elementPatchChoice) stats.element = breedMonster.elementPatchChoice;
+    } else if (part.element) {
+      stats.element = part.element;
+    }
+    if (part.trait) stats.traits.push(part.trait);
   }
   return stats;
 }
@@ -73,6 +100,47 @@ export function describeBreedPart(part) {
   if (part.atkDelta) bits.push(`ATK${part.atkDelta > 0 ? '+' : ''}${part.atkDelta}`);
   if (part.hpDelta) bits.push(`HP${part.hpDelta > 0 ? '+' : ''}${part.hpDelta}`);
   if (part.costDelta) bits.push(`コスト${part.costDelta > 0 ? '+' : ''}${part.costDelta}`);
+  if (part.chooseElement) bits.push('属性を選択して上書き');
   if (part.element) bits.push(`属性→${ELEMENT_LABEL[part.element]}`);
+  if (part.trait) bits.push(`特殊効果: ${TRAIT_LABEL[part.trait]}`);
   return bits.join(' / ');
+}
+
+// 質素な絵合わせアイコン（剣=ATK、盾=HP、金貨=コスト、パレット=属性、
+// 特殊効果ごとに1文字絵文字）。パーツ一覧を数値バッジとして表示するのに使う。
+const STAT_ICON = { atk: '⚔️', hp: '🛡️', cost: '💰' };
+const TRAIT_ICON = { firstStrike: '⚡', halfDamage: '💠', pierce: '🏹', phoenix: '🔥', robber: '🥷' };
+
+/** {icon, text} badges for one part - e.g. ATKアップ → [{icon:'⚔️', text:'+10'}, {icon:'💰', text:'+20G'}]. */
+export function breedPartBadges(part) {
+  const badges = [];
+  if (part.atkDelta) badges.push({ icon: STAT_ICON.atk, text: `${part.atkDelta > 0 ? '+' : ''}${part.atkDelta}` });
+  if (part.hpDelta) badges.push({ icon: STAT_ICON.hp, text: `${part.hpDelta > 0 ? '+' : ''}${part.hpDelta}` });
+  if (part.costDelta) badges.push({ icon: STAT_ICON.cost, text: `${part.costDelta > 0 ? '+' : ''}${part.costDelta}G` });
+  if (part.chooseElement) badges.push({ icon: '🎨', text: '属性選択' });
+  if (part.trait) badges.push({ icon: TRAIT_ICON[part.trait] || '✨', text: TRAIT_LABEL[part.trait] });
+  return badges;
+}
+
+/**
+ * The breed monster as a real, playable Rarity.EX monster card - live
+ * stats/traits computed from whatever's currently equipped. `catalogId`
+ * stays 'breedMonster' regardless of the player's chosen name, so deck
+ * tracking survives renames (see main.js's cardKey).
+ */
+export function buildBreedCardDef(character) {
+  const stats = computeBreedStats(character.breedMonster);
+  return {
+    id: 'breedMonster',
+    catalogId: 'breedMonster',
+    type: CardType.MONSTER,
+    name: character.breedMonster.name,
+    element: stats.element,
+    rarity: Rarity.EX,
+    atk: stats.atk,
+    hp: stats.hp,
+    cost: stats.cost,
+    traits: stats.traits,
+    imageDataUrl: character.breedMonster.imageDataUrl || '',
+  };
 }

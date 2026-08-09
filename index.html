@@ -42,8 +42,38 @@
           <button class="hub-tile" data-mode="story">ストーリー</button>
           <button class="hub-tile" data-mode="battle">対戦</button>
           <button class="hub-tile" data-mode="deck">デッキ</button>
+          <button class="hub-tile" data-mode="catalog">カード図鑑</button>
           <button class="hub-tile" data-mode="shop">ショップ</button>
           <button class="hub-tile" data-mode="breed">ブリード</button>
+          <button id="card-editor-hub" class="hub-tile hidden" data-mode="card-editor">カード作成</button>
+        </div>
+      </div>
+
+      <div id="catalog-screen" class="pg-screen hidden">
+        <h2 class="pg-title">カード図鑑</h2>
+        <p class="pg-label">所持カードは名前と枚数を表示します</p>
+        <div id="catalog-list"></div>
+        <button id="catalog-back" class="pg-button pg-button-secondary">戻る</button>
+      </div>
+
+      <div id="card-editor-screen" class="pg-screen hidden">
+        <h2 class="pg-title">カードエディタ</h2>
+        <div id="card-editor-form">
+          <label>カード名<input id="editor-name" type="text" maxlength="30"></label>
+          <label>画像<input id="editor-image" type="file" accept="image/*"></label>
+          <img id="editor-image-preview" class="hidden" alt="カード画像プレビュー">
+          <label>種類<select id="editor-type"><option value="monster">モンスター</option><option value="gear">アイテム</option><option value="spell">スペル</option></select></label>
+          <label>レアリティ<select id="editor-rarity"><option>N</option><option>S</option><option>R</option><option>EX</option></select></label>
+          <div id="editor-stats-row">
+            <label>ATK<input id="editor-atk" type="number" min="0" value="0"></label>
+            <label>HP<input id="editor-hp" type="number" min="1" value="1"></label>
+          </div>
+          <label id="editor-element-label">属性<select id="editor-element"><option value="fire">火</option><option value="water">水</option><option value="thunder">雷</option><option value="forest">森</option><option value="neutral">無属性</option></select></label>
+          <label>コスト<input id="editor-cost" type="number" min="0" value="0"></label>
+          <fieldset><legend>特殊効果</legend><div id="editor-effects"></div></fieldset>
+          <label>特殊効果の説明<textarea id="editor-effect-description" rows="2" maxlength="200"></textarea></label>
+          <p id="editor-error" class="pg-error hidden"></p>
+          <div class="pg-actions-row"><button id="editor-save" class="pg-button">図鑑に登録</button><button id="editor-back" class="pg-button pg-button-secondary">戻る</button></div>
         </div>
       </div>
 
@@ -59,11 +89,18 @@
 
       <div id="shop-screen" class="pg-screen hidden">
         <h2 class="pg-title">ショップ</h2>
-        <p id="shop-currency" class="pg-label">所持G: 0</p>
-        <h3 class="pg-subtitle">所持カード売却</h3>
-        <div id="shop-list"></div>
+        <p id="shop-currency" class="pg-label">所持M: 0</p>
+        <h3 class="pg-subtitle">パック購入</h3>
+        <div id="shop-pack-list"></div>
+        <div id="shop-pack-result" class="hidden">
+          <h3 class="pg-subtitle">獲得カード</h3>
+          <div id="shop-pack-cards"></div>
+          <button id="shop-pack-result-close" class="pg-button">閉じる</button>
+        </div>
         <h3 class="pg-subtitle">ブリードパーツ購入</h3>
         <div id="shop-parts-list"></div>
+        <h3 class="pg-subtitle">カード売却</h3>
+        <div id="shop-list"></div>
         <button id="shop-back" class="pg-button pg-button-secondary">戻る</button>
       </div>
 
@@ -80,11 +117,30 @@
           <label for="breed-name">名前</label>
           <input id="breed-name" type="text" maxlength="10" />
         </div>
+        <div class="pg-field">
+          <label for="breed-image">画像</label>
+          <input id="breed-image" type="file" accept="image/*" />
+        </div>
+        <img id="breed-image-preview" class="hidden" alt="ブリードモンスター画像プレビュー" />
         <p id="breed-stats" class="pg-label"></p>
         <p id="breed-error" class="pg-error hidden"></p>
         <h3 class="pg-subtitle">パーツ</h3>
         <div id="breed-parts-list"></div>
         <button id="breed-back" class="pg-button pg-button-secondary">戻る</button>
+      </div>
+
+      <div id="story-screen" class="pg-screen hidden">
+        <h2 class="pg-title">ストーリー</h2>
+        <div id="story-stage-list"></div>
+        <button id="story-back" class="pg-button pg-button-secondary">戻る</button>
+      </div>
+
+      <div id="story-dialogue-screen" class="pg-screen hidden">
+        <div id="story-dialogue-box">
+          <p id="story-dialogue-speaker" class="pg-subtitle"></p>
+          <p id="story-dialogue-text" class="pg-label"></p>
+        </div>
+        <button id="story-dialogue-next" class="pg-button">次へ ▶</button>
       </div>
 
       <div id="stub-screen" class="pg-screen hidden">
@@ -139,6 +195,7 @@
             <button id="land-submenu-levelup">土地Lvアップ</button>
             <button id="land-submenu-element">属性変更</button>
             <button id="land-submenu-move">移動</button>
+            <button id="land-submenu-sell">土地を売る</button>
             <button id="land-submenu-info">情報</button>
             <button id="land-submenu-back">もどる</button>
           </div>
