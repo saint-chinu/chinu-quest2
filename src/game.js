@@ -65,6 +65,7 @@ export class Game {
     onConfirmSellLand,
     onPickBrowseTile,
     onLandSubmenu,
+    onPickAbilityTarget,
     onShowTileInfo,
     onChooseBranch,
     onPickMoveDirection,
@@ -96,6 +97,7 @@ export class Game {
     this.onConfirmSellLand = onConfirmSellLand;
     this.onPickBrowseTile = onPickBrowseTile;
     this.onLandSubmenu = onLandSubmenu;
+    this.onPickAbilityTarget = onPickAbilityTarget;
     this.onShowTileInfo = onShowTileInfo;
     this.onChooseBranch = onChooseBranch;
     this.onPickMoveDirection = onPickMoveDirection;
@@ -550,6 +552,7 @@ export class Game {
         if (action === 'element' && (await this._humanChangeElementFlowForTile(player, tile))) return true;
         if (action === 'move' && (await this._humanMoveFlow(player, tile))) return true;
         if (action === 'sell' && (await this._humanSellLandFlow(player, tile))) return true;
+        if (action === 'ability' && (await this._humanAbilityFlow(player, tile))) return true;
         // cancelled sub-action - loop back to the submenu for this same tile
       }
     }
@@ -793,6 +796,72 @@ export class Game {
     this._repaintTileToElement(tile);
     player.currency += salePrice;
     this.onLog(`${player.name}は土地を売却した (+${salePrice}G)`);
+    this._notifyState();
+    return true;
+  }
+
+  /** BFS hop-count between two tiles over the same adjacency graph movement uses - this is what "3マス以内" means on this board (graph distance, not world-space distance). */
+  _tileDistance(fromId, toId) {
+    if (fromId === toId) return 0;
+    const visited = new Set([fromId]);
+    let frontier = [fromId];
+    let distance = 0;
+    while (frontier.length > 0) {
+      distance += 1;
+      const next = [];
+      for (const id of frontier) {
+        for (const neighborId of this.tiles[id].neighbors) {
+          if (visited.has(neighborId)) continue;
+          if (neighborId === toId) return distance;
+          visited.add(neighborId);
+          next.push(neighborId);
+        }
+      }
+      frontier = next;
+    }
+    return Infinity;
+  }
+
+  /**
+   * 土地コマンドの「特殊能力」: 配置されたモンスターが持つability
+   * （現状はtype:'damage'のみ - 射程内の敵1体に固定ダメージ）を行使する。
+   * HPが0以下になったら即死（通常の戦闘死と同じ_handleUnitDeathを流用 -
+   * 不死鳥特性はここでも効く）。実行したら移動・売却と同様に自動でターン
+   * 終了する。
+   */
+  async _humanAbilityFlow(player, tile) {
+    const ability = tile.unit?.def.ability;
+    if (!ability) return false;
+
+    const targets = this.tiles.filter((t) => {
+      if (t.owner == null || t.owner === player.id) return false;
+      const owner = this.players.find((p) => p.id === t.owner);
+      if (owner?.allianceId != null && owner.allianceId === player.allianceId) return false;
+      return this._tileDistance(tile.id, t.id) <= ability.range;
+    });
+    if (targets.length === 0) {
+      this.onLog('射程内に敵がいません');
+      return false;
+    }
+
+    const targetId = await this.onPickAbilityTarget(targets.map((t) => this._browseTileSummary(t, player)));
+    if (targetId == null) return false;
+
+    const targetTile = this.tiles.find((t) => t.id === targetId);
+    const targetUnit = targetTile.unit;
+    const attackerName = tile.unit.def.name;
+    targetUnit.currentHp -= ability.power;
+    this.onLog(`${player.name}の${attackerName}が特殊能力で${targetUnit.def.name}に${ability.power}ダメージ！`);
+    this._notifyState();
+
+    if (targetUnit.currentHp <= 0) {
+      const targetOwner = this.players.find((p) => p.id === targetTile.owner);
+      targetTile.unit = null;
+      targetTile.owner = null;
+      this._repaintTileToElement(targetTile);
+      this.onLog(`${targetOwner.name}の${targetUnit.def.name}は倒された`);
+      await this._handleUnitDeath(targetUnit, targetOwner);
+    }
     this._notifyState();
     return true;
   }
@@ -1088,6 +1157,7 @@ export class Game {
       unitName: tile.unit ? tile.unit.def.name : null,
       unitAtk: tile.unit ? tile.unit.def.atk : null,
       unitHp: tile.unit ? tile.unit.currentHp ?? tile.unit.def.hp : null,
+      hasAbility: !!tile.unit?.def.ability,
     };
   }
 

@@ -43,6 +43,20 @@ export const MONSTER_CATALOG = {
     hp: 30,
     cost: 45,
   },
+  // 土地コマンドの「特殊能力」第一号（game.js の _humanAbilityFlow 参照）。
+  // ability.type:'damage' は射程内（グラフ距離）の敵1体にpower固定ダメージ。
+  molotovMan: {
+    id: 'molotovMan',
+    type: CardType.MONSTER,
+    name: '火炎瓶男',
+    element: Element.FIRE,
+    rarity: Rarity.R,
+    atk: 20,
+    hp: 25,
+    cost: 40,
+    ability: { type: 'damage', range: 3, power: 10 },
+    effectDescription: '特殊能力: 3マス以内の敵モンスター1体に10ダメージ（使用するとそのターンは終了する）',
+  },
 };
 
 export const ITEM_CATALOG = {

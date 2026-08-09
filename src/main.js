@@ -51,8 +51,12 @@ const landSubmenuLevelup = document.getElementById('land-submenu-levelup');
 const landSubmenuElement = document.getElementById('land-submenu-element');
 const landSubmenuMove = document.getElementById('land-submenu-move');
 const landSubmenuSell = document.getElementById('land-submenu-sell');
+const landSubmenuAbility = document.getElementById('land-submenu-ability');
 const landSubmenuInfo = document.getElementById('land-submenu-info');
 const landSubmenuBack = document.getElementById('land-submenu-back');
+const abilityTargetModal = document.getElementById('ability-target-modal');
+const abilityTargetChoices = document.getElementById('ability-target-choices');
+const abilityTargetCancel = document.getElementById('ability-target-cancel');
 const monsterPickerModal = document.getElementById('monster-picker-modal');
 const monsterPickerChoices = document.getElementById('monster-picker-choices');
 const monsterPickerCancel = document.getElementById('monster-picker-cancel');
@@ -260,6 +264,7 @@ function promptLandCommand(tile, { canSummon }) {
 function promptLandSubmenu(tile) {
   return new Promise((resolve) => {
     landSubmenuTitle.textContent = tileSummaryText(tile);
+    landSubmenuAbility.classList.toggle('hidden', !tile.hasAbility);
     landSubmenuModal.classList.remove('hidden');
 
     function cleanup(result) {
@@ -269,6 +274,7 @@ function promptLandSubmenu(tile) {
       landSubmenuElement.removeEventListener('click', onElement);
       landSubmenuMove.removeEventListener('click', onMove);
       landSubmenuSell.removeEventListener('click', onSell);
+      landSubmenuAbility.removeEventListener('click', onAbility);
       landSubmenuInfo.removeEventListener('click', onInfo);
       landSubmenuBack.removeEventListener('click', onBack);
       resolve(result);
@@ -288,6 +294,9 @@ function promptLandSubmenu(tile) {
     function onSell() {
       cleanup('sell');
     }
+    function onAbility() {
+      cleanup('ability');
+    }
     function onInfo() {
       cleanup('info');
     }
@@ -299,8 +308,33 @@ function promptLandSubmenu(tile) {
     landSubmenuElement.addEventListener('click', onElement);
     landSubmenuMove.addEventListener('click', onMove);
     landSubmenuSell.addEventListener('click', onSell);
+    landSubmenuAbility.addEventListener('click', onAbility);
     landSubmenuInfo.addEventListener('click', onInfo);
     landSubmenuBack.addEventListener('click', onBack);
+  });
+}
+
+/** 「特殊能力」の対象選び: 射程内の敵モンスターを一覧表示、押すと即決定。「やめる」でnull（能力不使用のまま土地サブメニューへ戻る）。 */
+function promptPickAbilityTarget(targets) {
+  return new Promise((resolve) => {
+    function cleanup(result) {
+      abilityTargetModal.classList.add('hidden');
+      abilityTargetCancel.removeEventListener('click', onCancel);
+      resolve(result);
+    }
+    function onCancel() {
+      cleanup(null);
+    }
+
+    abilityTargetChoices.replaceChildren();
+    for (const target of targets) {
+      const el = document.createElement('button');
+      el.textContent = `${target.ownerName}の${target.unitName} (ATK${target.unitAtk}/HP${target.unitHp})`;
+      el.addEventListener('click', () => cleanup(target.id));
+      abilityTargetChoices.appendChild(el);
+    }
+    abilityTargetModal.classList.remove('hidden');
+    abilityTargetCancel.addEventListener('click', onCancel);
   });
 }
 
@@ -1176,6 +1210,7 @@ function startBattle(character, storyOptions = {}) {
     onConfirmSellLand: promptConfirmSellLand,
     onPickBrowseTile: promptPickBrowseTile,
     onLandSubmenu: promptLandSubmenu,
+    onPickAbilityTarget: promptPickAbilityTarget,
     onShowTileInfo: promptShowTileInfo,
     onChooseBranch: promptChooseBranch,
     onPickMoveDirection: promptMoveDirection,

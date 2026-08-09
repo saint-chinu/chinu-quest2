@@ -790,6 +790,7 @@ html, body {
 #monster-picker-modal,
 #shop-tile-modal,
 #element-picker-modal,
+#ability-target-modal,
 #confirm-modal,
 #tile-info-modal {
   position: absolute;
@@ -806,8 +807,13 @@ html, body {
 #monster-picker-modal.hidden,
 #shop-tile-modal.hidden,
 #element-picker-modal.hidden,
+#ability-target-modal.hidden,
 #confirm-modal.hidden,
 #tile-info-modal.hidden {
+  display: none;
+}
+
+#land-submenu-ability.hidden {
   display: none;
 }
 
@@ -816,6 +822,7 @@ html, body {
 #monster-picker-box,
 #shop-tile-box,
 #element-picker-box,
+#ability-target-box,
 #confirm-box,
 #tile-info-box {
   background: #22223b;
@@ -857,6 +864,8 @@ html, body {
 #monster-picker-cancel,
 #shop-tile-cancel,
 #element-picker-cancel,
+#ability-target-cancel,
+#ability-target-choices button,
 #tile-info-close,
 #land-submenu-actions button {
   border: none;
@@ -917,6 +926,19 @@ html, body {
   width: 74px;
   height: 102px;
   font-size: 11px;
+}
+
+#ability-target-choices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  max-height: 45vh;
+  overflow-y: auto;
+}
+
+#ability-target-choices button {
+  text-align: left;
 }
 
 #element-picker-choices {
