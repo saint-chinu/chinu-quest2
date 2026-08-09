@@ -146,6 +146,24 @@ export function buildStarterDeckList(bookId = 'fireForest') {
   return new Deck(extra, { elements: book.elements }).drawPile;
 }
 
+/**
+ * A themed 40-card deck list for an NPC (ストーリーモードの敵/味方キャラ
+ * 等) - same shape as buildStarterDeckList's output, but not tied to the
+ * 2 fixed STARTER_DECKS book ids. `elements` restricts the generic monster
+ * fill to give the deck a real identity; `featuredMonster`/`featuredItem`
+ * (optional catalog defs) get mixed in 4 copies each, same as a player
+ * starter book, for a signature card. See story.js's STORY_STAGES for the
+ * per-character theme assignments.
+ */
+export function buildThemedDeckList({ elements, featuredMonster, featuredItem }) {
+  const extra = [
+    ...(featuredMonster ? duplicateForDeck(featuredMonster, 4) : []),
+    ...(featuredItem ? duplicateForDeck(featuredItem, 4) : []),
+    ...duplicateForDeck(SPELL_CATALOG.manjaro, 2),
+  ];
+  return new Deck(extra, { elements }).drawPile;
+}
+
 /** The stable catalog key for ability/effect lookups, for both raw catalog defs and deck copies. */
 export function catalogIdOf(def) {
   return def.catalogId || def.id;

@@ -3,7 +3,7 @@ import { GameScene } from './scene.js';
 import { createBoard } from './board.js';
 import { Game } from './game.js';
 import { CardType, CARD_COLOR, ELEMENT_LABEL, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
-import { STARTER_DECKS, buildStarterDeckList, ITEM_CATALOG } from './battleCards.js';
+import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, ITEM_CATALOG } from './battleCards.js';
 import { loginOrRegister, saveCharacter } from './auth.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { PACKS, drawPack } from './shopPacks.js';
@@ -1492,7 +1492,7 @@ function buildStoryPlayerConfigs(stage, iconImage) {
       isCPU: true,
       color: stage.ally.color,
       allianceId: stage.heroAllianceId ?? null,
-      deckVariant: stage.ally.deckVariant,
+      deckList: buildThemedDeckList(stage.ally.theme),
     });
   }
   for (const opponent of stage.opponents) {
@@ -1501,7 +1501,7 @@ function buildStoryPlayerConfigs(stage, iconImage) {
       isCPU: true,
       color: opponent.color,
       allianceId: stage.enemyAllianceId ?? null,
-      deckVariant: opponent.deckVariant,
+      deckList: buildThemedDeckList(opponent.theme),
     });
   }
   return configs;

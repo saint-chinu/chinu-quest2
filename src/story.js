@@ -1,7 +1,17 @@
+import { Element } from './cards.js';
+import { MONSTER_CATALOG, ITEM_CATALOG } from './battleCards.js';
+
 // ストーリーモードのシナリオデータ（chinu-quest2-story-spec.md 準拠）。
 // 立ち絵/背景グラフィックは未着手のため、`portrait`は今のところ常にnull
 // (プレースホルダー表示) - 後日ここに画像パスを足すだけで差し替えられる
 // ようにしておく（main.js側はハードコードせずこのフィールドを見るだけ）。
+//
+// 各NPCの`theme`はbuildThemedDeckList（battleCards.js）にそのまま渡す
+// デッキサンプル定義 - elementsで属性2種に絞った上でfeaturedMonster/
+// featuredItem（既存カタログから1体1種、任意）を4枚ずつ混ぜ、キャラごと
+// に個性のあるデッキにする（以前は全員が同じ2種の初期ブックを使い回し
+// ていた）。カード規模がまだ小さいため名前付きカードの使い回しはあるが、
+// 属性の組み合わせだけでもキャラ差別化になるようにしてある。
 export const STORY_STAGES = [
   {
     key: 'hitode',
@@ -17,7 +27,13 @@ export const STORY_STAGES = [
       { speaker: '???', text: '突然、急流が二人を飲み込んだ……！' },
       { speaker: '主人公', text: 'うわあああ！？ ここは……北の海？' },
     ],
-    opponents: [{ name: 'ヒトデ', color: 0xe63946, deckVariant: 'waterThunder' }],
+    opponents: [
+      {
+        name: 'ヒトデ',
+        color: 0xe63946,
+        theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi, featuredItem: ITEM_CATALOG.potLid },
+      },
+    ],
     reward: null,
   },
   {
@@ -34,8 +50,16 @@ export const STORY_STAGES = [
       { speaker: '主人公', text: '二体とも倒した……。この先には何があるんだ？' },
     ],
     opponents: [
-      { name: '暴君マダイ', color: 0xffd166, deckVariant: 'fireForest' },
-      { name: 'ニュウドウカジカ（お肉）', color: 0x8e5ce6, deckVariant: 'waterThunder' },
+      {
+        name: '暴君マダイ',
+        color: 0xffd166,
+        theme: { elements: [Element.FIRE, Element.THUNDER], featuredMonster: MONSTER_CATALOG.salarymander, featuredItem: ITEM_CATALOG.knife },
+      },
+      {
+        name: 'ニュウドウカジカ（お肉）',
+        color: 0x8e5ce6,
+        theme: { elements: [Element.THUNDER, Element.FOREST] },
+      },
     ],
     reward: null,
   },
@@ -61,10 +85,22 @@ export const STORY_STAGES = [
     // 文字列キーをそのまま渡すだけで2vs2として成立する。
     heroAllianceId: 'hero',
     enemyAllianceId: 'enemy',
-    ally: { name: 'ぶどう', color: 0x8e5ce6, deckVariant: 'waterThunder' },
+    ally: {
+      name: 'ぶどう',
+      color: 0x8e5ce6,
+      theme: { elements: [Element.WATER, Element.THUNDER], featuredItem: ITEM_CATALOG.knife },
+    },
     opponents: [
-      { name: '農家のウサギ', color: 0xe63946, deckVariant: 'fireForest' },
-      { name: '某不思議の国の少女', color: 0x4caf6e, deckVariant: 'fireForest' },
+      {
+        name: '農家のウサギ',
+        color: 0xe63946,
+        theme: { elements: [Element.FOREST, Element.FIRE], featuredItem: ITEM_CATALOG.potLid },
+      },
+      {
+        name: '某不思議の国の少女',
+        color: 0x4caf6e,
+        theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi },
+      },
     ],
     reward: 'peeStaff',
   },
@@ -82,7 +118,15 @@ export const STORY_STAGES = [
       { speaker: '主人公', text: '……終わった、のか。' },
       { speaker: '???', text: '魚群の王を目指した魚の旅は、まだ続く。' },
     ],
-    opponents: [{ name: 'ダンボール男', color: 0x333333, deckVariant: 'fireForest' }],
+    opponents: [
+      {
+        name: 'ダンボール男',
+        color: 0x333333,
+        // ラスボスは属性の有利/不利を受けないNEUTRALのみで構成 - 誰の
+        // デッキとも噛み合わない、正体不明な強敵という位置づけ。
+        theme: { elements: [Element.NEUTRAL], featuredMonster: MONSTER_CATALOG.salarymander, featuredItem: ITEM_CATALOG.knife },
+      },
+    ],
     reward: null,
   },
 ];
