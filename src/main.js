@@ -7,6 +7,7 @@ import { STARTER_DECKS, buildStarterDeckList } from './battleCards.js';
 import { loginOrRegister, saveCharacter } from './auth.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { loadPlayerIcons } from './iconSheet.js';
+import { BREED_BASE, BREED_PARTS, computeBreedStats, canEquipPart, describeBreedPart } from './breedParts.js';
 
 const canvas = document.getElementById('game-canvas');
 const turnIndicator = document.getElementById('turn-indicator');
@@ -1185,15 +1186,22 @@ const deckBack = document.getElementById('deck-back');
 const shopScreen = document.getElementById('shop-screen');
 const shopCurrency = document.getElementById('shop-currency');
 const shopList = document.getElementById('shop-list');
+const shopPartsList = document.getElementById('shop-parts-list');
 const shopBackButton = document.getElementById('shop-back');
 const battleMenuScreen = document.getElementById('battle-menu-screen');
 const battleCpuButton = document.getElementById('battle-cpu');
 const battleBackButton = document.getElementById('battle-back');
+const breedScreen = document.getElementById('breed-screen');
+const breedName = document.getElementById('breed-name');
+const breedStats = document.getElementById('breed-stats');
+const breedError = document.getElementById('breed-error');
+const breedPartsList = document.getElementById('breed-parts-list');
+const breedBackButton = document.getElementById('breed-back');
 const stubScreen = document.getElementById('stub-screen');
 const stubText = document.getElementById('stub-text');
 const stubBackButton = document.getElementById('stub-back');
 
-const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, deckScreen, shopScreen, battleMenuScreen, stubScreen];
+const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, deckScreen, shopScreen, battleMenuScreen, breedScreen, stubScreen];
 function showScreen(el) {
   ALL_PG_SCREENS.forEach((s) => s.classList.toggle('hidden', s !== el));
 }
@@ -1262,6 +1270,13 @@ function showHubScreen() {
   showScreen(hubScreen);
 }
 
+/** Existing characters saved before ブリードモンスター existed won't have these fields yet - fill them in with the default build (no owned parts) rather than crashing on undefined. */
+function ensureBreedFields(character) {
+  if (!character.breedMonster) character.breedMonster = { name: BREED_BASE.defaultName, equippedPartIds: [] };
+  if (!character.ownedPartIds) character.ownedPartIds = [];
+  return character;
+}
+
 loginSubmit.addEventListener('click', () => {
   const result = loginOrRegister(loginId.value.trim(), loginPassword.value);
   if (!result.ok) {
@@ -1274,7 +1289,7 @@ loginSubmit.addEventListener('click', () => {
   if (result.isNew || !result.character) {
     showCharmakeScreen();
   } else {
-    currentCharacter = result.character;
+    currentCharacter = ensureBreedFields(result.character);
     showHubScreen();
   }
 });
@@ -1294,12 +1309,14 @@ charmakeSubmit.addEventListener('click', () => {
     deckList,
     ownedCards,
     m: STARTING_M,
+    breedMonster: { name: BREED_BASE.defaultName, equippedPartIds: [] },
+    ownedPartIds: [],
   };
   saveCharacter(currentUserId, currentCharacter);
   showHubScreen();
 });
 
-const STUB_MODE_LABEL = { story: 'ストーリー', breed: 'ブリード' };
+const STUB_MODE_LABEL = { story: 'ストーリー' };
 
 document.querySelectorAll('.hub-tile').forEach((tile) => {
   tile.addEventListener('click', () => {
@@ -1310,6 +1327,8 @@ document.querySelectorAll('.hub-tile').forEach((tile) => {
       showDeckScreen();
     } else if (mode === 'shop') {
       showShopScreen();
+    } else if (mode === 'breed') {
+      showBreedScreen();
     } else {
       stubText.textContent = `${STUB_MODE_LABEL[mode]}は準備中です`;
       showScreen(stubScreen);
@@ -1501,9 +1520,114 @@ function showShopScreen() {
     row.append(swatch, info, sellBtn);
     shopList.appendChild(row);
   }
+
+  shopPartsList.replaceChildren();
+  for (const part of BREED_PARTS) {
+    const owned = (currentCharacter.ownedPartIds || []).includes(part.id);
+
+    const row = document.createElement('div');
+    row.className = 'deck-row';
+
+    const info = document.createElement('div');
+    info.className = 'deck-row-info';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'deck-row-name';
+    nameEl.textContent = part.name;
+    const meta = document.createElement('div');
+    meta.className = 'deck-row-meta';
+    meta.textContent = `${describeBreedPart(part)} / 価格${part.price}M`;
+    info.append(nameEl, meta);
+
+    const buyBtn = document.createElement('button');
+    buyBtn.className = 'deck-row-sell';
+    buyBtn.textContent = owned ? '購入済み' : '購入';
+    buyBtn.disabled = owned || currentCharacter.m < part.price;
+    buyBtn.addEventListener('click', () => {
+      currentCharacter.m -= part.price;
+      currentCharacter.ownedPartIds.push(part.id);
+      saveCharacter(currentUserId, currentCharacter);
+      showShopScreen();
+    });
+
+    row.append(info, buyBtn);
+    shopPartsList.appendChild(row);
+  }
 }
 
 shopBackButton.addEventListener('click', showHubScreen);
+
+// ---- ブリード: rename + view computed stats + equip/unequip owned parts ----
+
+function showBreedScreen() {
+  breedName.value = currentCharacter.breedMonster.name;
+  breedError.classList.add('hidden');
+  renderBreedScreen();
+  showScreen(breedScreen);
+}
+
+function renderBreedScreen() {
+  const stats = computeBreedStats(currentCharacter.breedMonster);
+  breedStats.textContent = `属性: ${ELEMENT_LABEL[stats.element]} / ATK ${stats.atk} / HP ${stats.hp} / 召喚コスト ${stats.cost}G`;
+
+  breedPartsList.replaceChildren();
+  for (const part of currentCharacter.ownedPartIds || []) {
+    const def = BREED_PARTS.find((p) => p.id === part);
+    if (!def) continue;
+    const equipped = currentCharacter.breedMonster.equippedPartIds.includes(def.id);
+
+    const row = document.createElement('div');
+    row.className = 'deck-row';
+
+    const info = document.createElement('div');
+    info.className = 'deck-row-info';
+    const nameEl = document.createElement('div');
+    nameEl.className = 'deck-row-name';
+    nameEl.textContent = def.name;
+    const meta = document.createElement('div');
+    meta.className = 'deck-row-meta';
+    meta.textContent = describeBreedPart(def);
+    info.append(nameEl, meta);
+
+    const toggleBtn = document.createElement('button');
+    toggleBtn.className = 'deck-row-sell';
+    toggleBtn.textContent = equipped ? '外す' : '装着';
+    if (!equipped) {
+      const check = canEquipPart(currentCharacter.breedMonster, def);
+      toggleBtn.disabled = !check.ok;
+      toggleBtn.title = check.ok ? '' : check.error;
+    }
+    toggleBtn.addEventListener('click', () => {
+      breedError.classList.add('hidden');
+      if (equipped) {
+        currentCharacter.breedMonster.equippedPartIds = currentCharacter.breedMonster.equippedPartIds.filter(
+          (id) => id !== def.id
+        );
+      } else {
+        const check = canEquipPart(currentCharacter.breedMonster, def);
+        if (!check.ok) {
+          breedError.textContent = check.error;
+          breedError.classList.remove('hidden');
+          return;
+        }
+        currentCharacter.breedMonster.equippedPartIds.push(def.id);
+      }
+      saveCharacter(currentUserId, currentCharacter);
+      renderBreedScreen();
+    });
+
+    row.append(info, toggleBtn);
+    breedPartsList.appendChild(row);
+  }
+}
+
+breedName.addEventListener('change', () => {
+  const trimmed = breedName.value.trim();
+  currentCharacter.breedMonster.name = trimmed || BREED_BASE.defaultName;
+  breedName.value = currentCharacter.breedMonster.name;
+  saveCharacter(currentUserId, currentCharacter);
+});
+
+breedBackButton.addEventListener('click', showHubScreen);
 
 battleCpuButton.addEventListener('click', async () => {
   preGame.classList.add('hidden');

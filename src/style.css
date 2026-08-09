@@ -206,7 +206,9 @@ html, body {
 }
 
 #deck-catalog-list,
-#shop-list {
+#shop-list,
+#shop-parts-list,
+#breed-parts-list {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -216,6 +218,13 @@ html, body {
   padding: 4px;
   background: rgba(255, 255, 255, 0.03);
   border-radius: 10px;
+}
+
+.pg-subtitle {
+  color: #fff;
+  font-size: 15px;
+  font-weight: bold;
+  margin-top: 4px;
 }
 
 .deck-row {
