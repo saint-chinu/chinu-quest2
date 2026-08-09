@@ -1081,6 +1081,20 @@ html, body {
   position: relative;
 }
 
+.battle-side {
+  transition: transform 600ms ease, opacity 600ms ease;
+}
+
+#battle-side-attacker.battle-retreat {
+  transform: translateX(-160%);
+  opacity: 0;
+}
+
+#battle-side-defender.battle-retreat {
+  transform: translateX(160%);
+  opacity: 0;
+}
+
 .battle-side .card-large {
   transition: transform 200ms ease, filter 200ms ease;
 }
@@ -1101,8 +1115,15 @@ html, body {
   80% { transform: translateX(6px); }
 }
 
-.card-large.battle-defeated {
-  filter: grayscale(1) brightness(0.5);
+/* 死亡したモンスターのカードが下から崩れ落ちるエフェクト。 */
+.card-large.battle-crumble {
+  animation: battle-crumble 900ms ease-in forwards;
+}
+
+@keyframes battle-crumble {
+  0% { clip-path: inset(0 0 0% 0); opacity: 1; transform: translateY(0) rotate(0deg); }
+  60% { clip-path: inset(0 0 55% 0); opacity: 0.9; transform: translateY(4px) rotate(-2deg); }
+  100% { clip-path: inset(0 0 100% 0); opacity: 0; transform: translateY(14px) rotate(3deg); }
 }
 
 .battle-item-overlay {
@@ -1126,29 +1147,34 @@ html, body {
   padding: 1px;
 }
 
-.battle-damage-popup {
+/* 有利/不利属性の表示 - カード下部に重ねる。 */
+.battle-matchup-label {
   position: absolute;
-  top: 40%;
+  z-index: 2;
+  bottom: -10px;
   left: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 26px;
+  transform: translateX(-50%);
+  font-size: 11px;
   font-weight: bold;
-  color: #ff6b6b;
-  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
-  z-index: 3;
-  animation: battle-dmg-pop 900ms ease forwards;
-  pointer-events: none;
   white-space: nowrap;
+  padding: 3px 8px;
+  border-radius: 6px;
+  color: #fff;
+  background: #555;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 
-.battle-damage-popup.hidden {
+.battle-matchup-label.advantage {
+  background: #2ec4b6;
+  color: #06231f;
+}
+
+.battle-matchup-label.disadvantage {
+  background: #e6553a;
+}
+
+.battle-matchup-label.hidden {
   display: none;
-}
-
-@keyframes battle-dmg-pop {
-  0% { opacity: 0; transform: translate(-50%, -30%); }
-  30% { opacity: 1; transform: translate(-50%, -60%); }
-  100% { opacity: 0; transform: translate(-50%, -90%); }
 }
 
 #battle-vs {
@@ -1208,13 +1234,13 @@ html, body {
   color: #fff;
 }
 
-#battle-outcome-text {
+#battle-message-text {
   position: absolute;
   z-index: 5;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  font-size: 22px;
+  font-size: 20px;
   font-weight: bold;
   color: #ffd166;
   text-align: center;
@@ -1222,9 +1248,9 @@ html, body {
   background: rgba(0, 0, 0, 0.5);
   padding: 16px 28px;
   border-radius: 12px;
-  white-space: nowrap;
+  max-width: 85%;
 }
 
-#battle-outcome-text.hidden {
+#battle-message-text.hidden {
   display: none;
 }

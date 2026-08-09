@@ -62,8 +62,9 @@ function dealDamage(attacker, defender, log, attackerBonus) {
   const multiplier = incomingDamageMultiplier(defender, attacker.def.element);
   const damage = Math.round(atkStats.atk * multiplier);
   defender.currentHp -= damage;
-  log.push(`${attacker.def.name} → ${defender.def.name} に${damage}ダメージ（倍率${multiplier}）`);
-  return damage;
+  const message = `${attacker.def.name} → ${defender.def.name} に${damage}ダメージ（倍率${multiplier}）`;
+  log.push(message);
+  return { damage, message };
 }
 
 /** Minimal gold ledger so battle abilities have somewhere to move currency. */
@@ -102,10 +103,12 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
       `${defender.def.name}(ATK${statTotals(defender, defenderBonus).atk}/HP${defender.currentHp})`
   );
 
-  const dmgToDefender = dealDamage(attacker, defender, log, attackerBonus);
+  const attackResult = dealDamage(attacker, defender, log, attackerBonus);
+  const dmgToDefender = attackResult.damage;
   const defenderSurvived = defender.currentHp > 0;
 
-  const dmgToAttacker = defenderSurvived ? dealDamage(defender, attacker, log, defenderBonus) : 0;
+  const counterResult = defenderSurvived ? dealDamage(defender, attacker, log, defenderBonus) : null;
+  const dmgToAttacker = counterResult ? counterResult.damage : 0;
   const attackerSurvived = attacker.currentHp > 0;
 
   if (catalogIdOf(attacker.def) === 'minatoJoshi' && dmgToDefender > 0) {
@@ -133,5 +136,13 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   if (!attackerSurvived) attacker.curses = [];
   if (!defenderSurvived) defender.curses = [];
 
-  return { log, dmgToAttacker, dmgToDefender, attackerSurvived, defenderSurvived };
+  return {
+    log,
+    dmgToAttacker,
+    dmgToDefender,
+    attackerSurvived,
+    defenderSurvived,
+    attackMessage: attackResult.message,
+    counterMessage: counterResult ? counterResult.message : null,
+  };
 }

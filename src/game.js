@@ -1,7 +1,7 @@
 import { TileType } from './board.js';
 import { PIECE_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck } from './cards.js';
-import { buildStarterExtraCards } from './battleCards.js';
+import { buildStarterExtraCards, WEAK_AGAINST } from './battleCards.js';
 import { createFieldUnit, resolveBattle, equipItem } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay } from './utils.js';
@@ -72,6 +72,7 @@ export class Game {
     onBattleSceneEnter,
     onPickBattleItem,
     onBattleAttack,
+    onBattleRetreat,
     onBattleOutcome,
     humanPlayer,
   }) {
@@ -98,6 +99,7 @@ export class Game {
     this.onBattleSceneEnter = onBattleSceneEnter;
     this.onPickBattleItem = onPickBattleItem;
     this.onBattleAttack = onBattleAttack;
+    this.onBattleRetreat = onBattleRetreat;
     this.onBattleOutcome = onBattleOutcome;
     // A canvas cropped from the player-icon sheet (see iconSheet.js) for
     // the human player's board piece - null falls back to the plain
@@ -728,6 +730,22 @@ export class Game {
     return { atk, hp };
   }
 
+  /**
+   * How mySideElement fares against opponentElement under the weakness
+   * cycle (火→水→雷→森→火): 'advantage' if mySide is the one that hits the
+   * opponent for 1.2x, 'disadvantage' if it's the other way around (the
+   * opponent would hit mySide for 1.2x), 'neutral' otherwise (includes any
+   * 無属性 side, and "opposite corner" pairs that aren't adjacent in the
+   * cycle either way). Purely the elemental relationship - doesn't account
+   * for monster-specific traits like 港区女子's resistance.
+   */
+  _elementMatchup(mySideElement, opponentElement) {
+    if (mySideElement === Element.NEUTRAL || opponentElement === Element.NEUTRAL) return 'neutral';
+    if (mySideElement === WEAK_AGAINST[opponentElement]) return 'advantage';
+    if (opponentElement === WEAK_AGAINST[mySideElement]) return 'disadvantage';
+    return 'neutral';
+  }
+
   /** Base ATK/HP as shown on the battle-scene stat panel: def stats plus any永続 curses, but NOT items or the situational cheer/element bonuses (those are surfaced separately - see _runBattleScene). */
   _baseStats(unit) {
     const curseAtk = unit.curses.reduce((sum, c) => sum + (c.addedAtk || 0), 0);
@@ -767,6 +785,9 @@ export class Game {
     const attackerBonus = this._battleBonus(attackerUnit, attackerPositionTile, battleTile);
     const defenderBonus = this._battleBonus(defenderUnit, battleTile, battleTile);
 
+    const attackerMatchup = this._elementMatchup(attackerUnit.def.element, defenderUnit.def.element);
+    const defenderMatchup = this._elementMatchup(defenderUnit.def.element, attackerUnit.def.element);
+
     await this.onBattleSceneEnter({
       attacker: {
         card: attackerUnit.def,
@@ -777,6 +798,7 @@ export class Game {
         cheerAtk: attackerBonus.atk,
         elementHp: attackerBonus.hp,
         element: attackerPositionTile?.element ?? null,
+        matchup: attackerMatchup,
       },
       defender: {
         card: defenderUnit.def,
@@ -787,6 +809,7 @@ export class Game {
         cheerAtk: defenderBonus.atk,
         elementHp: defenderBonus.hp,
         element: battleTile.element,
+        matchup: defenderMatchup,
       },
     });
 
@@ -816,20 +839,22 @@ export class Game {
     await this.onBattleAttack({
       side: 'attacker',
       item: attackerItem,
-      damage: result.dmgToDefender,
+      message: result.attackMessage,
       targetHp: Math.max(defenderUnit.currentHp, 0),
-      targetMaxHp: defenderBase.hp + defenderBonus.hp,
       targetDied: !result.defenderSurvived,
     });
     if (result.defenderSurvived) {
       await this.onBattleAttack({
         side: 'defender',
         item: defenderItem,
-        damage: result.dmgToAttacker,
+        message: result.counterMessage,
         targetHp: Math.max(attackerUnit.currentHp, 0),
-        targetMaxHp: attackerBase.hp + attackerBonus.hp,
         targetDied: !result.attackerSurvived,
       });
+      // Neither died - a genuine draw (見た目上は防衛成功): both monsters
+      // retreat off-screen to their own side before the outcome message,
+      // rather than either one crumbling.
+      if (result.attackerSurvived) await this.onBattleRetreat();
     }
 
     const won = result.attackerSurvived && !result.defenderSurvived;

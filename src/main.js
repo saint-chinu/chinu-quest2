@@ -85,7 +85,7 @@ const battleSide = {
     atkBonus: document.getElementById('battle-attacker-atk-bonus'),
     card: document.getElementById('battle-attacker-card'),
     item: document.getElementById('battle-attacker-item'),
-    dmg: document.getElementById('battle-attacker-dmg'),
+    matchup: document.getElementById('battle-attacker-matchup'),
     el: document.getElementById('battle-side-attacker'),
   },
   defender: {
@@ -96,7 +96,7 @@ const battleSide = {
     atkBonus: document.getElementById('battle-defender-atk-bonus'),
     card: document.getElementById('battle-defender-card'),
     item: document.getElementById('battle-defender-item'),
-    dmg: document.getElementById('battle-defender-dmg'),
+    matchup: document.getElementById('battle-defender-matchup'),
     el: document.getElementById('battle-side-defender'),
   },
 };
@@ -104,7 +104,7 @@ const battleItemPickerBox = document.getElementById('battle-item-picker-box');
 const battleItemPickerTitle = document.getElementById('battle-item-picker-title');
 const battleItemPickerChoices = document.getElementById('battle-item-picker-choices');
 const battleItemPickerSkip = document.getElementById('battle-item-picker-skip');
-const battleOutcomeText = document.getElementById('battle-outcome-text');
+const battleMessageText = document.getElementById('battle-message-text');
 
 const BLINK_MS = 600;
 
@@ -734,13 +734,18 @@ function promptSpellUse(card) {
   });
 }
 
+const MATCHUP_LABEL = {
+  advantage: '有利！攻撃1.2倍',
+  disadvantage: '不利…被ダメージ1.2倍',
+};
+
 const BATTLE_FADE_MS = 450;
 const BATTLE_STAGE_REVEAL_MS = 450;
-const BATTLE_ATTACK_ANIM_MS = 900;
-const BATTLE_OUTCOME_HOLD_MS = 1600;
+const BATTLE_MESSAGE_HOLD_MS = 1500;
+const BATTLE_RETREAT_MS = 600;
 const BATTLE_FADE_OUT_MS = 450;
 
-/** Resets one side's panel/card/item-overlay/damage-popup to a fresh state and fills in this battle's base stats + bonuses. */
+/** Resets one side's panel/card/item-overlay/matchup-label to a fresh state and fills in this battle's base stats + bonuses. */
 function renderBattleStat(sideEls, data) {
   sideEls.owner.textContent = data.ownerName;
   sideEls.hp.textContent = data.hp;
@@ -750,23 +755,30 @@ function renderBattleStat(sideEls, data) {
   sideEls.atkBonus.classList.toggle('hidden', !(data.cheerAtk > 0));
   if (data.cheerAtk > 0) sideEls.atkBonus.textContent = `+${data.cheerAtk}`;
   renderCardEl(sideEls.card, data.card);
-  sideEls.card.classList.remove('battle-defeated');
+  sideEls.card.classList.remove('battle-crumble');
   sideEls.item.classList.add('hidden');
   sideEls.item.replaceChildren();
-  sideEls.dmg.classList.add('hidden');
-  sideEls.el.classList.remove('battle-attacking', 'battle-hit');
+  const matchupText = MATCHUP_LABEL[data.matchup];
+  sideEls.matchup.classList.toggle('hidden', !matchupText);
+  sideEls.matchup.classList.remove('advantage', 'disadvantage');
+  if (matchupText) {
+    sideEls.matchup.textContent = matchupText;
+    sideEls.matchup.classList.add(data.matchup);
+  }
+  sideEls.el.classList.remove('battle-attacking', 'battle-hit', 'battle-retreat');
 }
 
 /**
  * バトルフェーズ開始: 暗転してから攻撃側(左)・防御側(右)のカードと基礎
- * ステータス（応援/同属性ボーナスは基礎数値の横に＋◯◯で表示）を見せる。
- * アイテムはまだこの時点では一切表示しない（選択・使用時に初めて出る）。
+ * ステータス（応援/同属性ボーナスは基礎数値の横に＋◯◯で表示、有利/不利
+ * 属性はカード下部に表示）を見せる。アイテムはまだこの時点では一切表示
+ * しない（選択・使用時に初めて出る）。
  */
 function promptBattleSceneEnter({ attacker, defender }) {
   return new Promise((resolve) => {
     battleSceneModal.classList.remove('hidden');
     battleStage.classList.remove('show');
-    battleOutcomeText.classList.add('hidden');
+    battleMessageText.classList.add('hidden');
     battleFade.classList.remove('show');
     renderBattleStat(battleSide.attacker, attacker);
     renderBattleStat(battleSide.defender, defender);
@@ -819,10 +831,12 @@ function promptPickBattleItem({ hand, side, ownerName, unitName }) {
 
 /**
  * One side's strike: its item (if used) appears at 1/4 size over its own
- * card's top-left corner, the target's card flashes/shakes and shows the
- * damage dealt, then the target's displayed HP updates to match.
+ * card's top-left corner, the target's card flashes/shakes, the damage
+ * calculation message shows for 1.5s, and the target's displayed HP
+ * updates to match. If the target died, its card crumbles from the bottom
+ * during that same hold.
  */
-function promptBattleAttack({ side, item, damage, targetHp, targetDied }) {
+function promptBattleAttack({ side, item, message, targetHp, targetDied }) {
   return new Promise((resolve) => {
     const attackerEls = battleSide[side];
     const targetEls = battleSide[side === 'attacker' ? 'defender' : 'attacker'];
@@ -835,37 +849,45 @@ function promptBattleAttack({ side, item, damage, targetHp, targetDied }) {
       attackerEls.item.classList.remove('hidden');
     }
 
-    setTimeout(() => {
-      attackerEls.el.classList.add('battle-attacking');
-      targetEls.el.classList.add('battle-hit');
-      targetEls.dmg.textContent = `-${damage}`;
-      targetEls.dmg.classList.remove('hidden');
-      targetEls.hp.textContent = Math.max(targetHp, 0);
-      if (targetDied) targetEls.card.classList.add('battle-defeated');
+    attackerEls.el.classList.add('battle-attacking');
+    targetEls.el.classList.add('battle-hit');
+    targetEls.hp.textContent = Math.max(targetHp, 0);
+    battleMessageText.textContent = message;
+    battleMessageText.classList.remove('hidden');
+    if (targetDied) targetEls.card.classList.add('battle-crumble');
 
-      setTimeout(() => {
-        attackerEls.el.classList.remove('battle-attacking');
-        targetEls.el.classList.remove('battle-hit');
-        targetEls.dmg.classList.add('hidden');
-        resolve();
-      }, BATTLE_ATTACK_ANIM_MS / 2);
-    }, BATTLE_ATTACK_ANIM_MS / 2);
+    setTimeout(() => {
+      attackerEls.el.classList.remove('battle-attacking');
+      targetEls.el.classList.remove('battle-hit');
+      battleMessageText.classList.add('hidden');
+      resolve();
+    }, BATTLE_MESSAGE_HOLD_MS);
   });
 }
 
-/** "〇〇の□□は土地を奪った/守った" - holds, then fades the whole battle scene back out to the board. */
+/** 引き分け（両者生存）専用の演出: 決着メッセージの前に、両陣営のカードをそれぞれ自分の側の画面外へ退避させる。 */
+function promptBattleRetreat() {
+  return new Promise((resolve) => {
+    battleSide.attacker.el.classList.add('battle-retreat');
+    battleSide.defender.el.classList.add('battle-retreat');
+    setTimeout(resolve, BATTLE_RETREAT_MS);
+  });
+}
+
+/** "〇〇の□□は土地を奪った/守った" - holds 1.5秒, then fades the whole battle scene back out to the board. */
 function promptBattleOutcome({ won, ownerName, unitName }) {
   return new Promise((resolve) => {
-    battleOutcomeText.textContent = `${ownerName}の${unitName}は${won ? '土地を奪った' : '土地を守った'}`;
-    battleOutcomeText.classList.remove('hidden');
+    battleMessageText.textContent = `${ownerName}の${unitName}は${won ? '土地を奪った' : '土地を守った'}`;
+    battleMessageText.classList.remove('hidden');
     setTimeout(() => {
       battleStage.classList.remove('show');
       battleFade.classList.remove('show');
       setTimeout(() => {
+        battleMessageText.classList.add('hidden');
         battleSceneModal.classList.add('hidden');
         resolve();
       }, BATTLE_FADE_OUT_MS);
-    }, BATTLE_OUTCOME_HOLD_MS);
+    }, BATTLE_MESSAGE_HOLD_MS);
   });
 }
 
@@ -1121,6 +1143,7 @@ function startBattle(character) {
     onBattleSceneEnter: promptBattleSceneEnter,
     onPickBattleItem: promptPickBattleItem,
     onBattleAttack: promptBattleAttack,
+    onBattleRetreat: promptBattleRetreat,
     onBattleOutcome: promptBattleOutcome,
     humanPlayer: character
       ? {
