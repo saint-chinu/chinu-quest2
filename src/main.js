@@ -21,6 +21,7 @@ import {
 import { STORY_STAGES, isStageUnlocked, isStageCleared } from './story.js';
 import { firebaseReady } from './firebase.js';
 import { createPvpRoom, joinPvpRoom, listenToRoom, leavePvpRoom } from './pvp.js';
+import { playBoardTheme, playBattleTheme, stopMusic, toggleMuted } from './audio.js';
 
 const canvas = document.getElementById('game-canvas');
 const turnIndicator = document.getElementById('turn-indicator');
@@ -807,6 +808,7 @@ function renderBattleStat(sideEls, data) {
  */
 function promptBattleSceneEnter({ attacker, defender }) {
   return new Promise((resolve) => {
+    playBattleTheme();
     battleSceneModal.classList.remove('hidden');
     battleStage.classList.remove('show');
     battleMessageText.classList.add('hidden');
@@ -916,6 +918,7 @@ function promptBattleOutcome({ won, ownerName, unitName }) {
       setTimeout(() => {
         battleMessageText.classList.add('hidden');
         battleSceneModal.classList.add('hidden');
+        playBoardTheme();
         resolve();
       }, BATTLE_FADE_OUT_MS);
     }, BATTLE_MESSAGE_HOLD_MS);
@@ -1200,6 +1203,7 @@ function startBattle(character, storyOptions = {}) {
   });
 
   game.init();
+  playBoardTheme();
   requestAnimationFrame(animate);
 }
 
@@ -1208,6 +1212,11 @@ function startBattle(character, storyOptions = {}) {
 const preGame = document.getElementById('pre-game');
 const appEl = document.getElementById('app');
 const exitBattleButton = document.getElementById('exit-battle-button');
+const muteButton = document.getElementById('mute-button');
+muteButton.addEventListener('click', () => {
+  const muted = toggleMuted();
+  muteButton.textContent = muted ? '🔇' : '🔊';
+});
 const loginScreen = document.getElementById('login-screen');
 const loginId = document.getElementById('login-id');
 const loginPassword = document.getElementById('login-password');
@@ -2328,6 +2337,7 @@ exitBattleButton.addEventListener('click', async () => {
   currentCharacter.m += earnedM;
   saveCharacter(currentUserId, currentCharacter);
   game = undefined;
+  stopMusic();
   appEl.classList.add('hidden');
   preGame.classList.remove('hidden');
   const wasStoryBattle = activeStoryStageIndex != null;

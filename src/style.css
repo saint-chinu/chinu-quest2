@@ -507,6 +507,20 @@ html, body {
   color: #fff;
 }
 
+#mute-button {
+  position: absolute;
+  top: 12px;
+  left: calc(50% + 60px);
+  z-index: 12;
+  border: none;
+  border-radius: 8px;
+  width: 30px;
+  height: 28px;
+  font-size: 14px;
+  background: rgba(68, 68, 68, 0.8);
+  color: #fff;
+}
+
 #hud {
   position: absolute;
   inset: 0;
