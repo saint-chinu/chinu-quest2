@@ -198,6 +198,42 @@
       <div id="spell-effect-modal" class="hidden">
         <p id="spell-effect-text"></p>
       </div>
+      <div id="battle-scene-modal" class="hidden">
+        <div id="battle-fade"></div>
+        <div id="battle-stage">
+          <div id="battle-side-attacker" class="battle-side">
+            <div class="battle-panel">
+              <p id="battle-attacker-owner" class="battle-owner-name"></p>
+              <p class="battle-stat-line">HP <span id="battle-attacker-hp"></span><span id="battle-attacker-hp-bonus" class="battle-bonus hidden"></span></p>
+              <p class="battle-stat-line">ATK <span id="battle-attacker-atk"></span><span id="battle-attacker-atk-bonus" class="battle-bonus hidden"></span></p>
+            </div>
+            <div class="battle-card-wrap">
+              <div id="battle-attacker-card" class="card card-large"></div>
+              <div id="battle-attacker-item" class="battle-item-overlay hidden"></div>
+              <p id="battle-attacker-dmg" class="battle-damage-popup hidden"></p>
+            </div>
+          </div>
+          <div id="battle-vs">VS</div>
+          <div id="battle-side-defender" class="battle-side">
+            <div class="battle-panel">
+              <p id="battle-defender-owner" class="battle-owner-name"></p>
+              <p class="battle-stat-line">HP <span id="battle-defender-hp"></span><span id="battle-defender-hp-bonus" class="battle-bonus hidden"></span></p>
+              <p class="battle-stat-line">ATK <span id="battle-defender-atk"></span><span id="battle-defender-atk-bonus" class="battle-bonus hidden"></span></p>
+            </div>
+            <div class="battle-card-wrap">
+              <div id="battle-defender-card" class="card card-large"></div>
+              <div id="battle-defender-item" class="battle-item-overlay hidden"></div>
+              <p id="battle-defender-dmg" class="battle-damage-popup hidden"></p>
+            </div>
+          </div>
+        </div>
+        <div id="battle-item-picker-box" class="hidden">
+          <p id="battle-item-picker-title"></p>
+          <div id="battle-item-picker-choices"></div>
+          <button id="battle-item-picker-skip">使わない</button>
+        </div>
+        <p id="battle-outcome-text" class="hidden"></p>
+      </div>
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

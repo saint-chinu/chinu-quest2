@@ -73,6 +73,38 @@ const centerPanel = document.getElementById('center-panel');
 const centerHandEl = document.getElementById('center-hand');
 const spellEffectModal = document.getElementById('spell-effect-modal');
 const spellEffectText = document.getElementById('spell-effect-text');
+const battleSceneModal = document.getElementById('battle-scene-modal');
+const battleFade = document.getElementById('battle-fade');
+const battleStage = document.getElementById('battle-stage');
+const battleSide = {
+  attacker: {
+    owner: document.getElementById('battle-attacker-owner'),
+    hp: document.getElementById('battle-attacker-hp'),
+    hpBonus: document.getElementById('battle-attacker-hp-bonus'),
+    atk: document.getElementById('battle-attacker-atk'),
+    atkBonus: document.getElementById('battle-attacker-atk-bonus'),
+    card: document.getElementById('battle-attacker-card'),
+    item: document.getElementById('battle-attacker-item'),
+    dmg: document.getElementById('battle-attacker-dmg'),
+    el: document.getElementById('battle-side-attacker'),
+  },
+  defender: {
+    owner: document.getElementById('battle-defender-owner'),
+    hp: document.getElementById('battle-defender-hp'),
+    hpBonus: document.getElementById('battle-defender-hp-bonus'),
+    atk: document.getElementById('battle-defender-atk'),
+    atkBonus: document.getElementById('battle-defender-atk-bonus'),
+    card: document.getElementById('battle-defender-card'),
+    item: document.getElementById('battle-defender-item'),
+    dmg: document.getElementById('battle-defender-dmg'),
+    el: document.getElementById('battle-side-defender'),
+  },
+};
+const battleItemPickerBox = document.getElementById('battle-item-picker-box');
+const battleItemPickerTitle = document.getElementById('battle-item-picker-title');
+const battleItemPickerChoices = document.getElementById('battle-item-picker-choices');
+const battleItemPickerSkip = document.getElementById('battle-item-picker-skip');
+const battleOutcomeText = document.getElementById('battle-outcome-text');
 
 const BLINK_MS = 600;
 
@@ -702,6 +734,141 @@ function promptSpellUse(card) {
   });
 }
 
+const BATTLE_FADE_MS = 450;
+const BATTLE_STAGE_REVEAL_MS = 450;
+const BATTLE_ATTACK_ANIM_MS = 900;
+const BATTLE_OUTCOME_HOLD_MS = 1600;
+const BATTLE_FADE_OUT_MS = 450;
+
+/** Resets one side's panel/card/item-overlay/damage-popup to a fresh state and fills in this battle's base stats + bonuses. */
+function renderBattleStat(sideEls, data) {
+  sideEls.owner.textContent = data.ownerName;
+  sideEls.hp.textContent = data.hp;
+  sideEls.atk.textContent = data.atk;
+  sideEls.hpBonus.classList.toggle('hidden', !(data.elementHp > 0));
+  if (data.elementHp > 0) sideEls.hpBonus.textContent = `+${data.elementHp}`;
+  sideEls.atkBonus.classList.toggle('hidden', !(data.cheerAtk > 0));
+  if (data.cheerAtk > 0) sideEls.atkBonus.textContent = `+${data.cheerAtk}`;
+  renderCardEl(sideEls.card, data.card);
+  sideEls.card.classList.remove('battle-defeated');
+  sideEls.item.classList.add('hidden');
+  sideEls.item.replaceChildren();
+  sideEls.dmg.classList.add('hidden');
+  sideEls.el.classList.remove('battle-attacking', 'battle-hit');
+}
+
+/**
+ * バトルフェーズ開始: 暗転してから攻撃側(左)・防御側(右)のカードと基礎
+ * ステータス（応援/同属性ボーナスは基礎数値の横に＋◯◯で表示）を見せる。
+ * アイテムはまだこの時点では一切表示しない（選択・使用時に初めて出る）。
+ */
+function promptBattleSceneEnter({ attacker, defender }) {
+  return new Promise((resolve) => {
+    battleSceneModal.classList.remove('hidden');
+    battleStage.classList.remove('show');
+    battleOutcomeText.classList.add('hidden');
+    battleFade.classList.remove('show');
+    renderBattleStat(battleSide.attacker, attacker);
+    renderBattleStat(battleSide.defender, defender);
+
+    // Force a reflow so the fade-in transition restarts cleanly even if a
+    // battle scene was still mid-animation from a moment ago.
+    void battleFade.offsetWidth;
+    battleFade.classList.add('show');
+    setTimeout(() => {
+      battleStage.classList.add('show');
+      setTimeout(resolve, BATTLE_STAGE_REVEAL_MS);
+    }, BATTLE_FADE_MS);
+  });
+}
+
+/**
+ * Gear-only hand for this one side; tapping blinks then resolves that
+ * card, "使わない" resolves null. Only ever one picker mounted at a time -
+ * the other side's choice (already made, or not yet made) is never shown
+ * here, which is what keeps each side's pick hidden from the other.
+ */
+function promptPickBattleItem({ hand, side, ownerName, unitName }) {
+  return new Promise((resolve) => {
+    battleItemPickerTitle.textContent =
+      hand.length > 0 ? `${ownerName}の${unitName}: 使うアイテムを選んでください` : `${ownerName}の${unitName}: アイテムがありません`;
+    battleItemPickerChoices.replaceChildren();
+    for (const card of hand) {
+      const el = document.createElement('div');
+      el.className = 'card';
+      renderCardEl(el, card);
+      el.addEventListener('click', () => {
+        el.classList.add('blinking');
+        setTimeout(() => cleanup(card), BLINK_MS);
+      });
+      battleItemPickerChoices.appendChild(el);
+    }
+    battleItemPickerBox.classList.remove('hidden');
+
+    function cleanup(result) {
+      battleItemPickerBox.classList.add('hidden');
+      battleItemPickerSkip.removeEventListener('click', onSkip);
+      resolve(result);
+    }
+    function onSkip() {
+      cleanup(null);
+    }
+    battleItemPickerSkip.addEventListener('click', onSkip);
+  });
+}
+
+/**
+ * One side's strike: its item (if used) appears at 1/4 size over its own
+ * card's top-left corner, the target's card flashes/shakes and shows the
+ * damage dealt, then the target's displayed HP updates to match.
+ */
+function promptBattleAttack({ side, item, damage, targetHp, targetDied }) {
+  return new Promise((resolve) => {
+    const attackerEls = battleSide[side];
+    const targetEls = battleSide[side === 'attacker' ? 'defender' : 'attacker'];
+
+    if (item) {
+      const el = document.createElement('div');
+      el.className = 'card';
+      renderCardEl(el, item);
+      attackerEls.item.replaceChildren(el);
+      attackerEls.item.classList.remove('hidden');
+    }
+
+    setTimeout(() => {
+      attackerEls.el.classList.add('battle-attacking');
+      targetEls.el.classList.add('battle-hit');
+      targetEls.dmg.textContent = `-${damage}`;
+      targetEls.dmg.classList.remove('hidden');
+      targetEls.hp.textContent = Math.max(targetHp, 0);
+      if (targetDied) targetEls.card.classList.add('battle-defeated');
+
+      setTimeout(() => {
+        attackerEls.el.classList.remove('battle-attacking');
+        targetEls.el.classList.remove('battle-hit');
+        targetEls.dmg.classList.add('hidden');
+        resolve();
+      }, BATTLE_ATTACK_ANIM_MS / 2);
+    }, BATTLE_ATTACK_ANIM_MS / 2);
+  });
+}
+
+/** "〇〇の□□は土地を奪った/守った" - holds, then fades the whole battle scene back out to the board. */
+function promptBattleOutcome({ won, ownerName, unitName }) {
+  return new Promise((resolve) => {
+    battleOutcomeText.textContent = `${ownerName}の${unitName}は${won ? '土地を奪った' : '土地を守った'}`;
+    battleOutcomeText.classList.remove('hidden');
+    setTimeout(() => {
+      battleStage.classList.remove('show');
+      battleFade.classList.remove('show');
+      setTimeout(() => {
+        battleSceneModal.classList.add('hidden');
+        resolve();
+      }, BATTLE_FADE_OUT_MS);
+    }, BATTLE_OUTCOME_HOLD_MS);
+  });
+}
+
 /** "「card.name」を捨てますか？" yes/no, reusing the same confirm modal as land-command actions. */
 /** Generic はい/いいえ confirm, reusing the same confirm-modal DOM as land-command actions (never active at the same time as those). */
 function confirmYesNo(text) {
@@ -951,6 +1118,10 @@ function startBattle(character) {
     onPickMoveDirection: promptMoveDirection,
     onPickElement: promptPickElement,
     onShopPurchase: promptShopPurchase,
+    onBattleSceneEnter: promptBattleSceneEnter,
+    onPickBattleItem: promptPickBattleItem,
+    onBattleAttack: promptBattleAttack,
+    onBattleOutcome: promptBattleOutcome,
     humanPlayer: character
       ? {
           name: character.name,

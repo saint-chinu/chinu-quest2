@@ -81,12 +81,17 @@ export class GoldLedger {
 }
 
 /**
- * One-round simultaneous battle: both units deal damage based on their
- * pre-battle stats, then survival/ability triggers resolve off the damage
- * actually dealt. Items are consumed regardless of outcome; curses persist
- * unless their unit died. `attackerBonus`/`defenderBonus` ({atk, hp}) carry
- * this battle's 同属性ボーナス/応援ボーナス (see Game._elementHpBonus /
- * Game._cheerAtkBonus) - purely situational, never stored on the unit.
+ * Sequential single exchange: the attacker strikes first; only if the
+ * defender survives that hit does it get to strike back. A defender killed
+ * outright never counters, so the attacker takes zero damage in that case
+ * (this is why "mutual destruction" can no longer happen in ordinary
+ * combat - it would need a special ability that damages the attacker
+ * outside of a counter-attack, none of which exist yet). Unless a future
+ * special grants 先制/後攻, the attacker always goes first. Items are
+ * consumed regardless of outcome; curses persist unless their unit died.
+ * `attackerBonus`/`defenderBonus` ({atk, hp}) carry this battle's 同属性
+ * ボーナス/応援ボーナス (see Game._elementHpBonus/Game._cheerAtkBonus) -
+ * purely situational, never stored on the unit.
  */
 export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defenderBonus = {}) {
   const log = [];
@@ -98,10 +103,10 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   );
 
   const dmgToDefender = dealDamage(attacker, defender, log, attackerBonus);
-  const dmgToAttacker = dealDamage(defender, attacker, log, defenderBonus);
-
-  const attackerSurvived = attacker.currentHp > 0;
   const defenderSurvived = defender.currentHp > 0;
+
+  const dmgToAttacker = defenderSurvived ? dealDamage(defender, attacker, log, defenderBonus) : 0;
+  const attackerSurvived = attacker.currentHp > 0;
 
   if (catalogIdOf(attacker.def) === 'minatoJoshi' && dmgToDefender > 0) {
     gold.transfer(defender.ownerId, attacker.ownerId, dmgToDefender);

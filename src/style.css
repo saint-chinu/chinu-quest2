@@ -1000,3 +1000,231 @@ html, body {
   height: 97px;
   font-size: 11px;
 }
+
+/* ---- バトルフェーズ (戦闘シーン) ---- */
+#battle-scene-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#battle-scene-modal.hidden {
+  display: none;
+}
+
+#battle-fade {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  opacity: 0;
+  transition: opacity 450ms ease;
+}
+
+#battle-fade.show {
+  opacity: 0.94;
+}
+
+#battle-stage {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+  opacity: 0;
+  transform: scale(0.96);
+  transition: opacity 450ms ease, transform 450ms ease;
+}
+
+#battle-stage.show {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.battle-side {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #fff;
+}
+
+.battle-panel {
+  text-align: center;
+}
+
+.battle-owner-name {
+  font-size: 15px;
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.battle-stat-line {
+  font-size: 14px;
+}
+
+.battle-bonus {
+  color: #6ee7a0;
+  font-weight: bold;
+  margin-left: 4px;
+}
+
+.battle-bonus.hidden {
+  display: none;
+}
+
+.battle-card-wrap {
+  position: relative;
+}
+
+.battle-side .card-large {
+  transition: transform 200ms ease, filter 200ms ease;
+}
+
+.battle-attacking .card-large {
+  transform: scale(1.08) translateY(-6px);
+}
+
+.battle-hit .card-large {
+  animation: battle-shake 400ms ease;
+}
+
+@keyframes battle-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+}
+
+.card-large.battle-defeated {
+  filter: grayscale(1) brightness(0.5);
+}
+
+.battle-item-overlay {
+  position: absolute;
+  top: -8px;
+  left: -8px;
+  width: 35px;
+  height: 49px;
+  z-index: 2;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.6));
+}
+
+.battle-item-overlay.hidden {
+  display: none;
+}
+
+.battle-item-overlay .card {
+  width: 35px;
+  height: 49px;
+  font-size: 6px;
+  padding: 1px;
+}
+
+.battle-damage-popup {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 26px;
+  font-weight: bold;
+  color: #ff6b6b;
+  text-shadow: 0 2px 6px rgba(0, 0, 0, 0.8);
+  z-index: 3;
+  animation: battle-dmg-pop 900ms ease forwards;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.battle-damage-popup.hidden {
+  display: none;
+}
+
+@keyframes battle-dmg-pop {
+  0% { opacity: 0; transform: translate(-50%, -30%); }
+  30% { opacity: 1; transform: translate(-50%, -60%); }
+  100% { opacity: 0; transform: translate(-50%, -90%); }
+}
+
+#battle-vs {
+  font-size: 28px;
+  font-weight: bold;
+  color: #fff;
+  opacity: 0.6;
+}
+
+#battle-item-picker-box {
+  position: absolute;
+  z-index: 4;
+  bottom: 8%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #22223b;
+  border-radius: 12px;
+  padding: 16px 22px;
+  text-align: center;
+  color: #fff;
+  max-width: 90%;
+}
+
+#battle-item-picker-box.hidden {
+  display: none;
+}
+
+#battle-item-picker-title {
+  font-size: 13px;
+  margin-bottom: 10px;
+}
+
+#battle-item-picker-choices {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+  margin-bottom: 10px;
+  max-height: 30vh;
+  overflow-y: auto;
+}
+
+#battle-item-picker-choices .card {
+  cursor: pointer;
+  width: 60px;
+  height: 84px;
+  font-size: 10px;
+}
+
+#battle-item-picker-skip {
+  border: none;
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: bold;
+  background: #555;
+  color: #fff;
+}
+
+#battle-outcome-text {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 22px;
+  font-weight: bold;
+  color: #ffd166;
+  text-align: center;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.5);
+  padding: 16px 28px;
+  border-radius: 12px;
+  white-space: nowrap;
+}
+
+#battle-outcome-text.hidden {
+  display: none;
+}

@@ -2,7 +2,7 @@ import { TileType } from './board.js';
 import { PIECE_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck } from './cards.js';
 import { buildStarterExtraCards } from './battleCards.js';
-import { createFieldUnit, resolveBattle } from './battle.js';
+import { createFieldUnit, resolveBattle, equipItem } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay } from './utils.js';
 
@@ -69,6 +69,10 @@ export class Game {
     onPickMoveDirection,
     onPickElement,
     onShopPurchase,
+    onBattleSceneEnter,
+    onPickBattleItem,
+    onBattleAttack,
+    onBattleOutcome,
     humanPlayer,
   }) {
     this.tiles = tiles;
@@ -91,6 +95,10 @@ export class Game {
     this.onPickMoveDirection = onPickMoveDirection;
     this.onPickElement = onPickElement;
     this.onShopPurchase = onShopPurchase;
+    this.onBattleSceneEnter = onBattleSceneEnter;
+    this.onPickBattleItem = onPickBattleItem;
+    this.onBattleAttack = onBattleAttack;
+    this.onBattleOutcome = onBattleOutcome;
     // A canvas cropped from the player-icon sheet (see iconSheet.js) for
     // the human player's board piece - null falls back to the plain
     // colored-circle token (always true for CPU, which has no character).
@@ -322,7 +330,12 @@ export class Game {
     });
   }
 
-  /** ② Goal/checkpoint/shop handling, plus the toll auto-charge for stopping on someone else's land. */
+  /**
+   * ② Goal/checkpoint/shop handling. Landing on someone else's land no
+   * longer charges the toll here immediately - it's deferred until the
+   * land command resolves (see _settleLandingToll), since a successful
+   * invasion waives it entirely.
+   */
   async _resolveSpecialTile(player) {
     const tile = this.tiles[player.tileId];
 
@@ -333,12 +346,6 @@ export class Game {
       this.onLog(`${player.name}はチェックポイントに止まった`);
     } else if (tile.type === TileType.SHOP) {
       await this._resolveShopTile(player);
-    } else if (tile.type === TileType.LAND && tile.owner != null && tile.owner !== player.id) {
-      const owner = this.players.find((p) => p.id === tile.owner);
-      const toll = this._tollOfTile(tile);
-      player.currency -= toll;
-      owner.currency += toll;
-      this.onLog(`${player.name}は通行料を支払った (-${toll}G → ${owner.name})`);
     }
 
     await delay(200);
@@ -377,15 +384,18 @@ export class Game {
    * player landed exactly on START/EVENT, to every tile they own (見た目
    * 上の「本拠地」扱い). Both 召喚 and any browse action that actually
    * commits end the turn immediately; a cancelled action just loops back
-   * to this menu.
+   * to this menu. Whatever happens, _settleLandingToll runs exactly once
+   * right before the turn actually ends (see its own doc comment).
    */
   async _runLandCommand(player) {
     const tile = this.tiles[player.tileId];
     const isAdmin = tile.type === TileType.START || tile.type === TileType.EVENT;
+    const owesTollUnlessConquered = tile.type === TileType.LAND && tile.owner != null && tile.owner !== player.id;
     if (tile.type !== TileType.LAND && !isAdmin) return;
 
     if (player.isCPU) {
       if (tile.type === TileType.LAND) await this._cpuLandCommand(player, tile);
+      this._settleLandingToll(player, tile, owesTollUnlessConquered);
       return;
     }
 
@@ -393,19 +403,39 @@ export class Game {
       const choice = await this.onLandCommand(this.getTileSummary(tile), {
         canSummon: tile.type === TileType.LAND && this._affordableMonsterCards(player).length > 0,
       });
-      if (choice === 'end') return;
+      if (choice === 'end') break;
 
       if (choice === 'summon') {
-        if (await this._humanSummonFlow(player, tile)) return;
+        if (await this._humanSummonFlow(player, tile)) break;
       } else if (choice === 'land') {
         const candidateIds = isAdmin ? this._ownedTiles(player).map((t) => t.id) : [...this._turnPathIds];
         if (candidateIds.length === 0) {
           this.onLog('選択できる土地がありません');
           continue;
         }
-        if (await this._runLandBrowse(player, candidateIds)) return;
+        if (await this._runLandBrowse(player, candidateIds)) break;
       }
     }
+    this._settleLandingToll(player, tile, owesTollUnlessConquered);
+  }
+
+  /**
+   * 通行料は「敵地に足を踏み入れたのに、結局そこを奪えなかった」ことへの
+   * 代償という扱いに変更（旧仕様は着地した瞬間に無条件徴収していた）。
+   * このターンの土地コマンドが終わる瞬間に一度だけ判定する: 侵略に成功して
+   * 自分の土地になっていれば免除、相打ちで無人地になっていても（払う相手が
+   * もういないので）免除、それ以外（防衛成功、または侵略を試みなかった）
+   * は今まで通り徴収する。
+   */
+  _settleLandingToll(player, tile, owesTollUnlessConquered) {
+    if (!owesTollUnlessConquered) return;
+    if (tile.owner == null || tile.owner === player.id) return;
+    const owner = this.players.find((p) => p.id === tile.owner);
+    const toll = this._tollOfTile(tile);
+    player.currency -= toll;
+    owner.currency += toll;
+    this.onLog(`${player.name}は通行料を支払った (-${toll}G → ${owner.name})`);
+    this._notifyState();
   }
 
   /**
@@ -611,10 +641,7 @@ export class Game {
     } else {
       const defenderPlayer = this.players.find((p) => p.id === targetTile.owner);
       const defenderUnit = targetTile.unit;
-      const attackerBonus = this._battleBonus(attackerUnit, tile, targetTile);
-      const defenderBonus = this._battleBonus(defenderUnit, targetTile, targetTile);
-      const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, defenderBonus);
-      result.log.forEach((line) => this.onLog(line));
+      const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, tile, targetTile);
 
       if (result.attackerSurvived && !result.defenderSurvived) {
         targetTile.unit = attackerUnit;
@@ -701,14 +728,125 @@ export class Game {
     return { atk, hp };
   }
 
+  /** Base ATK/HP as shown on the battle-scene stat panel: def stats plus any永続 curses, but NOT items or the situational cheer/element bonuses (those are surfaced separately - see _runBattleScene). */
+  _baseStats(unit) {
+    const curseAtk = unit.curses.reduce((sum, c) => sum + (c.addedAtk || 0), 0);
+    const curseHp = unit.curses.reduce((sum, c) => sum + (c.addedHp || 0), 0);
+    return { atk: unit.def.atk + curseAtk, hp: unit.def.hp + curseHp };
+  }
+
+  /** CPU never deliberates over an item pick - just grabs its first (if any), same "pick the obvious option instantly" spirit as _cpuLandCommand. */
+  _cpuPickBattleItem(player) {
+    return player.hand.find((c) => c.type === CardType.GEAR) || null;
+  }
+
+  /** Equips + permanently consumes the chosen item (removed from hand, discarded) - a no-op if the side skipped. */
+  _consumeBattleItem(player, unit, item) {
+    if (!item) return;
+    equipItem(unit, item);
+    player.hand = player.hand.filter((c) => c.id !== item.id);
+    player.deck.discard(item);
+  }
+
+  /**
+   * Full battle-scene choreography, shared by both invasion entry points
+   * (landing-invasion via _runInvasion, and the 移動 command's invasion
+   * branch): fade in → reveal base stats + situational bonuses for both
+   * sides → each side secretly picks an item (CPU sides never pause; a
+   * human side never sees what the OTHER side already picked, since that
+   * pick already happened silently or its own picker already closed) →
+   * resolveBattle → attacker's strike animation, then the defender's
+   * counter-strike animation only if it survived to make one (see
+   * battle.js's sequential resolution) → outcome message. Returns the
+   * resolveBattle result so callers still own the tile-ownership mutations
+   * (that part differs between straight invasion and move-invasion).
+   */
+  async _runBattleScene(attackerUnit, attackerPlayer, defenderUnit, defenderPlayer, attackerPositionTile, battleTile) {
+    const attackerBase = this._baseStats(attackerUnit);
+    const defenderBase = this._baseStats(defenderUnit);
+    const attackerBonus = this._battleBonus(attackerUnit, attackerPositionTile, battleTile);
+    const defenderBonus = this._battleBonus(defenderUnit, battleTile, battleTile);
+
+    await this.onBattleSceneEnter({
+      attacker: {
+        card: attackerUnit.def,
+        name: attackerUnit.def.name,
+        ownerName: attackerPlayer.name,
+        atk: attackerBase.atk,
+        hp: attackerBase.hp,
+        cheerAtk: attackerBonus.atk,
+        elementHp: attackerBonus.hp,
+        element: attackerPositionTile?.element ?? null,
+      },
+      defender: {
+        card: defenderUnit.def,
+        name: defenderUnit.def.name,
+        ownerName: defenderPlayer.name,
+        atk: defenderBase.atk,
+        hp: defenderBase.hp,
+        cheerAtk: defenderBonus.atk,
+        elementHp: defenderBonus.hp,
+        element: battleTile.element,
+      },
+    });
+
+    const attackerItem = attackerPlayer.isCPU
+      ? this._cpuPickBattleItem(attackerPlayer)
+      : await this.onPickBattleItem({
+          hand: attackerPlayer.hand.filter((c) => c.type === CardType.GEAR),
+          side: 'attacker',
+          ownerName: attackerPlayer.name,
+          unitName: attackerUnit.def.name,
+        });
+    this._consumeBattleItem(attackerPlayer, attackerUnit, attackerItem);
+
+    const defenderItem = defenderPlayer.isCPU
+      ? this._cpuPickBattleItem(defenderPlayer)
+      : await this.onPickBattleItem({
+          hand: defenderPlayer.hand.filter((c) => c.type === CardType.GEAR),
+          side: 'defender',
+          ownerName: defenderPlayer.name,
+          unitName: defenderUnit.def.name,
+        });
+    this._consumeBattleItem(defenderPlayer, defenderUnit, defenderItem);
+
+    const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, defenderBonus);
+    result.log.forEach((line) => this.onLog(line));
+
+    await this.onBattleAttack({
+      side: 'attacker',
+      item: attackerItem,
+      damage: result.dmgToDefender,
+      targetHp: Math.max(defenderUnit.currentHp, 0),
+      targetMaxHp: defenderBase.hp + defenderBonus.hp,
+      targetDied: !result.defenderSurvived,
+    });
+    if (result.defenderSurvived) {
+      await this.onBattleAttack({
+        side: 'defender',
+        item: defenderItem,
+        damage: result.dmgToAttacker,
+        targetHp: Math.max(attackerUnit.currentHp, 0),
+        targetMaxHp: attackerBase.hp + attackerBonus.hp,
+        targetDied: !result.attackerSurvived,
+      });
+    }
+
+    const won = result.attackerSurvived && !result.defenderSurvived;
+    await this.onBattleOutcome({
+      won,
+      ownerName: won ? attackerPlayer.name : defenderPlayer.name,
+      unitName: won ? attackerUnit.def.name : defenderUnit.def.name,
+    });
+
+    return result;
+  }
+
   async _runInvasion(player, tile, card) {
     const defenderPlayer = this.players.find((p) => p.id === tile.owner);
     const attackerUnit = createFieldUnit(card, player.id);
     const defenderUnit = tile.unit;
-    const attackerBonus = this._battleBonus(attackerUnit, null, tile);
-    const defenderBonus = this._battleBonus(defenderUnit, tile, tile);
-    const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, defenderBonus);
-    result.log.forEach((line) => this.onLog(line));
+    const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, null, tile);
 
     if (!result.defenderSurvived) {
       if (result.attackerSurvived) {
