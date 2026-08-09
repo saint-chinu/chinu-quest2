@@ -611,7 +611,9 @@ export class Game {
     } else {
       const defenderPlayer = this.players.find((p) => p.id === targetTile.owner);
       const defenderUnit = targetTile.unit;
-      const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter());
+      const attackerBonus = this._battleBonus(attackerUnit, tile, targetTile);
+      const defenderBonus = this._battleBonus(defenderUnit, targetTile, targetTile);
+      const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, defenderBonus);
       result.log.forEach((line) => this.onLog(line));
 
       if (result.attackerSurvived && !result.defenderSurvived) {
@@ -664,11 +666,48 @@ export class Game {
     this._notifyState();
   }
 
+  /**
+   * 同属性ボーナス: 自分の土地に配置されているモンスターは、土地と同じ
+   * 属性なら土地レベル×10（最大50）だけHPが増える。`positionTile` は
+   * このモンスターが「今立っている」土地 - 手札から召喚したばかりの
+   * 侵略側にはそもそも該当する土地が無いので null を渡す（ボーナス無し）。
+   */
+  _elementHpBonus(unit, positionTile) {
+    if (!positionTile || positionTile.owner !== unit.ownerId) return 0;
+    if (positionTile.element !== unit.def.element) return 0;
+    return Math.min(positionTile.level * 10, 50);
+  }
+
+  /**
+   * 応援ボーナス: 戦闘地（battleTile）に隣接するマスに同じ所有者の別
+   * モンスターがいればATK+10。攻撃側・防御側どちらにも同じ判定を使う
+   * （`unit !== t.unit` は移動コマンドで自分の元いた土地が戦闘地の隣接
+   * マスに含まれてしまう＝自分自身を援護扱いしないための除外）。
+   */
+  _cheerAtkBonus(unit, battleTile) {
+    const hasAlly = battleTile.neighbors.some((id) => {
+      const t = this.tiles[id];
+      return t.unit != null && t.unit !== unit && t.unit.ownerId === unit.ownerId;
+    });
+    return hasAlly ? 10 : 0;
+  }
+
+  /** Bundles both situational bonuses into the {atk,hp} shape resolveBattle expects, logging whichever actually apply. */
+  _battleBonus(unit, positionTile, battleTile) {
+    const hp = this._elementHpBonus(unit, positionTile);
+    const atk = this._cheerAtkBonus(unit, battleTile);
+    if (hp > 0) this.onLog(`${unit.def.name}は${ELEMENT_LABEL[positionTile.element]}の土地でHP+${hp}`);
+    if (atk > 0) this.onLog(`${unit.def.name}は応援を受けてATK+10`);
+    return { atk, hp };
+  }
+
   async _runInvasion(player, tile, card) {
     const defenderPlayer = this.players.find((p) => p.id === tile.owner);
     const attackerUnit = createFieldUnit(card, player.id);
     const defenderUnit = tile.unit;
-    const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter());
+    const attackerBonus = this._battleBonus(attackerUnit, null, tile);
+    const defenderBonus = this._battleBonus(defenderUnit, tile, tile);
+    const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, defenderBonus);
     result.log.forEach((line) => this.onLog(line));
 
     if (!result.defenderSurvived) {

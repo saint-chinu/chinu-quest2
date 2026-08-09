@@ -24,20 +24,24 @@ export function applyCurse(unit, spellDef) {
   });
 }
 
-function statTotals(unit) {
+// `bonus` carries battle-context modifiers the unit itself doesn't know
+// about (同属性ボーナス's land-level HP, 応援's adjacent-ally ATK) - the
+// caller (Game, which has the board) computes these per-battle and passes
+// them in, same shape as items/curses but never persisted on the unit.
+function statTotals(unit, bonus = {}) {
   const itemAtk = unit.items.reduce((sum, i) => sum + (i.atkBonus || 0), 0);
   const itemHp = unit.items.reduce((sum, i) => sum + (i.hpBonus || 0), 0);
   const curseAtk = unit.curses.reduce((sum, c) => sum + (c.addedAtk || 0), 0);
   const curseHp = unit.curses.reduce((sum, c) => sum + (c.addedHp || 0), 0);
   return {
-    atk: unit.def.atk + curseAtk + itemAtk,
-    maxHp: unit.def.hp + curseHp + itemHp,
+    atk: unit.def.atk + curseAtk + itemAtk + (bonus.atk || 0),
+    maxHp: unit.def.hp + curseHp + itemHp + (bonus.hp || 0),
   };
 }
 
 /** Call once right before a battle to lock in this fight's max HP. */
-export function prepareForBattle(unit) {
-  unit.currentHp = statTotals(unit).maxHp;
+export function prepareForBattle(unit, bonus = {}) {
+  unit.currentHp = statTotals(unit, bonus).maxHp;
 }
 
 // Per-monster incoming-damage multiplier. Only 港区女子 has a declared
@@ -53,8 +57,8 @@ function incomingDamageMultiplier(defenderUnit, attackerElement) {
   return isWeaknessHit ? 1.2 : 1.0;
 }
 
-function dealDamage(attacker, defender, log) {
-  const atkStats = statTotals(attacker);
+function dealDamage(attacker, defender, log, attackerBonus) {
+  const atkStats = statTotals(attacker, attackerBonus);
   const multiplier = incomingDamageMultiplier(defender, attacker.def.element);
   const damage = Math.round(atkStats.atk * multiplier);
   defender.currentHp -= damage;
@@ -80,19 +84,21 @@ export class GoldLedger {
  * One-round simultaneous battle: both units deal damage based on their
  * pre-battle stats, then survival/ability triggers resolve off the damage
  * actually dealt. Items are consumed regardless of outcome; curses persist
- * unless their unit died.
+ * unless their unit died. `attackerBonus`/`defenderBonus` ({atk, hp}) carry
+ * this battle's 同属性ボーナス/応援ボーナス (see Game._elementHpBonus /
+ * Game._cheerAtkBonus) - purely situational, never stored on the unit.
  */
-export function resolveBattle(attacker, defender, gold) {
+export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defenderBonus = {}) {
   const log = [];
-  prepareForBattle(attacker);
-  prepareForBattle(defender);
+  prepareForBattle(attacker, attackerBonus);
+  prepareForBattle(defender, defenderBonus);
   log.push(
-    `${attacker.def.name}(ATK${statTotals(attacker).atk}/HP${attacker.currentHp}) vs ` +
-      `${defender.def.name}(ATK${statTotals(defender).atk}/HP${defender.currentHp})`
+    `${attacker.def.name}(ATK${statTotals(attacker, attackerBonus).atk}/HP${attacker.currentHp}) vs ` +
+      `${defender.def.name}(ATK${statTotals(defender, defenderBonus).atk}/HP${defender.currentHp})`
   );
 
-  const dmgToDefender = dealDamage(attacker, defender, log);
-  const dmgToAttacker = dealDamage(defender, attacker, log);
+  const dmgToDefender = dealDamage(attacker, defender, log, attackerBonus);
+  const dmgToAttacker = dealDamage(defender, attacker, log, defenderBonus);
 
   const attackerSurvived = attacker.currentHp > 0;
   const defenderSurvived = defender.currentHp > 0;
