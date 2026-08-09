@@ -479,11 +479,11 @@ html, body {
   position: absolute;
   top: 2px;
   left: 2px;
-  font-size: 21px;
+  font-size: 15px;
   font-weight: bold;
   line-height: 1;
   color: #101018;
-  padding: 2px 5px;
+  padding: 1px 4px;
   border-radius: 4px;
 }
 
@@ -491,7 +491,7 @@ html, body {
   position: absolute;
   top: 1px;
   right: 2px;
-  font-size: 30px;
+  font-size: 21px;
   line-height: 1;
 }
 
@@ -500,12 +500,12 @@ html, body {
 }
 
 .card-large .card-rarity {
-  font-size: 33px;
-  padding: 4px 10px;
+  font-size: 23px;
+  padding: 3px 7px;
 }
 
 .card-large .card-type-icon {
-  font-size: 54px;
+  font-size: 38px;
 }
 
 #hand-panel .card {
