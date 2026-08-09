@@ -61,10 +61,12 @@ export class Game {
     onLandCommand,
     onPickMonsterCard,
     onConfirmAction,
-    onTileInfo,
-    onPickLandForLevelUp,
+    onConfirmMove,
+    onPickBrowseTile,
+    onLandSubmenu,
+    onShowTileInfo,
     onChooseBranch,
-    onPickLandForElementChange,
+    onPickMoveDirection,
     onPickElement,
     onShopPurchase,
     humanPlayer,
@@ -81,10 +83,12 @@ export class Game {
     this.onLandCommand = onLandCommand;
     this.onPickMonsterCard = onPickMonsterCard;
     this.onConfirmAction = onConfirmAction;
-    this.onTileInfo = onTileInfo;
-    this.onPickLandForLevelUp = onPickLandForLevelUp;
+    this.onConfirmMove = onConfirmMove;
+    this.onPickBrowseTile = onPickBrowseTile;
+    this.onLandSubmenu = onLandSubmenu;
+    this.onShowTileInfo = onShowTileInfo;
     this.onChooseBranch = onChooseBranch;
-    this.onPickLandForElementChange = onPickLandForElementChange;
+    this.onPickMoveDirection = onPickMoveDirection;
     this.onPickElement = onPickElement;
     this.onShopPurchase = onShopPurchase;
     // A canvas cropped from the player-icon sheet (see iconSheet.js) for
@@ -120,6 +124,11 @@ export class Game {
     this.currentPlayerIndex = 0;
     this.isBusy = false;
     this.tilesSincePan = 0;
+    // Tile ids stepped onto during the current dice roll (landing tile
+    // included, the tile moved FROM excluded) - reset at the start of each
+    // _movePlayer call. Powers 土地コマンド's "土地" browse, which is
+    // normally scoped to just this turn's path (see _runLandCommand).
+    this._turnPathIds = [];
     // True from the moment a turn's draw finishes until the dice is
     // rolled - the window where the center hand+dice is shown and a
     // spell may be used.
@@ -249,6 +258,7 @@ export class Game {
    * once at game start.
    */
   async _movePlayer(player, steps) {
+    this._turnPathIds = [];
     for (let i = 0; i < steps; i++) {
       const fromTile = this.tiles[player.tileId];
       const forward = fromTile.neighbors.filter((id) => id !== player.previousTileId);
@@ -258,6 +268,7 @@ export class Game {
       const toTile = this.tiles[nextId];
       player.previousTileId = player.tileId;
       player.tileId = nextId;
+      this._turnPathIds.push(nextId);
       await this._stepWithCamera(player, fromTile.position, toTile.position);
 
       if (toTile.type === TileType.START && i < steps - 1) {
@@ -359,38 +370,79 @@ export class Game {
   }
 
   /**
-   * ③ The summon/invade/swap, level-up, and info menu for whichever land
-   * tile was landed on. Summon/invade/swap and level-up both end the turn
-   * as soon as they actually go through; info just loops back to the menu
-   * (nothing about it commits to anything), and so does a cancelled action.
+   * ③ The 3-button 召喚(/侵略)・土地・終了 menu for whichever tile was
+   * landed on. 召喚 acts on the CURRENT tile only (summon/invade/swap,
+   * exactly like before); 土地 opens the tile-browse sub-flow (see
+   * _runLandBrowse) scoped to this turn's traversed path - or, if the
+   * player landed exactly on START/EVENT, to every tile they own (見た目
+   * 上の「本拠地」扱い). Both 召喚 and any browse action that actually
+   * commits end the turn immediately; a cancelled action just loops back
+   * to this menu.
    */
   async _runLandCommand(player) {
     const tile = this.tiles[player.tileId];
-    if (tile.type !== TileType.LAND) return;
+    const isAdmin = tile.type === TileType.START || tile.type === TileType.EVENT;
+    if (tile.type !== TileType.LAND && !isAdmin) return;
 
     if (player.isCPU) {
-      await this._cpuLandCommand(player, tile);
+      if (tile.type === TileType.LAND) await this._cpuLandCommand(player, tile);
       return;
     }
 
     for (;;) {
       const choice = await this.onLandCommand(this.getTileSummary(tile), {
-        canSummon: this._affordableMonsterCards(player).length > 0,
-        canLevelUp: this._levelableTiles(player).length > 0,
-        canChangeElement: this._ownedTiles(player).length > 0,
+        canSummon: tile.type === TileType.LAND && this._affordableMonsterCards(player).length > 0,
       });
       if (choice === 'end') return;
 
       if (choice === 'summon') {
         if (await this._humanSummonFlow(player, tile)) return;
-      } else if (choice === 'levelup') {
-        if (await this._humanLevelUpFlow(player)) return;
-      } else if (choice === 'element') {
-        if (await this._humanChangeElementFlow(player)) return;
-      } else if (choice === 'info') {
-        await this.onTileInfo();
+      } else if (choice === 'land') {
+        const candidateIds = isAdmin ? this._ownedTiles(player).map((t) => t.id) : [...this._turnPathIds];
+        if (candidateIds.length === 0) {
+          this.onLog('選択できる土地がありません');
+          continue;
+        }
+        if (await this._runLandBrowse(player, candidateIds)) return;
       }
     }
+  }
+
+  /**
+   * 土地コマンドの「土地」: camera-work over just the candidate tiles
+   * (blinking/highlighted), tapping one either opens the vertical submenu
+   * (own tile with a garrisoned monster) or just shows its info inline
+   * (anything else - handled entirely within onPickBrowseTile, which only
+   * ever resolves once a "mine" tile is tapped or the player backs out).
+   * Returns true once some submenu action actually commits (turn ends);
+   * false if the player backs all the way out to the 3-button menu.
+   */
+  async _runLandBrowse(player, candidateIds) {
+    for (;;) {
+      const summaries = candidateIds.map((id) => this._browseTileSummary(this.tiles[id], player));
+      const pickedId = await this.onPickBrowseTile(summaries);
+      if (pickedId == null) return false;
+
+      const tile = this.tiles[pickedId];
+      for (;;) {
+        const action = await this.onLandSubmenu(this._browseTileSummary(tile, player));
+        if (action == null || action === 'back') break;
+
+        if (action === 'info') {
+          await this.onShowTileInfo(this._browseTileSummary(tile, player));
+          continue;
+        }
+        if (action === 'swap' && (await this._humanSummonFlow(player, tile))) return true;
+        if (action === 'levelup' && (await this._humanLevelUpFlowForTile(player, tile))) return true;
+        if (action === 'element' && (await this._humanChangeElementFlowForTile(player, tile))) return true;
+        if (action === 'move' && (await this._humanMoveFlow(player, tile))) return true;
+        // cancelled sub-action - loop back to the submenu for this same tile
+      }
+    }
+  }
+
+  _browseTileSummary(tile, player) {
+    return { ...this.getTileSummary(tile), isMine: tile.owner === player.id && tile.unit != null };
   }
 
   _affordableMonsterCards(player) {
@@ -399,10 +451,6 @@ export class Game {
 
   _ownedTiles(player) {
     return this.tiles.filter((t) => t.owner === player.id);
-  }
-
-  _levelableTiles(player) {
-    return this._ownedTiles(player).filter((t) => t.level < LEVEL_CAP);
   }
 
   /**
@@ -427,7 +475,13 @@ export class Game {
     return Math.round(this._landValueOfTile(tile) * TOLL_RATE[tile.level]);
   }
 
-  /** Returns true if a summon/invade/swap actually went through (vs. being cancelled). */
+  /**
+   * Returns true if a summon/invade/swap actually went through (vs. being
+   * cancelled). Doubles as the 土地-browse submenu's 入れ替え handler - the
+   * only difference for a 'swap' actionType (tile already owned by this
+   * player) is that the displaced unit's original card goes back to hand
+   * instead of just vanishing.
+   */
   async _humanSummonFlow(player, tile) {
     const options = this._affordableMonsterCards(player);
     if (options.length === 0) {
@@ -447,6 +501,12 @@ export class Game {
     player.currency -= card.cost;
 
     if (actionType === 'summon' || actionType === 'swap') {
+      if (actionType === 'swap' && tile.unit) {
+        player.hand.push({
+          ...tile.unit.def,
+          id: `swap-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        });
+      }
       this._placeUnit(tile, player, card);
       this.onLog(`${player.name}は${card.name}を${actionType === 'summon' ? '召喚' : '入れ替え'}した (-${card.cost}G)`);
     } else {
@@ -456,18 +516,15 @@ export class Game {
     return true;
   }
 
-  /** Returns true if a level-up actually went through (vs. no levelable tiles / cancelled / unaffordable). */
-  async _humanLevelUpFlow(player) {
-    const owned = this._levelableTiles(player);
-    if (owned.length === 0) return false;
+  /** Returns true if a level-up actually went through (vs. maxed out / cancelled / unaffordable). Operates on an already-picked tile (see _runLandBrowse). */
+  async _humanLevelUpFlowForTile(player, tile) {
+    if (tile.level >= LEVEL_CAP) {
+      this.onLog('これ以上レベルアップできません');
+      return false;
+    }
 
-    const targetId = await this.onPickLandForLevelUp(owned.map((t) => this.getTileSummary(t)));
-    if (targetId == null) return false;
-    const target = this.tiles.find((t) => t.id === targetId);
-    if (!target || target.level >= LEVEL_CAP) return false;
-
-    const cost = LEVEL_UP_COST[target.level];
-    const confirmed = await this.onConfirmAction({ actionType: 'levelup', cost, tile: this.getTileSummary(target) });
+    const cost = LEVEL_UP_COST[tile.level];
+    const confirmed = await this.onConfirmAction({ actionType: 'levelup', cost, tile: this.getTileSummary(tile) });
     if (!confirmed) return false;
     if (player.currency < cost) {
       this.onLog('ゴールドが足りません');
@@ -475,31 +532,23 @@ export class Game {
     }
 
     player.currency -= cost;
-    target.level += 1;
-    this.onLog(`${player.name}は土地をLv${target.level}にアップグレードした (-${cost}G)`);
+    tile.level += 1;
+    this.onLog(`${player.name}は土地をLv${tile.level}にアップグレードした (-${cost}G)`);
     this._notifyState();
     return true;
   }
 
-  /** Returns true if an element change actually went through (vs. no owned tiles / cancelled / unaffordable). */
-  async _humanChangeElementFlow(player) {
-    const owned = this._ownedTiles(player);
-    if (owned.length === 0) return false;
-
-    const targetId = await this.onPickLandForElementChange(owned.map((t) => this.getTileSummary(t)));
-    if (targetId == null) return false;
-    const target = this.tiles.find((t) => t.id === targetId);
-    if (!target) return false;
-
-    const newElement = await this.onPickElement(CHANGEABLE_ELEMENTS.filter((e) => e !== target.element));
+  /** Returns true if an element change actually went through (vs. cancelled / unaffordable). Operates on an already-picked tile (see _runLandBrowse). */
+  async _humanChangeElementFlowForTile(player, tile) {
+    const newElement = await this.onPickElement(CHANGEABLE_ELEMENTS.filter((e) => e !== tile.element));
     if (!newElement) return false;
 
-    const rate = target.element === Element.NEUTRAL ? NEUTRAL_ELEMENT_CHANGE_DISCOUNT : 1;
-    const cost = Math.round(ELEMENT_CHANGE_COST_PER_LEVEL * target.level * rate);
+    const rate = tile.element === Element.NEUTRAL ? NEUTRAL_ELEMENT_CHANGE_DISCOUNT : 1;
+    const cost = Math.round(ELEMENT_CHANGE_COST_PER_LEVEL * tile.level * rate);
     const confirmed = await this.onConfirmAction({
       actionType: 'element',
       cost,
-      tile: this.getTileSummary(target),
+      tile: this.getTileSummary(tile),
       targetElement: newElement,
     });
     if (!confirmed) return false;
@@ -509,8 +558,86 @@ export class Game {
     }
 
     player.currency -= cost;
-    target.element = newElement;
+    tile.element = newElement;
     this.onLog(`${player.name}は土地属性を${ELEMENT_LABEL[newElement]}に変更した (-${cost}G)`);
+    this._notifyState();
+    return true;
+  }
+
+  /**
+   * 土地コマンドの「移動」: relocates the tile's garrisoned monster to an
+   * orthogonally-adjacent land that's either empty or enemy-owned. Empty
+   * just relocates outright; enemy triggers a one-round invasion battle
+   * reusing the SAME field-unit object (so equipped curses ride along).
+   * Ownership only ever exists alongside a garrisoned unit - so whichever
+   * tile(s) end up unit-less have owner cleared too, but level is never
+   * touched (see the confirmed 土地レベルは所有権と無関係に保持される
+   * design). Always ends the turn once the player actually commits to a
+   * move, win or lose.
+   */
+  async _humanMoveFlow(player, tile) {
+    const candidates = tile.neighbors
+      .map((id) => this.tiles[id])
+      .filter((t) => t.type === TileType.LAND && (t.owner == null || t.owner !== player.id));
+    if (candidates.length === 0) {
+      this.onLog('移動できる土地がありません');
+      return false;
+    }
+
+    const options = candidates.map((t) => {
+      const dgx = t.gridX - tile.gridX;
+      const dgz = t.gridZ - tile.gridZ;
+      const screenDir = dgx === 1 ? 'downright' : dgx === -1 ? 'upleft' : dgz === 1 ? 'downleft' : 'upright';
+      return { tileId: t.id, screenDir };
+    });
+    const targetId = await this.onPickMoveDirection(options);
+    if (targetId == null) return false;
+    const targetTile = this.tiles.find((t) => t.id === targetId);
+
+    const confirmed = await this.onConfirmMove(this.getTileSummary(targetTile));
+    if (!confirmed) return false;
+
+    const attackerUnit = tile.unit;
+    const attackerName = attackerUnit.def.name;
+
+    if (targetTile.owner == null) {
+      targetTile.unit = attackerUnit;
+      targetTile.owner = player.id;
+      this._paintTile(targetTile, player.color);
+      tile.unit = null;
+      tile.owner = null;
+      this._repaintTileToElement(tile);
+      this.onLog(`${player.name}は${attackerName}を移動させた`);
+    } else {
+      const defenderPlayer = this.players.find((p) => p.id === targetTile.owner);
+      const defenderUnit = targetTile.unit;
+      const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter());
+      result.log.forEach((line) => this.onLog(line));
+
+      if (result.attackerSurvived && !result.defenderSurvived) {
+        targetTile.unit = attackerUnit;
+        targetTile.owner = player.id;
+        this._paintTile(targetTile, player.color);
+        tile.unit = null;
+        tile.owner = null;
+        this._repaintTileToElement(tile);
+        this.onLog(`${player.name}が土地を奪取した！`);
+      } else if (result.attackerSurvived && result.defenderSurvived) {
+        this.onLog(`${defenderPlayer.name}の${defenderUnit.def.name}が防衛に成功し、${attackerName}は元の土地に戻った`);
+      } else {
+        tile.unit = null;
+        tile.owner = null;
+        this._repaintTileToElement(tile);
+        if (!result.defenderSurvived) {
+          targetTile.unit = null;
+          targetTile.owner = null;
+          this._repaintTileToElement(targetTile);
+          this.onLog('両者相打ちで両方の土地が無人になった');
+        } else {
+          this.onLog(`${attackerName}は倒された`);
+        }
+      }
+    }
     this._notifyState();
     return true;
   }

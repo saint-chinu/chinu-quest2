@@ -110,10 +110,21 @@
           <p id="land-command-title"></p>
           <div id="land-command-actions">
             <button id="land-command-summon">召喚／侵略</button>
-            <button id="land-command-levelup">土地レベルアップ</button>
-            <button id="land-command-element">土地属性変更</button>
-            <button id="land-command-info">土地情報</button>
-            <button id="land-command-end">ターン終了</button>
+            <button id="land-command-land">土地</button>
+            <button id="land-command-end">終了</button>
+          </div>
+        </div>
+      </div>
+      <div id="land-submenu-modal" class="hidden">
+        <div id="land-submenu-box">
+          <p id="land-submenu-title"></p>
+          <div id="land-submenu-actions">
+            <button id="land-submenu-swap">入れ替え</button>
+            <button id="land-submenu-levelup">土地Lvアップ</button>
+            <button id="land-submenu-element">属性変更</button>
+            <button id="land-submenu-move">移動</button>
+            <button id="land-submenu-info">情報</button>
+            <button id="land-submenu-back">もどる</button>
           </div>
         </div>
       </div>
@@ -129,13 +140,6 @@
           <p>購入するカードを選んでください</p>
           <div id="shop-tile-choices"></div>
           <button id="shop-tile-cancel">やめる</button>
-        </div>
-      </div>
-      <div id="land-picker-modal" class="hidden">
-        <div id="land-picker-box">
-          <p id="land-picker-title">レベルアップする土地を選んでください</p>
-          <div id="land-picker-choices"></div>
-          <button id="land-picker-cancel">やめる</button>
         </div>
       </div>
       <div id="element-picker-modal" class="hidden">
@@ -166,7 +170,6 @@
           <p id="tile-info-text"></p>
           <div id="tile-info-actions">
             <button id="tile-info-close">閉じる</button>
-            <button id="tile-info-back">土地コマンドに戻る</button>
           </div>
         </div>
       </div>

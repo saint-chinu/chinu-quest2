@@ -27,20 +27,22 @@ const dirArrowDownright = document.getElementById('dir-arrow-downright');
 const landCommandModal = document.getElementById('land-command-modal');
 const landCommandTitle = document.getElementById('land-command-title');
 const landCommandSummon = document.getElementById('land-command-summon');
-const landCommandLevelup = document.getElementById('land-command-levelup');
-const landCommandElement = document.getElementById('land-command-element');
-const landCommandInfo = document.getElementById('land-command-info');
+const landCommandLand = document.getElementById('land-command-land');
 const landCommandEnd = document.getElementById('land-command-end');
+const landSubmenuModal = document.getElementById('land-submenu-modal');
+const landSubmenuTitle = document.getElementById('land-submenu-title');
+const landSubmenuSwap = document.getElementById('land-submenu-swap');
+const landSubmenuLevelup = document.getElementById('land-submenu-levelup');
+const landSubmenuElement = document.getElementById('land-submenu-element');
+const landSubmenuMove = document.getElementById('land-submenu-move');
+const landSubmenuInfo = document.getElementById('land-submenu-info');
+const landSubmenuBack = document.getElementById('land-submenu-back');
 const monsterPickerModal = document.getElementById('monster-picker-modal');
 const monsterPickerChoices = document.getElementById('monster-picker-choices');
 const monsterPickerCancel = document.getElementById('monster-picker-cancel');
 const shopTileModal = document.getElementById('shop-tile-modal');
 const shopTileChoices = document.getElementById('shop-tile-choices');
 const shopTileCancel = document.getElementById('shop-tile-cancel');
-const landPickerModal = document.getElementById('land-picker-modal');
-const landPickerTitle = document.getElementById('land-picker-title');
-const landPickerChoices = document.getElementById('land-picker-choices');
-const landPickerCancel = document.getElementById('land-picker-cancel');
 const elementPickerModal = document.getElementById('element-picker-modal');
 const elementPickerChoices = document.getElementById('element-picker-choices');
 const elementPickerCancel = document.getElementById('element-picker-cancel');
@@ -57,7 +59,6 @@ const camWorkBack = document.getElementById('cam-work-back');
 const tileInfoModal = document.getElementById('tile-info-modal');
 const tileInfoText = document.getElementById('tile-info-text');
 const tileInfoClose = document.getElementById('tile-info-close');
-const tileInfoBack = document.getElementById('tile-info-back');
 const cardRevealModal = document.getElementById('card-reveal-modal');
 const cardRevealCard = document.getElementById('card-reveal-card');
 const discardModal = document.getElementById('discard-modal');
@@ -96,23 +97,18 @@ const BRANCH_ARROW_BY_DIR = {
 };
 
 /**
- * Every time movement reaches a tile with more than one way forward (the
- * board's 4 edge-midpoints and its center - see board.js), not just once at
- * game start: up to 4 diagonal arrows appear, one per available option, in
- * whichever screen direction that neighbor actually sits (see
- * Game._chooseNextTile - a world +X/-X/+Z/-Z step reads as screen
- * ↘/↖/↙/↗ respectively under this board's fixed diagonal camera). The same
- * camera-work pan overlay used by 土地情報 comes along so the player can
- * look around before deciding. One tap picks - no arm/confirm step, since
- * this now fires often rather than being a single big one-time decision.
- * The camera-work "戻る" button is hidden (.no-back) since the choice is
- * mandatory; camera position is restored once resolved, before movement
- * continues.
+ * Shared diagonal-arrow + camera-work-pan chooser. Up to 4 arrows appear,
+ * one per option, in whichever screen direction that option actually sits
+ * (world +X/-X/+Z/-Z reads as screen ↘/↖/↙/↗ respectively under this
+ * board's fixed diagonal camera - see Game._chooseNextTile /
+ * Game._humanMoveFlow, both of which compute `screenDir` this same way).
+ * `noBack` hides the camera-work "戻る" button (via the .no-back CSS class)
+ * for choices that are mandatory rather than cancellable.
  */
-function promptChooseBranch(options) {
+function promptDirectionArrows(options, { noBack = false } = {}) {
   return new Promise((resolve) => {
     const savedFocus = { x: scene.focus.x, z: scene.focus.z };
-    cameraWorkOverlay.classList.add('no-back');
+    if (noBack) cameraWorkOverlay.classList.add('no-back');
     cameraWorkOverlay.classList.remove('hidden');
     directionArrowsOverlay.classList.remove('hidden');
 
@@ -129,6 +125,9 @@ function promptChooseBranch(options) {
     function onPanRight() {
       scene.panByDirection('right');
     }
+    function onBack() {
+      cleanup(null);
+    }
     function cleanup(tileId) {
       cameraWorkOverlay.classList.add('hidden');
       cameraWorkOverlay.classList.remove('no-back');
@@ -139,6 +138,7 @@ function promptChooseBranch(options) {
       camArrowDown.removeEventListener('click', onPanDown);
       camArrowLeft.removeEventListener('click', onPanLeft);
       camArrowRight.removeEventListener('click', onPanRight);
+      camWorkBack.removeEventListener('click', onBack);
       scene.setFocusImmediate(savedFocus.x, savedFocus.z);
       resolve(tileId);
     }
@@ -154,28 +154,78 @@ function promptChooseBranch(options) {
     camArrowDown.addEventListener('click', onPanDown);
     camArrowLeft.addEventListener('click', onPanLeft);
     camArrowRight.addEventListener('click', onPanRight);
+    camWorkBack.addEventListener('click', onBack);
   });
 }
 
-function promptLandCommand(tile, { canSummon, canLevelUp, canChangeElement }) {
+/**
+ * Every time movement reaches a tile with more than one way forward (the
+ * board's 4 edge-midpoints and its center - see board.js), not just once at
+ * game start. One tap picks - no arm/confirm step, since this now fires
+ * often rather than being a single big one-time decision. The choice is
+ * mandatory (no camera-work "戻る").
+ */
+function promptChooseBranch(options) {
+  return promptDirectionArrows(options, { noBack: true });
+}
+
+/** 土地コマンドの「移動」: same diagonal-arrow chooser, but cancellable (the player already has a monster placed - trying doesn't have to commit). */
+function promptMoveDirection(options) {
+  return promptDirectionArrows(options);
+}
+
+/** 3-button top menu: 召喚（敵地なら侵略）/ 土地 / 終了. */
+function promptLandCommand(tile, { canSummon }) {
   return new Promise((resolve) => {
     landCommandTitle.textContent = tileSummaryText(tile);
     landCommandSummon.disabled = !canSummon;
-    landCommandLevelup.disabled = !canLevelUp;
-    landCommandElement.disabled = !canChangeElement;
     landCommandModal.classList.remove('hidden');
 
     function cleanup(result) {
       landCommandModal.classList.add('hidden');
       landCommandSummon.removeEventListener('click', onSummon);
-      landCommandLevelup.removeEventListener('click', onLevelup);
-      landCommandElement.removeEventListener('click', onElement);
-      landCommandInfo.removeEventListener('click', onInfo);
+      landCommandLand.removeEventListener('click', onLand);
       landCommandEnd.removeEventListener('click', onEnd);
       resolve(result);
     }
     function onSummon() {
       cleanup('summon');
+    }
+    function onLand() {
+      cleanup('land');
+    }
+    function onEnd() {
+      cleanup('end');
+    }
+    landCommandSummon.addEventListener('click', onSummon);
+    landCommandLand.addEventListener('click', onLand);
+    landCommandEnd.addEventListener('click', onEnd);
+  });
+}
+
+/**
+ * The 土地-browse tile's vertical submenu (own tile with a garrisoned
+ * monster only - see Game._runLandBrowse, which never opens this for a
+ * tile that isn't the player's own): 入れ替え/土地Lvアップ/属性変更/移動/
+ * 情報/もどる. Resolves the chosen action string, or 'back'/null.
+ */
+function promptLandSubmenu(tile) {
+  return new Promise((resolve) => {
+    landSubmenuTitle.textContent = tileSummaryText(tile);
+    landSubmenuModal.classList.remove('hidden');
+
+    function cleanup(result) {
+      landSubmenuModal.classList.add('hidden');
+      landSubmenuSwap.removeEventListener('click', onSwap);
+      landSubmenuLevelup.removeEventListener('click', onLevelup);
+      landSubmenuElement.removeEventListener('click', onElement);
+      landSubmenuMove.removeEventListener('click', onMove);
+      landSubmenuInfo.removeEventListener('click', onInfo);
+      landSubmenuBack.removeEventListener('click', onBack);
+      resolve(result);
+    }
+    function onSwap() {
+      cleanup('swap');
     }
     function onLevelup() {
       cleanup('levelup');
@@ -183,18 +233,27 @@ function promptLandCommand(tile, { canSummon, canLevelUp, canChangeElement }) {
     function onElement() {
       cleanup('element');
     }
+    function onMove() {
+      cleanup('move');
+    }
     function onInfo() {
       cleanup('info');
     }
-    function onEnd() {
-      cleanup('end');
+    function onBack() {
+      cleanup('back');
     }
-    landCommandSummon.addEventListener('click', onSummon);
-    landCommandLevelup.addEventListener('click', onLevelup);
-    landCommandElement.addEventListener('click', onElement);
-    landCommandInfo.addEventListener('click', onInfo);
-    landCommandEnd.addEventListener('click', onEnd);
+    landSubmenuSwap.addEventListener('click', onSwap);
+    landSubmenuLevelup.addEventListener('click', onLevelup);
+    landSubmenuElement.addEventListener('click', onElement);
+    landSubmenuMove.addEventListener('click', onMove);
+    landSubmenuInfo.addEventListener('click', onInfo);
+    landSubmenuBack.addEventListener('click', onBack);
   });
+}
+
+/** "移動しますか？" はい/いいえ, reusing the generic confirm modal. */
+function promptConfirmMove() {
+  return confirmYesNo('移動しますか？');
 }
 
 /** Shows the hand's monster cards; clicking one blinks it twice before resolving. */
@@ -296,44 +355,6 @@ function promptConfirmAction({ actionType, card, cost, tile, targetElement }) {
   });
 }
 
-function landChoiceText(tile) {
-  return `${ELEMENT_LABEL[tile.element]} / Lv${tile.level} / 通行料${tile.toll}G`;
-}
-
-/** Picks one of the given owned tiles; resolves the tile's id, or null if cancelled. */
-function promptPickLand(summaries, title) {
-  return new Promise((resolve) => {
-    landPickerTitle.textContent = title;
-    landPickerChoices.replaceChildren();
-    for (const tile of summaries) {
-      const el = document.createElement('div');
-      el.className = 'land-choice';
-      el.textContent = landChoiceText(tile);
-      el.addEventListener('click', () => {
-        landPickerModal.classList.add('hidden');
-        resolve(tile.id);
-      });
-      landPickerChoices.appendChild(el);
-    }
-    landPickerModal.classList.remove('hidden');
-
-    function onCancel() {
-      landPickerModal.classList.add('hidden');
-      landPickerCancel.removeEventListener('click', onCancel);
-      resolve(null);
-    }
-    landPickerCancel.addEventListener('click', onCancel);
-  });
-}
-
-function promptPickLandForLevelUp(summaries) {
-  return promptPickLand(summaries, 'レベルアップする土地を選んでください');
-}
-
-function promptPickLandForElementChange(summaries) {
-  return promptPickLand(summaries, '属性を変更する土地を選んでください');
-}
-
 /** Picks a target element from the given options (colored swatches); resolves the element, or null if cancelled. */
 function promptPickElement(options) {
   return new Promise((resolve) => {
@@ -360,14 +381,62 @@ function promptPickElement(options) {
   });
 }
 
+/** Simple info-only popup, no camera-work of its own - "閉じる" just resolves. */
+function promptShowTileInfo(tile) {
+  return new Promise((resolve) => {
+    tileInfoText.textContent = tileSummaryText(tile);
+    tileInfoModal.classList.remove('hidden');
+
+    function onClose() {
+      tileInfoModal.classList.add('hidden');
+      tileInfoClose.removeEventListener('click', onClose);
+      resolve();
+    }
+    tileInfoClose.addEventListener('click', onClose);
+  });
+}
+
+const BROWSE_HIGHLIGHT_COLOR = 0xfff2a8;
+
+/** Slow blink/faint-glow on the given tiles' meshes (via emissive), until the returned stop function is called. */
+function startTileHighlight(tileIds) {
+  const meshes = tileIds.map((id) => tiles[id]?.mesh).filter(Boolean);
+  const start = performance.now();
+  let raf;
+  function frame(now) {
+    const t = (now - start) / 1000;
+    const intensity = 0.35 + 0.25 * Math.sin(t * 2.4);
+    for (const mesh of meshes) {
+      mesh.material.emissive.setHex(BROWSE_HIGHLIGHT_COLOR);
+      mesh.material.emissiveIntensity = intensity;
+    }
+    raf = requestAnimationFrame(frame);
+  }
+  raf = requestAnimationFrame(frame);
+  return () => {
+    cancelAnimationFrame(raf);
+    for (const mesh of meshes) {
+      mesh.material.emissive.setHex(0x000000);
+      mesh.material.emissiveIntensity = 0;
+    }
+  };
+}
+
 /**
- * "土地情報" mode: free-look camera (4 edge arrows) over the actual board,
- * click any tile for its info. Camera position is restored to wherever it
- * was before entering, once the player backs all the way out.
+ * 土地コマンドの「土地」: camera-work over just the given candidate tiles
+ * (this turn's traversed path, or every owned tile if landed exactly on
+ * START/EVENT - see Game._runLandCommand), which slowly blink/glow.
+ * Tapping a candidate that's the player's own garrisoned land resolves
+ * with its id, closing this camera-work session so Game._runLandBrowse can
+ * open the vertical submenu over it. Tapping anything else just shows its
+ * info inline, without closing camera-work, and keeps waiting for another
+ * tap. Backing out via 戻る resolves null.
  */
-function promptTileInfo() {
+function promptPickBrowseTile(candidates) {
   return new Promise((resolve) => {
     const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+    const byId = new Map(candidates.map((c) => [c.id, c]));
+    const stopHighlight = startTileHighlight(candidates.map((c) => c.id));
     cameraWorkOverlay.classList.remove('hidden');
 
     function onCanvasClick(e) {
@@ -375,10 +444,17 @@ function promptTileInfo() {
       const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
       const tile = scene.pickTileAt(ndcX, ndcY, tiles);
-      if (tile) {
-        tileInfoText.textContent = tileSummaryText(game.getTileSummary(tile));
+      const candidate = tile && byId.get(tile.id);
+      if (!candidate) return;
+      if (candidate.isMine) {
+        finish(candidate.id);
+      } else {
+        tileInfoText.textContent = tileSummaryText(candidate);
         tileInfoModal.classList.remove('hidden');
       }
+    }
+    function onInfoClose() {
+      tileInfoModal.classList.add('hidden');
     }
     function onUp() {
       scene.panByDirection('up');
@@ -392,18 +468,13 @@ function promptTileInfo() {
     function onRight() {
       scene.panByDirection('right');
     }
-    function onInfoClose() {
-      tileInfoModal.classList.add('hidden');
-    }
-    function onInfoBack() {
-      tileInfoModal.classList.add('hidden');
-      finish();
-    }
     function onWorkBack() {
-      finish();
+      finish(null);
     }
-    function finish() {
+    function finish(result) {
+      stopHighlight();
       cameraWorkOverlay.classList.add('hidden');
+      tileInfoModal.classList.add('hidden');
       canvas.removeEventListener('click', onCanvasClick);
       camArrowUp.removeEventListener('click', onUp);
       camArrowDown.removeEventListener('click', onDown);
@@ -411,9 +482,8 @@ function promptTileInfo() {
       camArrowRight.removeEventListener('click', onRight);
       camWorkBack.removeEventListener('click', onWorkBack);
       tileInfoClose.removeEventListener('click', onInfoClose);
-      tileInfoBack.removeEventListener('click', onInfoBack);
       scene.setFocusImmediate(savedFocus.x, savedFocus.z);
-      resolve();
+      resolve(result);
     }
 
     canvas.addEventListener('click', onCanvasClick);
@@ -423,7 +493,6 @@ function promptTileInfo() {
     camArrowRight.addEventListener('click', onRight);
     camWorkBack.addEventListener('click', onWorkBack);
     tileInfoClose.addEventListener('click', onInfoClose);
-    tileInfoBack.addEventListener('click', onInfoBack);
   });
 }
 
@@ -874,10 +943,12 @@ function startBattle(character) {
     onLandCommand: promptLandCommand,
     onPickMonsterCard: promptPickMonsterCard,
     onConfirmAction: promptConfirmAction,
-    onTileInfo: promptTileInfo,
-    onPickLandForLevelUp: promptPickLandForLevelUp,
+    onConfirmMove: promptConfirmMove,
+    onPickBrowseTile: promptPickBrowseTile,
+    onLandSubmenu: promptLandSubmenu,
+    onShowTileInfo: promptShowTileInfo,
     onChooseBranch: promptChooseBranch,
-    onPickLandForElementChange: promptPickLandForElementChange,
+    onPickMoveDirection: promptMoveDirection,
     onPickElement: promptPickElement,
     onShopPurchase: promptShopPurchase,
     humanPlayer: character
