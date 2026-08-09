@@ -19,6 +19,8 @@ import {
   buildBreedCardDef,
 } from './breedParts.js';
 import { STORY_STAGES, isStageUnlocked, isStageCleared } from './story.js';
+import { firebaseReady } from './firebase.js';
+import { createPvpRoom, joinPvpRoom, listenToRoom, leavePvpRoom } from './pvp.js';
 
 const canvas = document.getElementById('game-canvas');
 const turnIndicator = document.getElementById('turn-indicator');
@@ -1255,7 +1257,19 @@ const shopPartsList = document.getElementById('shop-parts-list');
 const shopBackButton = document.getElementById('shop-back');
 const battleMenuScreen = document.getElementById('battle-menu-screen');
 const battleCpuButton = document.getElementById('battle-cpu');
+const battlePvpButton = document.getElementById('battle-pvp');
 const battleBackButton = document.getElementById('battle-back');
+const pvpMenuScreen = document.getElementById('pvp-menu-screen');
+const pvpCreateButton = document.getElementById('pvp-create-button');
+const pvpJoinCode = document.getElementById('pvp-join-code');
+const pvpJoinButton = document.getElementById('pvp-join-button');
+const pvpMenuError = document.getElementById('pvp-menu-error');
+const pvpMenuBack = document.getElementById('pvp-menu-back');
+const pvpRoomScreen = document.getElementById('pvp-room-screen');
+const pvpRoomCode = document.getElementById('pvp-room-code');
+const pvpRoomStatus = document.getElementById('pvp-room-status');
+const pvpRoomStart = document.getElementById('pvp-room-start');
+const pvpRoomLeave = document.getElementById('pvp-room-leave');
 const breedScreen = document.getElementById('breed-screen');
 const breedName = document.getElementById('breed-name');
 const breedImage = document.getElementById('breed-image');
@@ -1275,7 +1289,7 @@ const storyDialogueSpeaker = document.getElementById('story-dialogue-speaker');
 const storyDialogueText = document.getElementById('story-dialogue-text');
 const storyDialogueNext = document.getElementById('story-dialogue-next');
 
-const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, catalogScreen, cardEditorScreen, deckScreen, shopScreen, battleMenuScreen, breedScreen, stubScreen, storyScreen, storyDialogueScreen];
+const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, catalogScreen, cardEditorScreen, deckScreen, shopScreen, battleMenuScreen, breedScreen, stubScreen, storyScreen, storyDialogueScreen, pvpMenuScreen, pvpRoomScreen];
 function showScreen(el) {
   ALL_PG_SCREENS.forEach((s) => s.classList.toggle('hidden', s !== el));
 }
@@ -2202,6 +2216,104 @@ battleCpuButton.addEventListener('click', async () => {
     iconImage = icons[currentCharacter.iconIndex]?.canvas ?? null;
   }
   startBattle({ ...currentCharacter, iconImage });
+});
+
+// ---- 対人戦(PvP): 部屋コードでの招待・参加ロビー ----
+// 部屋を作った側（ホスト）だけが本物のGameインスタンスを持つホスト権威
+// モデル（pvp.js参照）。ここではロビー（部屋作成/参加/相手待ち）まで。
+
+let pvpUnsubscribe = null;
+let pvpSession = null; // { roomCode, uid, isHost }
+
+function stopPvpRoomListener() {
+  if (pvpUnsubscribe) {
+    pvpUnsubscribe();
+    pvpUnsubscribe = null;
+  }
+}
+
+function showPvpMenuScreen() {
+  pvpJoinCode.value = '';
+  pvpMenuError.classList.add('hidden');
+  pvpCreateButton.disabled = !firebaseReady;
+  pvpJoinButton.disabled = !firebaseReady;
+  if (!firebaseReady) {
+    pvpMenuError.textContent = '対人戦は準備中です（サーバー未設定）';
+    pvpMenuError.classList.remove('hidden');
+  }
+  showScreen(pvpMenuScreen);
+}
+
+battlePvpButton.addEventListener('click', showPvpMenuScreen);
+pvpMenuBack.addEventListener('click', () => showScreen(battleMenuScreen));
+
+function enterPvpRoomScreen(session) {
+  pvpSession = session;
+  pvpRoomCode.textContent = `部屋コード: ${session.roomCode}`;
+  pvpRoomStatus.textContent = '対戦相手を待っています…';
+  pvpRoomStart.classList.add('hidden');
+  showScreen(pvpRoomScreen);
+
+  stopPvpRoomListener();
+  pvpUnsubscribe = listenToRoom(session.roomCode, (room) => {
+    if (!room) {
+      pvpRoomStatus.textContent = '部屋が削除されました';
+      pvpRoomStart.classList.add('hidden');
+      return;
+    }
+    if (room.status === 'finished') {
+      pvpRoomStatus.textContent = '対戦は終了しました';
+      pvpRoomStart.classList.add('hidden');
+      return;
+    }
+    if (room.guestUid) {
+      const opponentName = session.isHost ? room.guestName : room.hostName;
+      pvpRoomStatus.textContent = `対戦相手: ${opponentName}`;
+      pvpRoomStart.classList.toggle('hidden', !session.isHost);
+    } else {
+      pvpRoomStatus.textContent = '対戦相手を待っています…';
+      pvpRoomStart.classList.add('hidden');
+    }
+  });
+}
+
+pvpCreateButton.addEventListener('click', async () => {
+  pvpMenuError.classList.add('hidden');
+  pvpCreateButton.disabled = true;
+  try {
+    const session = await createPvpRoom({ name: currentCharacter.name, color: currentCharacter.color });
+    enterPvpRoomScreen(session);
+  } catch {
+    pvpMenuError.textContent = '部屋を作成できませんでした';
+    pvpMenuError.classList.remove('hidden');
+  } finally {
+    pvpCreateButton.disabled = false;
+  }
+});
+
+pvpJoinButton.addEventListener('click', async () => {
+  const code = pvpJoinCode.value.trim();
+  if (!code) return;
+  pvpMenuError.classList.add('hidden');
+  pvpJoinButton.disabled = true;
+  try {
+    const session = await joinPvpRoom(code, { name: currentCharacter.name, color: currentCharacter.color });
+    enterPvpRoomScreen(session);
+  } catch (error) {
+    pvpMenuError.textContent = error.message || '入室できませんでした';
+    pvpMenuError.classList.remove('hidden');
+  } finally {
+    pvpJoinButton.disabled = false;
+  }
+});
+
+pvpRoomLeave.addEventListener('click', async () => {
+  stopPvpRoomListener();
+  if (pvpSession) {
+    await leavePvpRoom(pvpSession.roomCode, { isHost: pvpSession.isHost });
+    pvpSession = null;
+  }
+  showScreen(battleMenuScreen);
 });
 
 // ---- Leaving a battle: cash out the ending in-battle G into persistent M (20%, 50 minimum) ----

@@ -1,0 +1,50 @@
+rules_version = '2';
+
+// 対人戦（PvP）専用のセキュリティルール。ホスト権威モデル:
+// - ホスト（部屋を作った側）のブラウザだけが本物のGameシミュレーションを
+//   持ち、盤面・通行料・ダイス等すべてを計算する「権威」。
+// - ゲストは自分の手番の意思決定（hostRequestで来る質問への回答）だけを
+//   guestResponse系フィールドに書き込める。盤面やGなど他のフィールドは
+//   一切書き換えられない。
+// - 各プレイヤーの手札（private/{uid}.hand）はそのuid本人しか読めない。
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /pvpRooms/{roomCode} {
+      function isParticipant() {
+        return request.auth != null &&
+          (resource.data.hostUid == request.auth.uid || resource.data.guestUid == request.auth.uid);
+      }
+
+      allow read: if isParticipant();
+
+      allow create: if request.auth != null &&
+        request.resource.data.hostUid == request.auth.uid &&
+        request.resource.data.guestUid == null &&
+        request.resource.data.status == 'waiting';
+
+      // ホストは全フィールド更新可。ゲストは「部屋への参加」または
+      // 「guestResponse系フィールドのみの更新」だけが許される。
+      allow update: if request.auth != null && (
+        resource.data.hostUid == request.auth.uid ||
+        (
+          resource.data.guestUid == null &&
+          request.resource.data.guestUid == request.auth.uid &&
+          resource.data.status == 'waiting'
+        ) ||
+        (
+          resource.data.guestUid == request.auth.uid &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['guestResponse', 'guestResponseId'])
+        )
+      );
+
+      allow delete: if request.auth != null && resource.data.hostUid == request.auth.uid;
+
+      match /private/{uid} {
+        allow read: if request.auth != null && request.auth.uid == uid;
+        allow write: if request.auth != null &&
+          get(/databases/$(database)/documents/pvpRooms/$(roomCode)).data.hostUid == request.auth.uid;
+      }
+    }
+  }
+}

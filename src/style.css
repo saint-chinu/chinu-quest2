@@ -378,6 +378,17 @@ html, body {
   font-size: 11px;
 }
 
+#pvp-room-code {
+  font-size: 28px;
+  font-weight: bold;
+  letter-spacing: 6px;
+  color: #fff;
+}
+
+#pvp-join-code {
+  text-transform: uppercase;
+}
+
 #story-dialogue-box {
   width: min(600px, 90vw);
   min-height: 140px;
@@ -1435,5 +1446,9 @@ html, body {
 }
 
 #battle-message-text.hidden {
+  display: none;
+}
+
+#pvp-room-start.hidden {
   display: none;
 }

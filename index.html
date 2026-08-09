@@ -107,8 +107,29 @@
       <div id="battle-menu-screen" class="pg-screen hidden">
         <h2 class="pg-title">対戦</h2>
         <button id="battle-cpu" class="pg-button">CPU戦</button>
-        <button id="battle-pvp" class="pg-button" disabled>対人戦（準備中）</button>
+        <button id="battle-pvp" class="pg-button">対人戦</button>
         <button id="battle-back" class="pg-button pg-button-secondary">戻る</button>
+      </div>
+
+      <div id="pvp-menu-screen" class="pg-screen hidden">
+        <h2 class="pg-title">対人戦</h2>
+        <button id="pvp-create-button" class="pg-button">部屋を作る</button>
+        <p class="pg-label">または部屋コードで参加</p>
+        <div class="pg-field">
+          <label for="pvp-join-code">部屋コード</label>
+          <input id="pvp-join-code" type="text" maxlength="5" autocapitalize="characters" />
+        </div>
+        <button id="pvp-join-button" class="pg-button">部屋に入る</button>
+        <p id="pvp-menu-error" class="pg-error hidden"></p>
+        <button id="pvp-menu-back" class="pg-button pg-button-secondary">戻る</button>
+      </div>
+
+      <div id="pvp-room-screen" class="pg-screen hidden">
+        <h2 class="pg-title">対人戦ルーム</h2>
+        <p id="pvp-room-code" class="pg-label"></p>
+        <p id="pvp-room-status" class="pg-label"></p>
+        <button id="pvp-room-start" class="pg-button hidden">対戦開始</button>
+        <button id="pvp-room-leave" class="pg-button pg-button-secondary">やめる</button>
       </div>
 
       <div id="breed-screen" class="pg-screen hidden">
