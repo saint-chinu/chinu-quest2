@@ -34,7 +34,7 @@ service cloud.firestore {
         (
           resource.data.guestUid == request.auth.uid &&
           request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['guestResponse', 'guestResponseId'])
+            .hasOnly(['guestResponse', 'guestResponseId', 'guestAction', 'guestActionId'])
         )
       );
 

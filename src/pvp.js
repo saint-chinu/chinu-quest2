@@ -56,6 +56,8 @@ export async function createPvpRoom({ name, color }) {
     hostRequest: null,
     guestResponseId: 0,
     guestResponse: null,
+    guestActionId: 0,
+    guestAction: null,
   });
   return { roomCode, uid, isHost: true };
 }
@@ -114,7 +116,10 @@ export function finishPvpRoom(roomCode) {
 // ---- ゲスト専用: hostRequestへの回答 ----
 
 export function sendGuestResponse(roomCode, requestId, response) {
-  return updateDoc(roomRef(roomCode), { guestResponseId: requestId, guestResponse: response });
+  // Firestoreはフィールド値にundefinedを許さない（promptCardReveal等、
+  // 「確認しました」の意味でresolve()を引数なしで呼ぶ型があるため、ここで
+  // 必ずnullへ丸める）。
+  return updateDoc(roomRef(roomCode), { guestResponseId: requestId, guestResponse: response === undefined ? null : response });
 }
 
 /**
@@ -176,6 +181,47 @@ export class GuestHostListener {
     const handler = this.handlers[type];
     const response = handler ? await handler(payload) : null;
     await sendGuestResponse(this.roomCode, requestId, response);
+  }
+
+  destroy() {
+    this.unsubscribe();
+  }
+}
+
+// ---- ゲスト発の自発的アクション（ダイスを振る/スペルを使う）----
+// hostRequest/guestResponse（ホストが尋ねてゲストが答える）とは逆方向の
+// 一方向チャンネル。ゲストが手番中に「自分から」起こす操作用 - 応答は
+// 待たない（ホスト側のGameシミュレーションが結果を計算し、その結果は
+// 通常のpublicState/private hand経由で両者に伝わる）。
+
+export function sendGuestAction(roomCode, actionId, action) {
+  return updateDoc(roomRef(roomCode), { guestActionId: actionId, guestAction: action });
+}
+
+/** ゲスト側で使う、送信ごとにactionIdを自動採番する薄いラッパー。 */
+export class GuestActionSender {
+  constructor(roomCode) {
+    this.roomCode = roomCode;
+    this.nextActionId = 1;
+  }
+  send(action) {
+    const actionId = this.nextActionId;
+    this.nextActionId += 1;
+    return sendGuestAction(this.roomCode, actionId, action);
+  }
+}
+
+/** ホスト側: ゲストの自発的アクションを購読する。onActionは新しいアクションが来るたびに呼ばれる。 */
+export class HostActionListener {
+  constructor(roomCode, onAction) {
+    this.roomCode = roomCode;
+    this.lastHandledActionId = 0;
+    this.unsubscribe = listenToRoom(roomCode, (room) => {
+      if (!room || !room.guestAction) return;
+      if (room.guestActionId <= this.lastHandledActionId) return;
+      this.lastHandledActionId = room.guestActionId;
+      onAction(room.guestAction);
+    });
   }
 
   destroy() {

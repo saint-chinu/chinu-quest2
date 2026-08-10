@@ -1,5 +1,5 @@
 import './style.css';
-import { GameScene } from './scene.js';
+import { GameScene, PIECE_REST_Y } from './scene.js';
 import { createBoard } from './board.js';
 import { Game } from './game.js';
 import { CardType, CARD_COLOR, ELEMENT_LABEL, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
@@ -20,7 +20,20 @@ import {
 } from './breedParts.js';
 import { STORY_STAGES, isStageUnlocked, isStageCleared } from './story.js';
 import { firebaseReady } from './firebase.js';
-import { createPvpRoom, joinPvpRoom, listenToRoom, leavePvpRoom } from './pvp.js';
+import {
+  createPvpRoom,
+  joinPvpRoom,
+  listenToRoom,
+  listenToPrivateHand,
+  leavePvpRoom,
+  HostGuestRelay,
+  GuestHostListener,
+  HostActionListener,
+  GuestActionSender,
+  publishPublicState,
+  publishPrivateHand,
+  finishPvpRoom,
+} from './pvp.js';
 import { playBoardTheme, playBattleTheme, stopMusic, toggleMuted } from './audio.js';
 
 const canvas = document.getElementById('game-canvas');
@@ -750,7 +763,13 @@ function renderCenterHand(hand, isCPU, spellUsable) {
       el.addEventListener('click', () => {
         showCardDetail(card, canUseThis ? () => {
           el.classList.add('blinking');
-          setTimeout(() => game.useSpell(card), BLINK_MS);
+          setTimeout(() => {
+            if (pvpMatch && !pvpMatch.isHost) {
+              pvpMatch.actionSender.send({ type: 'useSpell', cardId: card.id });
+            } else {
+              game.useSpell(card);
+            }
+          }, BLINK_MS);
         } : null);
       });
     }
@@ -1108,6 +1127,10 @@ function settleDiceSpin(forcedValue) {
 function beginDiceMove(result) {
   diceMoving = true;
   syncCenterVisibility();
+  if (pvpMatch && !pvpMatch.isHost) {
+    pvpMatch.actionSender.send({ type: 'rollDice', steps: result });
+    return;
+  }
   game.rollDice(result);
 }
 
@@ -1151,8 +1174,10 @@ let game;
 function animate() {
   // Stops this loop for good once the battle is exited (see
   // exitBattleButton) - startBattle() kicks off a fresh loop next time, so
-  // loops never pile up across repeated enter/exit cycles.
-  if (!game) return;
+  // loops never pile up across repeated enter/exit cycles. PvPのゲスト側は
+  // gameを持たない（scene/tilesだけをローカルで描画するのでpvpMatchで
+  // 続行判定する）。
+  if (!game && !pvpMatch) return;
   scene.render();
   requestAnimationFrame(animate);
 }
@@ -1195,33 +1220,38 @@ function startBattle(character, storyOptions = {}) {
       if (enteringShowCenter) resetDice();
       syncCenterVisibility();
       if (showCenter) {
-        renderCenterHand(centerHand, currentPlayerIsCPU, !spellUsedThisTurn);
+        // 対人戦ホストは自分のGameインスタンスに相手(ゲスト)の本当の手札も
+        // 持っているが、対戦相手なのでローカル画面にも表示してはいけない
+        // （vs CPUなら手の内が見えても問題ないので今まで通り表示する）。
+        const isRemoteHumanTurn = pvpMatch?.isHost && !currentPlayerIsCPU && game.currentPlayer.id !== pvpMatch.localPlayerId;
+        renderCenterHand(isRemoteHumanTurn ? [] : centerHand, currentPlayerIsCPU, !spellUsedThisTurn);
       }
     },
-    onCardReveal: promptCardReveal,
-    onDiscardChoice: promptDiscardChoice,
-    onSpellUse: promptSpellUse,
+    onCardReveal: relayable('cardReveal', promptCardReveal),
+    onDiscardChoice: relayable('discardChoice', promptDiscardChoice),
+    onSpellUse: relayable('spellUse', promptSpellUse, { broadcast: true }),
     onCpuRoll: cpuRollDice,
     onMoveComplete,
-    onLandCommand: promptLandCommand,
-    onPickMonsterCard: promptPickMonsterCard,
-    onConfirmAction: promptConfirmAction,
-    onConfirmMove: promptConfirmMove,
-    onConfirmSellLand: promptConfirmSellLand,
-    onPickBrowseTile: promptPickBrowseTile,
-    onLandSubmenu: promptLandSubmenu,
-    onPickAbilityTarget: promptPickAbilityTarget,
-    onShowTileInfo: promptShowTileInfo,
-    onChooseBranch: promptChooseBranch,
-    onPickMoveDirection: promptMoveDirection,
-    onPickElement: promptPickElement,
-    onShopPurchase: promptShopPurchase,
-    onBattleSceneEnter: promptBattleSceneEnter,
-    onPickBattleItem: promptPickBattleItem,
-    onBattleAttack: promptBattleAttack,
-    onBattleRetreat: promptBattleRetreat,
-    onBattleOutcome: promptBattleOutcome,
+    onLandCommand: relayable('landCommand', promptLandCommand),
+    onPickMonsterCard: relayable('pickMonsterCard', promptPickMonsterCard),
+    onConfirmAction: relayable('confirmAction', promptConfirmAction),
+    onConfirmMove: relayable('confirmMove', promptConfirmMove),
+    onConfirmSellLand: relayable('confirmSellLand', promptConfirmSellLand),
+    onPickBrowseTile: relayable('pickBrowseTile', promptPickBrowseTile),
+    onLandSubmenu: relayable('landSubmenu', promptLandSubmenu),
+    onPickAbilityTarget: relayable('pickAbilityTarget', promptPickAbilityTarget),
+    onShowTileInfo: relayable('showTileInfo', promptShowTileInfo),
+    onChooseBranch: relayable('chooseBranch', promptChooseBranch),
+    onPickMoveDirection: relayable('pickMoveDirection', promptMoveDirection),
+    onPickElement: relayable('pickElement', promptPickElement),
+    onShopPurchase: relayable('shopPurchase', promptShopPurchase),
+    onBattleSceneEnter: relayable('battleSceneEnter', promptBattleSceneEnter, { broadcast: true }),
+    onPickBattleItem: relayable('pickBattleItem', promptPickBattleItem),
+    onBattleAttack: relayable('battleAttack', promptBattleAttack, { broadcast: true }),
+    onBattleRetreat: relayable('battleRetreat', promptBattleRetreat, { broadcast: true }),
+    onBattleOutcome: relayable('battleOutcome', promptBattleOutcome, { broadcast: true }),
     onStoryBattleEnd: storyOptions.onStoryBattleEnd,
+    onPvpSync: handlePvpSync,
     storyMode: storyOptions.storyMode ?? false,
     playerConfigs: storyOptions.playerConfigs,
     humanPlayer: storyOptions.playerConfigs
@@ -2412,6 +2442,7 @@ battleCpuButton.addEventListener('click', async () => {
 // モデル（pvp.js参照）。ここではロビー（部屋作成/参加/相手待ち）まで。
 
 let pvpUnsubscribe = null;
+let pvpMatch = null;
 let pvpSession = null; // { roomCode, uid, isHost }
 
 function stopPvpRoomListener() {
@@ -2436,6 +2467,8 @@ function showPvpMenuScreen() {
 battlePvpButton.addEventListener('click', showPvpMenuScreen);
 pvpMenuBack.addEventListener('click', () => showScreen(battleMenuScreen));
 
+let pvpLastRoom = null;
+
 function enterPvpRoomScreen(session) {
   pvpSession = session;
   pvpRoomCode.textContent = `部屋コード: ${session.roomCode}`;
@@ -2443,8 +2476,24 @@ function enterPvpRoomScreen(session) {
   pvpRoomStart.classList.add('hidden');
   showScreen(pvpRoomScreen);
 
+  // ゲスト側は入室した瞬間から「ホストからの質問」を受け取れるようにして
+  // おく（対戦開始そのものもhostRequest経由の'pickDeck'質問として届く -
+  // 詳しくはpvpGuestHandlers参照）。
+  if (!session.isHost) {
+    pvpMatch = {
+      isHost: false,
+      roomCode: session.roomCode,
+      uid: session.uid,
+      localPlayerId: 1,
+      myHand: [],
+      listener: new GuestHostListener(session.roomCode, session.uid, pvpGuestHandlers),
+      actionSender: new GuestActionSender(session.roomCode),
+    };
+  }
+
   stopPvpRoomListener();
   pvpUnsubscribe = listenToRoom(session.roomCode, (room) => {
+    pvpLastRoom = room;
     if (!room) {
       pvpRoomStatus.textContent = '部屋が削除されました';
       pvpRoomStart.classList.add('hidden');
@@ -2498,6 +2547,10 @@ pvpJoinButton.addEventListener('click', async () => {
 
 pvpRoomLeave.addEventListener('click', async () => {
   stopPvpRoomListener();
+  if (pvpMatch && !pvpMatch.isHost) {
+    pvpMatch.listener.destroy();
+    pvpMatch = null;
+  }
   if (pvpSession) {
     await leavePvpRoom(pvpSession.roomCode, { isHost: pvpSession.isHost });
     pvpSession = null;
@@ -2505,17 +2558,256 @@ pvpRoomLeave.addEventListener('click', async () => {
   showScreen(battleMenuScreen);
 });
 
+// ---- 対人戦(PvP)本編: ホスト権威モデルのリレー配線 ----
+// pvpMatchは対戦ロビーに入った瞬間（ゲスト側）または対戦開始した瞬間
+// （ホスト側）にセットされる実行時状態。
+//   ホスト: { isHost:true, roomCode, uid, localPlayerId:0, relay, actionListener, uidByPlayerId }
+//   ゲスト: { isHost:false, roomCode, uid, localPlayerId:1, myHand, listener, actionSender }
+
+/**
+ * ホスト側専用: Gameの各onXxxをローカルUIかFirestoreリレーかに振り分ける
+ * ラッパー。PvP中でなければ（pvpMatchがnull、またはゲスト側main.jsの場合
+ * は別経路なのでそもそもこの関数を通らない）常にローカルprompt関数を
+ * そのまま呼ぶ - 既存の対戦・ストーリーの動作は完全に無変更。
+ * broadcast:trueは両者が見る演出（バトルシーン等）用 - ホストはローカル
+ * 描画を待ちつつ、ゲストへは投げっぱなし（返事を待たない）で同じ演出を
+ * 再生させる。
+ */
+/**
+ * game.jsのonXxxコールバックは型によって引数の数が違う（大半はpayload+
+ * player.idの2つだが、onLandCommand/onShopPurchaseだけはpayloadとplayer.id
+ * の間に追加の引数を挟む）。forPlayerIdは常に「最後の引数」として届くので
+ * 可変長で受け取り、末尾を分離してから残りをそのままlocalPromptに渡す -
+ * 追加引数があってもforPlayerId判定を誤らない。中継用payloadは残り引数が
+ * 1個ならその値そのまま、2個以上なら配列にまとめる（pvpGuestHandlers側で
+ * その型ごとに展開する）。
+ */
+function relayable(type, localPrompt, { broadcast = false } = {}) {
+  return (...args) => {
+    const forPlayerId = args[args.length - 1];
+    const localArgs = args.slice(0, -1);
+    const payload = localArgs.length === 1 ? localArgs[0] : localArgs;
+    if (!pvpMatch || !pvpMatch.isHost) return localPrompt(...localArgs);
+    if (broadcast) {
+      pvpMatch.relay.ask(type, payload);
+      return localPrompt(...localArgs);
+    }
+    if (forPlayerId == null || forPlayerId === pvpMatch.localPlayerId) return localPrompt(...localArgs);
+    return pvpMatch.relay.ask(type, payload);
+  };
+}
+
+/** ホスト側専用: Game._notifyStateのたびに呼ばれる。公開状態(手札を除く)をpublicStateへ、各プレイヤーの手札は本人のprivateドキュメントへ、別々にpublishする。 */
+function handlePvpSync(snapshot) {
+  if (!pvpMatch || !pvpMatch.isHost) return;
+  const { hands, ...publicPart } = snapshot;
+  publishPublicState(pvpMatch.roomCode, publicPart);
+  for (const [playerIdStr, hand] of Object.entries(hands || {})) {
+    const uid = pvpMatch.uidByPlayerId[playerIdStr];
+    if (uid && uid !== pvpMatch.uid) publishPrivateHand(pvpMatch.roomCode, uid, hand);
+  }
+}
+
+/** ホスト側専用: ゲスト発の自発的アクション（本人の手番のダイス/スペル使用）を受けてローカルのGameインスタンスに反映する。 */
+function handlePvpGuestAction(action) {
+  if (!game) return;
+  if (action.type === 'rollDice') {
+    game.rollDice(action.steps);
+  } else if (action.type === 'useSpell') {
+    const card = game.currentPlayer.hand.find((c) => c.id === action.cardId);
+    if (card) game.useSpell(card);
+  }
+}
+
+/**
+ * ゲスト側で使う「ホストからの質問」ハンドラ一覧。中身はローカル対戦と
+ * 全く同じprompt*関数（同じ画面・同じ操作感をそのまま再利用できる -
+ * ゲスト専用のUIは一切作っていない）。pickDeckだけは対戦開始そのものの
+ * 合図を兼ねる特別な質問で、答えると同時に盤面描画を始める。
+ */
+const pvpGuestHandlers = {
+  cardReveal: promptCardReveal,
+  discardChoice: promptDiscardChoice,
+  spellUse: promptSpellUse,
+  // landCommand/shopPurchaseはgame.js側でpayloadとplayer.idの間に追加引数を
+  // 挟む型なので、relayable()が[複数引数]の配列としてまとめて送ってくる -
+  // ここで展開してローカルのprompt関数へ渡す（他の型は単一値のまま素通し）。
+  landCommand: ([tile, options]) => promptLandCommand(tile, options),
+  pickMonsterCard: promptPickMonsterCard,
+  confirmAction: promptConfirmAction,
+  confirmMove: promptConfirmMove,
+  confirmSellLand: promptConfirmSellLand,
+  pickBrowseTile: promptPickBrowseTile,
+  landSubmenu: promptLandSubmenu,
+  pickAbilityTarget: promptPickAbilityTarget,
+  showTileInfo: promptShowTileInfo,
+  chooseBranch: promptChooseBranch,
+  pickMoveDirection: promptMoveDirection,
+  pickElement: promptPickElement,
+  shopPurchase: ([options]) => promptShopPurchase(options),
+  battleSceneEnter: promptBattleSceneEnter,
+  pickBattleItem: promptPickBattleItem,
+  battleAttack: promptBattleAttack,
+  battleRetreat: promptBattleRetreat,
+  battleOutcome: promptBattleOutcome,
+  pickDeck: async () => {
+    const chosen = await promptDeckSelection();
+    startPvpGuestBattle();
+    return chosen.deckList;
+  },
+};
+
+const pvpPieces = new Map(); // playerId -> billboard sprite (ゲスト側のローカル駒キャッシュ)
+
+/** ゲスト側専用: publicStateの土地(所有者/レベル/属性/配置モンスター)と各プレイヤーの駒位置をローカルのtiles/sceneへそのまま反映する。ホストのように1マスずつアニメーションはしない（毎回のsync時点の最終状態へスナップするだけ）。 */
+function applyPvpBoardState(publicState) {
+  if (!publicState || !tiles) return;
+  for (const tileState of publicState.tiles) {
+    const tile = tiles[tileState.id];
+    if (!tile) continue;
+    tile.owner = tileState.owner;
+    tile.level = tileState.level;
+    tile.element = tileState.element;
+    tile.unit = tileState.unit
+      ? { def: { name: tileState.unit.name, atk: tileState.unit.atk }, currentHp: tileState.unit.hp }
+      : null;
+    const ownerPlayer = tile.owner != null ? publicState.players.find((p) => p.id === tile.owner) : null;
+    if (tile.mesh) {
+      if (ownerPlayer) tile.mesh.material.color.setHex(ownerPlayer.color);
+      else tile.mesh.material.color.set(CARD_COLOR[tile.element]);
+    }
+    scene.updateTileLevelBorder(tile);
+  }
+
+  for (const p of publicState.players) {
+    const tile = tiles[p.tileId];
+    if (!tile) continue;
+    let piece = pvpPieces.get(p.id);
+    if (!piece) {
+      piece = scene.createPiece(p.color, tile.position);
+      pvpPieces.set(p.id, piece);
+    }
+    piece.position.set(tile.position.x, PIECE_REST_Y, tile.position.z);
+  }
+}
+
+/** ゲスト側専用: publicStateをGameのonStateChangeと同じ見た目になるようUIへ反映する。相手(ホスト)の本当の手札は届かない（別チャンネルで配られるのは自分の分だけ）ので、自分の番以外はcenterHandを伏せる。 */
+function applyPvpPublicState(publicState) {
+  if (!publicState || !pvpMatch) return;
+  const isMyTurn = publicState.currentPlayerId === pvpMatch.localPlayerId;
+  const showCenter = publicState.awaitingRoll && !publicState.isBusy;
+
+  turnIndicator.textContent = publicState.turnText;
+  diceButton.disabled = !(showCenter && isMyTurn);
+  renderPlayerPanels(publicState.players);
+  if (isMyTurn) renderHand(pvpMatch.myHand);
+  const me = publicState.players.find((p) => p.id === pvpMatch.localPlayerId);
+  if (me) pvpMatch.lastCurrency = me.currency;
+
+  const enteringShowCenter = showCenter && !showCenterState;
+  showCenterState = showCenter;
+  if (enteringShowCenter) resetDice();
+  syncCenterVisibility();
+  if (showCenter) {
+    renderCenterHand(isMyTurn ? pvpMatch.myHand : [], !isMyTurn, isMyTurn);
+  }
+
+  applyPvpBoardState(publicState);
+}
+
+/** ゲスト側専用: 対戦開始の合図（pickDeck質問への回答）と同時に呼ばれる。ホストと同じcreateBoard()で作った盤面をローカルに構築し、以後はpublicState/自分の手札の購読だけで描画し続ける（Gameインスタンスは持たない）。 */
+function startPvpGuestBattle() {
+  preGame.classList.add('hidden');
+  appEl.classList.remove('hidden');
+
+  scene = new GameScene(canvas);
+  tiles = createBoard();
+  scene.buildBoard(tiles);
+  requestAnimationFrame(animate);
+  playBoardTheme();
+
+  pvpMatch.stopPublicListener = listenToRoom(pvpMatch.roomCode, (room) => {
+    if (!room || room.status === 'finished') {
+      // ホストが退出した（部屋を消した/finishedにした） - こちらも対戦を終える。
+      pvpMatch?.stopPublicListener?.();
+      pvpMatch?.stopHandListener?.();
+      pvpMatch?.listener?.destroy();
+      pvpMatch = null;
+      stopMusic();
+      appEl.classList.add('hidden');
+      preGame.classList.remove('hidden');
+      showHubScreen();
+      return;
+    }
+    if (room.publicState) applyPvpPublicState(room.publicState);
+  });
+  pvpMatch.stopHandListener = listenToPrivateHand(pvpMatch.roomCode, pvpMatch.uid, (hand) => {
+    pvpMatch.myHand = hand || [];
+  });
+}
+
+pvpRoomStart.addEventListener('click', async () => {
+  if (!pvpSession?.isHost || !pvpLastRoom?.guestUid) return;
+  pvpRoomStart.disabled = true;
+  const hostDeck = await promptDeckSelection();
+
+  const relay = new HostGuestRelay(pvpSession.roomCode);
+  const guestDeckList = await relay.ask('pickDeck', {});
+
+  let iconImage = null;
+  if (currentCharacter.iconIndex != null) {
+    const icons = await loadPlayerIcons();
+    iconImage = icons[currentCharacter.iconIndex]?.canvas ?? null;
+  }
+
+  pvpMatch = {
+    isHost: true,
+    roomCode: pvpSession.roomCode,
+    uid: pvpSession.uid,
+    localPlayerId: 0,
+    relay,
+    uidByPlayerId: { 0: pvpSession.uid, 1: pvpLastRoom.guestUid },
+  };
+  pvpMatch.actionListener = new HostActionListener(pvpSession.roomCode, handlePvpGuestAction);
+
+  stopPvpRoomListener();
+  preGame.classList.add('hidden');
+  appEl.classList.remove('hidden');
+  startBattle(currentCharacter, {
+    playerConfigs: [
+      { name: currentCharacter.name, isCPU: false, color: currentCharacter.color, deckList: hostDeck.deckList, iconImage },
+      { name: pvpLastRoom.guestName, isCPU: false, color: pvpLastRoom.guestColor, deckList: guestDeckList },
+    ],
+  });
+  pvpRoomStart.disabled = false;
+});
+
 // ---- Leaving a battle: cash out the ending in-battle G into persistent M (20%, 50 minimum) ----
 
 exitBattleButton.addEventListener('click', async () => {
-  if (!game) return;
-  const endingG = game.players[0].currency;
+  const isPvpGuest = pvpMatch && !pvpMatch.isHost;
+  if (!game && !isPvpGuest) return;
+
+  // ゲスト側はGameを持たないので、直近のpublicStateから自分のGを読む
+  // （publicStateがまだ届いていない対戦開始直後は0扱い）。
+  const endingG = isPvpGuest ? pvpMatch.lastCurrency ?? 0 : game.players[0].currency;
   const earnedM = Math.max(Math.round(endingG * M_CONVERSION_RATE), M_CONVERSION_MIN);
   const confirmed = await confirmYesNo(`対戦をやめますか？\n所持${endingG}Gの20%（${earnedM}M、下限50M）を獲得します。`);
   if (!confirmed) return;
 
   currentCharacter.m += earnedM;
   saveCharacter(currentUserId, currentCharacter);
+
+  if (pvpMatch?.isHost) {
+    pvpMatch.relay.destroy();
+    pvpMatch.actionListener.destroy();
+    finishPvpRoom(pvpMatch.roomCode);
+  } else if (isPvpGuest) {
+    pvpMatch.stopPublicListener?.();
+    pvpMatch.stopHandListener?.();
+    pvpMatch.listener.destroy();
+  }
+  pvpMatch = null;
   game = undefined;
   stopMusic();
   appEl.classList.add('hidden');

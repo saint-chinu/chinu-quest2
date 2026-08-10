@@ -77,6 +77,7 @@ export class Game {
     onBattleRetreat,
     onBattleOutcome,
     onStoryBattleEnd,
+    onPvpSync,
     playerConfigs,
     humanPlayer,
     storyMode = false,
@@ -109,6 +110,10 @@ export class Game {
     this.onBattleRetreat = onBattleRetreat;
     this.onBattleOutcome = onBattleOutcome;
     this.onStoryBattleEnd = onStoryBattleEnd;
+    // 対人戦(PvP)ホスト側のみ使う: _notifyStateのたびに盤面全体のスナップ
+    // ショットを渡す（main.js側がFirestoreへpublishする）。通常対戦/
+    // ストーリーでは未設定のままなので何も起きない。
+    this.onPvpSync = onPvpSync;
     // ストーリーモードでは破産＝敗北（脱落）としてそのままバトル終了判定に
     // つながる（_checkBankruptcy/_checkStoryWinCondition参照）。通常の対戦
     // モードでは今まで通り500Gを渡されゴール地点から再スタートするだけ。
@@ -318,7 +323,7 @@ export class Game {
     if (player.isCPU) {
       this.onLog(`${player.name}はカードを1枚引いた`);
     } else {
-      await this.onCardReveal(card);
+      await this.onCardReveal(card, player.id);
     }
 
     player.hand.push(card);
@@ -330,7 +335,7 @@ export class Game {
         await delay(CPU_DECISION_MS);
         discarded = player.hand[0];
       } else {
-        discarded = await this.onDiscardChoice(player.hand);
+        discarded = await this.onDiscardChoice(player.hand, player.id);
       }
       player.hand = player.hand.filter((c) => c.id !== discarded.id);
       player.deck.discard(discarded);
@@ -380,7 +385,7 @@ export class Game {
       const screenDir = dgx === 1 ? 'downright' : dgx === -1 ? 'upleft' : dgz === 1 ? 'downleft' : 'upright';
       return { tileId: id, screenDir };
     });
-    return this.onChooseBranch(options);
+    return this.onChooseBranch(options, player.id);
   }
 
   /**
@@ -447,7 +452,7 @@ export class Game {
     // free once drawn) - excluded here rather than pretending they cost 0G.
     const sellable = getCardCatalog().filter((c) => c.cost != null);
     const options = randomSample(sellable, SHOP_OPTION_COUNT);
-    const card = await this.onShopPurchase(options, player.currency);
+    const card = await this.onShopPurchase(options, player.currency, player.id);
     if (!card) return;
     if (player.currency < card.cost) {
       this.onLog('ゴールドが足りません');
@@ -483,9 +488,11 @@ export class Game {
     }
 
     for (;;) {
-      const choice = await this.onLandCommand(this.getTileSummary(tile), {
-        canSummon: tile.type === TileType.LAND && this._affordableMonsterCards(player).length > 0,
-      });
+      const choice = await this.onLandCommand(
+        this.getTileSummary(tile),
+        { canSummon: tile.type === TileType.LAND && this._affordableMonsterCards(player).length > 0 },
+        player.id,
+      );
       if (choice === 'end') break;
 
       if (choice === 'summon') {
@@ -535,16 +542,16 @@ export class Game {
   async _runLandBrowse(player, candidateIds) {
     for (;;) {
       const summaries = candidateIds.map((id) => this._browseTileSummary(this.tiles[id], player));
-      const pickedId = await this.onPickBrowseTile(summaries);
+      const pickedId = await this.onPickBrowseTile(summaries, player.id);
       if (pickedId == null) return false;
 
       const tile = this.tiles[pickedId];
       for (;;) {
-        const action = await this.onLandSubmenu(this._browseTileSummary(tile, player));
+        const action = await this.onLandSubmenu(this._browseTileSummary(tile, player), player.id);
         if (action == null || action === 'back') break;
 
         if (action === 'info') {
-          await this.onShowTileInfo(this._browseTileSummary(tile, player));
+          await this.onShowTileInfo(this._browseTileSummary(tile, player), player.id);
           continue;
         }
         if (action === 'swap' && (await this._humanSummonFlow(player, tile))) return true;
@@ -616,11 +623,14 @@ export class Game {
       return false;
     }
 
-    const card = await this.onPickMonsterCard(options);
+    const card = await this.onPickMonsterCard(options, player.id);
     if (!card) return false;
 
     const actionType = tile.owner == null ? 'summon' : tile.owner === player.id ? 'swap' : 'invade';
-    const confirmed = await this.onConfirmAction({ actionType, card, cost: card.cost, tile: this.getTileSummary(tile) });
+    const confirmed = await this.onConfirmAction(
+      { actionType, card, cost: card.cost, tile: this.getTileSummary(tile) },
+      player.id,
+    );
     if (!confirmed) return false;
 
     player.hand = player.hand.filter((c) => c.id !== card.id);
@@ -651,7 +661,7 @@ export class Game {
     }
 
     const cost = LEVEL_UP_COST[tile.level];
-    const confirmed = await this.onConfirmAction({ actionType: 'levelup', cost, tile: this.getTileSummary(tile) });
+    const confirmed = await this.onConfirmAction({ actionType: 'levelup', cost, tile: this.getTileSummary(tile) }, player.id);
     if (!confirmed) return false;
     if (player.currency < cost) {
       this.onLog('ゴールドが足りません');
@@ -668,17 +678,15 @@ export class Game {
 
   /** Returns true if an element change actually went through (vs. cancelled / unaffordable). Operates on an already-picked tile (see _runLandBrowse). */
   async _humanChangeElementFlowForTile(player, tile) {
-    const newElement = await this.onPickElement(CHANGEABLE_ELEMENTS.filter((e) => e !== tile.element));
+    const newElement = await this.onPickElement(CHANGEABLE_ELEMENTS.filter((e) => e !== tile.element), player.id);
     if (!newElement) return false;
 
     const rate = tile.element === Element.NEUTRAL ? NEUTRAL_ELEMENT_CHANGE_DISCOUNT : 1;
     const cost = Math.round(ELEMENT_CHANGE_COST_PER_LEVEL * tile.level * rate);
-    const confirmed = await this.onConfirmAction({
-      actionType: 'element',
-      cost,
-      tile: this.getTileSummary(tile),
-      targetElement: newElement,
-    });
+    const confirmed = await this.onConfirmAction(
+      { actionType: 'element', cost, tile: this.getTileSummary(tile), targetElement: newElement },
+      player.id,
+    );
     if (!confirmed) return false;
     if (player.currency < cost) {
       this.onLog('ゴールドが足りません');
@@ -718,11 +726,11 @@ export class Game {
       const screenDir = dgx === 1 ? 'downright' : dgx === -1 ? 'upleft' : dgz === 1 ? 'downleft' : 'upright';
       return { tileId: t.id, screenDir };
     });
-    const targetId = await this.onPickMoveDirection(options);
+    const targetId = await this.onPickMoveDirection(options, player.id);
     if (targetId == null) return false;
     const targetTile = this.tiles.find((t) => t.id === targetId);
 
-    const confirmed = await this.onConfirmMove(this.getTileSummary(targetTile));
+    const confirmed = await this.onConfirmMove(this.getTileSummary(targetTile), player.id);
     if (!confirmed) return false;
 
     const attackerUnit = tile.unit;
@@ -782,7 +790,7 @@ export class Game {
    */
   async _humanSellLandFlow(player, tile) {
     const salePrice = Math.round(this._landValueOfTile(tile) / 2);
-    const confirmed = await this.onConfirmSellLand({ tile: this.getTileSummary(tile), salePrice });
+    const confirmed = await this.onConfirmSellLand({ tile: this.getTileSummary(tile), salePrice }, player.id);
     if (!confirmed) return false;
 
     if (tile.unit) {
@@ -846,7 +854,7 @@ export class Game {
       return false;
     }
 
-    const targetId = await this.onPickAbilityTarget(targets.map((t) => this._browseTileSummary(t, player)));
+    const targetId = await this.onPickAbilityTarget(targets.map((t) => this._browseTileSummary(t, player)), player.id);
     if (targetId == null) return false;
 
     const targetTile = this.tiles.find((t) => t.id === targetId);
@@ -1010,22 +1018,28 @@ export class Game {
 
     const attackerItem = attackerPlayer.isCPU
       ? this._cpuPickBattleItem(attackerPlayer)
-      : await this.onPickBattleItem({
-          hand: attackerPlayer.hand.filter((c) => c.type === CardType.GEAR),
-          side: 'attacker',
-          ownerName: attackerPlayer.name,
-          unitName: attackerUnit.def.name,
-        });
+      : await this.onPickBattleItem(
+          {
+            hand: attackerPlayer.hand.filter((c) => c.type === CardType.GEAR),
+            side: 'attacker',
+            ownerName: attackerPlayer.name,
+            unitName: attackerUnit.def.name,
+          },
+          attackerPlayer.id,
+        );
     this._consumeBattleItem(attackerPlayer, attackerUnit, attackerItem);
 
     const defenderItem = defenderPlayer.isCPU
       ? this._cpuPickBattleItem(defenderPlayer)
-      : await this.onPickBattleItem({
-          hand: defenderPlayer.hand.filter((c) => c.type === CardType.GEAR),
-          side: 'defender',
-          ownerName: defenderPlayer.name,
-          unitName: defenderUnit.def.name,
-        });
+      : await this.onPickBattleItem(
+          {
+            hand: defenderPlayer.hand.filter((c) => c.type === CardType.GEAR),
+            side: 'defender',
+            ownerName: defenderPlayer.name,
+            unitName: defenderUnit.def.name,
+          },
+          defenderPlayer.id,
+        );
     this._consumeBattleItem(defenderPlayer, defenderUnit, defenderItem);
 
     // 貫通: nullifies the defender's 同属性ボーナス (land-added HP) for this
@@ -1112,7 +1126,7 @@ export class Game {
         await delay(CPU_DECISION_MS);
         discarded = ownerPlayer.hand[0];
       } else {
-        discarded = await this.onDiscardChoice(ownerPlayer.hand);
+        discarded = await this.onDiscardChoice(ownerPlayer.hand, ownerPlayer.id);
       }
       ownerPlayer.hand = ownerPlayer.hand.filter((c) => c.id !== discarded.id);
       ownerPlayer.deck.discard(discarded);
@@ -1210,25 +1224,57 @@ export class Game {
   _notifyState() {
     const human = this.players.find((p) => !p.isCPU);
     const showCenter = this.awaitingRoll && !this.isBusy;
+    const playersPayload = this.players.map((p) => ({
+      id: p.id,
+      name: p.name,
+      color: p.color,
+      allianceId: p.allianceId,
+      tileId: p.tileId,
+      currency: p.currency,
+      totalAssets: this._totalAssetsOf(p),
+      summonCount: this._summonCountOf(p.id),
+      handCount: p.hand.length,
+      defeated: !!p.defeated,
+    }));
     this.onStateChange({
       turnText: `${this.currentPlayer.name}のターン`,
       canRoll: showCenter && !this.currentPlayer.isCPU,
-      players: this.players.map((p) => ({
-        id: p.id,
-        name: p.name,
-        color: p.color,
-        allianceId: p.allianceId,
-        currency: p.currency,
-        totalAssets: this._totalAssetsOf(p),
-        summonCount: this._summonCountOf(p.id),
-        handCount: p.hand.length,
-        defeated: p.defeated,
-      })),
+      players: playersPayload,
       hand: human.hand,
       showCenter,
       centerHand: this.currentPlayer.hand,
       currentPlayerIsCPU: this.currentPlayer.isCPU,
       spellUsedThisTurn: this.currentPlayer.spellUsedThisTurn,
     });
+    this.onPvpSync?.(this._pvpSnapshot(playersPayload));
+  }
+
+  /**
+   * 対人戦ホスト権威モデル用の盤面スナップショット。ゲスト側main.jsは
+   * Gameインスタンスを持たず、これをFirestore経由で受け取ってローカルの
+   * scene/tilesにそのまま反映するだけ（シミュレーションはホストだけが行う
+   * ので決定論の問題が発生しない）。手札は各プレイヤーごとに別チャンネル
+   * （private/{uid}）で配るため、ここでは枚数だけ含む。
+   */
+  _pvpSnapshot(playersPayload) {
+    return {
+      currentPlayerId: this.currentPlayer.id,
+      turnText: `${this.currentPlayer.name}のターン`,
+      awaitingRoll: this.awaitingRoll,
+      isBusy: this.isBusy,
+      players: playersPayload,
+      tiles: this.tiles
+        .filter((t) => t.type === TileType.LAND)
+        .map((t) => ({
+          id: t.id,
+          owner: t.owner,
+          level: t.level,
+          element: t.element,
+          unit: t.unit
+            ? { name: t.unit.def.name, atk: t.unit.def.atk, hp: t.unit.currentHp ?? t.unit.def.hp }
+            : null,
+        })),
+      hands: Object.fromEntries(this.players.filter((p) => !p.isCPU).map((p) => [p.id, p.hand])),
+    };
   }
 }
