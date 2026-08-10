@@ -35,7 +35,10 @@
 - Firestoreは値に`undefined`を許さないため、`sendGuestResponse`は`undefined`を`null`に丸めてから書き込む（`promptCardReveal`等、確認のみでresolve()に引数を渡さない型があるため）
 - 本物のFirebaseプロジェクト設定（`.env`）はまだ未投入（開発中はローカルエミュレータにフォールバックしている）
 - モンスター同士のバトル演出（`battle-scene-modal`）は実機で確認済み（侵略→アイテム選択→攻撃応酬→通行料決着まで一巡）。検証中に`relayable()`のバグを発見・修正: `onBattleSceneEnter`/`onBattleAttack`/`onBattleOutcome`はplayer.idを引数に持たないbroadcast型なのに、末尾引数を一律「player.id」とみなして切り落とす処理が唯一の引数（payload本体）を誤って消してしまい、ゲスト側で`undefined`を受け取って侵略した瞬間に無言で止まっていた。broadcast型は末尾切り落としをスキップするよう修正済み
-- 未検証のまま残っている個別フロー: ショップマス（`onShopPurchase`のリレー先）、スペル使用のリレー、破産・勝敗判定の対人戦での見え方 - アーキテクチャ上は他の意思決定と同じ経路を通るはずだが、実機での動作確認はまだ
+- ショップマス（`onShopPurchase`）とSTART/EVENTマス（チェックポイント到着）は実機で確認済み。検証中に2件のバグを発見・修正:
+  - `getTileSummary()`: 非LANDマス（START/EVENT/SHOP）はboard.js側でlevelがundefinedのまま置かれており、そのままFirestoreへ中継すると拒否されて対戦相手（チェックポイントに止まった側）の意思決定が無言で止まっていた。非LANDマスのlevel/landValue/tollをnullへ丸めて修正
+  - `relayable()`: 追加引数を持つ型（`onLandCommand`/`onShopPurchase`）の中継payloadを配列でまとめていたが、引数自体が配列の場合（ショップの購入候補一覧など）Firestoreが拒否する「ネストした配列」になっていた。配列ではなく`{a0, a1, ...}`という個別プロパティのオブジェクトにまとめて修正
+- 未検証のまま残っている個別フロー: スペル使用のリレー、破産・勝敗判定の対人戦での見え方 - アーキテクチャ上は他の意思決定と同じ経路を通るはずだが、実機での動作確認はまだ
 - 既知のv1簡略化: ゲスト側の駒移動はステップアニメーションなし（publicState同期のたびに最終位置へスナップ）、切断検知なし（ホスト退出→ゲスト強制退出のパスのみ）、ゲストのダイス目はゲスト側で計算した値をそのまま信頼（サーバー側再検証なし）
 
 ### カード・収集まわり
