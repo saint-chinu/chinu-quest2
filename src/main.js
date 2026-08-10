@@ -2581,17 +2581,24 @@ pvpRoomLeave.addEventListener('click', async () => {
  * 追加引数があってもforPlayerId判定を誤らない。中継用payloadは残り引数が
  * 1個ならその値そのまま、2個以上なら配列にまとめる（pvpGuestHandlers側で
  * その型ごとに展開する）。
+ *
+ * broadcast型（onBattleSceneEnter等）はそもそもplayer.idを引数に持たない
+ * （両者へ同じ内容を流すだけなので「誰の手番か」という概念自体がない）ため、
+ * 末尾を切り落とす処理を一切せず引数をそのまま使う。ここを他の型と同列に
+ * 扱うと、broadcast型の唯一の引数（payloadそのもの）が誤ってforPlayerId
+ * 扱いされて消え、ゲスト側でundefinedを渡してしまうバグになる。
  */
 function relayable(type, localPrompt, { broadcast = false } = {}) {
   return (...args) => {
+    if (broadcast) {
+      const payload = args.length === 1 ? args[0] : args;
+      if (pvpMatch?.isHost) pvpMatch.relay.ask(type, payload);
+      return localPrompt(...args);
+    }
     const forPlayerId = args[args.length - 1];
     const localArgs = args.slice(0, -1);
     const payload = localArgs.length === 1 ? localArgs[0] : localArgs;
     if (!pvpMatch || !pvpMatch.isHost) return localPrompt(...localArgs);
-    if (broadcast) {
-      pvpMatch.relay.ask(type, payload);
-      return localPrompt(...localArgs);
-    }
     if (forPlayerId == null || forPlayerId === pvpMatch.localPlayerId) return localPrompt(...localArgs);
     return pvpMatch.relay.ask(type, payload);
   };
