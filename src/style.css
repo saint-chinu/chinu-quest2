@@ -211,7 +211,8 @@ html, body {
 #shop-list,
 #shop-parts-list,
 #breed-parts-list,
-#story-stage-list {
+#story-stage-list,
+#deck-select-breakdown {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -411,6 +412,78 @@ html, body {
   color: #6a6a80;
   cursor: default;
   text-decoration: none;
+}
+
+#deck-slot-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.deck-slot-tab {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: bold;
+  background: #333;
+  color: #fff;
+}
+
+.deck-slot-tab.selected {
+  border-color: #2ec4b6;
+  background: #1c1c2c;
+}
+
+#deck-select-list {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.deck-select-card {
+  width: 140px;
+  padding: 16px 10px;
+  border-radius: 12px;
+  background: #1c1c2c;
+  border: 2px solid transparent;
+  cursor: pointer;
+  text-align: center;
+  color: #fff;
+}
+
+.deck-select-card:hover {
+  border-color: #2ec4b6;
+}
+
+.deck-select-book-icon {
+  font-size: 44px;
+  margin-bottom: 8px;
+}
+
+.deck-select-name {
+  font-weight: bold;
+  font-size: 14px;
+}
+
+.deck-select-meta {
+  font-size: 11px;
+  color: #9a9ab0;
+  margin-top: 4px;
+}
+
+#deck-select-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+}
+
+#deck-select-confirm.hidden,
+#deck-select-picker.hidden {
+  display: none;
 }
 
 .breed-part-badges {

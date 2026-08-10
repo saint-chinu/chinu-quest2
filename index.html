@@ -79,11 +79,31 @@
 
       <div id="deck-screen" class="pg-screen hidden">
         <h2 class="pg-title">デッキ編成</h2>
+        <div id="deck-slot-tabs"></div>
+        <div class="pg-field">
+          <label for="deck-name-input">デッキ名</label>
+          <input id="deck-name-input" type="text" maxlength="12" />
+        </div>
         <p id="deck-count" class="pg-label">0 / 40</p>
         <div id="deck-catalog-list"></div>
         <div class="pg-actions-row">
           <button id="deck-save" class="pg-button" disabled>保存</button>
           <button id="deck-back" class="pg-button pg-button-secondary">戻る</button>
+        </div>
+      </div>
+
+      <div id="deck-select-screen" class="pg-screen hidden">
+        <div id="deck-select-picker">
+          <h2 class="pg-title">デッキを選んでください</h2>
+          <div id="deck-select-list"></div>
+        </div>
+        <div id="deck-select-confirm" class="hidden">
+          <p id="deck-select-confirm-text" class="pg-label"></p>
+          <div class="pg-actions-row">
+            <button id="deck-select-yes" class="pg-button">はい</button>
+            <button id="deck-select-no" class="pg-button pg-button-secondary">いいえ</button>
+          </div>
+          <div id="deck-select-breakdown"></div>
         </div>
       </div>
 

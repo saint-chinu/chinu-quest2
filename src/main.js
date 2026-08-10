@@ -1286,10 +1286,20 @@ const editorError = document.getElementById('editor-error');
 const editorSave = document.getElementById('editor-save');
 const editorBack = document.getElementById('editor-back');
 const deckScreen = document.getElementById('deck-screen');
+const deckSlotTabs = document.getElementById('deck-slot-tabs');
+const deckNameInput = document.getElementById('deck-name-input');
 const deckCount = document.getElementById('deck-count');
 const deckCatalogList = document.getElementById('deck-catalog-list');
 const deckSave = document.getElementById('deck-save');
 const deckBack = document.getElementById('deck-back');
+const deckSelectScreen = document.getElementById('deck-select-screen');
+const deckSelectPicker = document.getElementById('deck-select-picker');
+const deckSelectList = document.getElementById('deck-select-list');
+const deckSelectConfirm = document.getElementById('deck-select-confirm');
+const deckSelectConfirmText = document.getElementById('deck-select-confirm-text');
+const deckSelectBreakdown = document.getElementById('deck-select-breakdown');
+const deckSelectYes = document.getElementById('deck-select-yes');
+const deckSelectNo = document.getElementById('deck-select-no');
 const shopScreen = document.getElementById('shop-screen');
 const shopCurrency = document.getElementById('shop-currency');
 const shopPackList = document.getElementById('shop-pack-list');
@@ -1333,7 +1343,7 @@ const storyDialogueSpeaker = document.getElementById('story-dialogue-speaker');
 const storyDialogueText = document.getElementById('story-dialogue-text');
 const storyDialogueNext = document.getElementById('story-dialogue-next');
 
-const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, catalogScreen, cardEditorScreen, deckScreen, shopScreen, battleMenuScreen, breedScreen, stubScreen, storyScreen, storyDialogueScreen, pvpMenuScreen, pvpRoomScreen];
+const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, catalogScreen, cardEditorScreen, deckScreen, deckSelectScreen, shopScreen, battleMenuScreen, breedScreen, stubScreen, storyScreen, storyDialogueScreen, pvpMenuScreen, pvpRoomScreen];
 function showScreen(el) {
   ALL_PG_SCREENS.forEach((s) => s.classList.toggle('hidden', s !== el));
 }
@@ -1413,6 +1423,11 @@ function ensureBreedFields(character) {
   if (!character.breedMonster) character.breedMonster = { name: BREED_BASE.defaultName, equippedPartIds: [] };
   if (!character.ownedPartIds) character.ownedPartIds = [];
   if (character.storyProgress == null) character.storyProgress = 0;
+  // 複数デッキ(ブック)対応前のセーブデータ移行: 単一のdeckListを
+  // decks[0]として引き継ぐ（旧deckListフィールド自体はもう読まない）。
+  if (!character.decks) {
+    character.decks = [{ id: `deck-${Date.now()}`, name: 'ブック1', deckList: character.deckList || [] }];
+  }
   return character;
 }
 
@@ -1454,7 +1469,7 @@ charmakeSubmit.addEventListener('click', () => {
     iconIndex: selectedIconIndex,
     color: ICON_COLORS[selectedIconIndex],
     deckVariant: selectedDeckVariant,
-    deckList,
+    decks: [{ id: `deck-${Date.now()}`, name: 'ブック1', deckList }],
     ownedCards,
     m: STARTING_M,
     breedMonster,
@@ -1528,19 +1543,19 @@ function playDialogueLines(lines) {
 async function playStoryStage(index) {
   showScreen(storyDialogueScreen);
   await playDialogueLines(STORY_STAGES[index].intro);
-  await startStoryBattle(index);
+  const chosenDeck = await promptDeckSelection();
+  await startStoryBattle(index, chosenDeck.deckList);
 }
 
 /** hero(+ally) vs opponents, in Gameの playerConfigs 形式。陣営分けはallianceIdだけで表現 - stage.heroAllianceId/enemyAllianceIdがnullなら同盟なし（1vs1vs1のFFA）。 */
-function buildStoryPlayerConfigs(stage, iconImage) {
+function buildStoryPlayerConfigs(stage, iconImage, heroDeckList) {
   const configs = [
     {
       name: currentCharacter.name,
       isCPU: false,
       color: currentCharacter.color,
       allianceId: stage.heroAllianceId ?? null,
-      deckList: currentCharacter.deckList,
-      deckVariant: currentCharacter.deckVariant,
+      deckList: heroDeckList,
       iconImage,
     },
   ];
@@ -1565,7 +1580,7 @@ function buildStoryPlayerConfigs(stage, iconImage) {
   return configs;
 }
 
-async function startStoryBattle(index) {
+async function startStoryBattle(index, heroDeckList) {
   const stage = STORY_STAGES[index];
   activeStoryStageIndex = index;
 
@@ -1579,7 +1594,7 @@ async function startStoryBattle(index) {
   appEl.classList.remove('hidden');
   startBattle(currentCharacter, {
     storyMode: true,
-    playerConfigs: buildStoryPlayerConfigs(stage, iconImage),
+    playerConfigs: buildStoryPlayerConfigs(stage, iconImage, heroDeckList),
     onStoryBattleEnd: (result) => handleStoryBattleEnd(index, result),
   });
 }
@@ -1790,6 +1805,7 @@ editorBack.addEventListener('click', () => {
 // ---- Deck editor: browse the card catalog, +/- copies (max 4 each) until exactly 40, then save ----
 
 const MAX_COPIES_PER_CARD = 4;
+const MAX_DECKS = 3;
 const DECK_SIZE = 40;
 
 /**
@@ -1813,6 +1829,7 @@ function effectiveCatalog() {
 }
 
 let deckWorkingCounts = null;
+let editingDeckIndex = 0;
 
 function deckTotal() {
   let total = 0;
@@ -1830,11 +1847,50 @@ function ownedCountOf(key) {
   return (currentCharacter.ownedCards || {})[key] || 0;
 }
 
+/** Up to MAX_DECKS tabs (existing deck names) plus a trailing "＋ 新規作成" tab while under the cap. Clicking a tab (re-)opens the deck editor on that slot. */
+function renderDeckSlotTabs() {
+  deckSlotTabs.replaceChildren();
+  currentCharacter.decks.forEach((deck, index) => {
+    const tab = document.createElement('button');
+    tab.className = `deck-slot-tab${index === editingDeckIndex ? ' selected' : ''}`;
+    tab.textContent = deck.name;
+    tab.addEventListener('click', () => {
+      editingDeckIndex = index;
+      showDeckScreen();
+    });
+    deckSlotTabs.appendChild(tab);
+  });
+  if (currentCharacter.decks.length < MAX_DECKS) {
+    const addTab = document.createElement('button');
+    addTab.className = 'deck-slot-tab';
+    addTab.textContent = '＋ 新規作成';
+    addTab.addEventListener('click', () => {
+      currentCharacter.decks.push({
+        id: `deck-${Date.now()}`,
+        name: `ブック${currentCharacter.decks.length + 1}`,
+        deckList: [],
+      });
+      editingDeckIndex = currentCharacter.decks.length - 1;
+      showDeckScreen();
+    });
+    deckSlotTabs.appendChild(addTab);
+  }
+}
+
 function showDeckScreen() {
+  if (editingDeckIndex >= currentCharacter.decks.length) editingDeckIndex = 0;
+  const editingDeck = currentCharacter.decks[editingDeckIndex];
+  renderDeckSlotTabs();
+  deckNameInput.value = editingDeck.name;
+
   const catalog = effectiveCatalog();
+  const catalogByKey = new Map(catalog.map((def) => [cardKey(def), def]));
   deckWorkingCounts = new Map();
-  for (const card of currentCharacter.deckList || []) {
+  for (const card of editingDeck.deckList || []) {
     const key = cardKey(card);
+    // カタログに存在しないキー（壊れた保存データ等）は数えない - 総数表示が
+    // 実際の有効枚数を正しく反映し、保存し直すと自然に取り除かれる。
+    if (!catalogByKey.has(key)) continue;
     deckWorkingCounts.set(key, (deckWorkingCounts.get(key) || 0) + 1);
   }
 
@@ -1917,9 +1973,11 @@ deckSave.addEventListener('click', () => {
   const newList = [];
   for (const [key, count] of deckWorkingCounts.entries()) {
     const def = byKey.get(key);
+    if (!def) continue; // 保険: 解決できないキーは書き込まない
     for (let i = 0; i < count; i++) newList.push({ ...def });
   }
-  currentCharacter = { ...currentCharacter, deckList: newList };
+  const name = deckNameInput.value.trim() || currentCharacter.decks[editingDeckIndex].name;
+  currentCharacter.decks[editingDeckIndex] = { ...currentCharacter.decks[editingDeckIndex], name, deckList: newList };
   saveCharacter(currentUserId, currentCharacter);
   showHubScreen();
 });
@@ -1928,12 +1986,98 @@ deckBack.addEventListener('click', showHubScreen);
 
 // ---- Shop: buy permanent card packs with M, or sell spare cards. EX never sells. ----
 
+/** Summed across every one of the character's books - a card still committed to any of them can't be sold. */
 function inDeckCountOf(key) {
   let count = 0;
-  for (const card of currentCharacter.deckList || []) {
-    if (cardKey(card) === key) count += 1;
+  for (const deck of currentCharacter.decks || []) {
+    for (const card of deck.deckList || []) {
+      if (cardKey(card) === key) count += 1;
+    }
   }
   return count;
+}
+
+// ---- デッキ選択（対戦・ストーリー共通）: 盤面に入る直前に毎回どのブックを使うか選ばせる ----
+
+/** 3冊まで並べて選ばせ、選んだ1冊を「このデッキにしますか？」で内訳付き確認してから確定する。resolveされるのは確定した{id,name,deckList}。 */
+function promptDeckSelection() {
+  return new Promise((resolve) => {
+    let pendingDeck = null;
+
+    function showPicker() {
+      deckSelectConfirm.classList.add('hidden');
+      deckSelectPicker.classList.remove('hidden');
+      deckSelectList.replaceChildren();
+      for (const deck of currentCharacter.decks) {
+        const card = document.createElement('div');
+        card.className = 'deck-select-card';
+        const icon = document.createElement('div');
+        icon.className = 'deck-select-book-icon';
+        icon.textContent = '📖';
+        const name = document.createElement('div');
+        name.className = 'deck-select-name';
+        name.textContent = deck.name;
+        const meta = document.createElement('div');
+        meta.className = 'deck-select-meta';
+        meta.textContent = `${deck.deckList.length}枚`;
+        card.append(icon, name, meta);
+        card.addEventListener('click', () => showConfirm(deck));
+        deckSelectList.appendChild(card);
+      }
+    }
+
+    function showConfirm(deck) {
+      pendingDeck = deck;
+      deckSelectConfirmText.textContent = `「${deck.name}」にしますか？`;
+
+      const counts = new Map(); // key -> { def, count }
+      for (const card of deck.deckList) {
+        if (!card?.name) continue; // 壊れた保存データ（デッキ編成画面を開けば自動で除去される）は表示しない
+        const key = cardKey(card);
+        if (!counts.has(key)) counts.set(key, { def: card, count: 0 });
+        counts.get(key).count += 1;
+      }
+      deckSelectBreakdown.replaceChildren();
+      for (const { def, count } of counts.values()) {
+        const row = document.createElement('div');
+        row.className = 'deck-row';
+        const swatch = document.createElement('div');
+        swatch.className = 'deck-row-swatch';
+        swatch.style.background = cardColor(def);
+        const info = document.createElement('div');
+        info.className = 'deck-row-info';
+        const nameEl = document.createElement('div');
+        nameEl.className = 'deck-row-name';
+        nameEl.textContent = def.name;
+        const meta = document.createElement('div');
+        meta.className = 'deck-row-meta';
+        meta.textContent = `${describeCard(def)} / ${count}枚`;
+        info.append(nameEl, meta);
+        row.append(swatch, info);
+        deckSelectBreakdown.appendChild(row);
+      }
+
+      deckSelectPicker.classList.add('hidden');
+      deckSelectConfirm.classList.remove('hidden');
+    }
+
+    function onYes() {
+      cleanup();
+      resolve(pendingDeck);
+    }
+    function onNo() {
+      showPicker();
+    }
+    function cleanup() {
+      deckSelectYes.removeEventListener('click', onYes);
+      deckSelectNo.removeEventListener('click', onNo);
+    }
+
+    deckSelectYes.addEventListener('click', onYes);
+    deckSelectNo.addEventListener('click', onNo);
+    showScreen(deckSelectScreen);
+    showPicker();
+  });
 }
 
 function showShopScreen() {
@@ -2252,6 +2396,7 @@ breedImage.addEventListener('change', () => {
 breedBackButton.addEventListener('click', showHubScreen);
 
 battleCpuButton.addEventListener('click', async () => {
+  const chosenDeck = await promptDeckSelection();
   preGame.classList.add('hidden');
   appEl.classList.remove('hidden');
   let iconImage = null;
@@ -2259,7 +2404,7 @@ battleCpuButton.addEventListener('click', async () => {
     const icons = await loadPlayerIcons();
     iconImage = icons[currentCharacter.iconIndex]?.canvas ?? null;
   }
-  startBattle({ ...currentCharacter, iconImage });
+  startBattle({ ...currentCharacter, iconImage, deckList: chosenDeck.deckList });
 });
 
 // ---- 対人戦(PvP): 部屋コードでの招待・参加ロビー ----
