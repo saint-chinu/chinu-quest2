@@ -2579,8 +2579,15 @@ pvpRoomLeave.addEventListener('click', async () => {
  * の間に追加の引数を挟む）。forPlayerIdは常に「最後の引数」として届くので
  * 可変長で受け取り、末尾を分離してから残りをそのままlocalPromptに渡す -
  * 追加引数があってもforPlayerId判定を誤らない。中継用payloadは残り引数が
- * 1個ならその値そのまま、2個以上なら配列にまとめる（pvpGuestHandlers側で
- * その型ごとに展開する）。
+ * 1個ならその値そのまま、2個以上なら`{a0: ..., a1: ...}`という「配列を
+ * 使わないオブジェクト」にまとめる（pvpGuestHandlers側でその型ごとに
+ * 展開する）。ここを`{args: [a, b]}`のように配列のまま1段オブジェクトで
+ * くるんだだけでは不十分 - Firestoreが拒否する「ネストした配列」は
+ * 配列の要素が配列であること自体を指すので、オブジェクトの外側の階層は
+ * 関係ない（`args`プロパティの値が`[optionsArray, currency]`という、
+ * 要素にoptionsArrayという配列を持つ配列である時点でアウト）。なので
+ * 引数ごとに別々のプロパティへ展開し、配列を配列の要素として一切
+ * 持たせない。
  *
  * broadcast型（onBattleSceneEnter等）はそもそもplayer.idを引数に持たない
  * （両者へ同じ内容を流すだけなので「誰の手番か」という概念自体がない）ため、
@@ -2597,7 +2604,8 @@ function relayable(type, localPrompt, { broadcast = false } = {}) {
     }
     const forPlayerId = args[args.length - 1];
     const localArgs = args.slice(0, -1);
-    const payload = localArgs.length === 1 ? localArgs[0] : localArgs;
+    const payload =
+      localArgs.length === 1 ? localArgs[0] : Object.fromEntries(localArgs.map((v, i) => [`a${i}`, v]));
     if (!pvpMatch || !pvpMatch.isHost) return localPrompt(...localArgs);
     if (forPlayerId == null || forPlayerId === pvpMatch.localPlayerId) return localPrompt(...localArgs);
     return pvpMatch.relay.ask(type, payload);
@@ -2639,7 +2647,7 @@ const pvpGuestHandlers = {
   // landCommand/shopPurchaseはgame.js側でpayloadとplayer.idの間に追加引数を
   // 挟む型なので、relayable()が[複数引数]の配列としてまとめて送ってくる -
   // ここで展開してローカルのprompt関数へ渡す（他の型は単一値のまま素通し）。
-  landCommand: ([tile, options]) => promptLandCommand(tile, options),
+  landCommand: ({ a0: tile, a1: options }) => promptLandCommand(tile, options),
   pickMonsterCard: promptPickMonsterCard,
   confirmAction: promptConfirmAction,
   confirmMove: promptConfirmMove,
@@ -2651,7 +2659,7 @@ const pvpGuestHandlers = {
   chooseBranch: promptChooseBranch,
   pickMoveDirection: promptMoveDirection,
   pickElement: promptPickElement,
-  shopPurchase: ([options]) => promptShopPurchase(options),
+  shopPurchase: ({ a0: options }) => promptShopPurchase(options),
   battleSceneEnter: promptBattleSceneEnter,
   pickBattleItem: promptPickBattleItem,
   battleAttack: promptBattleAttack,

@@ -1157,16 +1157,23 @@ export class Game {
     };
   }
 
-  /** Plain-data snapshot of a tile for the UI - safe to hand to main.js, no mesh/internal refs. */
+  /**
+   * Plain-data snapshot of a tile for the UI - safe to hand to main.js, no
+   * mesh/internal refs. Also safe to hand to Firestore (PvPの対人戦リレー
+   * 経由でそのままpublishされる) - board.jsは非LANDマス（START/EVENT/SHOP）
+   * のlevelをundefinedのまま置くので、ここで確実にnullへ丸める
+   * （Firestoreはフィールド値のundefinedを許さない）。
+   */
   getTileSummary(tile) {
     const owner = tile.owner != null ? this.players.find((p) => p.id === tile.owner) : null;
+    const isLand = tile.type === TileType.LAND;
     return {
       id: tile.id,
       type: tile.type,
       element: tile.element,
-      level: tile.level,
-      landValue: this._landValueOfTile(tile),
-      toll: this._tollOfTile(tile),
+      level: isLand ? tile.level : null,
+      landValue: isLand ? this._landValueOfTile(tile) : null,
+      toll: isLand ? this._tollOfTile(tile) : null,
       price: tile.price,
       ownerName: owner ? owner.name : null,
       ownerColor: owner ? owner.color : null,
