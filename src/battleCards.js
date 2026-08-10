@@ -80,7 +80,7 @@ export const ITEM_CATALOG = {
     atkBonus: 0,
     hpBonus: 10,
   },
-  // ストーリー③クリア報酬（ぶどうからのお礼）。story.jsのSTORY_STAGES[2].rewardから参照。
+  // ストーリー③クリア報酬（紫の魔女ホフクからのお礼）。story.jsのSTORY_STAGES[2].rewardから参照。
   peeStaff: {
     id: 'peeStaff',
     type: CardType.GEAR,

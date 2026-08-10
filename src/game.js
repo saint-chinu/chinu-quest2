@@ -660,6 +660,7 @@ export class Game {
 
     player.currency -= cost;
     tile.level += 1;
+    this.scene.updateTileLevelBorder(tile);
     this.onLog(`${player.name}は土地をLv${tile.level}にアップグレードした (-${cost}G)`);
     this._notifyState();
     return true;
@@ -794,6 +795,7 @@ export class Game {
     tile.owner = null;
     tile.level = 1;
     this._repaintTileToElement(tile);
+    this.scene.updateTileLevelBorder(tile);
     player.currency += salePrice;
     this.onLog(`${player.name}は土地を売却した (+${salePrice}G)`);
     this._notifyState();

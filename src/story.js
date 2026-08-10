@@ -65,28 +65,28 @@ export const STORY_STAGES = [
   },
   {
     key: 'budou',
-    title: '③ ウサギ＆某不思議の国の少女 vs ぶどう＆主人公',
+    title: '③ ウサギ＆某不思議の国の少女 vs 紫の魔女ホフク＆主人公',
     format: '2vs2',
     intro: [
       { speaker: '主人公', text: '砂浜で何やら揉め事か……？' },
       { speaker: '農家のウサギ', text: 'てめえの魔法、目障りなんだよ！' },
-      { speaker: 'ぶどう', text: 'ちょっと、二人がかりなんてズルいですよ！' },
+      { speaker: '紫の魔女ホフク', text: 'ちょっと、二人がかりなんてズルいですよ！' },
       { speaker: '主人公', text: '見過ごせないな。俺も加勢する！' },
-      { speaker: 'ぶどう', text: '助かります！ 一緒に戦いましょう！' },
+      { speaker: '紫の魔女ホフク', text: '助かります！ 一緒に戦いましょう！' },
     ],
     outro: [
-      { speaker: 'ぶどう', text: '助けてくれてありがとうございます。これ、お礼に受け取ってください。' },
+      { speaker: '紫の魔女ホフク', text: '助けてくれてありがとうございます。これ、お礼に受け取ってください。' },
       { speaker: '???', text: '「ペーの杖」を手に入れた！' },
       { speaker: '主人公', text: 'これは……只者じゃない杖だ。' },
       { speaker: '???', text: 'アイテムを手にしたその時、突然世界が暗転する……。' },
     ],
-    // 味方NPC（ぶどう）はheroAllianceId側、敵2体はenemyAllianceId側。
+    // 味方NPC（紫の魔女ホフク）はheroAllianceId側、敵2体はenemyAllianceId側。
     // Game側は元々allianceIdの汎用集計だけで同盟戦を処理できる設計なので、
     // 文字列キーをそのまま渡すだけで2vs2として成立する。
     heroAllianceId: 'hero',
     enemyAllianceId: 'enemy',
     ally: {
-      name: 'ぶどう',
+      name: '紫の魔女ホフク',
       color: 0x8e5ce6,
       theme: { elements: [Element.WATER, Element.THUNDER], featuredItem: ITEM_CATALOG.knife },
     },

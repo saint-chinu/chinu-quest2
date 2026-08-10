@@ -41,6 +41,10 @@
 
 ---
 
+## 土地レベルの縁取り表示（2026-08-10実装）
+- Lv2以上の土地マスに黒い縁取り（枠）を重ねて表示する。Lv2=細い一重、Lv3・Lv4と段階的に太くなり、Lv5だけ太さを戻して二重の細い枠にする（Lv1は枠なし）。`scene.js`の`GameScene.updateTileLevelBorder(tile)` - `THREE.ExtrudeGeometry`で作った平たい額縁状ジオメトリをtile.meshの子として重ねる方式（GL線の太さはブラウザ依存で制御できないため）
+- 呼び出し箇所は土地Lvアップ（`_humanLevelUpFlowForTile`）と土地売却（`tile.level`を1にリセットする`_humanSellLandFlow`）の2箇所のみ - 属性・所有者・配置モンスターの変化ではtile.levelは変わらないので、それらの操作では呼ばれない
+
 ## 土地コマンド「特殊能力」（2026-08-10実装）
 - 配置されたモンスターが持つ固有能力を行使する土地サブメニューの新項目。カード定義に`ability`フィールド（例: `{ type: 'damage', range: 3, power: 10 }`）を持たせるだけで有効化される汎用仕組み（`game.js`の`_humanAbilityFlow`/`_tileDistance`）。射程はマス目のグラフ距離（隣接関係でのホップ数、移動で使うのと同じ`tile.neighbors`）で判定する
 - 第一号として`battleCards.js`に「火炎瓶男」（火・R・ATK20/HP25・コスト40）を追加。射程3マス以内の敵モンスター1体に10ダメージを与える

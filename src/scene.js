@@ -32,6 +32,47 @@ const DEADZONE_MARGIN = 0.65;
 
 export const PIECE_REST_Y = 0.7;
 
+// 土地レベルの縁取り。tile.mesh(2.6四方)より少し内側(2.5)に、レベルが
+// 上がるほど太い黒枠を重ねる - Lv5だけ「太くする」路線から外れて二重の
+// 細い枠にする（レベル1は枠なし）。各要素は{outer, width}のリング1本分。
+const LEVEL_BORDER_OUTER = 2.5;
+const LEVEL_BORDER_DEPTH = 0.03;
+const LEVEL_BORDER_RINGS = {
+  2: [{ outer: LEVEL_BORDER_OUTER, width: 0.07 }],
+  3: [{ outer: LEVEL_BORDER_OUTER, width: 0.13 }],
+  4: [{ outer: LEVEL_BORDER_OUTER, width: 0.19 }],
+  5: [
+    { outer: LEVEL_BORDER_OUTER, width: 0.06 },
+    { outer: LEVEL_BORDER_OUTER - 2 * (0.06 + 0.05), width: 0.06 },
+  ],
+};
+const levelBorderMaterial = new THREE.MeshStandardMaterial({ color: 0x000000 });
+
+/** Flat square picture-frame geometry (outerSize square with an innerSize square hole), lying in the XZ plane. */
+function buildSquareFrameGeometry(outerSize, innerSize, depth) {
+  const outerHalf = outerSize / 2;
+  const innerHalf = innerSize / 2;
+  const shape = new THREE.Shape();
+  shape.moveTo(-outerHalf, -outerHalf);
+  shape.lineTo(outerHalf, -outerHalf);
+  shape.lineTo(outerHalf, outerHalf);
+  shape.lineTo(-outerHalf, outerHalf);
+  shape.lineTo(-outerHalf, -outerHalf);
+
+  const hole = new THREE.Path();
+  hole.moveTo(-innerHalf, -innerHalf);
+  hole.lineTo(innerHalf, -innerHalf);
+  hole.lineTo(innerHalf, innerHalf);
+  hole.lineTo(-innerHalf, innerHalf);
+  hole.lineTo(-innerHalf, -innerHalf);
+  shape.holes.push(hole);
+
+  const geo = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: false });
+  geo.translate(0, 0, -depth / 2);
+  geo.rotateX(-Math.PI / 2);
+  return geo;
+}
+
 const raycaster = new THREE.Raycaster();
 const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 const NDC_CORNERS = [
@@ -193,6 +234,35 @@ export class GameScene {
     // visible), which meant it fully occluded the CSS stage background
     // sitting behind the (now transparent) canvas. Tiles now float
     // directly over that backdrop instead of a separate 3D floor.
+  }
+
+  /**
+   * (Re)builds the black level-ring border sitting on top of `tile.mesh`
+   * to match its current `tile.level` (1 = no border). Safe to call
+   * repeatedly - always disposes whatever ring was there before building
+   * the new one, so it can just be called again after every level change.
+   */
+  updateTileLevelBorder(tile) {
+    if (tile.levelBorderGroup) {
+      tile.mesh.remove(tile.levelBorderGroup);
+      tile.levelBorderGroup.traverse((obj) => obj.geometry?.dispose());
+      tile.levelBorderGroup = null;
+    }
+
+    const rings = LEVEL_BORDER_RINGS[tile.level];
+    if (!rings) return;
+
+    const group = new THREE.Group();
+    for (const ring of rings) {
+      const geo = buildSquareFrameGeometry(ring.outer, ring.outer - ring.width * 2, LEVEL_BORDER_DEPTH);
+      group.add(new THREE.Mesh(geo, levelBorderMaterial));
+    }
+    // Tile geometry is centered on its own origin, so the top face sits at
+    // local y = +0.2 (half of the 0.4 box height) - nudge a hair above
+    // that to avoid z-fighting with the tile's own top face.
+    group.position.set(0, 0.2 + LEVEL_BORDER_DEPTH / 2 + 0.005, 0);
+    tile.mesh.add(group);
+    tile.levelBorderGroup = group;
   }
 
   /**
