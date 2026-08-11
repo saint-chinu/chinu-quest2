@@ -78,18 +78,22 @@ const BUDOU_ROWS = [
   '...PMMP....',
 ];
 
-// ④ダンボール男戦（ラスボス）のマップ - ①と同じ「＋」型だが9×9に拡大した
-// もの。最終決戦にふさわしい、一番広いマップ。
+// ④ダンボール男戦（ラスボス）のマップ - ユーザー指定のレイアウト。11×11。
+// 外周ループ＋「田」字型に4分割する十字の通路、四隅寄りにチェックポイント
+// 4つ（C×4、うち1つは盤面中央）、右辺中央に3連続のほこら（H×3、縦一列）。
+// 最終決戦にふさわしく、チェックポイント数もほこらの密度も他マップより多い。
 const DANBALL_ROWS = [
-  'GFFFFFFFC',
-  'W...N...T',
-  'W...N...T',
-  'W...N...T',
-  'WWWWNTTTT',
-  'W...N...T',
-  'W...N...T',
-  'W...N...T',
-  'CMMMMMMMS',
+  'GFFFTTTWWWC',
+  'M..M.N.F..N',
+  'MMMMNNFFFNN',
+  'M..M.N.F..N',
+  'W..F.N.M..H',
+  'WWWFNCNMNNH',
+  'W..F.N.M..H',
+  'T..T.N.T..W',
+  'TTTTNNNTNNW',
+  'T..T.N.T..W',
+  'CFFFWWWMMMC',
 ];
 
 // 対人戦のマップ選択・ストーリーモードの各ステージ盤面として使う一覧。
@@ -98,11 +102,13 @@ const DANBALL_ROWS = [
 // なる（story.js側に別途mapIdフィールドを持たせる必要はない）。
 // 背景画像（アセット）はまだ1種類しか無いため全マップ共通のプレースホルダー
 // - 盤面の形だけを変えて対人戦のマップ選択に意味を持たせている。
+// requireAllCheckpoints: 全マップ共通で「全チェックポイントを通過しないと
+// ゴールにならない」ルールが有効（ユーザー指定、2026-08-11）。
 export const MAPS = [
-  { id: 'hitode', name: '① ヒトデの縄張り', rows: HITODE_ROWS },
+  { id: 'hitode', name: '① ヒトデの縄張り', rows: HITODE_ROWS, requireAllCheckpoints: true },
   { id: 'madai', name: '② マダイの岩礁', rows: MADAI_ROWS, requireAllCheckpoints: true },
-  { id: 'budou', name: '③ 決闘の浜辺', rows: BUDOU_ROWS },
-  { id: 'danball', name: '④ 暗転した世界', rows: DANBALL_ROWS },
+  { id: 'budou', name: '③ 決闘の浜辺', rows: BUDOU_ROWS, requireAllCheckpoints: true },
+  { id: 'danball', name: '④ 暗転した世界', rows: DANBALL_ROWS, requireAllCheckpoints: true },
 ];
 
 function getMap(mapId) {
@@ -151,6 +157,10 @@ export function createBoard(mapId) {
 
   const idByCoord = new Map();
   const tiles = [];
+  // チェックポイント(EVENT)は生成順(gz→gxの盤面走査順)に1から番号を振る -
+  // プレイヤーパネルの通過状況表示（main.jsのrenderPlayerPanels）が
+  // マップごとに一貫した番号で「①②③④」のように出せるようにするため。
+  let nextCheckpointNumber = 1;
 
   for (let gz = 0; gz < height; gz++) {
     for (let gx = 0; gx < width; gx++) {
@@ -178,9 +188,10 @@ export function createBoard(mapId) {
         level: isLand ? 1 : undefined,
         // 基本地価 (base land price) - flat across all tiles for now. See
         // Game._landValueOfTile/_tollOfTile for how level/chain multipliers
-        // turn this into 地価 and 通行料.
+        // turn this into 地価 と 通行料.
         price: isLand ? 150 : null,
         neighbors: [],
+        checkpointNumber: type === TileType.EVENT ? nextCheckpointNumber++ : null,
       });
     }
   }

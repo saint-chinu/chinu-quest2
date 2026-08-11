@@ -640,7 +640,17 @@ function computePlayerSlots(players) {
   return [left[0], right[0], left[1], right[1]];
 }
 
-function renderPlayerPanels(players) {
+/** プレイヤー名の下に出すチェックポイント通過状況の番号列（暗い数字→そのチェックポイントを通過すると点灯）。checkpointNumbersが空/未指定（チェックポイントの無いマップ・データが来る前の初期フレーム等）なら何も出さない。 */
+function checkpointRowHtml(checkpointNumbers, passedCheckpointNumbers) {
+  if (!checkpointNumbers?.length) return '';
+  const passed = new Set(passedCheckpointNumbers || []);
+  const nums = checkpointNumbers
+    .map((n) => `<span class="checkpoint-num${passed.has(n) ? ' lit' : ''}">${n}</span>`)
+    .join('');
+  return `<div class="player-checkpoints">${nums}</div>`;
+}
+
+function renderPlayerPanels(players, checkpointNumbers) {
   const slots = computePlayerSlots(players);
   slots.forEach((player, i) => {
     const el = playerPanelEls[i];
@@ -659,6 +669,7 @@ function renderPlayerPanels(players) {
     lines.innerHTML = `
       <div class="player-name">${player.name}${player.defeated ? '（脱落）' : ''}</div>
       <div class="player-stat">所持 ${player.currency}G / 総資産 ${player.totalAssets}G</div>
+      ${checkpointRowHtml(checkpointNumbers, player.passedCheckpointNumbers)}
     `;
 
     el.append(icon, lines);
@@ -1207,6 +1218,7 @@ function startBattle(character, storyOptions = {}) {
       turnText,
       canRoll,
       players,
+      checkpointNumbers,
       hand,
       showCenter,
       centerHand,
@@ -1215,7 +1227,7 @@ function startBattle(character, storyOptions = {}) {
     }) => {
       turnIndicator.textContent = turnText;
       diceButton.disabled = !canRoll;
-      renderPlayerPanels(players);
+      renderPlayerPanels(players, checkpointNumbers);
       renderHand(hand);
 
       const enteringShowCenter = showCenter && !showCenterState;
@@ -3062,7 +3074,7 @@ function applyPvpPublicState(publicState) {
 
   turnIndicator.textContent = publicState.turnText;
   diceButton.disabled = !(showCenter && isMyTurn);
-  renderPlayerPanels(publicState.players);
+  renderPlayerPanels(publicState.players, publicState.checkpointNumbers);
   if (isMyTurn) renderHand(pvpMatch.myHand);
   const me = publicState.players.find((p) => p.id === pvpMatch.localPlayerId);
   if (me) pvpMatch.lastCurrency = me.currency;

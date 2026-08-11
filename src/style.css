@@ -753,6 +753,31 @@ html, body {
   white-space: nowrap;
 }
 
+.player-checkpoints {
+  display: flex;
+  gap: 3px;
+  margin-top: 1px;
+}
+
+.checkpoint-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  font-size: 9px;
+  font-weight: bold;
+  color: rgba(255, 255, 255, 0.35);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.checkpoint-num.lit {
+  color: #101018;
+  background: #ffd166;
+  box-shadow: 0 0 4px rgba(255, 209, 102, 0.9);
+}
+
 .corner-tl {
   top: 12px;
   left: 16px;

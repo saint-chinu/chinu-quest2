@@ -88,6 +88,13 @@ export class Game {
   }) {
     this.tiles = tiles;
     this.requireAllCheckpoints = mapRequiresAllCheckpoints(mapId);
+    // このマップに実在するチェックポイント番号一覧（board.jsが生成順に
+    // 1から振ったもの）- プレイヤーパネルの通過状況表示用に_notifyState
+    // で毎回そのまま送る（renderPlayerPanels参照）。
+    this.checkpointNumbers = this.tiles
+      .filter((t) => t.type === TileType.EVENT)
+      .map((t) => t.checkpointNumber)
+      .sort((a, b) => a - b);
     this.scene = scene;
     this.onLog = onLog;
     this.onStateChange = onStateChange;
@@ -1381,10 +1388,14 @@ export class Game {
       summonCount: this._summonCountOf(p.id),
       handCount: p.hand.length,
       defeated: !!p.defeated,
+      // このラップで通過済みのチェックポイント番号（未達成ならボーナス
+      // 無しでゴールを通過しても消えない - _grantGoalBonus参照）。
+      passedCheckpointNumbers: [...p.passedCheckpoints].map((id) => this.tiles[id].checkpointNumber),
     }));
     this.onStateChange({
       turnText: `${this.currentPlayer.name}のターン`,
       canRoll: showCenter && !this.currentPlayer.isCPU,
+      checkpointNumbers: this.checkpointNumbers,
       players: playersPayload,
       hand: human.hand,
       showCenter,
@@ -1408,6 +1419,7 @@ export class Game {
       turnText: `${this.currentPlayer.name}のターン`,
       awaitingRoll: this.awaitingRoll,
       isBusy: this.isBusy,
+      checkpointNumbers: this.checkpointNumbers,
       players: playersPayload,
       tiles: this.tiles
         .filter((t) => t.type === TileType.LAND)
