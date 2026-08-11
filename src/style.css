@@ -272,6 +272,33 @@ html, body {
 #editor-image-preview { width: 100%; max-height: 150px; object-fit: contain; border-radius: 7px; background: #111; }
 #card-editor-form .pg-actions-row, #card-editor-form .pg-error { grid-column: 1 / -1; }
 
+#card-editor-bulk {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: min(650px, 92vw);
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(20, 20, 34, 0.94);
+}
+#card-editor-bulk .pg-actions-row { flex-wrap: wrap; align-items: center; }
+#card-editor-bulk label { display: flex; flex-direction: column; gap: 4px; color: #ddd; font-size: 12px; }
+#card-editor-bulk input[type="file"] { color: #ddd; font-size: 12px; }
+#bulk-csv-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 30vh;
+  overflow-y: auto;
+  padding: 8px;
+  border-radius: 7px;
+  background: #1c1c2c;
+}
+#bulk-csv-result.hidden { display: none; }
+#bulk-csv-result .bulk-row { font-size: 12px; padding: 3px 6px; border-radius: 4px; }
+#bulk-csv-result .bulk-row-ok { color: #7fe0a0; background: rgba(76, 175, 110, 0.12); }
+#bulk-csv-result .bulk-row-error { color: #ff9b9b; background: rgba(255, 107, 107, 0.12); }
+
 #breed-image-preview { width: 140px; max-height: 140px; object-fit: contain; border-radius: 7px; background: #111; }
 
 #shop-pack-list {

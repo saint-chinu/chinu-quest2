@@ -22,9 +22,12 @@ export function loadCustomCards(userId) {
   }
 }
 
-export function saveCustomCard(userId, input) {
-  const cards = loadCustomCards(userId);
-  const slug = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+let bulkSlugCounter = 0;
+
+/** Builds one custom-card record from a validated `input` (same shape saveCustomCard/saveCustomCardsBulk take) - no storage side effect. */
+function buildCustomCard(input) {
+  bulkSlugCounter += 1;
+  const slug = `${Date.now()}-${bulkSlugCounter}-${Math.random().toString(36).slice(2, 8)}`;
   const card = {
     id: `custom-${slug}`,
     catalogId: `custom-${slug}`,
@@ -49,9 +52,24 @@ export function saveCustomCard(userId, input) {
     card.addedHp = 0;
     card.permanent = true;
   }
+  return card;
+}
+
+export function saveCustomCard(userId, input) {
+  const cards = loadCustomCards(userId);
+  const card = buildCustomCard(input);
   cards.push(card);
   localStorage.setItem(STORAGE_KEY_PREFIX + userId, JSON.stringify(cards));
   return card;
+}
+
+/** CSV一括登録用: 検証済みのinput配列をまとめて1回のlocalStorage書き込みで保存する（1件ずつsaveCustomCardを呼ぶと件数分の書き込みが発生するため）。 */
+export function saveCustomCardsBulk(userId, inputs) {
+  const cards = loadCustomCards(userId);
+  const saved = inputs.map((input) => buildCustomCard(input));
+  cards.push(...saved);
+  localStorage.setItem(STORAGE_KEY_PREFIX + userId, JSON.stringify(cards));
+  return saved;
 }
 
 export function validateCustomCard(userId, input) {

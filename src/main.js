@@ -2,12 +2,12 @@ import './style.css';
 import { GameScene, PIECE_REST_Y } from './scene.js';
 import { createBoard } from './board.js';
 import { Game } from './game.js';
-import { CardType, CARD_COLOR, ELEMENT_LABEL, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
+import { CardType, CARD_COLOR, ELEMENT_LABEL, Element, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
 import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, ITEM_CATALOG } from './battleCards.js';
 import { loginOrRegister, saveCharacter } from './auth.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { PACKS, drawPack } from './shopPacks.js';
-import { CARD_EFFECTS, saveCustomCard, validateCustomCard } from './customCards.js';
+import { CARD_EFFECTS, saveCustomCard, saveCustomCardsBulk, validateCustomCard } from './customCards.js';
 import { loadPlayerIcons } from './iconSheet.js';
 import {
   BREED_BASE,
@@ -1315,6 +1315,13 @@ const editorEffectDescription = document.getElementById('editor-effect-descripti
 const editorError = document.getElementById('editor-error');
 const editorSave = document.getElementById('editor-save');
 const editorBack = document.getElementById('editor-back');
+const bulkCsvTemplate = document.getElementById('bulk-csv-template');
+const bulkCsvFile = document.getElementById('bulk-csv-file');
+const bulkImageFiles = document.getElementById('bulk-image-files');
+const bulkImageCount = document.getElementById('bulk-image-count');
+const bulkCsvSubmit = document.getElementById('bulk-csv-submit');
+const bulkCsvError = document.getElementById('bulk-csv-error');
+const bulkCsvResult = document.getElementById('bulk-csv-result');
 const deckScreen = document.getElementById('deck-screen');
 const deckSlotTabs = document.getElementById('deck-slot-tabs');
 const deckNameInput = document.getElementById('deck-name-input');
@@ -1752,6 +1759,29 @@ function showCardEditor() {
 
 editorType.addEventListener('change', updateEditorFields);
 
+/** Shared by the single-card editor and the CSV bulk-import: downscales to maxSide and re-encodes as webp so custom-card images stay small in localStorage. */
+function resizeImageFileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.addEventListener('load', () => {
+      const image = new Image();
+      image.addEventListener('load', () => {
+        const maxSide = 768;
+        const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/webp', 0.82));
+      });
+      image.addEventListener('error', () => reject(new Error('image decode failed')));
+      image.src = String(reader.result);
+    });
+    reader.addEventListener('error', () => reject(new Error('file read failed')));
+    reader.readAsDataURL(file);
+  });
+}
+
 editorImage.addEventListener('change', () => {
   const file = editorImage.files?.[0];
   if (!file) return;
@@ -1760,24 +1790,12 @@ editorImage.addEventListener('change', () => {
     editorError.classList.remove('hidden');
     return;
   }
-  const reader = new FileReader();
-  reader.addEventListener('load', () => {
-    const image = new Image();
-    image.addEventListener('load', () => {
-      const maxSide = 768;
-      const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
-      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
-      canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
-      editorImageDataUrl = canvas.toDataURL('image/webp', 0.82);
-      editorImagePreview.src = editorImageDataUrl;
-      editorImagePreview.classList.remove('hidden');
-      editorError.classList.add('hidden');
-    });
-    image.src = String(reader.result);
+  resizeImageFileToDataUrl(file).then((dataUrl) => {
+    editorImageDataUrl = dataUrl;
+    editorImagePreview.src = dataUrl;
+    editorImagePreview.classList.remove('hidden');
+    editorError.classList.add('hidden');
   });
-  reader.readAsDataURL(file);
 });
 
 editorSave.addEventListener('click', () => {
@@ -1830,6 +1848,234 @@ editorSave.addEventListener('click', () => {
 editorBack.addEventListener('click', () => {
   history.replaceState(null, '', `${location.pathname}${location.search}`);
   showHubScreen();
+});
+
+// ---- カードエディタのCSV一括登録: 画像以外の項目をCSVから、画像は別途
+// 複数選択したファイルとCSVの「画像ファイル名」列を突き合わせて紐付ける
+// （200種近くを1枚ずつ手動アップロードするのは非現実的なため）。1行=1枚、
+// バリデーションは既存のvalidateCustomCard()を流用し、行ごとに独立して
+// 成否を出す（1行の失敗が他の行を止めない）。 ----
+
+const BULK_TYPE_LABELS = { モンスター: CardType.MONSTER, アイテム: CardType.GEAR, スペル: CardType.SPELL };
+const BULK_ELEMENT_LABELS = Object.fromEntries(Object.entries(ELEMENT_LABEL).map(([value, label]) => [label, value]));
+const BULK_EFFECT_LABELS = Object.fromEntries(CARD_EFFECTS.map((effect) => [effect.label, effect.id]));
+const BULK_CSV_HEADERS = ['カード名', '種類', 'レアリティ', '属性', 'コスト', 'ATK', 'HP', '特殊効果', '特殊効果の説明', '画像ファイル名'];
+const BULK_REQUIRED_HEADERS = ['カード名', '種類', 'レアリティ'];
+
+let bulkImageFileList = [];
+
+function csvEscape(value) {
+  const str = String(value ?? '');
+  return /["\r\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str;
+}
+
+/** Minimal RFC4180-ish parser: quoted fields (with "" for a literal quote) and \n/\r\n/\r line endings, no external library. */
+function parseCsv(text) {
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  const clean = text.replace(/^﻿/, '');
+  for (let i = 0; i < clean.length; i++) {
+    const c = clean[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (clean[i + 1] === '"') {
+          field += '"';
+          i++;
+        } else inQuotes = false;
+      } else field += c;
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ',') {
+      row.push(field);
+      field = '';
+    } else if (c === '\n' || c === '\r') {
+      if (c === '\r' && clean[i + 1] === '\n') i++;
+      row.push(field);
+      field = '';
+      rows.push(row);
+      row = [];
+    } else {
+      field += c;
+    }
+  }
+  if (field !== '' || row.length) {
+    row.push(field);
+    rows.push(row);
+  }
+  return rows;
+}
+
+function csvValue(v) {
+  return (v ?? '').trim();
+}
+
+/** Accepts either the Japanese label shown in the manual editor's dropdowns, or the raw enum value (case-insensitive) - forgiving of however the spreadsheet was filled in. */
+function resolveBulkEnum(raw, labelMap, validValues) {
+  const trimmed = csvValue(raw);
+  if (labelMap[trimmed]) return labelMap[trimmed];
+  const lower = trimmed.toLowerCase();
+  return validValues.find((v) => v.toLowerCase() === lower) || null;
+}
+
+function parseBulkTraits(raw) {
+  return csvValue(raw)
+    .split(/[;,、]/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((label) => BULK_EFFECT_LABELS[label] || (CARD_EFFECTS.some((effect) => effect.id === label) ? label : null))
+    .filter(Boolean);
+}
+
+function buildHeaderIndex(headerRow) {
+  const map = {};
+  headerRow.forEach((h, i) => {
+    map[csvValue(h)] = i;
+  });
+  return map;
+}
+
+function csvRowToBulkInput(row, headerIndex) {
+  const get = (name) => (name in headerIndex ? csvValue(row[headerIndex[name]]) : '');
+  const type = resolveBulkEnum(get('種類'), BULK_TYPE_LABELS, Object.values(CardType));
+  return {
+    name: get('カード名'),
+    type,
+    rarity: resolveBulkEnum(get('レアリティ'), {}, Object.values(Rarity)),
+    element: type === CardType.MONSTER ? resolveBulkEnum(get('属性'), BULK_ELEMENT_LABELS, Object.values(Element)) : Element.NEUTRAL,
+    cost: get('コスト') || '0',
+    atk: get('ATK') || '0',
+    hp: get('HP') || '1',
+    traits: parseBulkTraits(get('特殊効果')),
+    effectDescription: get('特殊効果の説明'),
+    imageFileName: get('画像ファイル名'),
+    imageDataUrl: '',
+  };
+}
+
+function renderBulkCsvResult(results, savedCount) {
+  bulkCsvResult.replaceChildren();
+  const summary = document.createElement('div');
+  summary.className = 'bulk-row bulk-row-ok';
+  summary.textContent = `${savedCount}件登録しました（全${results.length}件中）`;
+  bulkCsvResult.appendChild(summary);
+  for (const r of results) {
+    const row = document.createElement('div');
+    row.className = `bulk-row ${r.ok ? 'bulk-row-ok' : 'bulk-row-error'}`;
+    row.textContent = `${r.rowNumber}行目 ${r.name}: ${r.message}`;
+    bulkCsvResult.appendChild(row);
+  }
+  bulkCsvResult.classList.remove('hidden');
+}
+
+async function processBulkCsv(text) {
+  const rows = parseCsv(text).filter((r) => r.some((cell) => cell.trim() !== ''));
+  if (rows.length < 2) {
+    bulkCsvError.textContent = 'CSVにデータ行がありません';
+    bulkCsvError.classList.remove('hidden');
+    return;
+  }
+  const headerIndex = buildHeaderIndex(rows[0]);
+  const missingHeaders = BULK_REQUIRED_HEADERS.filter((h) => !(h in headerIndex));
+  if (missingHeaders.length) {
+    bulkCsvError.textContent = `見出し行に必要な列がありません: ${missingHeaders.join('、')}`;
+    bulkCsvError.classList.remove('hidden');
+    return;
+  }
+
+  const imageByName = new Map(bulkImageFileList.map((f) => [f.name.toLowerCase(), f]));
+  const catalogNames = new Set(getCardCatalog(currentUserId).map((c) => c.name));
+  const seenNames = new Set();
+  const results = [];
+  const toSave = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    const rowNumber = i + 1;
+    const input = csvRowToBulkInput(row, headerIndex);
+    const name = input.name.trim();
+    let error = validateCustomCard(currentUserId, input);
+    if (!error && seenNames.has(name)) error = 'CSV内で名前が重複しています';
+    if (!error && catalogNames.has(name)) error = '同じ名前のカードが図鑑に既にあります';
+    if (error) {
+      results.push({ rowNumber, name: name || '(名前なし)', ok: false, message: error });
+      continue;
+    }
+
+    let imageNote = '';
+    if (input.imageFileName) {
+      const matched = imageByName.get(input.imageFileName.toLowerCase());
+      if (matched) {
+        try {
+          input.imageDataUrl = await resizeImageFileToDataUrl(matched);
+        } catch {
+          imageNote = '（画像の読み込みに失敗したため画像なしで登録）';
+        }
+      } else {
+        imageNote = '（一致する画像が見つからなかったため画像なしで登録）';
+      }
+    }
+
+    seenNames.add(name);
+    toSave.push(input);
+    results.push({ rowNumber, name, ok: true, message: `登録しました${imageNote}` });
+  }
+
+  if (toSave.length) {
+    const saved = saveCustomCardsBulk(currentUserId, toSave);
+    for (const card of saved) {
+      const key = cardKey(card);
+      currentCharacter.ownedCards[key] = (currentCharacter.ownedCards[key] || 0) + 1;
+    }
+    saveCharacter(currentUserId, currentCharacter);
+  }
+
+  renderBulkCsvResult(results, toSave.length);
+  bulkCsvFile.value = '';
+  bulkImageFiles.value = '';
+  bulkImageFileList = [];
+  bulkImageCount.textContent = '';
+  bulkCsvSubmit.disabled = true;
+}
+
+bulkCsvTemplate.addEventListener('click', () => {
+  const example = ['火の戦士', 'モンスター', 'N', '火', '20', '15', '20', '', '', 'hinosenshi.png'];
+  const csv = [BULK_CSV_HEADERS, example].map((r) => r.map(csvEscape).join(',')).join('\r\n');
+  const blob = new Blob([`﻿${csv}`], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'card_template.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+bulkCsvFile.addEventListener('change', () => {
+  bulkCsvSubmit.disabled = !bulkCsvFile.files?.[0];
+  bulkCsvError.classList.add('hidden');
+  bulkCsvResult.classList.add('hidden');
+  bulkCsvResult.replaceChildren();
+});
+
+bulkImageFiles.addEventListener('change', () => {
+  bulkImageFileList = Array.from(bulkImageFiles.files || []);
+  bulkImageCount.textContent = bulkImageFileList.length ? `${bulkImageFileList.length}枚選択中` : '';
+});
+
+bulkCsvSubmit.addEventListener('click', async () => {
+  const file = bulkCsvFile.files?.[0];
+  if (!file) return;
+  bulkCsvSubmit.disabled = true;
+  bulkCsvError.classList.add('hidden');
+  try {
+    const text = await file.text();
+    await processBulkCsv(text);
+  } catch {
+    bulkCsvError.textContent = 'CSVの読み込みに失敗しました';
+    bulkCsvError.classList.remove('hidden');
+    bulkCsvSubmit.disabled = false;
+  }
 });
 
 // ---- Deck editor: browse the card catalog, +/- copies (max 4 each) until exactly 40, then save ----

@@ -75,6 +75,24 @@
           <p id="editor-error" class="pg-error hidden"></p>
           <div class="pg-actions-row"><button id="editor-save" class="pg-button">図鑑に登録</button><button id="editor-back" class="pg-button pg-button-secondary">戻る</button></div>
         </div>
+
+        <div id="card-editor-bulk">
+          <h3 class="pg-subtitle">CSVで一括登録</h3>
+          <p class="pg-label">CSVの「画像ファイル名」列と、下で選んだ画像のファイル名が一致すると自動で紐付きます（一致しなければ画像なしで登録されます）。</p>
+          <div class="pg-actions-row">
+            <button id="bulk-csv-template" class="pg-button pg-button-secondary">CSVテンプレートをダウンロード</button>
+            <label>CSVファイル<input id="bulk-csv-file" type="file" accept=".csv,text/csv"></label>
+          </div>
+          <div class="pg-actions-row">
+            <label>画像ファイル（複数選択可）<input id="bulk-image-files" type="file" accept="image/*" multiple></label>
+          </div>
+          <p id="bulk-image-count" class="pg-label"></p>
+          <div class="pg-actions-row">
+            <button id="bulk-csv-submit" class="pg-button" disabled>一括登録</button>
+          </div>
+          <p id="bulk-csv-error" class="pg-error hidden"></p>
+          <div id="bulk-csv-result" class="hidden"></div>
+        </div>
       </div>
 
       <div id="deck-screen" class="pg-screen hidden">
