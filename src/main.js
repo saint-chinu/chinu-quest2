@@ -1878,6 +1878,7 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
       allianceId: heroAllianceId,
       deckList: buildThemedDeckList(allyDef.theme),
       iconImage: await loadNpcTokenImage(allyDef.name),
+      elements: allyDef.theme.elements,
     });
   }
   for (const opponent of opponents) {
@@ -1888,6 +1889,7 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
       allianceId: enemyAllianceId,
       deckList: buildThemedDeckList(opponent.theme),
       iconImage: await loadNpcTokenImage(opponent.name),
+      elements: opponent.theme.elements,
     });
   }
   return configs;

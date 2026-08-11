@@ -2,11 +2,12 @@ import { TileType, mapRequiresAllCheckpoints } from './board.js';
 import { PIECE_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity, buildCardPool } from './cards.js';
 import { buildStarterExtraCards, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf } from './battleCards.js';
-import { createFieldUnit, resolveBattle, equipItem, applyCurse } from './battle.js';
+import { createFieldUnit, resolveBattle, equipItem, applyCurse, GoldLedger } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay } from './utils.js';
 import { DENCHU_FIELD_MONSTER } from './thunderMonsters.js';
 import { GASHAAN_FIELD_MONSTER } from './neutralMonsters.js';
+import { resolveAiProfile } from './aiProfiles.js';
 
 const SHOP_OPTION_COUNT = 3;
 
@@ -190,6 +191,10 @@ export class Game {
       hasteTurnsRemaining: 0,
       // イカサマのサイコロ用: 直近で実際に振った（強制含む）サイコロの目。
       lastDiceSteps: 0,
+      // CPUの意思決定に使う性格パラメータ（aiProfiles.js）。人間プレイヤーでも
+      // 持たせておくが参照されない。cfg.elements（story.jsのtheme.elements）が
+      // あればそのキャラの得意属性として反映される。
+      aiProfile: resolveAiProfile(cfg.name, cfg.elements ?? null),
     }));
     this.currentPlayerIndex = 0;
     this.isBusy = false;
@@ -484,7 +489,7 @@ export class Game {
 
   /** CPU just picks randomly; the human is prompted (camera-work + diagonal arrows toward whichever screen direction each option actually sits in). */
   async _chooseNextTile(player, fromTile, optionIds) {
-    if (player.isCPU) return optionIds[Math.floor(Math.random() * optionIds.length)];
+    if (player.isCPU) return this._cpuChooseNextTile(player, optionIds);
 
     const options = optionIds.map((id) => {
       const tile = this.tiles[id];
@@ -494,6 +499,65 @@ export class Game {
       return { tileId: id, screenDir };
     });
     return this.onChooseBranch(options, player.id);
+  }
+
+  /**
+   * CPUの分岐選択: 完全ランダムではなく、次に狙うべきマス
+   * （_nearestGoalTileId: 未通過チェックポイントかゴール）までの距離が
+   * 近い選択肢ほど選ばれやすい重み付き抽選にする。ただし相手の高額マス
+   * （Lv3以上・同盟仲間以外の所有地）につながる選択肢は
+   * aiProfile.highValueAvoidanceに応じて重みを下げる（0にはしない -
+   * 「勝てる可能性がある限りは攻める」性格のキャラも成立させるため、
+   * あくまで確率を歪めるだけで完全に排除はしない）。
+   */
+  _cpuChooseNextTile(player, optionIds) {
+    const profile = player.aiProfile;
+    const target = this._nearestGoalTileId(player);
+    const weights = optionIds.map((id) => {
+      const tile = this.tiles[id];
+      const distance = target == null ? 0 : this._tileDistance(id, target);
+      let score = -distance;
+      if (tile.type === TileType.LAND && tile.level >= 3 && tile.owner != null && tile.owner !== player.id) {
+        const owner = this.players.find((p) => p.id === tile.owner);
+        const isAlly = owner?.allianceId != null && owner.allianceId === player.allianceId;
+        if (!isAlly) score -= profile.highValueAvoidance * 6;
+      }
+      return Math.exp(score);
+    });
+    return this._weightedRandomPick(optionIds, weights);
+  }
+
+  /** 今向かうべき目標タイルid: 全チェックポイント制のマップでまだ未通過のものがあればその中で一番近いもの、そうでなければゴール（START）。目標が存在しないマップ構成ならnull。 */
+  _nearestGoalTileId(player) {
+    if (this.requireAllCheckpoints) {
+      const unpassed = this.tiles.filter((t) => t.type === TileType.EVENT && !player.passedCheckpoints.has(t.id));
+      if (unpassed.length > 0) {
+        let best = unpassed[0];
+        let bestDist = this._tileDistance(player.tileId, best.id);
+        for (const t of unpassed.slice(1)) {
+          const d = this._tileDistance(player.tileId, t.id);
+          if (d < bestDist) {
+            best = t;
+            bestDist = d;
+          }
+        }
+        return best.id;
+      }
+    }
+    const startTile = this.tiles.find((t) => t.type === TileType.START);
+    return startTile ? startTile.id : null;
+  }
+
+  /** 重み付き抽選（重みの合計に対する乱数で選ぶ）。重みが全て0以下なら単純な一様ランダムにフォールバックする。 */
+  _weightedRandomPick(items, weights) {
+    const total = weights.reduce((sum, w) => sum + w, 0);
+    if (!(total > 0)) return items[Math.floor(Math.random() * items.length)];
+    let roll = Math.random() * total;
+    for (let i = 0; i < items.length; i++) {
+      roll -= weights[i];
+      if (roll <= 0) return items[i];
+    }
+    return items[items.length - 1];
   }
 
   /**
@@ -1329,26 +1393,114 @@ export class Game {
     return picked;
   }
 
+  /**
+   * CPUの土地コマンド判断。自分の土地なら_cpuMaybeLevelUpでレベルアップの
+   * 是非だけ検討（入れ替え・属性変更・売却・特殊能力はまだCPUに実装して
+   * いない）。空き地なら_cpuChooseSummonCardで召喚するカードを選ぶ。敵地
+   * なら_cpuDecideInvasionで侵略するかどうか・どのカードで・アイテムを
+   * 使うかを勝率シミュレーションベースで決める（見送ればG消費なしで
+   * このターンの土地コマンドを終える）。
+   */
   async _cpuLandCommand(player, tile) {
     await delay(CPU_DECISION_MS);
-    if (tile.owner === player.id) return; // CPU doesn't bother swapping its own land yet
+    const profile = player.aiProfile;
+
+    if (tile.owner === player.id) {
+      this._cpuMaybeLevelUp(player, tile, profile);
+      return;
+    }
 
     const options = this._affordableMonsterCards(player);
     if (options.length === 0) return;
-    const card = options[0];
-    const actionType = tile.owner == null ? 'summon' : 'invade';
 
+    if (tile.owner == null) {
+      const card = this._cpuChooseSummonCard(options, tile, profile);
+      player.hand = player.hand.filter((c) => c.id !== card.id);
+      player.deck.discard(card);
+      player.currency -= card.cost;
+      this._placeUnit(tile, player, card);
+      this.onLog(`${player.name}は${card.name}を召喚した (-${card.cost}G)`);
+      this._notifyState();
+      return;
+    }
+
+    const decision = this._cpuDecideInvasion(player, tile, options, profile);
+    if (!decision) {
+      this.onLog(`${player.name}は${tile.id}番地への侵略を見送った`);
+      return;
+    }
+    const { card } = decision;
     player.hand = player.hand.filter((c) => c.id !== card.id);
     player.deck.discard(card);
     player.currency -= card.cost;
-
-    if (actionType === 'summon') {
-      this._placeUnit(tile, player, card);
-      this.onLog(`${player.name}は${card.name}を召喚した (-${card.cost}G)`);
-    } else {
-      await this._runInvasion(player, tile, card);
-    }
+    await this._runInvasion(player, tile, card);
     this._notifyState();
+  }
+
+  /**
+   * 自分の土地のレベルアップ判断: 土地属性がキャラの得意属性
+   * （aiProfile.preferredElements、無ければどの属性でもマッチ扱い）に
+   * 合っていて、かつレベルアップ後もaiProfile.levelUpReserve以上のGが
+   * 手元に残る場合だけ実行する。人間向けの確認ダイアログは挟まない。
+   */
+  _cpuMaybeLevelUp(player, tile, profile) {
+    if (tile.type !== TileType.LAND || tile.level >= LEVEL_CAP) return;
+    const matches = !profile.preferredElements || profile.preferredElements.includes(tile.element);
+    if (!matches) return;
+    const cost = LEVEL_UP_COST[tile.level];
+    if (player.currency - cost < profile.levelUpReserve) return;
+
+    player.currency -= cost;
+    tile.level += 1;
+    this.scene.updateTileLevelBorder(tile);
+    this.onLog(`${player.name}は${tile.id}番地をLv${tile.level}にアップグレードした (-${cost}G)`);
+    this._notifyState();
+  }
+
+  /**
+   * 空き地への召喚カード選び: 基本は土地属性と同じ候補から選ぶが、
+   * aiProfile.offElementSummonChanceの確率であえて属性違いを選ぶ
+   * （同属性の選択肢が無ければ必然的に属性違いになる）。選んだプール内では
+   * ATK+HP合計が高いカードを優先する（同点ならコストが高い方＝より強力な
+   * 方を優先）。
+   */
+  _cpuChooseSummonCard(options, tile, profile) {
+    const onElement = options.filter((c) => c.element === tile.element);
+    const offElement = options.filter((c) => c.element !== tile.element);
+    const preferOff = onElement.length === 0 || (offElement.length > 0 && Math.random() < profile.offElementSummonChance);
+    const pool = preferOff && offElement.length > 0 ? offElement : onElement.length > 0 ? onElement : offElement;
+    return this._strongestCard(pool);
+  }
+
+  _strongestCard(cards) {
+    return [...cards].sort((a, b) => b.atk + b.hp - (a.atk + a.hp) || b.cost - a.cost)[0];
+  }
+
+  /**
+   * 敵地への侵略判断: 手持ちの召喚可能カードそれぞれについて、アイテム
+   * 無し／有りの勝率を_estimateWinProbabilityで見積もり、最も勝算の高い
+   * 組み合わせを選ぶ。侵略しきい値（aiProfile.minWinProbabilityToInvade）は
+   * 相手が高額マス（Lv3以上）だとaiProfile.highValueAvoidanceに応じて
+   * 引き上げる。アイテム無しでしきい値を超えていればそのまま侵略、
+   * アイテムを使えば超える場合はaiProfile.itemGambleChanceの確率でだけ
+   * 踏み切る（それ以外は見送り）。
+   */
+  _cpuDecideInvasion(player, tile, options, profile) {
+    const candidates = options.map((card) => ({
+      card,
+      noItemRate: this._estimateWinProbability(card, player.id, player.hand, tile, false),
+      withItemRate: this._estimateWinProbability(card, player.id, player.hand, tile, true),
+    }));
+    candidates.sort((a, b) => Math.max(b.noItemRate, b.withItemRate) - Math.max(a.noItemRate, a.withItemRate));
+    const best = candidates[0];
+    if (!best) return null;
+
+    let threshold = profile.minWinProbabilityToInvade;
+    if (tile.level >= 3) threshold = Math.min(0.97, threshold + profile.highValueAvoidance * 0.3);
+
+    if (best.noItemRate >= threshold) return { card: best.card };
+    if (best.withItemRate >= threshold && Math.random() < profile.itemGambleChance) return { card: best.card };
+    return null;
   }
 
   /**
@@ -1495,9 +1647,76 @@ export class Game {
     return { atk: unit.def.atk + curseAtk, hp: unit.def.hp + curseHp };
   }
 
-  /** CPU never deliberates over an item pick - just grabs its first (if any), same "pick the obvious option instantly" spirit as _cpuLandCommand. */
+  /** 装備アイテムとしての強さを大まかに数値化する（CPUの実際の選択と、侵略前のシミュレーションの両方から使う - 同じ基準で選ぶことで「シミュレーションで想定した通りに実際も動く」を保証する）。 */
+  _itemPowerScore(item) {
+    let score = (item.atkBonus || 0) + (item.hpBonus || 0);
+    if (item.effect) score += 15;
+    if (item.traits?.includes('firstStrike')) score += 10;
+    if (item.traits?.includes('pierce')) score += 10;
+    if (item.traits?.includes('lastStrike')) score -= 5;
+    return score;
+  }
+
+  /** 手札の中から一番強いGEARカードを選ぶ（無ければnull）。 */
+  _bestBattleItemFromHand(hand) {
+    const gear = hand.filter((c) => c.type === CardType.GEAR);
+    if (gear.length === 0) return null;
+    return gear.reduce((best, c) => (this._itemPowerScore(c) > this._itemPowerScore(best) ? c : best));
+  }
+
+  /** CPUの実際のバトルアイテム選択。シミュレーション（_estimateWinProbability）と同じ_bestBattleItemFromHandを使うので、事前に見積もった勝率と実際の挙動がずれない。 */
   _cpuPickBattleItem(player) {
-    return player.hand.find((c) => c.type === CardType.GEAR) || null;
+    return this._bestBattleItemFromHand(player.hand);
+  }
+
+  /** シミュレーション専用: 本物のユニットには一切触れず、items/cursesだけ独立コピーした複製を作る（resolveBattleは渡された引数を直接書き換えるため、実物を渡すと本当に装備/呪いが消し飛んでしまう）。 */
+  _cloneFieldUnitForSim(unit) {
+    return {
+      ownerId: unit.ownerId,
+      def: unit.def,
+      items: unit.items.map((i) => ({ ...i })),
+      curses: unit.curses.map((c) => ({ ...c })),
+      currentHp: unit.currentHp,
+      blinded: unit.blinded,
+    };
+  }
+
+  /**
+   * CPUの侵略判断用: 実際に戦闘を起こさず、指定したカードで相手の土地に
+   * 侵略した場合の勝率をモンテカルロ法（既定20試行）で見積もる。
+   * `useItem`がtrueなら手札の最強アイテムを装備した想定で計算する
+   * （相手はアイテムを使わない前提 - ユーザー指示通りの簡略化）。
+   * 実際の対戦へは一切影響しない: this._goldAdapter()（本物のプレイヤーの
+   * Gを直接動かす）ではなく使い捨てのGoldLedgerを使い、onLogも一時的に
+   * 抑制する。
+   */
+  _estimateWinProbability(card, attackerOwnerId, attackerHand, defenderTile, useItem, trials = 20) {
+    const savedLog = this.onLog;
+    this.onLog = () => {};
+    try {
+      let wins = 0;
+      for (let i = 0; i < trials; i++) {
+        const attackerUnit = createFieldUnit(card, attackerOwnerId);
+        const defenderUnit = this._cloneFieldUnitForSim(defenderTile.unit);
+        if (useItem) {
+          const item = this._bestBattleItemFromHand(attackerHand);
+          if (item) equipItem(attackerUnit, item);
+        }
+        const attackerBonus = this._battleBonus(attackerUnit, null, defenderTile);
+        const defenderBonus = this._battleBonus(defenderUnit, defenderTile, defenderTile);
+        this._applyEffectBonus(attackerUnit, defenderUnit, attackerBonus);
+        this._applyEffectBonus(defenderUnit, attackerUnit, defenderBonus);
+        const attackerHasPierce =
+          attackerUnit.def.traits?.includes('pierce') || attackerUnit.items.some((i) => i.traits?.includes('pierce'));
+        const battleDefenderBonus = attackerHasPierce ? { ...defenderBonus, hp: 0 } : defenderBonus;
+
+        const result = resolveBattle(attackerUnit, defenderUnit, new GoldLedger(), attackerBonus, battleDefenderBonus);
+        if (result.attackerSurvived && !result.defenderSurvived) wins++;
+      }
+      return wins / trials;
+    } finally {
+      this.onLog = savedLog;
+    }
   }
 
   /** Equips + permanently consumes the chosen item (removed from hand, discarded) - a no-op if the side skipped. */

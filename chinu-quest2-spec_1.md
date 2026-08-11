@@ -512,6 +512,35 @@
 - 副産物として発見・修正したバグ: `game.js`の`_runBattleScene`にある「貫通は相手の同属性ボーナスを無視する」判定が、`attackerUnit.def.traits`（モンスター自身の特性）しか見ておらず、**アイテムが持つtraits（今回の3種はまさにこれ）を無視していた**。`battle.js`の`hasTrait()`相当のチェック（def.traits + 装備アイテムのtraits）に直して修正
 - 検証: Node単体テスト7件（にょ〇棒のステータス変更確認、貫通がくねくね/ナンカのお守り/ハリネズミの服それぞれを無視すること、貫通が土地レベルボーナスを無視して本来なら耐えるはずの一撃で倒れること）で全パス、実機で3アイテムのtraits反映を確認済み
 
+## CPU AIの大幅強化（2026-08-12実装）
+それまでのCPUは実質「意思決定ゼロ」だった: 土地コマンドは手札の先頭の召喚可能カードで無条件に召喚/侵略するだけ（自分の土地では何もしない＝レベルアップ等は一切しない）、分岐点の移動方向は完全ランダム、バトルアイテムも手札の先頭のGEARを機械的に装備するだけ、という3つの一行ロジックが全てだった。これをキャラごとの「性格」パラメータに基づく確率的な意思決定に置き換えた。
+
+### src/aiProfiles.js（新規）
+`DEFAULT_AI_PROFILE`と、story.jsに登場する7キャラ（ヒトデ/ウサギン/暴君マダイ/ニュウドウカジカ（お肉）/少女A/紫の魔女ホフク/ダンボール男）ごとの上書き差分`AI_PROFILES`を定義。パラメータは全て確率・閾値であり固定分岐ではない:
+- `offElementSummonChance`: 土地属性と違うモンスターをあえて選ぶ確率（同属性の選択肢があるのに、という条件下で判定）
+- `levelUpReserve`: 土地レベルアップ後もこの額以上Gを残せる時だけ実行（キャラごとに300〜700）
+- `minWinProbabilityToInvade`: 侵略を決断する勝率の基本しきい値（キャラごとに0.15〜0.9）
+- `itemGambleChance`: 「アイテムを使えば勝てるが素では勝てない」場面でそれでも侵略に踏み切る確率
+- `highValueAvoidance`: 相手の高額マス（Lv3以上）をどれだけ避けたがるか（侵略しきい値の上乗せ・分岐点の経路選択の両方に影響）
+- `preferredElements`: 実行時にキャラのデッキテーマ（story.jsの`theme.elements`）から差し込む。テーマの無い汎用CPU（フリー対戦の既定の「CPU」）はnull＝どの属性でもマッチ扱い
+
+`resolveAiProfile(name, preferredElements)`が実行時プロファイルを組み立て、`Game`コンストラクタが各CPUプレイヤーに`player.aiProfile`として持たせる（`main.js`の`buildBattlePlayerConfigs`が`opponent.theme.elements`/`allyDef.theme.elements`を`elements`として`playerConfigs`に追加）。
+
+### game.js: 侵略前の勝率シミュレーション
+`_estimateWinProbability(card, ownerId, hand, defenderTile, useItem, trials=20)`が、実際に戦闘を起こさずモンテカルロ法（既定20試行）で勝率を見積もる。**相手はアイテムを使わない前提**（ユーザー指示通りの簡略化）。実際の対戦へは一切影響しないよう設計: `this._goldAdapter()`（本物のプレイヤーGを直接動かす）ではなく試行ごとに使い捨ての`GoldLedger`を使い、`onLog`も一時的に無効化し、防御側ユニットも`items`/`curses`だけ独立コピーした複製（`_cloneFieldUnitForSim`）を使う（本物の装備・呪いを破壊しない）。土地の同属性ボーナスや貫通判定など、実戦と全く同じ`_battleBonus`/`_applyEffectBonus`ロジックを再利用しているため、見積もりと実際の挙動が乖離しない。
+
+### game.js: 土地コマンドの判断ロジック刷新
+- `_cpuMaybeLevelUp`: 自分の土地限定。土地属性がキャラの得意属性に合っていて、かつ`levelUpReserve`を満たす時だけレベルアップ（Lv5上限は既存の`LEVEL_CAP`のまま）
+- `_cpuChooseSummonCard`: 空き地への召喚。基本は土地属性と同じカードから選び、`offElementSummonChance`の確率であえて属性違いを選ぶ（選択肢が同属性に無ければ必然的に属性違い）。同プール内ではATK+HP合計が高いカードを優先
+- `_cpuDecideInvasion`: 敵地への侵略。手持ちの召喚可能カード全てについてアイテム無し/有りの勝率を`_estimateWinProbability`で見積もり、最有力の組み合わせを選ぶ。相手が高額マス（Lv3以上）なら`highValueAvoidance`に応じてしきい値を引き上げる。アイテム無しでしきい値超えならそのまま侵略、アイテムがあれば超える場合は`itemGambleChance`の確率でだけ踏み切る。どちらも満たさなければG消費なしで見送り（ログに「侵略を見送った」と表示）
+
+### game.js: アイテム選択・分岐点の経路選択
+- `_itemPowerScore`/`_bestBattleItemFromHand`: GEARカードを「ATK+HPボーナス＋特殊効果+15点＋先制/貫通+10点ずつ－後攻-5点」という大まかな基準で採点し最強の1枚を選ぶ。この関数を`_cpuPickBattleItem`（実際の戦闘）と`_estimateWinProbability`（事前シミュレーション）の両方が共有するため、「シミュレーションで想定した通りに実際も動く」が保証される
+- `_cpuChooseNextTile`: 分岐点での移動方向を完全ランダムから重み付き抽選に変更。次に目指すべきマス（`_nearestGoalTileId`: 未通過チェックポイントがあればBFS距離で最も近いもの、無ければゴール）までの距離が近い選択肢ほど選ばれやすく、かつ相手の高額マス（Lv3以上・同盟仲間以外の所有地）につながる選択肢は`highValueAvoidance`に応じて重みを下げる（0にはしない＝「勝てる可能性がある限り攻める」キャラも成立する）。重み付き抽選そのものは新設の`_weightedRandomPick`ヘルパーが担う
+
+### 検証
+Node単体テスト18件（プロファイル解決、属性一致優先/offElementSummonChanceの両極端、レベルアップの属性・reserve判定、勝率シミュレーションが極端なケースで0/1になること、シミュレーションが実際のプレイヤーGを一切変更しないこと、侵略判断の決断/見送り、分岐選択が目標への近さ・高額マス回避それぞれで統計的に有意な偏りを示すこと、アイテムスコアリング）を実施、全てパス。実機でも新規アカウント作成→CPU戦を実際に4ターン分自動進行させ、CPUが召喚判断を繰り返し行い、エラーなく進行することを確認（このセッションはBrowserペインが終始`document.hidden=true`の状態だったため、`window.requestAnimationFrame`をコンソールから一時的にポリフィルしてアニメーション主体のUIフローを動かした）。
+
 ## フェーズ5: 対戦モード
 - Firebaseを使ったリアルタイムマルチプレイ
 - 盤面状態・ターン進行・プレイヤー状態の同期
