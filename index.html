@@ -59,6 +59,12 @@
         <h2 class="pg-title">キャラメイク</h2>
         <p class="pg-label">アイコンを選んでください</p>
         <div id="charmake-icons" class="pg-choice-row"></div>
+        <div class="pg-field charmake-upload-field">
+          <label for="charmake-icon-upload">または任意画像</label>
+          <input id="charmake-icon-upload" type="file" accept="image/*" />
+        </div>
+        <p id="charmake-icon-error" class="pg-error hidden"></p>
+        <img id="charmake-icon-preview" class="pg-icon-choice hidden" alt="アップロード画像のプレビュー" />
         <div class="pg-field">
           <label for="charmake-name">名前</label>
           <input id="charmake-name" type="text" maxlength="10" />

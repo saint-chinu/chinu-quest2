@@ -237,6 +237,14 @@ html, body {
   box-shadow: 0 0 0 3px rgba(255, 209, 102, 0.4);
 }
 
+.charmake-upload-field {
+  width: min(400px, 90vw);
+}
+
+#charmake-icon-preview {
+  flex: 0 0 auto;
+}
+
 .pg-choice-column {
   display: flex;
   flex-direction: column;

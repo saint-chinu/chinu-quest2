@@ -9,7 +9,7 @@ import { loginOrRegister, saveCharacter } from './auth.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { PACKS, drawPack } from './shopPacks.js';
 import { CARD_EFFECTS, saveCustomCard, saveCustomCardsBulk, validateCustomCard } from './customCards.js';
-import { loadPlayerIcons } from './iconSheet.js';
+import { loadCharacterIconPresets, fileToCharacterIcon, resolveCharacterIcon } from './playerIcons.js';
 import {
   BREED_BASE,
   BREED_PARTS,
@@ -1438,6 +1438,9 @@ const loginError = document.getElementById('login-error');
 const loginSubmit = document.getElementById('login-submit');
 const charmakeScreen = document.getElementById('charmake-screen');
 const charmakeIcons = document.getElementById('charmake-icons');
+const charmakeIconUpload = document.getElementById('charmake-icon-upload');
+const charmakeIconPreview = document.getElementById('charmake-icon-preview');
+const charmakeIconError = document.getElementById('charmake-icon-error');
 const charmakeName = document.getElementById('charmake-name');
 const charmakeDecks = document.getElementById('charmake-decks');
 const charmakeSubmit = document.getElementById('charmake-submit');
@@ -1569,28 +1572,33 @@ const CARD_EDITOR_HASH = '#card-editor';
 
 let currentUserId = null;
 let currentCharacter = null;
-let selectedIconIndex = null;
+let selectedCharacterIcon = null;
 let selectedDeckVariant = null;
 
 function updateCharmakeValidity() {
-  charmakeSubmit.disabled = !charmakeName.value.trim() || selectedIconIndex == null || !selectedDeckVariant;
+  charmakeSubmit.disabled = !charmakeName.value.trim() || !selectedCharacterIcon || !selectedDeckVariant;
 }
 
 async function showCharmakeScreen() {
-  selectedIconIndex = null;
+  selectedCharacterIcon = null;
   selectedDeckVariant = null;
   charmakeName.value = '';
+  charmakeIconUpload.value = '';
+  charmakeIconPreview.classList.add('hidden');
+  charmakeIconError.classList.add('hidden');
 
   charmakeIcons.replaceChildren();
-  const icons = await loadPlayerIcons();
+  const icons = await loadCharacterIconPresets();
   icons.forEach((icon, index) => {
     const el = document.createElement('img');
     el.className = 'pg-icon-choice';
     el.src = icon.dataUrl;
-    el.alt = `アイコン${index + 1}`;
+    el.alt = icon.name;
+    el.title = icon.name;
     el.addEventListener('click', () => {
-      selectedIconIndex = index;
+      selectedCharacterIcon = { preset: icon.id, dataUrl: '', colorIndex: index };
       [...charmakeIcons.children].forEach((c) => c.classList.remove('selected'));
+      charmakeIconPreview.classList.remove('selected');
       el.classList.add('selected');
       updateCharmakeValidity();
     });
@@ -1614,6 +1622,26 @@ async function showCharmakeScreen() {
   updateCharmakeValidity();
   showScreen(charmakeScreen);
 }
+
+charmakeIconUpload.addEventListener('change', async () => {
+  const file = charmakeIconUpload.files?.[0];
+  if (!file) return;
+  try {
+    const icon = await fileToCharacterIcon(file);
+    selectedCharacterIcon = { preset: '', dataUrl: icon.dataUrl, colorIndex: 0 };
+    [...charmakeIcons.children].forEach((child) => child.classList.remove('selected'));
+    charmakeIconPreview.src = icon.dataUrl;
+    charmakeIconPreview.classList.remove('hidden');
+    charmakeIconPreview.classList.add('selected');
+    charmakeIconError.classList.add('hidden');
+  } catch (error) {
+    selectedCharacterIcon = null;
+    charmakeIconPreview.classList.add('hidden');
+    charmakeIconError.textContent = error.message;
+    charmakeIconError.classList.remove('hidden');
+  }
+  updateCharmakeValidity();
+});
 
 function showHubScreen() {
   hubWelcome.textContent = `ようこそ、${currentCharacter.name}（所持M: ${currentCharacter.m}）`;
@@ -1673,8 +1701,9 @@ charmakeSubmit.addEventListener('click', () => {
   for (const card of deckList) ownedCards[cardKey(card)] = (ownedCards[cardKey(card)] || 0) + 1;
   currentCharacter = {
     name: charmakeName.value.trim(),
-    iconIndex: selectedIconIndex,
-    color: ICON_COLORS[selectedIconIndex],
+    iconPreset: selectedCharacterIcon.preset || null,
+    iconImageDataUrl: selectedCharacterIcon.dataUrl || '',
+    color: ICON_COLORS[selectedCharacterIcon.colorIndex] || ICON_COLORS[0],
     deckVariant: selectedDeckVariant,
     decks: [{ id: `deck-${Date.now()}`, name: 'ブック1', deckList }],
     ownedCards,
@@ -1869,13 +1898,9 @@ async function startStoryBattle(index, heroDeckList, isReplay) {
   const variant = isReplay ? stage.replay : stage;
   activeStoryStageIndex = index;
 
-  let iconImage = null;
-  let iconDataUrl = null;
-  if (currentCharacter.iconIndex != null) {
-    const icons = await loadPlayerIcons();
-    iconImage = icons[currentCharacter.iconIndex]?.canvas ?? null;
-    iconDataUrl = icons[currentCharacter.iconIndex]?.dataUrl ?? null;
-  }
+  const characterIcon = await resolveCharacterIcon(currentCharacter);
+  const iconImage = characterIcon?.canvas ?? null;
+  const iconDataUrl = characterIcon?.dataUrl ?? null;
 
   const playerConfigs = await buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList);
 
@@ -1953,12 +1978,12 @@ async function handleStoryBattleEnd(index, { won }) {
   saveCharacter(currentUserId, currentCharacter);
 
   if (useHitodeOverlay) {
-    const icons = currentCharacter.iconIndex != null ? await loadPlayerIcons() : null;
+    const characterIcon = await resolveCharacterIcon(currentCharacter);
     await playOverlayDialogueLines(stage.outro, {
       leftName: 'ヒトデ',
       leftPortraitUrl: NPC_PORTRAIT_URL['ヒトデ'],
       rightName: currentCharacter.name,
-      rightPortraitUrl: icons?.[currentCharacter.iconIndex]?.dataUrl ?? null,
+      rightPortraitUrl: characterIcon?.dataUrl ?? null,
     });
     game = undefined;
     appEl.classList.add('hidden');
@@ -2966,11 +2991,7 @@ battleCpuButton.addEventListener('click', async () => {
   const chosenDeck = await promptDeckSelection();
   preGame.classList.add('hidden');
   appEl.classList.remove('hidden');
-  let iconImage = null;
-  if (currentCharacter.iconIndex != null) {
-    const icons = await loadPlayerIcons();
-    iconImage = icons[currentCharacter.iconIndex]?.canvas ?? null;
-  }
+  const iconImage = (await resolveCharacterIcon(currentCharacter))?.canvas ?? null;
   startBattle({ ...currentCharacter, iconImage, deckList: chosenDeck.deckList });
 });
 
@@ -3361,11 +3382,7 @@ pvpRoomStart.addEventListener('click', async () => {
   const relay = new HostGuestRelay(pvpSession.roomCode);
   const guestDeckList = pvpLastRoom.guestDeckList;
 
-  let iconImage = null;
-  if (currentCharacter.iconIndex != null) {
-    const icons = await loadPlayerIcons();
-    iconImage = icons[currentCharacter.iconIndex]?.canvas ?? null;
-  }
+  const iconImage = (await resolveCharacterIcon(currentCharacter))?.canvas ?? null;
 
   pvpMatch = {
     isHost: true,
