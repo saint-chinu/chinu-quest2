@@ -170,13 +170,13 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     log.push(`${defender.def.name}が強盗で${stolen}Gを奪った`);
   }
 
-  if (defenderSurvived && catalogIdOf(defender.def) === 'salarymander') {
-    const bonus = defender.currentHp * 4;
+  if (defenderSurvived && defender.def.effect?.type === 'survivalGold') {
+    const bonus = defender.currentHp * defender.def.effect.multiplier;
     gold.add(defender.ownerId, bonus);
     log.push(`${defender.def.name}は土地に生き残り${bonus}Gを獲得`);
   }
-  if (attackerSurvived && catalogIdOf(attacker.def) === 'salarymander') {
-    const bonus = attacker.currentHp * 4;
+  if (attackerSurvived && attacker.def.effect?.type === 'survivalGold') {
+    const bonus = attacker.currentHp * attacker.def.effect.multiplier;
     gold.add(attacker.ownerId, bonus);
     log.push(`${attacker.def.name}は土地に生き残り${bonus}Gを獲得`);
   }

@@ -1,4 +1,5 @@
 import { CardType, Element, Rarity, Deck } from './cards.js';
+import { FIRE_MONSTER_CATALOG } from './fireMonsters.js';
 
 // Elemental weakness cycle: each element takes bonus damage from the next
 // one. 火→水→雷→森→火 (fire is weak to water, water to thunder, thunder to
@@ -23,16 +24,7 @@ export const ItemType = {
  * `id` (see duplicateForDeck) plus a `catalogId` pointing back to this.
  */
 export const MONSTER_CATALOG = {
-  salarymander: {
-    id: 'salarymander',
-    type: CardType.MONSTER,
-    name: 'サラリーマンダー',
-    element: Element.FIRE,
-    rarity: Rarity.R,
-    atk: 30,
-    hp: 20,
-    cost: 50,
-  },
+  ...FIRE_MONSTER_CATALOG,
   minatoJoshi: {
     id: 'minatoJoshi',
     type: CardType.MONSTER,
@@ -42,20 +34,6 @@ export const MONSTER_CATALOG = {
     atk: 15,
     hp: 30,
     cost: 45,
-  },
-  // 土地コマンドの「特殊能力」第一号（game.js の _humanAbilityFlow 参照）。
-  // ability.type:'damage' は射程内（グラフ距離）の敵1体にpower固定ダメージ。
-  molotovMan: {
-    id: 'molotovMan',
-    type: CardType.MONSTER,
-    name: '火炎瓶男',
-    element: Element.FIRE,
-    rarity: Rarity.R,
-    atk: 20,
-    hp: 25,
-    cost: 40,
-    ability: { type: 'damage', range: 3, power: 10 },
-    effectDescription: '特殊能力: 3マス以内の敵モンスター1体に10ダメージ（使用するとそのターンは終了する）',
   },
 };
 
