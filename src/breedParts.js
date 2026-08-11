@@ -46,6 +46,28 @@ export const BREED_PARTS = [
   { id: 'part-robber', name: '強盗', rarity: Rarity.S, costDelta: 30, trait: 'robber', price: 60 },
 ];
 
+export const BREED_PART_PACK = { cost: 150, count: 3 };
+
+const rollBreedPartRarity = (random) => {
+  const roll = random();
+  if (roll < 0.10) return Rarity.R;
+  if (roll < 0.35) return Rarity.S;
+  return Rarity.N;
+};
+
+/** 1回3個。各枠N65%/S25%/R10%、全てNなら最後の1個をSにして最低保証。 */
+export function drawBreedPartPack(random = Math.random) {
+  const pools = Object.fromEntries(
+    [Rarity.N, Rarity.S, Rarity.R].map((rarity) => [rarity, BREED_PARTS.filter((part) => part.rarity === rarity)])
+  );
+  for (const rarity of [Rarity.N, Rarity.S, Rarity.R]) {
+    if (!pools[rarity].length) throw new Error(`ブリードパーツに${rarity}が登録されていません`);
+  }
+  const rarities = Array.from({ length: BREED_PART_PACK.count }, () => rollBreedPartRarity(random));
+  if (rarities.every((rarity) => rarity === Rarity.N)) rarities[rarities.length - 1] = Rarity.S;
+  return rarities.map((rarity) => ({ ...pools[rarity][Math.floor(random() * pools[rarity].length)] }));
+}
+
 export function findBreedPart(id) {
   return BREED_PARTS.find((p) => p.id === id) || null;
 }
