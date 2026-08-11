@@ -52,6 +52,15 @@
 
 ---
 
+## ブリードパーツパック（2026-08-12実装、Codex担当分・仕様確認済み）
+- `src/breedParts.js`の`drawBreedPartPack(random)`: 150Mで一括3個抽選（`BREED_PART_PACK = { cost: 150, count: 3 }`）。各枠はN65%/S25%/R10%で独立抽選し、3個全てNだった場合だけ最後の1個をSへ差し替える最低保証付き。ショップ画面（`main.js`の`renderShopScreen`内、`shopPartsList`）に「ブリードパーツパック」として配線済みで、購入すると`currentCharacter.ownedPartIds`へ追加・M減算・結果表示（`showPackResult`、通常のカードパックと同じUIを`onDetail=null`で流用）まで一通り機能する。`tests/breedParts.test.mjs`のNode単体テスト2件（全N時のS差し替え／通常時のレアリティ維持）を実行し両方パス
+
+## ゴール/チェックポイント/ほこらマスの建物イラスト（2026-08-12実装）
+- ユーザー提供の`image/goal.png`（城）・`image/checkpoint.png`（塔）・`image/hokora.png`（鳥居）から境界フラッド・フィルで背景除去。`hokora.png`は内部の暗い陰影（灯籠の下部・屋根の影）が背景の純黒と地続きになっており、既定の許容誤差（22）だと金色の装飾が黒い穴になって消えてしまったため、許容誤差を6まで下げて再抽出（他2枚は22のままで問題なし）
+- `public/images/board-markers/`に`goal.webp`・`checkpoint.webp`・`shrine.webp`として保存
+- `scene.js`の`buildBoard()`から`_createBoardMarker(tileType, tilePosition)`を新規呼び出し。START/EVENT/SHRINEマスそれぞれに、プレイヤー駒・NPC駒と全く同じ「常にカメラを向くbillboard `THREE.Sprite`」方式で建物を配置（`createPiece`と同じ仕組みを流用）。各画像固有のaspect比を保持したまま、共通の目標高さ（3.0ユニット）から幅を逆算するため、縦長の城・塔・鳥居がそれぞれ潰れずに表示される。プレイヤー駒がタイル表面よりわずかに沈み込んで接地して見える量（0.1）に合わせて底面を配置
+- 検証: 実機でCPU戦を開始し、開始マス（START）に城のイラストが正しい向き・サイズで表示されることをcanvasキャプチャで確認。3画像とも`/images/board-markers/`から200 OKで読み込まれることを確認
+
 ## メニューボタン新設・カメラ角度調整・UI微修正（2026-08-12実装）
 - **メニューボタン**: 旧`#exit-battle-button`（画面上部中央、退出）と`#mute-button`（同、BGM）は`#log`と重なって見づらかったため廃止。代わりに盤面右下の「目標G」表示のすぐ上に「メニュー」ボタンを新設し、押すとポップアップ（`#game-menu-modal`）が開く。中身は上から**土地情報／BGMのON・OFF／ヘルプ／退出**の4項目固定
   - **土地情報**（新機能）: 土地コマンドの土地サブメニューにあった「情報」ボタンをここに統合・一本化した（`game.js`の`_runLandBrowse`から`'info'`分岐ごと削除、`land-submenu-info`ボタンも撤去）。特定の1マスに紐づかず、いつでも自分の所有地を一覧から選んで見られる（`main.js`の`showLandInfoFromMenu` - 所有地が無ければ「所有している土地がありません」とログ表示するだけ）。一覧・選択UIは既存の`onPickAbilityTarget`用モーダルをそのまま再利用（`label`フィールドで表示文言だけ差し替え）、詳細表示も既存の`promptShowTileInfo`をそのまま再利用 - 見た限りを閉じると一覧に戻り、何度でも選び直せる。対人戦ゲスト側はローカルに`Game`インスタンスを持たないため今のところ非対応（「対人戦のゲスト側では現在利用できません」）

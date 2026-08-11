@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { TileType } from './board.js';
 import { CARD_COLOR } from './cards.js';
 import { tween, easeInOutQuad } from './utils.js';
+import { assetUrl } from './assetUrl.js';
 
 const TILE_COLOR = {
   [TileType.START]: 0xffd166,
@@ -10,6 +11,30 @@ const TILE_COLOR = {
   [TileType.SHRINE]: 0xc1440e,
   [TileType.WARP]: 0x5e60ce,
 };
+
+/**
+ * START(ゴール)/EVENT(チェックポイント)/SHRINE(ほこら)マスに立てる建物
+ * イラスト（2026-08-12実装）。プレイヤー駒と同じ「常にカメラを向く
+ * billboardスプライト」方式（createPiece参照）- 縦長の建物イラストなので
+ * 個別のaspect比を持たせ、共通の目標高さから幅を逆算する。
+ */
+const BOARD_MARKER_HEIGHT = 3.0;
+const BOARD_MARKERS = {
+  [TileType.START]: { url: assetUrl('/images/board-markers/goal.webp'), aspect: 854 / 1004 },
+  [TileType.EVENT]: { url: assetUrl('/images/board-markers/checkpoint.webp'), aspect: 665 / 1024 },
+  [TileType.SHRINE]: { url: assetUrl('/images/board-markers/shrine.webp'), aspect: 1046 / 1181 },
+};
+const boardMarkerTextureLoader = new THREE.TextureLoader();
+const boardMarkerTextureCache = new Map();
+
+function loadBoardMarkerTexture(url) {
+  if (!boardMarkerTextureCache.has(url)) {
+    const texture = boardMarkerTextureLoader.load(url);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    boardMarkerTextureCache.set(url, texture);
+  }
+  return boardMarkerTextureCache.get(url);
+}
 
 // Offset diagonally (not straight along Z) so the camera looks at the
 // board from a corner angle. This is what makes the axis-aligned square
@@ -234,12 +259,27 @@ export class GameScene {
       mesh.position.set(tile.position.x, -0.2, tile.position.z);
       this.scene.add(mesh);
       tile.mesh = mesh;
+      this._createBoardMarker(tile.type, tile.position);
     }
     // No ground-plane mesh anymore - it used to fill the entire frustum
     // from this camera angle (400x400 is far bigger than what's ever
     // visible), which meant it fully occluded the CSS stage background
     // sitting behind the (now transparent) canvas. Tiles now float
     // directly over that backdrop instead of a separate 3D floor.
+  }
+
+  /** ゴール/チェックポイント/ほこらマスに建物イラストを立てる（該当しないマスタイプなら何もしない）。プレイヤー駒と同じ、常にカメラを向くbillboardスプライト。 */
+  _createBoardMarker(tileType, tilePosition) {
+    const def = BOARD_MARKERS[tileType];
+    if (!def) return;
+    const texture = loadBoardMarkerTexture(def.url);
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+    const width = BOARD_MARKER_HEIGHT * def.aspect;
+    sprite.scale.set(width, BOARD_MARKER_HEIGHT, 1);
+    // プレイヤー駒（PIECE_REST_Y=0.7、高さ1.6）がタイル表面(y=0)よりわずかに
+    // 沈む見た目に合わせ、同じ沈み込み量（0.1）で底面をタイルに接地させる。
+    sprite.position.set(tilePosition.x, BOARD_MARKER_HEIGHT / 2 - 0.1, tilePosition.z);
+    this.scene.add(sprite);
   }
 
   /**
