@@ -340,12 +340,15 @@
 - ステージ背景: `public/images/stage/stage1.png`（海底イラスト）を盤面の地面（ground plane）テクスチャとして適用済み（`scene.js`）
 - キャラアイコン: `public/images/player/icons6.png`（3×2グリッドの魚＋うさぎ6種シート）を`src/iconSheet.js`がブラウザ側でCanvas分割し、6枚の個別アイコンとして扱う（サーバー側の画像加工は不要）。キャラメイクのアイコン選択と、盤面上の自キャラ駒（ビルボードスプライト）の両方に使用
 - **既知の問題**: `icons6.png`の各アイコンの「透明に見える」市松模様部分は、実際には透過（アルファチャンネル）ではなくピクセルとして描き込まれた市松模様そのもの。そのため盤面の駒やキャラメイクのアイコンにもこの市松模様がそのまま表示される。本当に背景を透過させたい場合は、元画像を実際にアルファ抜きした状態で差し替える必要がある
-- **BGM（2026-08-11〜12実装）**: `src/audio.js`は以前Web Audio APIで音声ファイル無しにプロシージャル生成していたが、そのコードは全て削除し、`HTMLAudioElement`でユーザー提供のMP3実音源（`public/audio/`）を再生する方式にした（`playBoardTheme()`/`playBattleTheme()`/`stopMusic()`/`setMuted()`等のエクスポート名は変更していない）。3曲構成:
-  - `board-theme.mp3`: 通常ステージの盤面用
-  - `battle-theme.mp3`: バトルシーン用（30秒ループ想定）
-  - `boss-theme.mp3`: ④ダンボール男戦（ラスボス）専用の盤面BGM。`main.js`が現在の対戦の`mapId`を`currentMapId`というモジュール変数で覚えておき、盤面BGMを鳴らす箇所（バトル開始時・バトルシーン終了後の3箇所、全て`playBoardOrBossTheme()`に統一）で`mapId==='danball'`ならボス曲、それ以外なら通常の盤面曲を選ぶ。バトルシーン自体（`playBattleTheme()`）は専用のボス戦闘曲が無いため通常のまま
-  - PvPで④のマップを選んだ場合もゲスト側含め同じ分岐が効く（`pvpLastRoom.mapId`から`currentMapId`を設定）
-- **ストーリー名前付きNPCの立ち絵・盤面駒（2026-08-12実装）**: `src/npcArt.js`が名前文字列（story.jsの`speaker`/opponent`name`と完全一致）から実素材のURLを引く小さなルックアップ表。対応済み5キャラ: ダンボール男・暴君マダイ・ニュウドウカジカ（お肉）・紫の魔女ホフク・某不思議の国の少女（ヒトデ・農家のウサギ等は未対応でプレースホルダーのまま）
+- **BGM（2026-08-11〜12実装）**: `src/audio.js`は以前Web Audio APIで音声ファイル無しにプロシージャル生成していたが、そのコードは全て削除し、`HTMLAudioElement`でユーザー提供のMP3実音源（`public/audio/`）を再生する方式にした。盤面BGMはマップごとに専用曲を持てる設計（`playMapTheme(mapId)`が`board.js`の`MAPS`とは別にaudio.js内の`MAP_TRACK`テーブルでmapId→トラックを引き、無いマップは共通の`board-theme.mp3`にフォールバック）:
+  - `board-theme.mp3`: ①ヒトデの縄張り・専用曲の無いマップの既定
+  - `battle-theme.mp3`: バトルシーン用（全マップ共通、専用のマップ別戦闘曲は無い）
+  - `stage2-theme.mp3`: ②マダイの岩礁専用
+  - `stage3-theme.mp3`: ③決闘の浜辺専用
+  - `boss-theme.mp3`: ④暗転した世界（ラスボス）専用
+  - `main.js`の`currentMapId`（対戦開始時に設定するモジュール変数）を`playMapTheme(currentMapId)`にそのまま渡すだけで正しい曲が選ばれる。PvPで各マップを選んだ場合もゲスト側含め同じ仕組みが効く（`pvpLastRoom.mapId`から`currentMapId`を設定）
+- **ストーリー名前付きNPCの立ち絵・盤面駒（2026-08-12実装）**: `src/npcArt.js`が名前文字列（story.jsの`speaker`/opponent`name`と完全一致）から実素材のURLを引く小さなルックアップ表。対応済み6キャラ: ダンボール男・暴君マダイ・ニュウドウカジカ（お肉）・紫の魔女ホフク・少女A（旧称「某不思議の国の少女」）・ウサギン（旧称「農家のウサギ」）。ヒトデ等は未対応でプレースホルダーのまま
+  - **キャラ名変更（2026-08-12）**: ユーザー指定で「某不思議の国の少女」→「少女A」、「農家のウサギ」→「ウサギン」に改名。`story.js`内の該当する`speaker`/`name`/ステージタイトル文字列を全て置換済み（表示名がそのままnpcArt.jsの検索キーを兼ねるため、名前を変える時は両方を必ず揃える）
   - **立ち絵**（`public/images/npc-portraits/`）: 全身立ち絵、背景透過PNG。`#story-dialogue-screen`に追加した`#story-dialogue-portrait`が、`playDialogueLines`で1行進むたびに`speaker`名からルックアップして表示/非表示を切り替える（該当が無ければ非表示のまま、今まで通りテキストのみの表示）
   - **盤面駒**（`public/images/npc-tokens/`）: 256×256の正方形、キャラごとの縦横比を保ったまま底辺揃えで配置済み（`GameScene.createPieceFromImage`が前提とする1.6×1.6の正方形スプライトに合わせた設計）。`Game`の駒生成を汎用化 - 以前は人間プレイヤーの`humanIconImage`だけが特別扱いだったが、`player.iconImage`があれば（CPU/人間問わず）`createPieceFromImage`を使うよう統一した。`main.js`の`buildBattlePlayerConfigs`が非同期になり（`npcArt.js`の`loadNpcTokenImage`がpromise）、対応キャラのally/opponent configにだけ`iconImage`を設定する
   - 立ち絵・盤面駒とも元はAI生成の「フィギュア＋カードのモックアップ」6枚1組の合成画像から、背景（白/薄灰色）をflood-fillで透過にし、隣のキャラの絵が数px混入していた箇所を手作業で追加トリミングして作成した（`rembg`のような汎用背景除去だと枠やカード台座まで一体化していて使えなかったため、単色背景の別バージョンをユーザーに作り直してもらう方針にした）

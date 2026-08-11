@@ -37,7 +37,7 @@ import {
   finishPvpRoom,
   beginPvpMatch,
 } from './pvp.js';
-import { playBoardTheme, playBattleTheme, playBossTheme, stopMusic, toggleMuted } from './audio.js';
+import { playMapTheme, playBattleTheme, stopMusic, toggleMuted } from './audio.js';
 
 const canvas = document.getElementById('game-canvas');
 const turnIndicator = document.getElementById('turn-indicator');
@@ -987,7 +987,7 @@ function promptBattleOutcome({ won, ownerName, unitName }) {
       setTimeout(() => {
         battleMessageText.classList.add('hidden');
         battleSceneModal.classList.add('hidden');
-        playBoardOrBossTheme();
+        playMapTheme(currentMapId);
         resolve();
       }, BATTLE_FADE_OUT_MS);
     }, BATTLE_MESSAGE_HOLD_MS);
@@ -1186,17 +1186,12 @@ function onMoveComplete() {
 let scene;
 let tiles;
 let game;
-// 現在の対戦のマップid（CPU戦などmapId無指定なら null）。盤面BGMが
-// ④ダンボール男戦だけ専用のボス曲になる分岐に使う - playBoardOrBossTheme
-// 参照（バトルシーン終了後に盤面BGMへ戻る呼び出し元にはmapIdを直接渡せる
-// 引数が無いため、こうしてモジュール変数で持っておく）。
+// 現在の対戦のマップid（CPU戦などmapId無指定なら null）。盤面BGMがマップ
+// ごとの専用曲（audio.jsのplayMapTheme）を選ぶ分岐と、#appの背景画像
+// （applyMapBackground）に使う（バトルシーン終了後に盤面BGMへ戻る
+// 呼び出し元にはmapIdを直接渡せる引数が無いため、こうしてモジュール変数
+// で持っておく）。
 let currentMapId = null;
-
-/** 盤面BGMの再生: ④ダンボール男戦（マップid'danball'）の間だけボス専用曲、それ以外は通常の盤面曲。playBoardTheme()の全呼び出し元をこれに置き換えてある。 */
-function playBoardOrBossTheme() {
-  if (currentMapId === 'danball') playBossTheme();
-  else playBoardTheme();
-}
 
 /** #appの背景（CSSの静的ルールをインラインstyleで上書き）をそのマップの実素材に合わせる。実素材の無いマップはboard.js側で共通のstage1.pngにフォールバック済み。 */
 function applyMapBackground(mapId) {
@@ -1304,7 +1299,7 @@ function startBattle(character, storyOptions = {}) {
   });
 
   game.init();
-  playBoardOrBossTheme();
+  playMapTheme(currentMapId);
   requestAnimationFrame(animate);
 }
 
@@ -3130,7 +3125,7 @@ function startPvpGuestBattle() {
   tiles = createBoard(pvpLastRoom?.mapId);
   scene.buildBoard(tiles);
   requestAnimationFrame(animate);
-  playBoardOrBossTheme();
+  playMapTheme(currentMapId);
 
   pvpMatch.stopPublicListener = listenToRoom(pvpMatch.roomCode, (room) => {
     if (!room || room.status === 'finished') {

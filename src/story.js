@@ -43,7 +43,7 @@ export const STORY_STAGES = [
     replay: {
       intro: [
         { speaker: 'ヒトデ', text: 'おっ、よく来たな。遊んでいくか？ ボコボコにしてやるよ！！' },
-        { speaker: '農家のウサギ', text: 'ヒトデのくせに調子にのるなよ。俺がボコボコにしてやるよ。' },
+        { speaker: 'ウサギン', text: 'ヒトデのくせに調子にのるなよ。俺がボコボコにしてやるよ。' },
         { speaker: '主人公', text: '二人がかりかよ……上等だ、まとめて相手してやる！' },
       ],
       outro: [{ speaker: 'ヒトデ', text: 'くそ、やっぱり強えな……また来いよ。' }],
@@ -55,7 +55,7 @@ export const STORY_STAGES = [
           theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi, featuredItem: ITEM_CATALOG.potLid },
         },
         {
-          name: '農家のウサギ',
+          name: 'ウサギン',
           color: 0xffd166,
           theme: { elements: [Element.FOREST, Element.FIRE], featuredItem: ITEM_CATALOG.potLid },
         },
@@ -92,7 +92,7 @@ export const STORY_STAGES = [
       intro: [
         { speaker: '暴君マダイ', text: 'また来たのか。今度は仲間を連れてきたぜ。' },
         { speaker: 'ニュウドウカジカ（お肉）', text: 'また暴れさせてもらうぜ！' },
-        { speaker: '某不思議の国の少女', text: 'あら、面白そうな戦い。わたしも交ぜてくださらない？' },
+        { speaker: '少女A', text: 'あら、面白そうな戦い。わたしも交ぜてくださらない？' },
         { speaker: '主人公', text: '三つ巴どころか四つ巴かよ……上等だ！' },
       ],
       outro: [{ speaker: '暴君マダイ', text: 'ちくしょう、今度もやられたか……また挑んでこいよ。' }],
@@ -109,7 +109,7 @@ export const STORY_STAGES = [
           theme: { elements: [Element.THUNDER, Element.FOREST] },
         },
         {
-          name: '某不思議の国の少女',
+          name: '少女A',
           color: 0x4caf6e,
           theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi },
         },
@@ -118,11 +118,11 @@ export const STORY_STAGES = [
   },
   {
     key: 'budou',
-    title: '③ ウサギ＆某不思議の国の少女 vs 紫の魔女ホフク＆主人公',
+    title: '③ ウサギン＆少女A vs 紫の魔女ホフク＆主人公',
     format: '2vs2',
     intro: [
       { speaker: '主人公', text: '砂浜で何やら揉め事か……？' },
-      { speaker: '農家のウサギ', text: 'てめえの魔法、目障りなんだよ！' },
+      { speaker: 'ウサギン', text: 'てめえの魔法、目障りなんだよ！' },
       { speaker: '紫の魔女ホフク', text: 'ちょっと、二人がかりなんてズルいですよ！' },
       { speaker: '主人公', text: '見過ごせないな。俺も加勢する！' },
       { speaker: '紫の魔女ホフク', text: '助かります！ 一緒に戦いましょう！' },
@@ -145,12 +145,12 @@ export const STORY_STAGES = [
     },
     opponents: [
       {
-        name: '農家のウサギ',
+        name: 'ウサギン',
         color: 0xe63946,
         theme: { elements: [Element.FOREST, Element.FIRE], featuredItem: ITEM_CATALOG.potLid },
       },
       {
-        name: '某不思議の国の少女',
+        name: '少女A',
         color: 0x4caf6e,
         theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi },
       },
@@ -160,7 +160,7 @@ export const STORY_STAGES = [
       intro: [
         { speaker: '紫の魔女ホフク', text: 'また会いましたね！ 今日はもっと強い相手が待ち構えていますよ。' },
         { speaker: 'ヒトデ', text: 'おっと、俺も混ぜてくれよ！ 恩返しさせてくれ！' },
-        { speaker: '農家のウサギ', text: 'チッ、また数で勝負かよ。上等だ！' },
+        { speaker: 'ウサギン', text: 'チッ、また数で勝負かよ。上等だ！' },
         { speaker: '主人公', text: '心強いな……三人がかりで叩き潰すぞ！' },
       ],
       outro: [{ speaker: '紫の魔女ホフク', text: '今日も助かりました！ また力を貸してくださいね。' }],
@@ -181,12 +181,12 @@ export const STORY_STAGES = [
       },
       opponents: [
         {
-          name: '農家のウサギ',
+          name: 'ウサギン',
           color: 0xe63946,
           theme: { elements: [Element.FOREST, Element.FIRE], featuredItem: ITEM_CATALOG.potLid },
         },
         {
-          name: '某不思議の国の少女',
+          name: '少女A',
           color: 0x4caf6e,
           theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi },
         },
