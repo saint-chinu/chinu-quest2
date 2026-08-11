@@ -35,6 +35,32 @@ export const STORY_STAGES = [
       },
     ],
     reward: null,
+    // クリア済みステージをもう一度選んだ時の専用シナリオ（本編のintro/outro/
+    // opponentsとは別物）。format以外の未指定フィールドは元のstageの値を
+    // そのまま使う（見た目のクリア済み印は本編の完了状態を指すのでreplay
+    // 自体の勝敗はstoryProgress/rewardに一切影響しない - 何度でも遊べる
+    // おまけ戦闘という位置づけ）。
+    replay: {
+      intro: [
+        { speaker: 'ヒトデ', text: 'おっ、よく来たな。遊んでいくか？ ボコボコにしてやるよ！！' },
+        { speaker: '農家のウサギ', text: 'ヒトデのくせに調子にのるなよ。俺がボコボコにしてやるよ。' },
+        { speaker: '主人公', text: '二人がかりかよ……上等だ、まとめて相手してやる！' },
+      ],
+      outro: [{ speaker: 'ヒトデ', text: 'くそ、やっぱり強えな……また来いよ。' }],
+      format: '1vs1vs1',
+      opponents: [
+        {
+          name: 'ヒトデ',
+          color: 0xe63946,
+          theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi, featuredItem: ITEM_CATALOG.potLid },
+        },
+        {
+          name: '農家のウサギ',
+          color: 0xffd166,
+          theme: { elements: [Element.FOREST, Element.FIRE], featuredItem: ITEM_CATALOG.potLid },
+        },
+      ],
+    },
   },
   {
     key: 'madai',
@@ -62,6 +88,33 @@ export const STORY_STAGES = [
       },
     ],
     reward: null,
+    replay: {
+      intro: [
+        { speaker: '暴君マダイ', text: 'また来たのか。今度は仲間を連れてきたぜ。' },
+        { speaker: 'ニュウドウカジカ（お肉）', text: 'また暴れさせてもらうぜ！' },
+        { speaker: '某不思議の国の少女', text: 'あら、面白そうな戦い。わたしも交ぜてくださらない？' },
+        { speaker: '主人公', text: '三つ巴どころか四つ巴かよ……上等だ！' },
+      ],
+      outro: [{ speaker: '暴君マダイ', text: 'ちくしょう、今度もやられたか……また挑んでこいよ。' }],
+      format: '1vs1vs1vs1',
+      opponents: [
+        {
+          name: '暴君マダイ',
+          color: 0xffd166,
+          theme: { elements: [Element.FIRE, Element.THUNDER], featuredMonster: MONSTER_CATALOG.salarymander, featuredItem: ITEM_CATALOG.knife },
+        },
+        {
+          name: 'ニュウドウカジカ（お肉）',
+          color: 0x8e5ce6,
+          theme: { elements: [Element.THUNDER, Element.FOREST] },
+        },
+        {
+          name: '某不思議の国の少女',
+          color: 0x4caf6e,
+          theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi },
+        },
+      ],
+    },
   },
   {
     key: 'budou',
@@ -103,6 +156,42 @@ export const STORY_STAGES = [
       },
     ],
     reward: 'peeStaff',
+    replay: {
+      intro: [
+        { speaker: '紫の魔女ホフク', text: 'また会いましたね！ 今日はもっと強い相手が待ち構えていますよ。' },
+        { speaker: 'ヒトデ', text: 'おっと、俺も混ぜてくれよ！ 恩返しさせてくれ！' },
+        { speaker: '農家のウサギ', text: 'チッ、また数で勝負かよ。上等だ！' },
+        { speaker: '主人公', text: '心強いな……三人がかりで叩き潰すぞ！' },
+      ],
+      outro: [{ speaker: '紫の魔女ホフク', text: '今日も助かりました！ また力を貸してくださいね。' }],
+      format: '3vs2',
+      heroAllianceId: 'hero',
+      enemyAllianceId: 'enemy',
+      ally: {
+        name: '紫の魔女ホフク',
+        color: 0x8e5ce6,
+        theme: { elements: [Element.WATER, Element.THUNDER], featuredItem: ITEM_CATALOG.knife },
+      },
+      // 2人目の味方はallyフィールド1つでは表現できないため、opponents同様
+      // extraAllyという専用フィールドに乗せ、main.js側で組み立てる。
+      extraAlly: {
+        name: 'ヒトデ',
+        color: 0x2ec4b6,
+        theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi, featuredItem: ITEM_CATALOG.potLid },
+      },
+      opponents: [
+        {
+          name: '農家のウサギ',
+          color: 0xe63946,
+          theme: { elements: [Element.FOREST, Element.FIRE], featuredItem: ITEM_CATALOG.potLid },
+        },
+        {
+          name: '某不思議の国の少女',
+          color: 0x4caf6e,
+          theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi },
+        },
+      ],
+    },
   },
   {
     key: 'danball',
@@ -128,6 +217,16 @@ export const STORY_STAGES = [
       },
     ],
     reward: null,
+    // ラスボスの再戦は乱入キャラを足す理由が弱いので、フォーマットは変え
+    // ず1vs1のまま。opponents/ally/formatを指定しなければ本編のものを
+    // そのまま使う（main.jsのbuildBattlePlayerConfigsのフォールバック）。
+    replay: {
+      intro: [
+        { speaker: 'ダンボール男', text: 'また来たか。何度でも相手をしてやろう。' },
+        { speaker: '主人公', text: '受けて立つ。今度こそ完全に決着をつけてやる！' },
+      ],
+      outro: [{ speaker: 'ダンボール男', text: '……また負けたか。だが、何度でも待っているぞ。' }],
+    },
   },
 ];
 

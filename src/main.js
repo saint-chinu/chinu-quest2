@@ -1541,10 +1541,10 @@ function showStoryScreen() {
     const name = document.createElement('div');
     name.className = 'deck-row-name';
     name.textContent = stage.title;
-    if (unlocked) name.addEventListener('click', () => playStoryStage(index));
+    if (unlocked) name.addEventListener('click', () => (cleared && stage.replay ? playStoryReplay(index) : playStoryStage(index)));
     const meta = document.createElement('div');
     meta.className = 'deck-row-meta';
-    meta.textContent = unlocked ? (cleared ? 'クリア済み' : `形式: ${stage.format}`) : 'ロック中';
+    meta.textContent = unlocked ? (cleared ? 'クリア済み（もう一度挑戦できます）' : `形式: ${stage.format}`) : 'ロック中';
     info.append(name, meta);
 
     row.append(info);
@@ -1581,44 +1581,67 @@ async function playStoryStage(index) {
   showScreen(storyDialogueScreen);
   await playDialogueLines(STORY_STAGES[index].intro);
   const chosenDeck = await promptDeckSelection();
-  await startStoryBattle(index, chosenDeck.deckList);
+  await startStoryBattle(index, chosenDeck.deckList, false);
 }
 
-/** hero(+ally) vs opponents, in Gameの playerConfigs 形式。陣営分けはallianceIdだけで表現 - stage.heroAllianceId/enemyAllianceIdがnullなら同盟なし（1vs1vs1のFFA）。 */
-function buildStoryPlayerConfigs(stage, iconImage, heroDeckList) {
+/** クリア済みステージをもう一度選んだ時のおまけ戦闘。stage.replayの専用intro→デッキ選択→拡張された対戦カードで始まる。勝敗はstoryProgress/rewardに一切影響しない（handleStoryReplayEnd参照）。 */
+async function playStoryReplay(index) {
+  const stage = STORY_STAGES[index];
+  if (!stage.replay) return;
+  showScreen(storyDialogueScreen);
+  await playDialogueLines(stage.replay.intro);
+  const chosenDeck = await promptDeckSelection();
+  await startStoryBattle(index, chosenDeck.deckList, true);
+}
+
+/**
+ * hero(+ally(+extraAlly)) vs opponents, in Gameの playerConfigs 形式。
+ * 陣営分けはallianceIdだけで表現 - heroAllianceId/enemyAllianceIdがnullなら
+ * 同盟なし（FFA）。`variant`は本編ステージ自身（通常戦）か`stage.replay`
+ * （おまけ戦）のどちらか - replay側で未指定のフィールドは本編のstageの
+ * 値にフォールバックする（例: ダンボール男戦の再戦はopponents/ally/format
+ * を一切上書きせず、introだけ差し替えた1vs1のまま）。
+ */
+function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList) {
+  const ally = variant.ally ?? stage.ally;
+  const opponents = variant.opponents ?? stage.opponents;
+  const heroAllianceId = variant.heroAllianceId ?? stage.heroAllianceId ?? null;
+  const enemyAllianceId = variant.enemyAllianceId ?? stage.enemyAllianceId ?? null;
+
   const configs = [
     {
       name: currentCharacter.name,
       isCPU: false,
       color: currentCharacter.color,
-      allianceId: stage.heroAllianceId ?? null,
+      allianceId: heroAllianceId,
       deckList: heroDeckList,
       iconImage,
     },
   ];
-  if (stage.ally) {
+  for (const allyDef of [ally, variant.extraAlly].filter(Boolean)) {
     configs.push({
-      name: stage.ally.name,
+      name: allyDef.name,
       isCPU: true,
-      color: stage.ally.color,
-      allianceId: stage.heroAllianceId ?? null,
-      deckList: buildThemedDeckList(stage.ally.theme),
+      color: allyDef.color,
+      allianceId: heroAllianceId,
+      deckList: buildThemedDeckList(allyDef.theme),
     });
   }
-  for (const opponent of stage.opponents) {
+  for (const opponent of opponents) {
     configs.push({
       name: opponent.name,
       isCPU: true,
       color: opponent.color,
-      allianceId: stage.enemyAllianceId ?? null,
+      allianceId: enemyAllianceId,
       deckList: buildThemedDeckList(opponent.theme),
     });
   }
   return configs;
 }
 
-async function startStoryBattle(index, heroDeckList) {
+async function startStoryBattle(index, heroDeckList, isReplay) {
   const stage = STORY_STAGES[index];
+  const variant = isReplay ? stage.replay : stage;
   activeStoryStageIndex = index;
 
   let iconImage = null;
@@ -1631,9 +1654,26 @@ async function startStoryBattle(index, heroDeckList) {
   appEl.classList.remove('hidden');
   startBattle(currentCharacter, {
     storyMode: true,
-    playerConfigs: buildStoryPlayerConfigs(stage, iconImage, heroDeckList),
-    onStoryBattleEnd: (result) => handleStoryBattleEnd(index, result),
+    playerConfigs: buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList),
+    onStoryBattleEnd: (result) => (isReplay ? handleStoryReplayEnd(index, result) : handleStoryBattleEnd(index, result)),
   });
+}
+
+/** playStoryReplay()の決着後: 勝っても負けてもstoryProgress/rewardには一切触れない（何度でも遊べるおまけ戦闘のため）。短い一言だけ挟んでステージ一覧に戻る。 */
+async function handleStoryReplayEnd(index, { won }) {
+  const stage = STORY_STAGES[index];
+  game = undefined;
+  appEl.classList.add('hidden');
+  preGame.classList.remove('hidden');
+  activeStoryStageIndex = null;
+
+  showScreen(storyDialogueScreen);
+  if (won) {
+    await playDialogueLines(stage.replay.outro || [{ speaker: '???', text: 'また挑みに来てくれ！' }]);
+  } else {
+    await playDialogueLines([{ speaker: '???', text: '力及ばず、敗れてしまった……もう一度挑もう。' }]);
+  }
+  showStoryScreen();
 }
 
 async function handleStoryBattleEnd(index, { won }) {
