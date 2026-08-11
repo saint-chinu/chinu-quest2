@@ -7,6 +7,8 @@ const TILE_COLOR = {
   [TileType.START]: 0xffd166,
   [TileType.EVENT]: 0x9b5de5,
   [TileType.SHOP]: 0x2ec4b6,
+  [TileType.SHRINE]: 0xc1440e,
+  [TileType.WARP]: 0x5e60ce,
 };
 
 // Offset diagonally (not straight along Z) so the camera looks at the

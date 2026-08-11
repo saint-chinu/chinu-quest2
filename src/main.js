@@ -142,7 +142,7 @@ const battleMessageText = document.getElementById('battle-message-text');
 
 const BLINK_MS = 600;
 
-const TILE_TYPE_LABEL = { start: 'ゴール', land: '土地', event: 'チェックポイント', shop: 'ショップ' };
+const TILE_TYPE_LABEL = { start: 'ゴール', land: '土地', event: 'チェックポイント', shop: 'ショップ', shrine: 'ほこら', warp: 'ワープ' };
 
 function tileSummaryText(tile) {
   const lines = [`【${TILE_TYPE_LABEL[tile.type]}】`];
@@ -151,6 +151,7 @@ function tileSummaryText(tile) {
     lines.push(tile.ownerName ? `所有者: ${tile.ownerName}` : '所有者: なし');
     if (tile.unitName) lines.push(`配置モンスター: ${tile.unitName} (ATK${tile.unitAtk}/HP${tile.unitHp})`);
     lines.push(`地価: ${tile.landValue}G / 通行料: ${tile.toll}G`);
+    if (tile.cursed) lines.push('呪い: 強制停止中（戦闘が起きると解ける）');
   }
   return lines.join('\n');
 }
@@ -1197,6 +1198,7 @@ function startBattle(character, storyOptions = {}) {
 
   game = new Game({
     tiles,
+    mapId: storyOptions.mapId,
     scene,
     onLog: (message) => {
       logEl.textContent = message;

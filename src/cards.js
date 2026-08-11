@@ -167,4 +167,10 @@ export class Deck {
   discard(card) {
     this.discardPile.push(card);
   }
+
+  /** drawPile+discardPile（手札は含まない）をまとめて再シャッフルする。draw()が捨て札切れ時に自動でやる部分シャッフルと違い、いつでも呼べる（ほこらの「混沌を愛せ」効果専用）。 */
+  resetShuffle() {
+    this.drawPile = shuffle([...this.drawPile, ...this.discardPile]);
+    this.discardPile = [];
+  }
 }

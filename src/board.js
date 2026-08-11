@@ -5,6 +5,8 @@ export const TileType = {
   LAND: 'land',
   EVENT: 'event',
   SHOP: 'shop',
+  SHRINE: 'shrine',
+  WARP: 'warp',
 };
 
 const SPACING = 3.2;
@@ -13,6 +15,8 @@ const TILE_TYPE_COLOR = {
   [TileType.START]: '#ffd166',
   [TileType.EVENT]: '#9b5de5',
   [TileType.SHOP]: '#2ec4b6',
+  [TileType.SHRINE]: '#c1440e',
+  [TileType.WARP]: '#5e60ce',
 };
 
 /**
@@ -33,30 +37,45 @@ const HITODE_ROWS = [
   'CMMMMMS',
 ];
 
-// ②暴君マダイ戦のマップ - 横長9マス×7マスの外周に、中央で1本橋渡しされた
-// 「H」字型の内部通路2本を通す（ヒトデ戦のマップより横幅が広く、分岐点が
-// 2箇所に増える）。
+// ②暴君マダイ戦のマップ - ユーザー指定のレイアウト。15マス×5マスで、
+// 左右2つの縦長ループ（外周の上下段でつながる）を、中央のGを通る横一列
+// の通路が橋渡しする「めがね」型。四隅がH（ほこら）とC（チェックポイント）
+// の対角配置になっている。H=ほこら（止まるとランダム効果「マダイの福音書」
+// が発生 - _resolveShrineTile参照）。このステージだけ「全チェックポイント
+// を通過しないとゴールにならない」ルールが乗る（MAPS側のrequireAllCheckpoints
+// 参照）。ショップマスは無し（ユーザー指定に無いため）。
 const MADAI_ROWS = [
-  'GFFFFFFFC',
-  'W..N.N..T',
-  'W..N.N..T',
-  'W..NNN..T',
-  'W..N.N..T',
-  'W..N.N..T',
-  'CMMMMMMMS',
+  'HFFFN.....NWWWC',
+  'M...T.....M...T',
+  'M...TNNGNNM...T',
+  'M...T.....M...T',
+  'CWWWN.....NFFFH',
 ];
 
-// ③ウサギ＆某不思議の国の少女 vs 紫の魔女ホフク＆主人公戦のマップ -
-// 外周＋中央3×3を丸ごと埋めた「広場」。2vs2の乱戦向けに、中央付近の
-// 分岐・合流点をヒトデ戦のマップより増やしてある。
+// ③ウサギ＆某不思議の国の少女 vs 紫の魔女ホフク＆主人公戦のマップ - ユーザー
+// 指定のレイアウト。外周ループのメイン盤面(11×6)と、物理的に隔絶された
+// もう一つの島(4×4)の2領域から成る - 隣接マスとしては絶対に行き来できず、
+// 唯一の行き来手段がワープマス。V=ワープ1（メイン盤面に1つだけ。着地する
+// と別の島の「先頭のP」＝tiles配列で最初に見つかるPへ瞬間移動する - 生成順
+// はgz→gxの走査順なので自然と「一番上・一番左のP」になる）、P=ワープ2
+// （別の島の四隅すべて。どこに着地してもワープ1(V)へ戻る）。どちらも
+// "ちょうど止まった"時だけ発動する（通過しただけでは何も起きない -
+// ほこらマスと同じ挙動。実際のリンク付けはcreateBoard末尾、発動は
+// Game._resolveWarpTile参照）。行間の全マス"."の空白行が2島の非連結を
+// 表す実際の盤上の隙間。
 const BUDOU_ROWS = [
-  'GFFFFFC',
-  'W..F..T',
-  'W.FFF.T',
-  'WNNNNNT',
-  'W.MMM.T',
-  'W..M..T',
-  'CMMMMMS',
+  'GMMMMCTTTTV',
+  'W.........W',
+  'W.........N',
+  'W.........F',
+  'W.........F',
+  'CFFFFWWMMTT',
+  '...........',
+  '...........',
+  '...PFFP....',
+  '...W..T....',
+  '...W..T....',
+  '...PMMP....',
 ];
 
 // ④ダンボール男戦（ラスボス）のマップ - ①と同じ「＋」型だが9×9に拡大した
@@ -81,13 +100,18 @@ const DANBALL_ROWS = [
 // - 盤面の形だけを変えて対人戦のマップ選択に意味を持たせている。
 export const MAPS = [
   { id: 'hitode', name: '① ヒトデの縄張り', rows: HITODE_ROWS },
-  { id: 'madai', name: '② マダイの岩礁', rows: MADAI_ROWS },
+  { id: 'madai', name: '② マダイの岩礁', rows: MADAI_ROWS, requireAllCheckpoints: true },
   { id: 'budou', name: '③ 決闘の浜辺', rows: BUDOU_ROWS },
   { id: 'danball', name: '④ 暗転した世界', rows: DANBALL_ROWS },
 ];
 
 function getMap(mapId) {
   return MAPS.find((m) => m.id === mapId) ?? MAPS[0];
+}
+
+/** そのマップで「全チェックポイントを通過しないとゴールにならない」ルールが有効かどうか（Game側のGoal判定が参照する）。 */
+export function mapRequiresAllCheckpoints(mapId) {
+  return !!getMap(mapId).requireAllCheckpoints;
 }
 
 const LAND_ELEMENT_BY_CODE = {
@@ -102,6 +126,11 @@ function typeForCode(code) {
   if (code === 'G') return TileType.START;
   if (code === 'C') return TileType.EVENT;
   if (code === 'S') return TileType.SHOP;
+  if (code === 'H') return TileType.SHRINE;
+  // V/Pは共に「ちょうど止まったらワープする」マス(TileType.WARP)。
+  // V=ワープ1（1マスだけ）、P=ワープ2（複数マスありうる）- 区別は型では
+  // なく、createBoard末尾のリンク付けでtile.warpTargetIdに焼き込む。
+  if (code === 'V' || code === 'P') return TileType.WARP;
   if (LAND_ELEMENT_BY_CODE[code]) return TileType.LAND;
   return null;
 }
@@ -167,6 +196,18 @@ export function createBoard(mapId) {
       const neighborId = idByCoord.get(`${tile.gridX + dx},${tile.gridZ + dz}`);
       if (neighborId != null) tile.neighbors.push(neighborId);
     }
+  }
+
+  // ワープマスのリンク付け: 元コードが'V'の1枚（ワープ1）と'P'の全マス
+  // （ワープ2）を後付けで対応させる。tilesはgz→gxの走査順で積まれている
+  // ので、warpIn[0]が自然と「一番上・一番左のP」＝「先頭のP」になる。
+  // このマップにV/Pが無ければ何もしない（他マップはこのブロックが
+  // 素通りされるだけ）。
+  const warpOut = tiles.filter((t) => rows[t.gridZ][t.gridX] === 'V');
+  const warpIn = tiles.filter((t) => rows[t.gridZ][t.gridX] === 'P');
+  if (warpOut.length === 1 && warpIn.length > 0) {
+    warpOut[0].warpTargetId = warpIn[0].id;
+    for (const t of warpIn) t.warpTargetId = warpOut[0].id;
   }
 
   return tiles;

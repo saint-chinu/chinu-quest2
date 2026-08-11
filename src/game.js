@@ -1,8 +1,8 @@
-import { TileType } from './board.js';
+import { TileType, mapRequiresAllCheckpoints } from './board.js';
 import { PIECE_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck } from './cards.js';
 import { buildStarterExtraCards, WEAK_AGAINST } from './battleCards.js';
-import { createFieldUnit, resolveBattle, equipItem } from './battle.js';
+import { createFieldUnit, resolveBattle, equipItem, applyCurse } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay } from './utils.js';
 
@@ -47,9 +47,13 @@ const ELEMENT_CHANGE_COST_PER_LEVEL = 100;
 const NEUTRAL_ELEMENT_CHANGE_DISCOUNT = 0.5;
 const CHANGEABLE_ELEMENTS = [Element.FIRE, Element.WATER, Element.THUNDER, Element.FOREST, Element.NEUTRAL];
 
+// 速度違反はご愛嬌（ほこら効果）で強制されるサイコロ目。
+const FORCED_DICE_STEPS = 10;
+
 export class Game {
   constructor({
     tiles,
+    mapId,
     scene,
     onLog,
     onStateChange,
@@ -83,6 +87,7 @@ export class Game {
     storyMode = false,
   }) {
     this.tiles = tiles;
+    this.requireAllCheckpoints = mapRequiresAllCheckpoints(mapId);
     this.scene = scene;
     this.onLog = onLog;
     this.onStateChange = onStateChange;
@@ -161,6 +166,10 @@ export class Game {
       hand: [],
       spellUsedThisTurn: false,
       defeated: false,
+      // requireAllCheckpointsが有効なマップでだけ参照する: このラップで
+      // 通過済みのチェックポイント(EVENT)タイルidの集合。ゴールでボーナスを
+      // 受け取った瞬間にクリアする（_movePlayer/_resolveSpecialTile参照）。
+      passedCheckpoints: new Set(),
     }));
     this.currentPlayerIndex = 0;
     this.isBusy = false;
@@ -174,6 +183,10 @@ export class Game {
     // rolled - the window where the center hand+dice is shown and a
     // spell may be used.
     this.awaitingRoll = false;
+    // ほこら効果「速度違反はご愛嬌」用: 残りこの人数分の手番は、サイコロ
+    // フェーズ自体を見せずに強制的にFORCED_DICE_STEPS進める（_beginTurn
+    // 参照）。全員1回ずつ食らったら0に戻り通常進行に戻る。
+    this.forcedDiceRemaining = 0;
   }
 
   get currentPlayer() {
@@ -207,6 +220,17 @@ export class Game {
 
     this.isBusy = false;
     this.awaitingRoll = true;
+
+    // 速度違反はご愛嬌: サイコロフェーズ自体を一切見せず、この場で即
+    // FORCED_DICE_STEPSを振ったことにする（awaitingRoll=trueを一度も
+    // 通知しないので、UI上はダイス演出もスペル使用の隙も生まれない）。
+    if (this.forcedDiceRemaining > 0) {
+      this.forcedDiceRemaining -= 1;
+      this.onLog(`${this.currentPlayer.name}は速度違反の効果でサイコロ${FORCED_DICE_STEPS}固定！`);
+      await this.rollDice(FORCED_DICE_STEPS);
+      return;
+    }
+
     this._notifyState();
 
     if (this.currentPlayer.isCPU) {
@@ -367,11 +391,46 @@ export class Game {
       this._turnPathIds.push(nextId);
       await this._stepWithCamera(player, fromTile.position, toTile.position);
 
+      if (toTile.type === TileType.EVENT) player.passedCheckpoints.add(toTile.id);
+
       if (toTile.type === TileType.START && i < steps - 1) {
-        player.currency += START_BONUS;
-        this.onLog(`${player.name}はスタートを通過！ +${START_BONUS}`);
+        this._grantGoalBonus(player);
+      }
+
+      // 強制停止の呪い（ほこら効果「右の頬をシバかれたら～」）: 自分の土地・
+      // 同盟仲間の土地は素通りできるが、それ以外は通過中でもここで足を
+      // 止められる（このターンの残りステップは消化しない）。
+      if (this._isForcedStopFor(player, toTile)) {
+        if (i < steps - 1) this.onLog(`${player.name}は強制停止の呪いで足を止めた！`);
+        break;
       }
     }
+  }
+
+  /** ゴール(START)着地/通過どちらからも呼ぶ: このマップにrequireAllCheckpointsが立っていれば全チェックポイント通過済みの時だけボーナスを渡し、渡したらこのラップ分の通過記録をクリアする。立っていなければ無条件で渡す（従来通り）。 */
+  _grantGoalBonus(player) {
+    if (this.requireAllCheckpoints && !this._hasPassedAllCheckpoints(player)) {
+      this.onLog(`${player.name}はゴールを通過（チェックポイント未通過のためボーナスなし）`);
+      return;
+    }
+    player.currency += START_BONUS;
+    this.onLog(`${player.name}はゴールを通過！ +${START_BONUS}`);
+    if (this.requireAllCheckpoints) player.passedCheckpoints.clear();
+  }
+
+  _hasPassedAllCheckpoints(player) {
+    return this.tiles
+      .filter((t) => t.type === TileType.EVENT)
+      .every((t) => player.passedCheckpoints.has(t.id));
+  }
+
+  /** 強制停止の呪いが今このプレイヤーに対して効くか。呪い付きの土地でも、所有者本人と同盟仲間は素通りできる。 */
+  _isForcedStopFor(player, tile) {
+    if (!tile.forcedStopCursed || tile.type !== TileType.LAND || tile.owner == null) return false;
+    if (tile.owner === player.id) return false;
+    const owner = this.players.find((p) => p.id === tile.owner);
+    if (owner?.allianceId != null && owner.allianceId === player.allianceId) return false;
+    return true;
   }
 
   /** CPU just picks randomly; the human is prompted (camera-work + diagonal arrows toward whichever screen direction each option actually sits in). */
@@ -428,12 +487,15 @@ export class Game {
     const tile = this.tiles[player.tileId];
 
     if (tile.type === TileType.START) {
-      player.currency += START_BONUS;
-      this.onLog(`${player.name}はゴールに到着！ +${START_BONUS}`);
+      this._grantGoalBonus(player);
     } else if (tile.type === TileType.EVENT) {
       this.onLog(`${player.name}はチェックポイントに止まった`);
     } else if (tile.type === TileType.SHOP) {
       await this._resolveShopTile(player);
+    } else if (tile.type === TileType.SHRINE) {
+      await this._resolveShrineTile(player);
+    } else if (tile.type === TileType.WARP) {
+      await this._resolveWarpTile(player);
     }
 
     await delay(200);
@@ -462,6 +524,77 @@ export class Game {
     player.hand.push({ ...card, id: `shop-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}` });
     this.onLog(`${player.name}はショップで「${card.name}」を購入した (-${card.cost}G)`);
     this._notifyState();
+  }
+
+  /**
+   * ほこらマス: ちょうど止まると「マダイの福音書」として4種類の効果から
+   * 1つがランダムに発生する（②マダイの岩礁マップ専用）。誰が止まっても
+   * 平等に発生しうる - トリガーしたのが人間かCPUかは効果の内容を変えない。
+   */
+  async _resolveShrineTile(player) {
+    this.onLog('マダイの福音書……');
+    const effects = [this._shrineChaos, this._shrineDoubleAtk, this._shrineForcedDice, this._shrineForcedStop];
+    const effect = effects[Math.floor(Math.random() * effects.length)];
+    await effect.call(this, player);
+    this._notifyState();
+  }
+
+  /** 混沌を愛せ: 発動したプレイヤーの手札を全て捨て、デッキ（山札+捨札）を丸ごと再シャッフルしてから5枚引き直す。 */
+  _shrineChaos(player) {
+    this.onLog('「混沌を愛せ」……手札が入れ替わる！');
+    for (const card of player.hand) player.deck.discard(card);
+    player.hand = [];
+    player.deck.resetShuffle();
+    for (let i = 0; i < 5; i++) {
+      const card = player.deck.draw();
+      if (card) player.hand.push(card);
+    }
+  }
+
+  /** 力こそパワー: 盤上に配置中の全モンスターから1体をランダムに選び、「倍化」という名の永続呪い（基礎ATKと同じ量を加算＝基礎ATKが実質2倍）をかける。盤上にモンスターが1体もいなければ不発。 */
+  _shrineDoubleAtk() {
+    const candidates = this.tiles.filter((t) => t.unit != null);
+    if (candidates.length === 0) {
+      this.onLog('「力こそパワー」……だが誰もいなかった');
+      return;
+    }
+    const tile = candidates[Math.floor(Math.random() * candidates.length)];
+    const unit = tile.unit;
+    applyCurse(unit, { name: '倍化', addedAtk: unit.def.atk, addedHp: 0 });
+    this.onLog(`「力こそパワー」……${unit.def.name}の基礎ATKが倍になった！`);
+  }
+
+  /** 速度違反はご愛嬌: 次のプレイヤー人数分の手番、サイコロフェーズを飛ばして強制的にFORCED_DICE_STEPS進ませる（_beginTurn参照）。 */
+  _shrineForcedDice() {
+    this.onLog('「速度違反はご愛嬌」……次の一巡、全員のサイコロが強制的に固定される！');
+    this.forcedDiceRemaining = this.players.length;
+  }
+
+  /** 右の頬をシバかれたら、左の頬をシバきなさい: 盤上に配置中の全モンスターの土地に強制停止の呪いをかける（自分の土地以外を素通りできなくなる。同盟仲間は対象外 - _isForcedStopFor参照）。この呪いは戦闘が起きると解ける（_runInvasion/_humanMoveFlow参照）。 */
+  _shrineForcedStop() {
+    const targets = this.tiles.filter((t) => t.unit != null);
+    for (const tile of targets) tile.forcedStopCursed = true;
+    this.onLog(`「右の頬をシバかれたら、左の頬をシバきなさい」……配置中の全モンスターに強制停止の呪いがかかった！（${targets.length}箇所）`);
+  }
+
+  /**
+   * ワープマス: ちょうど止まると対になるワープ先へ瞬間移動する（③の
+   * マップ専用 - 物理的に隔絶されたもう一つの島との唯一の行き来手段。
+   * warpTargetIdはcreateBoardが構築時にリンク付け済み - board.js参照）。
+   * 歩行のtween演出はせず、その場で座標をスナップする（「瞬間移動」の
+   * 演出として意図的に一歩ずつ歩かせない）。ワープ後は移動元の概念が
+   * 無くなるのでpreviousTileIdをリセットし、次の分岐では全方向が候補
+   * になる。
+   */
+  _resolveWarpTile(player) {
+    const tile = this.tiles[player.tileId];
+    const targetTile = this.tiles.find((t) => t.id === tile.warpTargetId);
+    if (!targetTile) return;
+    player.previousTileId = null;
+    player.tileId = targetTile.id;
+    if (player.mesh) player.mesh.position.set(targetTile.position.x, PIECE_REST_Y, targetTile.position.z);
+    this.scene.panTo(targetTile.position.x, targetTile.position.z);
+    this.onLog(`${player.name}はワープした！`);
   }
 
   /**
@@ -748,6 +881,7 @@ export class Game {
       const defenderPlayer = this.players.find((p) => p.id === targetTile.owner);
       const defenderUnit = targetTile.unit;
       const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, tile, targetTile);
+      targetTile.forcedStopCursed = false; // 戦闘が終わると消える - _shrineForcedStop参照。
 
       if (result.attackerSurvived && !result.defenderSurvived) {
         targetTile.unit = attackerUnit;
@@ -1085,6 +1219,8 @@ export class Game {
     const attackerUnit = createFieldUnit(card, player.id);
     const defenderUnit = tile.unit;
     const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, null, tile);
+    // 強制停止の呪いは「戦闘が終わると消える」(勝敗を問わない) - _shrineForcedStop参照。
+    tile.forcedStopCursed = false;
 
     if (!result.defenderSurvived) {
       if (result.attackerSurvived) {
@@ -1178,9 +1314,12 @@ export class Game {
       ownerName: owner ? owner.name : null,
       ownerColor: owner ? owner.color : null,
       unitName: tile.unit ? tile.unit.def.name : null,
-      unitAtk: tile.unit ? tile.unit.def.atk : null,
-      unitHp: tile.unit ? tile.unit.currentHp ?? tile.unit.def.hp : null,
+      // 呪い（倍化等）込みの実際のATK/HPを見せる（def.atk/hpそのままだと
+      // 「倍化」がかかっていても数値に反映されない）。
+      unitAtk: tile.unit ? this._baseStats(tile.unit).atk : null,
+      unitHp: tile.unit ? (tile.unit.currentHp ?? this._baseStats(tile.unit).hp) : null,
       hasAbility: !!tile.unit?.def.ability,
+      cursed: !!tile.forcedStopCursed,
     };
   }
 
