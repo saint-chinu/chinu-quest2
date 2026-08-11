@@ -3,7 +3,9 @@
 // processing needed. Each entry's `canvas` can be handed straight to
 // THREE.CanvasTexture (board piece) and `dataUrl` to an <img src> (charmake
 // picker / player panel avatar).
-const ICON_SHEET_URL = '/images/player/icons6.png';
+import { assetUrl } from './assetUrl.js';
+
+const ICON_SHEET_URL = assetUrl('/images/player/icons6.png');
 const ICON_COLS = 3;
 const ICON_ROWS = 2;
 

@@ -7,12 +7,14 @@
 // までplay()が失敗しうる - 失敗は無視する（次にテーマ切り替えが呼ばれた
 // 時に再度play()される想定なので、実害はゲーム開始後の最初の一瞬だけ）。
 
+import { assetUrl } from './assetUrl.js';
+
 const TRACK_SRC = {
-  board: '/audio/board-theme.mp3', // ①ヒトデの縄張り・専用曲の無いマップの既定
-  battle: '/audio/battle-theme.mp3',
-  madai: '/audio/stage2-theme.mp3', // ②マダイの岩礁
-  budou: '/audio/stage3-theme.mp3', // ③決闘の浜辺
-  boss: '/audio/boss-theme.mp3', // ④暗転した世界（ラスボス）
+  board: assetUrl('/audio/board-theme.mp3'), // ①ヒトデの縄張り・専用曲の無いマップの既定
+  battle: assetUrl('/audio/battle-theme.mp3'),
+  madai: assetUrl('/audio/stage2-theme.mp3'), // ②マダイの岩礁
+  budou: assetUrl('/audio/stage3-theme.mp3'), // ③決闘の浜辺
+  boss: assetUrl('/audio/boss-theme.mp3'), // ④暗転した世界（ラスボス）
 };
 
 // mapId(board.jsのMAPS)→専用トラック。無いキーはplayMapTheme側でboardに

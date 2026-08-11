@@ -2,24 +2,26 @@
 // の`speaker`/opponent`name`と完全一致する文字列 - この名前だけを頼りに
 // 立ち絵・盤面駒アイコンを引く（story.js側にidを新設する必要はない）。
 // 一覧に無いキャラ（ヒトデ等）は今まで通りプレースホルダー表示のまま。
+import { assetUrl } from './assetUrl.js';
+
 export const NPC_PORTRAIT_URL = {
-  'ダンボール男': '/images/npc-portraits/danballman.png',
-  '暴君マダイ': '/images/npc-portraits/madai.png',
-  'ニュウドウカジカ（お肉）': '/images/npc-portraits/nikuchan.png',
-  '紫の魔女ホフク': '/images/npc-portraits/hofuku.png',
-  '少女A': '/images/npc-portraits/wonderland-girl.png',
-  'ウサギン': '/images/npc-portraits/usagin.webp',
+  'ダンボール男': assetUrl('/images/npc-portraits/danballman.png'),
+  '暴君マダイ': assetUrl('/images/npc-portraits/madai.png'),
+  'ニュウドウカジカ（お肉）': assetUrl('/images/npc-portraits/nikuchan.png'),
+  '紫の魔女ホフク': assetUrl('/images/npc-portraits/hofuku.png'),
+  '少女A': assetUrl('/images/npc-portraits/wonderland-girl.png'),
+  'ウサギン': assetUrl('/images/npc-portraits/usagin.webp'),
 };
 
 // 盤面駒用は256×256の正方形に統一済み（GameScene.createPieceFromImageが
 // 前提とする1.6×1.6の正方形スプライトにそのまま合う）。
 export const NPC_TOKEN_URL = {
-  'ダンボール男': '/images/npc-tokens/danballman.png',
-  '暴君マダイ': '/images/npc-tokens/madai.png',
-  'ニュウドウカジカ（お肉）': '/images/npc-tokens/nikuchan.png',
-  '紫の魔女ホフク': '/images/npc-tokens/hofuku.png',
-  '少女A': '/images/npc-tokens/wonderland-girl.png',
-  'ウサギン': '/images/npc-tokens/usagin.webp',
+  'ダンボール男': assetUrl('/images/npc-tokens/danballman.png'),
+  '暴君マダイ': assetUrl('/images/npc-tokens/madai.png'),
+  'ニュウドウカジカ（お肉）': assetUrl('/images/npc-tokens/nikuchan.png'),
+  '紫の魔女ホフク': assetUrl('/images/npc-tokens/hofuku.png'),
+  '少女A': assetUrl('/images/npc-tokens/wonderland-girl.png'),
+  'ウサギン': assetUrl('/images/npc-tokens/usagin.webp'),
 };
 
 const tokenImageCache = new Map();

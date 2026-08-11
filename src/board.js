@@ -1,4 +1,5 @@
 import { Element, CARD_COLOR } from './cards.js';
+import { assetUrl } from './assetUrl.js';
 
 export const TileType = {
   START: 'start',
@@ -105,10 +106,10 @@ const DANBALL_ROWS = [
 // requireAllCheckpoints: 全マップ共通で「全チェックポイントを通過しないと
 // ゴールにならない」ルールが有効（ユーザー指定、2026-08-11）。
 export const MAPS = [
-  { id: 'hitode', name: '① ヒトデの縄張り', rows: HITODE_ROWS, requireAllCheckpoints: true, background: '/images/stage/stage1.png' },
-  { id: 'madai', name: '② マダイの岩礁', rows: MADAI_ROWS, requireAllCheckpoints: true, background: '/images/stage/stage2.jpg' },
-  { id: 'budou', name: '③ 決闘の浜辺', rows: BUDOU_ROWS, requireAllCheckpoints: true, background: '/images/stage/stage1.png' },
-  { id: 'danball', name: '④ 暗転した世界', rows: DANBALL_ROWS, requireAllCheckpoints: true, background: '/images/stage/stage1.png' },
+  { id: 'hitode', name: '① ヒトデの縄張り', rows: HITODE_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage1.png') },
+  { id: 'madai', name: '② マダイの岩礁', rows: MADAI_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage2.jpg') },
+  { id: 'budou', name: '③ 決闘の浜辺', rows: BUDOU_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage1.png') },
+  { id: 'danball', name: '④ 暗転した世界', rows: DANBALL_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage1.png') },
 ];
 
 function getMap(mapId) {
