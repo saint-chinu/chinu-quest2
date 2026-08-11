@@ -52,6 +52,36 @@
 
 ---
 
+## 雷・森属性モンスター40種＋特殊能力（2026-08-12実装、火・水属性40種で確立した実装に合流）
+火・水（20種ずつ、`src/fireMonsters.js`/`src/waterMonsters.js`）に続き、`src/thunderMonsters.js`/`src/forestMonsters.js`で雷・森属性を追加。これで4属性×20種＝**モンスターカタログ全80種が揃った**（`MONSTER_CATALOG`はfire/water/thunder/forestの4カタログをスプレッドするだけの構成に）。既存の効果体系（`effect.type`/`ability.type`ディスパッチ、`chainRequired`、`statsPerElementChain`、`atkBonusAgainstRarity`、`warpToEmptyElementLand`、`challengeOdds`等）を最大限再利用しつつ、雷・森ならではの新規効果を追加実装した。
+
+### battle.js: 新規on-hit/撃破時/戦闘終了時エフェクト7種
+- `atkDownOnHit`（静電気野郎）: 命中時、相手に永続ATKダウンの呪いを付与（既存の汎用addedAtk curseをそのまま流用、重ね掛け可）。**副作用としてdealDamageに`Math.max(0, ...)`のクランプを追加** - ATKダウンが重なって負値になっても、負のダメージ（＝相手を回復させてしまうバグ）にならないようにした
+- `shockOnHit`（雷雲、感電）: 命中時、相手に「1/3の確率で攻撃が不発になる」永続の呪いを付与。目くらまし（1回消費）と違い入れ替え/死亡まで持続し、performStrikeの先頭で毎回抽選する
+- `stealDamageMultiple`（テンホウ×5、山賊フクロウ×2）: 強盗特性（3倍固定）を効果として一般化し、倍率を自由に設定できるようにしたもの
+- `instantKillOnHit`（樹海の怨霊=全属性対象、とある科学の...=水属性限定）: `targetElement`未指定なら全属性、指定時はその属性の相手にのみ発動する共通ハンドラ
+- `chanceGoldAfterBattle`（トリュフ豚）: 戦闘終了時、生死問わず確率でG獲得
+- `chanceSetHpOnHit`（山姥）: 命中時、相手が生存していれば確率でHPを固定値にする（現在HPがその値未満でも引き上げる＝回復もあり得る仕様通り）
+- `goldOnKillElement`（きこりのおじさん）: 指定属性のモンスターを撃破した時だけGを得る（payOnKillと同じ撃破判定タイミング）
+
+### game.js: 新規の召喚時/シナジー/経済/土地コマンド効果
+- `itemOnSummon`（謎の科学者）: `_placeUnit`にフック。名前付きアイテム（ITEM_CATALOG）＋汎用武器防具プールを合わせたレアリティ別プールからN70%/S20%/R10%で1枚を手札に加える（所持数は変化しない）
+- `synergyWithNamedAlly`（タケノコ派⇔きのこ派）: `_applyEffectBonus`で、盤面のどこかに指定catalogIdの味方が配置されていればATK/HPボーナスが乗る新規ヘルパー`_hasAllyOnBoard`を追加
+- `atkDoubleIfRicher`（マウントゴリラ）: `_applyEffectBonus`で、戦闘開始時点の所持Gが相手を上回っていれば基礎ATK分を追加（＝2倍）
+- **`summonFieldMonster`**（電柱を植える男）: 新設の土地コマンド。ランダムな空き地に、図鑑登録なしの専用駒「電柱」（`thunderMonsters.js`の`DENCHU_FIELD_MONSTER`、`MONSTER_CATALOG`には含まれない）を召喚する。盤面のどこかに電柱が1体でもいる間、**所有者を問わず**全ての雷属性モンスターがHP+10（`_battleBonus`に追加、`_hasFieldMonsterOnBoard`で判定）
+- **`summonMonsterOnEmptyLand`**（サンダーバード→雷雲、ドリアード→自分自身）: 新設の土地コマンド。`ability.catalogId`で指定した実在のカタログモンスターの新規インスタンスをランダムな空き地に召喚する（電柱と違いこちらは図鑑登録されている実カード）
+- **`cursePlayerHaste`**（ソニックムーヴ）: 新設の土地コマンド。選んだプレイヤー（同盟仲間は対象外）に「高速化の呪い」を2ターン分付与する。付与された側は`_beginTurn`が既存の「速度違反はご愛嬌」(`forcedDiceRemaining`)と全く同じ仕組みで自動的にサイコロ・スペルフェーズを飛ばし、6マス固定で強制移動する（`player.hasteTurnsRemaining`、ほこら効果は全体カウンタだったのに対しこちらはプレイヤー個人に効く点が違い）
+- **避雷針侍の身代わり効果**: 新規ヘルパー`_maybeRedirectDeathToLightningRod`。`_runInvasion`/`_humanMoveFlow`の侵略分岐で`_runBattleScene`直後・死亡処理より前に呼び、味方が敗死する結果だった場合、盤面の別マスにいる避雷針侍自身を代わりに死なせてresultを書き換える（元のモンスターはノーダメージで生存に戻る）
+- **メカニックマソの周回回復**: `_grantGoalBonus`（ゴール通過処理）の先頭で`_healMechanicMasoAllies`を呼び、配置していれば自分の雷属性モンスター全員の現在HPを最大HPの10%回復する。なお戦闘開始時に`prepareForBattle`が毎回HPを最大値へリセットする既存仕様上、この回復は「次の戦闘結果」には影響せず、専ら土地情報等アイドル時のHP表示にのみ反映される（氷柱の戦闘後自傷など既存の同種効果と共通の性質）
+
+### 仕様上あいまいだった3点は保守的に実装（要ユーザー確認）
+1. **ソニックムーヴ**: コスト欄が「50G」のみで、他の土地コマンド持ちカードのような「通常（コマンドXXG）」という別建て表記が無かったため、召喚コスト=50G・土地コマンドの発動コストは0（無料）として実装
+2. **避雷針侍**: コスト欄に「通常（コマンド50G）」とあるが、対応する土地コマンドの説明文が本文に無かったため、氷柱（水属性）の時と同じ判断で土地コマンド自体は実装せず、身代わり効果（受動効果）のみ実装した
+3. **電柱のHP+10効果**: 「配置されていると全ての雷属性モンスターのHP+10」に所有者の限定が無かったため、味方限定ではなく敵味方問わない全体効果として実装した（メカニックマソが明示的に「味方雷モンスター」と書いていたのとの対比から、この解釈にした）
+
+### 検証
+`resolveBattle`を直接叩くNode単体テスト13件、`Game`をVite SSRローダー経由でNode実行するテスト22件（chainRequired・新規エフェクト・電柱/雷雲召喚・電柱の全体HP+10オーラ・高速化の呪い・避雷針侍の身代わり・メカニックマソの回復を含む）の計35件を実施、全てパス。実機でも新規登録→水・雷ブックでCPU戦開始→カタログ80種読み込み確認→ダイス→着地→召喚まで一連の操作をコンソールエラーなしで確認済み
+
 ## ブリードパーツパック（2026-08-12実装、Codex担当分・仕様確認済み）
 - `src/breedParts.js`の`drawBreedPartPack(random)`: 150Mで一括3個抽選（`BREED_PART_PACK = { cost: 150, count: 3 }`）。各枠はN65%/S25%/R10%で独立抽選し、3個全てNだった場合だけ最後の1個をSへ差し替える最低保証付き。ショップ画面（`main.js`の`renderShopScreen`内、`shopPartsList`）に「ブリードパーツパック」として配線済みで、購入すると`currentCharacter.ownedPartIds`へ追加・M減算・結果表示（`showPackResult`、通常のカードパックと同じUIを`onDetail=null`で流用）まで一通り機能する。`tests/breedParts.test.mjs`のNode単体テスト2件（全N時のS差し替え／通常時のレアリティ維持）を実行し両方パス
 

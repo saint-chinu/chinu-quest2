@@ -1,10 +1,11 @@
 import { TileType, mapRequiresAllCheckpoints } from './board.js';
 import { PIECE_REST_Y } from './scene.js';
-import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck } from './cards.js';
-import { buildStarterExtraCards, WEAK_AGAINST } from './battleCards.js';
+import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity, buildCardPool } from './cards.js';
+import { buildStarterExtraCards, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, catalogIdOf } from './battleCards.js';
 import { createFieldUnit, resolveBattle, equipItem, applyCurse } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay } from './utils.js';
+import { DENCHU_FIELD_MONSTER } from './thunderMonsters.js';
 
 const SHOP_OPTION_COUNT = 3;
 
@@ -49,6 +50,8 @@ const CHANGEABLE_ELEMENTS = [Element.FIRE, Element.WATER, Element.THUNDER, Eleme
 
 // 速度違反はご愛嬌（ほこら効果）で強制されるサイコロ目。
 const FORCED_DICE_STEPS = 10;
+// ソニックムーヴの「高速化の呪い」で強制されるサイコロ目。
+const HASTE_FORCED_STEPS = 6;
 
 export class Game {
   constructor({
@@ -179,6 +182,11 @@ export class Game {
       // 通過済みのチェックポイント(EVENT)タイルidの集合。ゴールでボーナスを
       // 受け取った瞬間にクリアする（_movePlayer/_resolveSpecialTile参照）。
       passedCheckpoints: new Set(),
+      // ソニックムーヴの「高速化の呪い」残りターン数（0=呪いなし）。
+      // >0の間、_beginTurnがサイコロ/スペルフェーズを飛ばしHASTE_FORCED_STEPS
+      // 固定で強制移動させる（ほこらのforcedDiceRemainingと同じ仕組み、
+      // こちらは全体ではなく対象プレイヤー個人にだけ効く）。
+      hasteTurnsRemaining: 0,
     }));
     this.currentPlayerIndex = 0;
     this.isBusy = false;
@@ -237,6 +245,13 @@ export class Game {
       this.forcedDiceRemaining -= 1;
       this.onLog(`${this.currentPlayer.name}は速度違反の効果でサイコロ${FORCED_DICE_STEPS}固定！`);
       await this.rollDice(FORCED_DICE_STEPS);
+      return;
+    }
+
+    if (this.currentPlayer.hasteTurnsRemaining > 0) {
+      this.currentPlayer.hasteTurnsRemaining -= 1;
+      this.onLog(`${this.currentPlayer.name}は高速化の呪いでサイコロ${HASTE_FORCED_STEPS}固定！`);
+      await this.rollDice(HASTE_FORCED_STEPS);
       return;
     }
 
@@ -419,6 +434,7 @@ export class Game {
 
   /** ゴール(START)着地/通過どちらからも呼ぶ: このマップにrequireAllCheckpointsが立っていれば全チェックポイント通過済みの時だけボーナスを渡し、渡したらこのラップ分の通過記録をクリアする。立っていなければ無条件で渡す（従来通り）。 */
   _grantGoalBonus(player) {
+    this._healMechanicMasoAllies(player);
     if (this.requireAllCheckpoints && !this._hasPassedAllCheckpoints(player)) {
       this.onLog(`${player.name}はゴールを通過（チェックポイント未通過のためボーナスなし）`);
       return;
@@ -426,6 +442,20 @@ export class Game {
     player.currency += START_BONUS;
     this.onLog(`${player.name}はゴールを通過！ +${START_BONUS}`);
     if (this.requireAllCheckpoints) player.passedCheckpoints.clear();
+  }
+
+  /** メカニックマソ: 自分の盤面のどこかに配置されていれば、自分が所有する雷属性モンスター全員が周回ごとに最大HPの10%回復する（チェックポイント未達成でボーナス無しの周回でも、ゴールを通過したこと自体は変わらないので回復は適用する）。 */
+  _healMechanicMasoAllies(player) {
+    if (!this._hasAllyOnBoard(player.id, 'mechanicMaso')) return;
+    for (const t of this._ownedTiles(player)) {
+      if (!t.unit || t.unit.def.element !== Element.THUNDER) continue;
+      const maxHp = this._baseStats(t.unit).hp + this._elementHpBonus(t.unit, t);
+      const healed = Math.min(t.unit.currentHp + Math.round(maxHp * 0.1), maxHp);
+      if (healed > t.unit.currentHp) {
+        t.unit.currentHp = healed;
+        this.onLog(`${t.unit.def.name}はメカニックマソの効果でHP回復`);
+      }
+    }
   }
 
   _hasPassedAllCheckpoints(player) {
@@ -908,6 +938,7 @@ export class Game {
       const defenderUnit = targetTile.unit;
       const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, tile, targetTile);
       targetTile.forcedStopCursed = false; // 戦闘が終わると消える - _shrineForcedStop参照。
+      await this._maybeRedirectDeathToLightningRod(defenderPlayer, targetTile, result);
 
       if (result.attackerSurvived && !result.defenderSurvived) {
         targetTile.unit = attackerUnit;
@@ -1129,6 +1160,49 @@ export class Game {
       return true;
     }
 
+    if (ability.type === 'summonFieldMonster' || ability.type === 'summonMonsterOnEmptyLand') {
+      const emptyLands = this.tiles.filter((t) => t.type === TileType.LAND && t.owner == null);
+      if (emptyLands.length === 0) {
+        this.onLog('召喚できる空き地がありません');
+        return false;
+      }
+      if (!(await confirmAndSpend())) return false;
+
+      const targetTile = emptyLands[Math.floor(Math.random() * emptyLands.length)];
+      const summonedDef =
+        ability.type === 'summonFieldMonster'
+          ? { ...DENCHU_FIELD_MONSTER, id: `denchu-${Date.now()}-${Math.random().toString(36).slice(2)}` }
+          : { ...MONSTER_CATALOG[ability.catalogId], id: `summon-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+      this._placeUnit(targetTile, player, summonedDef);
+      this.onLog(`${player.name}の${unitDef.name}が${targetTile.id}番地に${summonedDef.name}を召喚した`);
+      this._notifyState();
+      return true;
+    }
+
+    if (ability.type === 'cursePlayerHaste') {
+      const targets = this.players.filter((p) => {
+        if (p.id === player.id || p.defeated) return false;
+        if (p.allianceId != null && p.allianceId === player.allianceId) return false;
+        return true;
+      });
+      if (targets.length === 0) {
+        this.onLog('対象にできるプレイヤーがいません');
+        return false;
+      }
+      const targetId = await this.onPickAbilityTarget(
+        targets.map((p) => ({ id: p.id, label: `${p.name}に高速化の呪いをかける` })),
+        player.id,
+      );
+      if (targetId == null) return false;
+      if (!(await confirmAndSpend())) return false;
+
+      const targetPlayer = this.players.find((p) => p.id === targetId);
+      targetPlayer.hasteTurnsRemaining = (targetPlayer.hasteTurnsRemaining || 0) + ability.turns;
+      this.onLog(`${player.name}の${unitDef.name}が${targetPlayer.name}に高速化の呪いをかけた`);
+      this._notifyState();
+      return true;
+    }
+
     return false;
   }
 
@@ -1193,11 +1267,23 @@ export class Game {
 
   /** Bundles both situational bonuses into the {atk,hp} shape resolveBattle expects, logging whichever actually apply. */
   _battleBonus(unit, positionTile, battleTile) {
-    const hp = this._elementHpBonus(unit, positionTile);
+    let hp = this._elementHpBonus(unit, positionTile);
     const atk = this._cheerAtkBonus(unit, battleTile);
     if (hp > 0) this.onLog(`${unit.def.name}は${ELEMENT_LABEL[positionTile.element]}の土地でHP+${hp}`);
     if (atk > 0) this.onLog(`${unit.def.name}は応援を受けてATK+10`);
+    // 電柱（電柱を植える男の土地コマンド産）: 所有者を問わず、盤上のどこかに
+    // 1体でもいれば全ての雷属性モンスターがHP+10（味方限定ではなく全体
+    // 効果 - 仕様上「配置されていると」に所有者の限定が無いため）。
+    if (unit.def.element === Element.THUNDER && this._hasFieldMonsterOnBoard('denchu-field')) {
+      hp += 10;
+      this.onLog(`${unit.def.name}は電柱の恩恵でHP+10`);
+    }
     return { atk, hp };
+  }
+
+  /** 盤面上のどこかに、指定catalogIdのモンスターが（所有者問わず）配置されているか。電柱の全体効果用。 */
+  _hasFieldMonsterOnBoard(catalogId) {
+    return this.tiles.some((t) => t.unit && catalogIdOf(t.unit.def) === catalogId);
   }
 
   /**
@@ -1220,7 +1306,26 @@ export class Game {
       const atk = Math.round(unit.def.atk * effect.ratio);
       bonus.atk += atk;
       this.onLog(`${unit.def.name}は相手のレアリティ(${effect.targetRarity})によりATK+${atk}`);
+    } else if (effect.type === 'synergyWithNamedAlly' && this._hasAllyOnBoard(unit.ownerId, effect.allyCatalogId)) {
+      const atk = effect.atkBonus || 0;
+      const hp = effect.hpBonus || 0;
+      bonus.atk += atk;
+      bonus.hp += hp;
+      if (atk > 0 || hp > 0) this.onLog(`${unit.def.name}はシナジーでATK+${atk}/HP+${hp}`);
+    } else if (effect.type === 'atkDoubleIfRicher') {
+      const owner = this.players.find((p) => p.id === unit.ownerId);
+      const opponentOwner = this.players.find((p) => p.id === opponentUnit.ownerId);
+      if (owner && opponentOwner && owner.currency > opponentOwner.currency) {
+        const atk = unit.def.atk;
+        bonus.atk += atk;
+        this.onLog(`${unit.def.name}は所持Gで上回りATKが2倍になった`);
+      }
     }
+  }
+
+  /** 盤面上のどこかに、指定オーナーが持つ指定カード（catalogId基準）が配置されているか。シナジー系効果（タケノコ派⇔きのこ派）用。 */
+  _hasAllyOnBoard(ownerId, catalogId) {
+    return this.tiles.some((t) => t.unit && t.unit.ownerId === ownerId && catalogIdOf(t.unit.def) === catalogId);
   }
 
   /**
@@ -1379,6 +1484,7 @@ export class Game {
     const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, null, tile);
     // 強制停止の呪いは「戦闘が終わると消える」(勝敗を問わない) - _shrineForcedStop参照。
     tile.forcedStopCursed = false;
+    await this._maybeRedirectDeathToLightningRod(defenderPlayer, tile, result);
 
     if (!result.defenderSurvived) {
       if (result.attackerSurvived) {
@@ -1400,6 +1506,38 @@ export class Game {
       this.onLog(`${defenderPlayer.name}の${defenderUnit.def.name}が防衛に成功した`);
       if (!result.attackerSurvived) await this._handleUnitDeath(attackerUnit, player);
     }
+  }
+
+  /**
+   * 避雷針侍: 味方（同オーナー）モンスターが戦闘に敗れて死ぬ場合、盤面の
+   * 別マスにいる避雷針侍自身が代わりに死んで守る（本来死ぬはずだった側は
+   * ノーダメージで生存扱いに戻し、resultをその場で書き換える）。呼び出し元
+   * （_runInvasion/_humanMoveFlowの侵略分岐）は_runBattleScene直後・
+   * 死亡処理より前に呼ぶことで、以降の分岐が自然に「防衛成功」を辿る。
+   * 避雷針侍が防衛側本人の場合や、身代わりがいない/既に生存している場合は
+   * 何もしない。
+   */
+  async _maybeRedirectDeathToLightningRod(defenderPlayer, defenderTile, result) {
+    if (result.defenderSurvived) return false;
+    const defenderUnit = defenderTile.unit;
+    if (!defenderUnit || catalogIdOf(defenderUnit.def) === 'raiheishinZamurai') return false;
+    const rodTile = this.tiles.find(
+      (t) => t !== defenderTile && t.unit && t.unit.ownerId === defenderPlayer.id && catalogIdOf(t.unit.def) === 'raiheishinZamurai',
+    );
+    if (!rodTile) return false;
+
+    const rodUnit = rodTile.unit;
+    this.onLog(`${defenderPlayer.name}の避雷針侍が${defenderUnit.def.name}の身代わりになった！`);
+    rodTile.unit = null;
+    rodTile.owner = null;
+    rodTile.transparentCursed = false;
+    this._repaintTileToElement(rodTile);
+
+    defenderUnit.currentHp = this._baseStats(defenderUnit).hp + this._elementHpBonus(defenderUnit, defenderTile);
+    result.defenderSurvived = true;
+    this._notifyState();
+    await this._handleUnitDeath(rodUnit, defenderPlayer);
+    return true;
   }
 
   /**
@@ -1436,6 +1574,31 @@ export class Game {
     tile.owner = player.id;
     tile.transparentCursed = false;
     this._paintTile(tile, player.color);
+    if (card.effect?.type === 'itemOnSummon') {
+      const item = this._randomItemCardForSummon();
+      player.hand.push(item);
+      this.onLog(`${player.name}の${card.name}が「${item.name}」を手に入れた`);
+    }
+  }
+
+  /**
+   * 謎の科学者「アイテムカードを1枚入手」用: 名前付きアイテム
+   * （ITEM_CATALOG）＋汎用武器防具プールを合わせたレアリティ別プールから
+   * N70%/S20%/R10%で1枚抽選する（所持カード自体は増減せず手札に加わる
+   * だけ - buildStarterExtraCard等と同じ「新しいidを振った即席インスタンス」
+   * として渡す）。該当レアリティが空なら安全にNへフォールバックする。
+   */
+  _randomItemCardForSummon() {
+    const pool = [...Object.values(ITEM_CATALOG), ...buildCardPool({ monsterCount: 0, spellCount: 0, gearCount: 8 })];
+    const byRarity = { [Rarity.N]: [], [Rarity.S]: [], [Rarity.R]: [] };
+    for (const c of pool) {
+      if (byRarity[c.rarity]) byRarity[c.rarity].push(c);
+    }
+    const roll = Math.random();
+    const rarity = roll < 0.1 ? Rarity.R : roll < 0.3 ? Rarity.S : Rarity.N;
+    const tier = byRarity[rarity].length ? byRarity[rarity] : byRarity[Rarity.N].length ? byRarity[Rarity.N] : pool;
+    const picked = tier[Math.floor(Math.random() * tier.length)];
+    return { ...picked, id: `item-summon-${Date.now()}-${Math.random().toString(36).slice(2)}` };
   }
 
   _goldAdapter() {

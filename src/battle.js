@@ -32,6 +32,17 @@ function applyPoison(unit, ratio) {
   unit.curses.push({ name: '毒', poisonRatio: ratio, addedAtk: 0, addedHp: 0, traits: [] });
 }
 
+/** 感電状態を付与する（雷雲参照）。以後この個体が攻撃する度に一定確率で攻撃そのものが不発になる（目くらましと違い1回で消費されず、毒同様に入れ替え/死亡まで持続）。既に感電なら上書きしない。 */
+function applyShock(unit, chance) {
+  if (unit.curses.some((c) => c.shockChance != null)) return;
+  unit.curses.push({ name: '感電', shockChance: chance, addedAtk: 0, addedHp: 0, traits: [] });
+}
+
+/** ATKダウンの呪い（静電気野郎参照）。既存のaddedAtk汎用curseをそのまま流用 - 通常の永続呪いと全く同じ仕組みで、重ね掛けもされる（複数回被弾すればその分下がり続ける）。 */
+function applyAtkDown(unit, amount) {
+  unit.curses.push({ name: 'ATKダウン', addedAtk: -amount, addedHp: 0, traits: [] });
+}
+
 function randomStep(min, max, step) {
   const stepsCount = Math.floor((max - min) / step) + 1;
   return min + step * Math.floor(Math.random() * stepsCount);
@@ -93,7 +104,9 @@ function damageReductionMultiplier(defenderUnit, attackerUnit) {
 function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
   const atkStats = statTotals(attackerUnit, attackerBonus);
   const multiplier = incomingDamageMultiplier(defenderUnit, attackerUnit) * damageReductionMultiplier(defenderUnit, attackerUnit);
-  const damage = Math.round(atkStats.atk * multiplier);
+  // ATKダウンの呪い（静電気野郎）が重なって0未満になっても、マイナスダメージ
+  // （＝相手を回復させてしまう）にはならないようクランプする。
+  const damage = Math.max(0, Math.round(atkStats.atk * multiplier));
   defenderUnit.currentHp -= damage;
   const message = `${attackerUnit.def.name} → ${defenderUnit.def.name} に${damage}ダメージ（倍率${multiplier}）`;
   log.push(message);
@@ -130,6 +143,13 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
     return { damage: 0, message };
   }
 
+  const shockCurse = attackerUnit.curses.find((c) => c.shockChance != null);
+  if (shockCurse && Math.random() < shockCurse.shockChance) {
+    const message = `${attackerUnit.def.name}は感電で攻撃できなかった`;
+    log.push(message);
+    return { damage: 0, message };
+  }
+
   const attackerEffect = attackerUnit.def.effect;
   const defenderEffect = defenderUnit.def.effect;
 
@@ -159,12 +179,42 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
       defenderUnit.blinded = true;
       log.push(`${defenderUnit.def.name}は目くらまし状態になった`);
     }
+    if (attackerEffect?.type === 'atkDownOnHit') {
+      applyAtkDown(defenderUnit, attackerEffect.amount);
+      log.push(`${defenderUnit.def.name}のATKが${attackerEffect.amount}下がった`);
+    }
+    if (attackerEffect?.type === 'shockOnHit') {
+      applyShock(defenderUnit, attackerEffect.chance);
+      log.push(`${defenderUnit.def.name}は感電状態になった`);
+    }
+    if (attackerEffect?.type === 'stealDamageMultiple') {
+      const stolen = result.damage * attackerEffect.multiplier;
+      gold.transfer(defenderUnit.ownerId, attackerUnit.ownerId, stolen);
+      log.push(`${attackerUnit.def.name}が${stolen}Gを奪った`);
+    }
+    if (defenderUnit.currentHp > 0 && attackerEffect?.type === 'chanceSetHpOnHit' && Math.random() < attackerEffect.chance) {
+      defenderUnit.currentHp = attackerEffect.hp;
+      log.push(`${defenderUnit.def.name}のHPが${attackerEffect.hp}に固定された`);
+    }
+    if (
+      defenderUnit.currentHp > 0 &&
+      attackerEffect?.type === 'instantKillOnHit' &&
+      (!attackerEffect.targetElement || defenderUnit.def.element === attackerEffect.targetElement) &&
+      Math.random() < attackerEffect.chance
+    ) {
+      defenderUnit.currentHp = 0;
+      log.push(`${defenderUnit.def.name}は即死した`);
+    }
   }
 
   if (defenderUnit.currentHp <= 0) {
     if (attackerEffect?.type === 'payOnKill') {
       gold.transfer(attackerUnit.ownerId, defenderUnit.ownerId, attackerEffect.amount);
       log.push(`${attackerUnit.def.name}は${defenderUnit.def.name}を倒したが賠償金${attackerEffect.amount}Gを支払った`);
+    }
+    if (attackerEffect?.type === 'goldOnKillElement' && defenderUnit.def.element === attackerEffect.targetElement) {
+      gold.add(attackerUnit.ownerId, attackerEffect.amount);
+      log.push(`${attackerUnit.def.name}は${defenderUnit.def.name}を倒して${attackerEffect.amount}Gを得た`);
     }
     if (defenderEffect?.type === 'deathRetaliation' && defenderEffect.trigger === 'enemyAttack') {
       attackerUnit.currentHp -= defenderEffect.damage;
@@ -301,6 +351,14 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     const g = randomStep(defender.def.effect.min, defender.def.effect.max, defender.def.effect.step);
     gold.add(defender.ownerId, g);
     log.push(`${defender.def.name}は戦闘後に${g}Gを得た`);
+  }
+  if (attacker.def.effect?.type === 'chanceGoldAfterBattle' && Math.random() < attacker.def.effect.chance) {
+    gold.add(attacker.ownerId, attacker.def.effect.amount);
+    log.push(`${attacker.def.name}は戦闘後に${attacker.def.effect.amount}Gを得た`);
+  }
+  if (defender.def.effect?.type === 'chanceGoldAfterBattle' && Math.random() < defender.def.effect.chance) {
+    gold.add(defender.ownerId, defender.def.effect.amount);
+    log.push(`${defender.def.name}は戦闘後に${defender.def.effect.amount}Gを得た`);
   }
 
   // 生存時のみの自己完結効果（回復・自傷）。ここでさらに力尽きることもある

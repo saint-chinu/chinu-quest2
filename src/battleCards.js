@@ -1,6 +1,8 @@
 import { CardType, Element, Rarity, Deck } from './cards.js';
 import { FIRE_MONSTER_CATALOG } from './fireMonsters.js';
 import { WATER_MONSTER_CATALOG } from './waterMonsters.js';
+import { THUNDER_MONSTER_CATALOG } from './thunderMonsters.js';
+import { FOREST_MONSTER_CATALOG } from './forestMonsters.js';
 
 // Elemental weakness cycle: each element takes bonus damage from the next
 // one. 火→水→雷→森→火 (fire is weak to water, water to thunder, thunder to
@@ -27,6 +29,8 @@ export const ItemType = {
 export const MONSTER_CATALOG = {
   ...FIRE_MONSTER_CATALOG,
   ...WATER_MONSTER_CATALOG,
+  ...THUNDER_MONSTER_CATALOG,
+  ...FOREST_MONSTER_CATALOG,
 };
 
 export const ITEM_CATALOG = {
