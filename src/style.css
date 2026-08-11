@@ -470,6 +470,81 @@ html, body {
   justify-content: center;
 }
 
+#pvp-map-list {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.pvp-map-card {
+  width: 140px;
+  padding: 12px;
+  border-radius: 12px;
+  background: #1c1c2c;
+  border: 2px solid transparent;
+  cursor: pointer;
+  text-align: center;
+  color: #fff;
+}
+
+.pvp-map-card:hover {
+  border-color: #2ec4b6;
+}
+
+.pvp-map-card canvas {
+  max-width: 100%;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.pvp-map-card p {
+  font-size: 13px;
+  font-weight: bold;
+}
+
+#pvp-map-confirm-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+#pvp-map-confirm-modal.hidden {
+  display: none;
+}
+
+#pvp-map-confirm-box {
+  background: #22223b;
+  border-radius: 12px;
+  padding: 20px 24px;
+  color: #fff;
+  text-align: center;
+  max-width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+#pvp-map-confirm-thumb {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+#pvp-map-confirm-thumb canvas {
+  max-width: 100%;
+  border-radius: 8px;
+}
+
+#pvp-map-confirm-text {
+  margin-bottom: 16px;
+  font-size: 14px;
+}
+
 .deck-select-card {
   width: 140px;
   padding: 16px 10px;

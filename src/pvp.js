@@ -38,17 +38,19 @@ function privateHandRef(roomCode, uid) {
   return doc(db, 'pvpRooms', roomCode.toUpperCase(), 'private', uid);
 }
 
-/** Creates a new waiting room and returns its code + this browser's Firebase uid (host). */
-export async function createPvpRoom({ name, color }) {
+/** Creates a new waiting room and returns its code + this browser's Firebase uid (host). `mapId` is the board layout the host picked (see board.js MAPS) - stored on the room so the guest builds the identical board. */
+export async function createPvpRoom({ name, color, mapId }) {
   const uid = await ensurePvpUser();
   const roomCode = randomRoomCode();
   await setDoc(roomRef(roomCode), {
     hostUid: uid,
     hostName: name,
     hostColor: color,
+    mapId,
     guestUid: null,
     guestName: null,
     guestColor: null,
+    guestDeckList: null,
     status: 'waiting',
     createdAt: serverTimestamp(),
     publicState: null,
@@ -62,8 +64,8 @@ export async function createPvpRoom({ name, color }) {
   return { roomCode, uid, isHost: true };
 }
 
-/** Joins an existing waiting room as guest. Throws a Japanese-language Error on failure (room not found / already full). */
-export async function joinPvpRoom(roomCodeInput, { name, color }) {
+/** Joins an existing waiting room as guest, submitting their deck choice in the same write (guests can only write further fields once past 'waiting' status per firestore.rules, so the deck has to ride along with the join itself). Throws a Japanese-language Error on failure (room not found / already full). */
+export async function joinPvpRoom(roomCodeInput, { name, color, deckList }) {
   const roomCode = roomCodeInput.trim().toUpperCase();
   const ref = roomRef(roomCode);
   const snap = await getDoc(ref);
@@ -76,9 +78,15 @@ export async function joinPvpRoom(roomCodeInput, { name, color }) {
     guestUid: uid,
     guestName: name,
     guestColor: color,
+    guestDeckList: deckList,
     status: 'active',
   });
   return { roomCode, uid, isHost: false };
+}
+
+/** ホスト専用: ロビーの「対戦開始」クリックと同時に呼ぶ。ゲスト側で購読中のroomリスナーがstatus:'battling'への変化を検知し、それを合図にゲスト側の盤面構築(startPvpGuestBattle)を始める。 */
+export function beginPvpMatch(roomCode) {
+  return updateDoc(roomRef(roomCode), { status: 'battling' });
 }
 
 /** Subscribes to the room document. `onChange(room|null)` fires on every update; call the returned function to unsubscribe. */

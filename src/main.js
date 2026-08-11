@@ -1,6 +1,6 @@
 import './style.css';
 import { GameScene, PIECE_REST_Y } from './scene.js';
-import { createBoard } from './board.js';
+import { createBoard, MAPS, createMapThumbnailCanvas } from './board.js';
 import { Game } from './game.js';
 import { CardType, CARD_COLOR, ELEMENT_LABEL, Element, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
 import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, ITEM_CATALOG } from './battleCards.js';
@@ -33,6 +33,7 @@ import {
   publishPublicState,
   publishPrivateHand,
   finishPvpRoom,
+  beginPvpMatch,
 } from './pvp.js';
 import { playBoardTheme, playBattleTheme, stopMusic, toggleMuted } from './audio.js';
 
@@ -1191,7 +1192,7 @@ function animate() {
  */
 function startBattle(character, storyOptions = {}) {
   scene = new GameScene(canvas);
-  tiles = createBoard();
+  tiles = createBoard(storyOptions.mapId);
   scene.buildBoard(tiles);
 
   game = new Game({
@@ -1361,6 +1362,14 @@ const pvpRoomCode = document.getElementById('pvp-room-code');
 const pvpRoomStatus = document.getElementById('pvp-room-status');
 const pvpRoomStart = document.getElementById('pvp-room-start');
 const pvpRoomLeave = document.getElementById('pvp-room-leave');
+const pvpMapSelectScreen = document.getElementById('pvp-map-select-screen');
+const pvpMapList = document.getElementById('pvp-map-list');
+const pvpMapSelectBack = document.getElementById('pvp-map-select-back');
+const pvpMapConfirmModal = document.getElementById('pvp-map-confirm-modal');
+const pvpMapConfirmThumb = document.getElementById('pvp-map-confirm-thumb');
+const pvpMapConfirmText = document.getElementById('pvp-map-confirm-text');
+const pvpMapConfirmYes = document.getElementById('pvp-map-confirm-yes');
+const pvpMapConfirmNo = document.getElementById('pvp-map-confirm-no');
 const breedScreen = document.getElementById('breed-screen');
 const breedName = document.getElementById('breed-name');
 const breedImage = document.getElementById('breed-image');
@@ -1380,7 +1389,7 @@ const storyDialogueSpeaker = document.getElementById('story-dialogue-speaker');
 const storyDialogueText = document.getElementById('story-dialogue-text');
 const storyDialogueNext = document.getElementById('story-dialogue-next');
 
-const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, catalogScreen, cardEditorScreen, deckScreen, deckSelectScreen, shopScreen, battleMenuScreen, breedScreen, stubScreen, storyScreen, storyDialogueScreen, pvpMenuScreen, pvpRoomScreen];
+const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, catalogScreen, cardEditorScreen, deckScreen, deckSelectScreen, shopScreen, battleMenuScreen, breedScreen, stubScreen, storyScreen, storyDialogueScreen, pvpMenuScreen, pvpRoomScreen, pvpMapSelectScreen];
 function showScreen(el) {
   ALL_PG_SCREENS.forEach((s) => s.classList.toggle('hidden', s !== el));
 }
@@ -1654,6 +1663,7 @@ async function startStoryBattle(index, heroDeckList, isReplay) {
   appEl.classList.remove('hidden');
   startBattle(currentCharacter, {
     storyMode: true,
+    mapId: stage.key,
     playerConfigs: buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList),
     onStoryBattleEnd: (result) => (isReplay ? handleStoryReplayEnd(index, result) : handleStoryBattleEnd(index, result)),
   });
@@ -2754,17 +2764,20 @@ battlePvpButton.addEventListener('click', showPvpMenuScreen);
 pvpMenuBack.addEventListener('click', () => showScreen(battleMenuScreen));
 
 let pvpLastRoom = null;
+let pvpGuestBattleStarted = false; // enterPvpRoomScreenのたびリセット。status:'battling'を二重に処理して盤面を2回作らないようにするガード。
 
 function enterPvpRoomScreen(session) {
   pvpSession = session;
   pvpRoomCode.textContent = `部屋コード: ${session.roomCode}`;
-  pvpRoomStatus.textContent = '対戦相手を待っています…';
+  pvpRoomStatus.textContent = session.isHost ? '対戦相手を待っています…' : 'ホストの開始を待っています…';
   pvpRoomStart.classList.add('hidden');
+  pvpGuestBattleStarted = false;
   showScreen(pvpRoomScreen);
 
   // ゲスト側は入室した瞬間から「ホストからの質問」を受け取れるようにして
-  // おく（対戦開始そのものもhostRequest経由の'pickDeck'質問として届く -
-  // 詳しくはpvpGuestHandlers参照）。
+  // おく（デッキは入室と同時に選び終えている - pvpJoinButton参照。対戦
+  // 開始そのものはroom.statusが'battling'になったことを下のリスナーで
+  // 検知して始める）。
   if (!session.isHost) {
     pvpMatch = {
       isHost: false,
@@ -2790,30 +2803,77 @@ function enterPvpRoomScreen(session) {
       pvpRoomStart.classList.add('hidden');
       return;
     }
+    if (room.status === 'battling') {
+      if (!session.isHost && !pvpGuestBattleStarted) {
+        pvpGuestBattleStarted = true;
+        startPvpGuestBattle();
+      }
+      return;
+    }
     if (room.guestUid) {
       const opponentName = session.isHost ? room.guestName : room.hostName;
-      pvpRoomStatus.textContent = `対戦相手: ${opponentName}`;
+      pvpRoomStatus.textContent = session.isHost ? `対戦相手: ${opponentName}（準備完了）` : `対戦相手: ${opponentName}`;
       pvpRoomStart.classList.toggle('hidden', !session.isHost);
     } else {
-      pvpRoomStatus.textContent = '対戦相手を待っています…';
+      pvpRoomStatus.textContent = session.isHost ? '対戦相手を待っています…' : 'ホストの開始を待っています…';
       pvpRoomStart.classList.add('hidden');
     }
   });
 }
 
-pvpCreateButton.addEventListener('click', async () => {
-  pvpMenuError.classList.add('hidden');
-  pvpCreateButton.disabled = true;
-  try {
-    const session = await createPvpRoom({ name: currentCharacter.name, color: currentCharacter.color });
-    enterPvpRoomScreen(session);
-  } catch {
-    pvpMenuError.textContent = '部屋を作成できませんでした';
-    pvpMenuError.classList.remove('hidden');
-  } finally {
-    pvpCreateButton.disabled = false;
+// ---- マップ選択（ホストが部屋を作る前に選ぶ） ----
+// ストーリーモードの各マップ（board.jsのMAPS）をそのまま対人戦でも使える
+// ようにする。ホストが部屋を作る前にマップを1つ選び、縮小プレビュー付き
+// の確認ポップアップで確定する。参加者側はマップを選ばない（部屋に入った
+// 時点でホストが選んだマップに合わせる）。
+
+function showPvpMapSelectScreen() {
+  pvpMapList.replaceChildren();
+  for (const map of MAPS) {
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'pvp-map-card';
+    card.appendChild(createMapThumbnailCanvas(map.id));
+    const label = document.createElement('p');
+    label.textContent = map.name;
+    card.appendChild(label);
+    card.addEventListener('click', () => showPvpMapConfirm(map));
+    pvpMapList.appendChild(card);
   }
-});
+  showScreen(pvpMapSelectScreen);
+}
+
+function showPvpMapConfirm(map) {
+  pvpMapConfirmThumb.replaceChildren(createMapThumbnailCanvas(map.id, 16));
+  pvpMapConfirmText.textContent = `「${map.name}」で遊びますか？`;
+  pvpMapConfirmModal.classList.remove('hidden');
+
+  function cleanup() {
+    pvpMapConfirmModal.classList.add('hidden');
+    pvpMapConfirmYes.removeEventListener('click', onYes);
+    pvpMapConfirmNo.removeEventListener('click', onNo);
+  }
+  async function onYes() {
+    cleanup();
+    pvpMenuError.classList.add('hidden');
+    try {
+      const session = await createPvpRoom({ name: currentCharacter.name, color: currentCharacter.color, mapId: map.id });
+      enterPvpRoomScreen(session);
+    } catch {
+      pvpMenuError.textContent = '部屋を作成できませんでした';
+      pvpMenuError.classList.remove('hidden');
+      showScreen(pvpMenuScreen);
+    }
+  }
+  function onNo() {
+    cleanup();
+  }
+  pvpMapConfirmYes.addEventListener('click', onYes);
+  pvpMapConfirmNo.addEventListener('click', onNo);
+}
+
+pvpMapSelectBack.addEventListener('click', () => showScreen(pvpMenuScreen));
+pvpCreateButton.addEventListener('click', showPvpMapSelectScreen);
 
 pvpJoinButton.addEventListener('click', async () => {
   const code = pvpJoinCode.value.trim();
@@ -2821,11 +2881,15 @@ pvpJoinButton.addEventListener('click', async () => {
   pvpMenuError.classList.add('hidden');
   pvpJoinButton.disabled = true;
   try {
-    const session = await joinPvpRoom(code, { name: currentCharacter.name, color: currentCharacter.color });
+    // 招待コード制の合言葉どおり: コードを入れたら先にデッキを選んでから
+    // 入室する（入室後は部屋の相手待ち画面に直行、デッキ選択で止まらない）。
+    const chosenDeck = await promptDeckSelection();
+    const session = await joinPvpRoom(code, { name: currentCharacter.name, color: currentCharacter.color, deckList: chosenDeck.deckList });
     enterPvpRoomScreen(session);
   } catch (error) {
     pvpMenuError.textContent = error.message || '入室できませんでした';
     pvpMenuError.classList.remove('hidden');
+    showScreen(pvpMenuScreen);
   } finally {
     pvpJoinButton.disabled = false;
   }
@@ -2923,8 +2987,9 @@ function handlePvpGuestAction(action) {
 /**
  * ゲスト側で使う「ホストからの質問」ハンドラ一覧。中身はローカル対戦と
  * 全く同じprompt*関数（同じ画面・同じ操作感をそのまま再利用できる -
- * ゲスト専用のUIは一切作っていない）。pickDeckだけは対戦開始そのものの
- * 合図を兼ねる特別な質問で、答えると同時に盤面描画を始める。
+ * ゲスト専用のUIは一切作っていない）。デッキは入室と同時に選び終えて
+ * いる（pvpJoinButton参照）ので、対戦開始そのものの合図はroom.statusの
+ * 'battling'遷移を見て検知する（enterPvpRoomScreenのリスナー参照）。
  */
 const pvpGuestHandlers = {
   cardReveal: promptCardReveal,
@@ -2951,11 +3016,6 @@ const pvpGuestHandlers = {
   battleAttack: promptBattleAttack,
   battleRetreat: promptBattleRetreat,
   battleOutcome: promptBattleOutcome,
-  pickDeck: async () => {
-    const chosen = await promptDeckSelection();
-    startPvpGuestBattle();
-    return chosen.deckList;
-  },
 };
 
 const pvpPieces = new Map(); // playerId -> billboard sprite (ゲスト側のローカル駒キャッシュ)
@@ -3016,13 +3076,13 @@ function applyPvpPublicState(publicState) {
   applyPvpBoardState(publicState);
 }
 
-/** ゲスト側専用: 対戦開始の合図（pickDeck質問への回答）と同時に呼ばれる。ホストと同じcreateBoard()で作った盤面をローカルに構築し、以後はpublicState/自分の手札の購読だけで描画し続ける（Gameインスタンスは持たない）。 */
+/** ゲスト側専用: room.statusが'battling'になった合図で呼ばれる（enterPvpRoomScreen参照）。ホストと同じcreateBoard(mapId)で作った盤面をローカルに構築し、以後はpublicState/自分の手札の購読だけで描画し続ける（Gameインスタンスは持たない）。 */
 function startPvpGuestBattle() {
   preGame.classList.add('hidden');
   appEl.classList.remove('hidden');
 
   scene = new GameScene(canvas);
-  tiles = createBoard();
+  tiles = createBoard(pvpLastRoom?.mapId);
   scene.buildBoard(tiles);
   requestAnimationFrame(animate);
   playBoardTheme();
@@ -3052,8 +3112,10 @@ pvpRoomStart.addEventListener('click', async () => {
   pvpRoomStart.disabled = true;
   const hostDeck = await promptDeckSelection();
 
+  // ゲストのデッキは入室と同時にguestDeckListとしてもう届いている
+  // （joinPvpRoom参照）ので、ここで改めて尋ねる必要はない。
   const relay = new HostGuestRelay(pvpSession.roomCode);
-  const guestDeckList = await relay.ask('pickDeck', {});
+  const guestDeckList = pvpLastRoom.guestDeckList;
 
   let iconImage = null;
   if (currentCharacter.iconIndex != null) {
@@ -3071,10 +3133,15 @@ pvpRoomStart.addEventListener('click', async () => {
   };
   pvpMatch.actionListener = new HostActionListener(pvpSession.roomCode, handlePvpGuestAction);
 
+  // status:'battling'への更新がゲスト側のroomリスナーに届き、それを合図に
+  // ゲストもstartPvpGuestBattle()で盤面構築を始める（enterPvpRoomScreen参照）。
+  await beginPvpMatch(pvpSession.roomCode);
+
   stopPvpRoomListener();
   preGame.classList.add('hidden');
   appEl.classList.remove('hidden');
   startBattle(currentCharacter, {
+    mapId: pvpLastRoom.mapId,
     playerConfigs: [
       { name: currentCharacter.name, isCPU: false, color: currentCharacter.color, deckList: hostDeck.deckList, iconImage },
       { name: pvpLastRoom.guestName, isCPU: false, color: pvpLastRoom.guestColor, deckList: guestDeckList },
