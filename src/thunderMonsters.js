@@ -66,8 +66,9 @@ export const THUNDER_MONSTER_CATALOG = {
   biribiTama: thunderMonster('biribiTama', 'ビリビリ玉', Rarity.N, 20, 40, { cost: 30 }),
   sonicMove: thunderMonster('sonicMove', 'ソニックムーヴ', Rarity.N, 30, 30, {
     cost: 50,
+    commandCost: 80,
     ability: { type: 'cursePlayerHaste', turns: 2 },
-    effectDescription: '土地コマンド: 選んだプレイヤーに高速化の呪いをかける（2ターン継続。サイコロ・スペルフェーズがスキップされ、代わりに6マス固定で移動する）',
+    effectDescription: '土地コマンド（80G）: 選んだプレイヤーに高速化の呪いをかける（2ターン継続。サイコロ・スペルフェーズがスキップされ、代わりに6マス固定で移動する）',
   }),
 
   thunderbird: thunderMonster('thunderbird', 'サンダーバード', Rarity.S, 30, 30, {
