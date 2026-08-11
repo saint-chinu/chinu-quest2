@@ -70,6 +70,7 @@ export class Game {
     onPickBrowseTile,
     onLandSubmenu,
     onPickAbilityTarget,
+    onPickCardType,
     onShowTileInfo,
     onChooseBranch,
     onPickMoveDirection,
@@ -111,6 +112,7 @@ export class Game {
     this.onPickBrowseTile = onPickBrowseTile;
     this.onLandSubmenu = onLandSubmenu;
     this.onPickAbilityTarget = onPickAbilityTarget;
+    this.onPickCardType = onPickCardType;
     this.onShowTileInfo = onShowTileInfo;
     this.onChooseBranch = onChooseBranch;
     this.onPickMoveDirection = onPickMoveDirection;
@@ -314,6 +316,7 @@ export class Game {
         if (tile.owner === player.id) {
           tile.unit = null;
           tile.owner = null;
+          tile.transparentCursed = false;
           this._repaintTileToElement(tile);
         }
       }
@@ -709,8 +712,16 @@ export class Game {
     return { ...this.getTileSummary(tile), isMine: tile.owner === player.id && tile.unit != null };
   }
 
+  /** 召喚条件chainRequired（例: 「火の土地1連鎖以上」）を満たすか。無指定なら常にtrue。 */
+  _meetsChainRequirement(player, card) {
+    if (!card.chainRequired) return true;
+    return this._chainCount(player.id, card.element) >= card.chainRequired;
+  }
+
   _affordableMonsterCards(player) {
-    return player.hand.filter((c) => c.type === CardType.MONSTER && c.cost <= player.currency);
+    return player.hand.filter(
+      (c) => c.type === CardType.MONSTER && c.cost <= player.currency && this._meetsChainRequirement(player, c),
+    );
   }
 
   _ownedTiles(player) {
@@ -718,24 +729,30 @@ export class Game {
   }
 
   /**
-   * 連鎖倍率: how many tiles of this element the owner holds (same-element
+   * 連鎖数: how many tiles of this element the owner holds (same-element
    * lands count as one 連鎖 today, since every element already forms a
-   * single contiguous edge on this board). Unowned tiles preview at 連鎖1.
-   * 無色 never chains, even with other 無色 tiles. 同盟戦では同盟仲間の
-   * 同属性所有地も連鎖にカウントする（土地の所有権自体は個人のまま - この
-   * カウント上だけ仲間の分も足し合わせる）。
+   * single contiguous edge on this board). 無色 never chains, even with
+   * other 無色 tiles. 同盟戦では同盟仲間の同属性所有地も連鎖にカウントする
+   * （土地の所有権自体は個人のまま - このカウント上だけ仲間の分も足し
+   * 合わせる）。召喚条件chainRequired（例:「1連鎖以上」）や炎神/水神系の
+   * statsPerElementChain効果（連鎖数×n）はこの生の枚数を直接使う。
    */
-  _chainMultiplier(ownerId, element) {
-    if (ownerId == null || element === Element.NEUTRAL) return CHAIN_MULTIPLIER[1];
+  _chainCount(ownerId, element) {
+    if (ownerId == null || element === Element.NEUTRAL) return 0;
     const owner = this.players.find((p) => p.id === ownerId);
     const allianceId = owner?.allianceId ?? null;
-    const count = this.tiles.filter((t) => {
+    return this.tiles.filter((t) => {
       if (t.element !== element || t.owner == null) return false;
       if (t.owner === ownerId) return true;
       if (allianceId == null) return false;
       const tileOwner = this.players.find((p) => p.id === t.owner);
       return tileOwner?.allianceId === allianceId;
     }).length;
+  }
+
+  /** 連鎖倍率: 連鎖数をCHAIN_MULTIPLIERテーブルに当てはめる（地価/通行料計算専用）。無所有・無色は連鎖1扱い。 */
+  _chainMultiplier(ownerId, element) {
+    const count = this._chainCount(ownerId, element);
     return CHAIN_MULTIPLIER[Math.min(Math.max(count, 1), LEVEL_CAP)];
   }
 
@@ -744,8 +761,9 @@ export class Game {
     return Math.round(tile.price * tile.level * this._chainMultiplier(tile.owner, tile.element));
   }
 
-  /** 通行料 = 地価 × 通行料倍率 */
+  /** 通行料 = 地価 × 通行料倍率。透過の呪い（深海魚X）がかかった土地は通行料ゼロ。 */
   _tollOfTile(tile) {
+    if (tile.transparentCursed) return 0;
     return Math.round(this._landValueOfTile(tile) * TOLL_RATE[tile.level]);
   }
 
@@ -757,6 +775,10 @@ export class Game {
    * instead of just vanishing.
    */
   async _humanSummonFlow(player, tile) {
+    if (tile.owner != null && tile.owner !== player.id && tile.transparentCursed) {
+      this.onLog('透過の呪いがかかっており侵略できません');
+      return false;
+    }
     const options = this._affordableMonsterCards(player);
     if (options.length === 0) {
       this.onLog('召喚できるモンスターカードがありません');
@@ -854,7 +876,7 @@ export class Game {
   async _humanMoveFlow(player, tile) {
     const candidates = tile.neighbors
       .map((id) => this.tiles[id])
-      .filter((t) => t.type === TileType.LAND && (t.owner == null || t.owner !== player.id));
+      .filter((t) => t.type === TileType.LAND && !t.transparentCursed && (t.owner == null || t.owner !== player.id));
     if (candidates.length === 0) {
       this.onLog('移動できる土地がありません');
       return false;
@@ -882,6 +904,7 @@ export class Game {
       this._paintTile(targetTile, player.color);
       tile.unit = null;
       tile.owner = null;
+      tile.transparentCursed = false;
       this._repaintTileToElement(tile);
       this.onLog(`${player.name}は${attackerName}を移動させた`);
     } else {
@@ -896,6 +919,7 @@ export class Game {
         this._paintTile(targetTile, player.color);
         tile.unit = null;
         tile.owner = null;
+        tile.transparentCursed = false;
         this._repaintTileToElement(tile);
         this.onLog(`${player.name}が土地を奪取した！`);
         await this._handleUnitDeath(defenderUnit, defenderPlayer);
@@ -904,10 +928,12 @@ export class Game {
       } else {
         tile.unit = null;
         tile.owner = null;
+        tile.transparentCursed = false;
         this._repaintTileToElement(tile);
         if (!result.defenderSurvived) {
           targetTile.unit = null;
           targetTile.owner = null;
+          targetTile.transparentCursed = false;
           this._repaintTileToElement(targetTile);
           this.onLog('両者相打ちで両方の土地が無人になった');
           await this._handleUnitDeath(defenderUnit, defenderPlayer);
@@ -942,6 +968,7 @@ export class Game {
     }
     tile.unit = null;
     tile.owner = null;
+    tile.transparentCursed = false;
     tile.level = 1;
     this._repaintTileToElement(tile);
     this.scene.updateTileLevelBorder(tile);
@@ -974,47 +1001,150 @@ export class Game {
   }
 
   /**
-   * 土地コマンドの「特殊能力」: 配置されたモンスターが持つability
-   * （現状はtype:'damage'のみ - 射程内の敵1体に固定ダメージ）を行使する。
-   * HPが0以下になったら即死（通常の戦闘死と同じ_handleUnitDeathを流用 -
-   * 不死鳥特性はここでも効く）。実行したら移動・売却と同様に自動でターン
-   * 終了する。
+   * 土地コマンドの「特殊能力」: 配置されたモンスターが持つabilityを行使
+   * する。commandCostが設定されていれば所持Gを確認したうえで対象選び→
+   * コスト確認→実行の順に進み、確定した時だけ消費する（キャンセルや
+   * 対象/種類が無い場合はG消費なし）。damage系はHPが0以下で即死（通常の
+   * 戦闘死と同じ_handleUnitDeathを流用 - 不死鳥特性はここでも効く）。
+   * 実行したら移動・売却と同様に自動でターン終了する。
    */
   async _humanAbilityFlow(player, tile) {
-    const ability = tile.unit?.def.ability;
+    const unitDef = tile.unit?.def;
+    const ability = unitDef?.ability;
     if (!ability) return false;
 
-    const targets = this.tiles.filter((t) => {
-      if (t.owner == null || t.owner === player.id) return false;
-      const owner = this.players.find((p) => p.id === t.owner);
-      if (owner?.allianceId != null && owner.allianceId === player.allianceId) return false;
-      return this._tileDistance(tile.id, t.id) <= ability.range;
-    });
-    if (targets.length === 0) {
-      this.onLog('射程内に敵がいません');
+    const commandCost = unitDef.commandCost ?? 0;
+    if (player.currency < commandCost) {
+      this.onLog('Gが足りず特殊能力を使えません');
       return false;
     }
+    const abilityLabel = unitDef.effectDescription ?? '特殊能力';
 
-    const targetId = await this.onPickAbilityTarget(targets.map((t) => this._browseTileSummary(t, player)), player.id);
-    if (targetId == null) return false;
+    const confirmAndSpend = async () => {
+      const confirmed = await this.onConfirmAction(
+        { actionType: 'ability', abilityLabel, cost: commandCost, tile: this.getTileSummary(tile) },
+        player.id,
+      );
+      if (!confirmed) return false;
+      player.currency -= commandCost;
+      return true;
+    };
 
-    const targetTile = this.tiles.find((t) => t.id === targetId);
-    const targetUnit = targetTile.unit;
-    const attackerName = tile.unit.def.name;
-    targetUnit.currentHp -= ability.power;
-    this.onLog(`${player.name}の${attackerName}が特殊能力で${targetUnit.def.name}に${ability.power}ダメージ！`);
-    this._notifyState();
+    if (ability.type === 'damage') {
+      const targets = this.tiles.filter((t) => {
+        if (t.owner == null || t.owner === player.id) return false;
+        const owner = this.players.find((p) => p.id === t.owner);
+        if (owner?.allianceId != null && owner.allianceId === player.allianceId) return false;
+        return this._tileDistance(tile.id, t.id) <= ability.range;
+      });
+      if (targets.length === 0) {
+        this.onLog('射程内に敵がいません');
+        return false;
+      }
+      const targetId = await this.onPickAbilityTarget(targets.map((t) => this._browseTileSummary(t, player)), player.id);
+      if (targetId == null) return false;
+      if (!(await confirmAndSpend())) return false;
 
-    if (targetUnit.currentHp <= 0) {
-      const targetOwner = this.players.find((p) => p.id === targetTile.owner);
-      targetTile.unit = null;
-      targetTile.owner = null;
-      this._repaintTileToElement(targetTile);
-      this.onLog(`${targetOwner.name}の${targetUnit.def.name}は倒された`);
-      await this._handleUnitDeath(targetUnit, targetOwner);
+      const targetTile = this.tiles.find((t) => t.id === targetId);
+      const targetUnit = targetTile.unit;
+      targetUnit.currentHp -= ability.power;
+      this.onLog(`${player.name}の${unitDef.name}が特殊能力で${targetUnit.def.name}に${ability.power}ダメージ！`);
+      this._notifyState();
+
+      if (targetUnit.currentHp <= 0) {
+        const targetOwner = this.players.find((p) => p.id === targetTile.owner);
+        targetTile.unit = null;
+        targetTile.owner = null;
+        targetTile.transparentCursed = false;
+        this._repaintTileToElement(targetTile);
+        this.onLog(`${targetOwner.name}の${targetUnit.def.name}は倒された`);
+        await this._handleUnitDeath(targetUnit, targetOwner);
+      }
+      this._notifyState();
+      return true;
     }
-    this._notifyState();
-    return true;
+
+    if (ability.type === 'warpToEmptyElementLand') {
+      const targets = this.tiles.filter(
+        (t) => t.type === TileType.LAND && t.owner == null && t.element === ability.element && t.id !== tile.id,
+      );
+      if (targets.length === 0) {
+        this.onLog('ワープ先の空き地がありません');
+        return false;
+      }
+      const targetId = await this.onPickAbilityTarget(
+        targets.map((t) => ({ ...this._browseTileSummary(t, player), label: `${ELEMENT_LABEL[t.element]}の空き地（${t.id}番）` })),
+        player.id,
+      );
+      if (targetId == null) return false;
+      if (!(await confirmAndSpend())) return false;
+
+      const targetTile = this.tiles.find((t) => t.id === targetId);
+      const unit = tile.unit;
+      targetTile.unit = unit;
+      targetTile.owner = player.id;
+      this._paintTile(targetTile, player.color);
+      tile.unit = null;
+      tile.owner = null;
+      tile.transparentCursed = false;
+      this._repaintTileToElement(tile);
+      this.onLog(`${player.name}の${unitDef.name}が${targetTile.id}番地へワープした`);
+      this._notifyState();
+      return true;
+    }
+
+    if (ability.type === 'healAllOwnedAndCleanse') {
+      if (!(await confirmAndSpend())) return false;
+
+      let healedCount = 0;
+      for (const t of this._ownedTiles(player)) {
+        if (!t.unit) continue;
+        t.unit.curses = [];
+        t.unit.currentHp = this._baseStats(t.unit).hp + this._elementHpBonus(t.unit, t);
+        healedCount += 1;
+      }
+      this.onLog(`${player.name}の${unitDef.name}が味方全体を回復し、呪いを解除した（${healedCount}体）`);
+      this._notifyState();
+      return true;
+    }
+
+    if (ability.type === 'drawCard') {
+      const cardType = await this.onPickCardType(player.id);
+      if (cardType == null) return false;
+      const drawn = this._drawCardOfType(player, cardType);
+      if (!drawn) {
+        this.onLog('該当するカードが見つかりませんでした');
+        return false;
+      }
+      if (!(await confirmAndSpend())) return false;
+
+      player.hand.push(drawn);
+      this.onLog(`${player.name}の${unitDef.name}が「${drawn.name}」を引いた`);
+      this._notifyState();
+      return true;
+    }
+
+    if (ability.type === 'curseTransparency') {
+      if (!(await confirmAndSpend())) return false;
+
+      tile.transparentCursed = true;
+      this.onLog(`${player.name}の${unitDef.name}が透過の呪いを自身にかけた（侵略不能・通行料ゼロ）`);
+      this._notifyState();
+      return true;
+    }
+
+    return false;
+  }
+
+  /** あざらしさんの「選んだ種類のカードをランダムに1枚引ける」用: まず山札から、無ければ捨て札から、指定typeのカードを1枚抜き出して返す（見つからなければnull）。 */
+  _drawCardOfType(player, cardType) {
+    const fromDraw = player.deck.drawPile.filter((c) => c.type === cardType);
+    const pile = fromDraw.length > 0 ? player.deck.drawPile : player.deck.discardPile;
+    const matches = fromDraw.length > 0 ? fromDraw : player.deck.discardPile.filter((c) => c.type === cardType);
+    if (matches.length === 0) return null;
+    const picked = matches[Math.floor(Math.random() * matches.length)];
+    pile.splice(pile.indexOf(picked), 1);
+    return picked;
   }
 
   async _cpuLandCommand(player, tile) {
@@ -1075,6 +1205,29 @@ export class Game {
   }
 
   /**
+   * カード固有の戦闘中ステータス補正（炎神/水神系のstatsPerElementChain、
+   * ファイアキック/水風呂修行僧系のatkBonusAgainstRarity）。_battleBonus
+   * （盤面の状況依存）とは別枠で計算するが、同じ{atk,hp}へそのまま加算
+   * する（呼び出し元のbonusオブジェクトをその場で書き換える）。
+   */
+  _applyEffectBonus(unit, opponentUnit, bonus) {
+    const effect = unit.def.effect;
+    if (!effect) return;
+    if (effect.type === 'statsPerElementChain') {
+      const count = this._chainCount(unit.ownerId, effect.element);
+      const atk = count * effect.atkPerChain;
+      const hp = count * effect.hpPerChain;
+      bonus.atk += atk;
+      bonus.hp += hp;
+      if (atk > 0 || hp > 0) this.onLog(`${unit.def.name}は${ELEMENT_LABEL[effect.element]}${count}連鎖でATK+${atk}/HP+${hp}`);
+    } else if (effect.type === 'atkBonusAgainstRarity' && opponentUnit.def.rarity === effect.targetRarity) {
+      const atk = Math.round(unit.def.atk * effect.ratio);
+      bonus.atk += atk;
+      this.onLog(`${unit.def.name}は相手のレアリティ(${effect.targetRarity})によりATK+${atk}`);
+    }
+  }
+
+  /**
    * How mySideElement fares against opponentElement under the weakness
    * cycle (火→水→雷→森→火): 'advantage' if mySide is the one that hits the
    * opponent for 1.2x, 'disadvantage' if it's the other way around (the
@@ -1128,6 +1281,8 @@ export class Game {
     const defenderBase = this._baseStats(defenderUnit);
     const attackerBonus = this._battleBonus(attackerUnit, attackerPositionTile, battleTile);
     const defenderBonus = this._battleBonus(defenderUnit, battleTile, battleTile);
+    this._applyEffectBonus(attackerUnit, defenderUnit, attackerBonus);
+    this._applyEffectBonus(defenderUnit, attackerUnit, defenderBonus);
 
     const attackerMatchup = this._elementMatchup(attackerUnit.def.element, defenderUnit.def.element);
     const defenderMatchup = this._elementMatchup(defenderUnit.def.element, attackerUnit.def.element);
@@ -1233,11 +1388,13 @@ export class Game {
       if (result.attackerSurvived) {
         tile.unit = attackerUnit;
         tile.owner = player.id;
+        tile.transparentCursed = false;
         this._paintTile(tile, player.color);
         this.onLog(`${player.name}が土地を奪取した！`);
       } else {
         tile.unit = null;
         tile.owner = null;
+        tile.transparentCursed = false;
         this._repaintTileToElement(tile);
         this.onLog('両者相打ちで土地は無人になった');
         await this._handleUnitDeath(attackerUnit, player);
@@ -1281,6 +1438,7 @@ export class Game {
   _placeUnit(tile, player, card) {
     tile.unit = createFieldUnit(card, player.id);
     tile.owner = player.id;
+    tile.transparentCursed = false;
     this._paintTile(tile, player.color);
   }
 
@@ -1327,6 +1485,7 @@ export class Game {
       unitHp: tile.unit ? (tile.unit.currentHp ?? this._baseStats(tile.unit).hp) : null,
       hasAbility: !!tile.unit?.def.ability,
       cursed: !!tile.forcedStopCursed,
+      transparentCursed: !!tile.transparentCursed,
     };
   }
 

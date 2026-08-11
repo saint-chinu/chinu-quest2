@@ -17,6 +17,7 @@ html, body {
   position: relative;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   /* The stage art sits here (plain CSS, always right-way-up) instead of in
      the 3D scene - the canvas above it is transparent, so tiles/pieces
      float directly over this backdrop. cover + center: it's fine for the
@@ -43,6 +44,7 @@ html, body {
   position: relative;
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   overflow: hidden;
 }
 
@@ -1052,6 +1054,7 @@ html, body {
 #monster-picker-modal,
 #shop-tile-modal,
 #element-picker-modal,
+#card-type-picker-modal,
 #ability-target-modal,
 #confirm-modal,
 #tile-info-modal {
@@ -1069,6 +1072,7 @@ html, body {
 #monster-picker-modal.hidden,
 #shop-tile-modal.hidden,
 #element-picker-modal.hidden,
+#card-type-picker-modal.hidden,
 #ability-target-modal.hidden,
 #confirm-modal.hidden,
 #tile-info-modal.hidden {
@@ -1084,6 +1088,7 @@ html, body {
 #monster-picker-box,
 #shop-tile-box,
 #element-picker-box,
+#card-type-picker-box,
 #ability-target-box,
 #confirm-box,
 #tile-info-box {
@@ -1108,7 +1113,8 @@ html, body {
   white-space: pre-line;
 }
 
-#element-picker-box p {
+#element-picker-box p,
+#card-type-picker-box p {
   margin-bottom: 16px;
   font-size: 14px;
 }
@@ -1126,6 +1132,7 @@ html, body {
 #monster-picker-cancel,
 #shop-tile-cancel,
 #element-picker-cancel,
+#card-type-picker-cancel,
 #ability-target-cancel,
 #ability-target-choices button,
 #tile-info-close,
@@ -1203,7 +1210,8 @@ html, body {
   text-align: left;
 }
 
-#element-picker-choices {
+#element-picker-choices,
+#card-type-picker-choices {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
@@ -1211,7 +1219,8 @@ html, body {
   margin-bottom: 16px;
 }
 
-#element-picker-choices .card {
+#element-picker-choices .card,
+#card-type-picker-choices .card {
   cursor: pointer;
   width: 74px;
   height: 74px;

@@ -82,6 +82,9 @@ const shopTileCancel = document.getElementById('shop-tile-cancel');
 const elementPickerModal = document.getElementById('element-picker-modal');
 const elementPickerChoices = document.getElementById('element-picker-choices');
 const elementPickerCancel = document.getElementById('element-picker-cancel');
+const cardTypePickerModal = document.getElementById('card-type-picker-modal');
+const cardTypePickerChoices = document.getElementById('card-type-picker-choices');
+const cardTypePickerCancel = document.getElementById('card-type-picker-cancel');
 const confirmModal = document.getElementById('confirm-modal');
 const confirmText = document.getElementById('confirm-text');
 const confirmYes = document.getElementById('confirm-yes');
@@ -346,7 +349,7 @@ function promptPickAbilityTarget(targets) {
     abilityTargetChoices.replaceChildren();
     for (const target of targets) {
       const el = document.createElement('button');
-      el.textContent = `${target.ownerName}の${target.unitName} (ATK${target.unitAtk}/HP${target.unitHp})`;
+      el.textContent = target.label ?? `${target.ownerName}の${target.unitName} (ATK${target.unitAtk}/HP${target.unitHp})`;
       el.addEventListener('click', () => cleanup(target.id));
       abilityTargetChoices.appendChild(el);
     }
@@ -434,11 +437,13 @@ function promptShopPurchase(options) {
 
 const ACTION_LABEL = { summon: '召喚', invade: '侵略', swap: '入れ替え', levelup: 'レベルアップ', element: '属性変更' };
 
-function promptConfirmAction({ actionType, card, cost, tile, targetElement }) {
+function promptConfirmAction({ actionType, card, cost, tile, targetElement, abilityLabel }) {
   return new Promise((resolve) => {
     let text;
     if (actionType === 'element') {
       text = `属性を${ELEMENT_LABEL[targetElement]}に変更しますか？ コスト${cost}G`;
+    } else if (actionType === 'ability') {
+      text = `「${abilityLabel}」を使いますか？ コスト${cost}G`;
     } else {
       const subject = card ? `「${card.name}」で` : '';
       const extra = actionType === 'levelup' && tile ? `（Lv${tile.level}→Lv${tile.level + 1}）` : '';
@@ -487,6 +492,32 @@ function promptPickElement(options) {
       resolve(null);
     }
     elementPickerCancel.addEventListener('click', onCancel);
+  });
+}
+
+/** あざらしさんの「選んだ種類のカードをランダムに1枚引ける」用: モンスター/武器防具/スペルの3択。resolveはCardType文字列、キャンセルでnull。 */
+function promptPickCardType() {
+  return new Promise((resolve) => {
+    cardTypePickerChoices.replaceChildren();
+    for (const type of [CardType.MONSTER, CardType.GEAR, CardType.SPELL]) {
+      const el = document.createElement('div');
+      el.className = 'card';
+      el.style.background = CARD_COLOR[type === CardType.MONSTER ? Element.NEUTRAL : type];
+      el.textContent = TYPE_LABEL[type];
+      el.addEventListener('click', () => {
+        cardTypePickerModal.classList.add('hidden');
+        resolve(type);
+      });
+      cardTypePickerChoices.appendChild(el);
+    }
+    cardTypePickerModal.classList.remove('hidden');
+
+    function onCancel() {
+      cardTypePickerModal.classList.add('hidden');
+      cardTypePickerCancel.removeEventListener('click', onCancel);
+      resolve(null);
+    }
+    cardTypePickerCancel.addEventListener('click', onCancel);
   });
 }
 
@@ -1271,6 +1302,7 @@ function startBattle(character, storyOptions = {}) {
     onPickBrowseTile: relayable('pickBrowseTile', promptPickBrowseTile),
     onLandSubmenu: relayable('landSubmenu', promptLandSubmenu),
     onPickAbilityTarget: relayable('pickAbilityTarget', promptPickAbilityTarget),
+    onPickCardType: relayable('pickCardType', promptPickCardType),
     onShowTileInfo: relayable('showTileInfo', promptShowTileInfo),
     onChooseBranch: relayable('chooseBranch', promptChooseBranch),
     onPickMoveDirection: relayable('pickMoveDirection', promptMoveDirection),
@@ -3044,6 +3076,7 @@ const pvpGuestHandlers = {
   pickBrowseTile: promptPickBrowseTile,
   landSubmenu: promptLandSubmenu,
   pickAbilityTarget: promptPickAbilityTarget,
+  pickCardType: promptPickCardType,
   showTileInfo: promptShowTileInfo,
   chooseBranch: promptChooseBranch,
   pickMoveDirection: promptMoveDirection,

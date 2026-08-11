@@ -4,6 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#101018" />
+    <!-- ホーム画面に追加した時、SafariのURLバー等を出さない全画面（standalone）表示にするための指定。 -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="チヌクエスト2" />
     <title>チヌクエスト2</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
@@ -327,6 +331,13 @@
           <p>変更する属性を選んでください</p>
           <div id="element-picker-choices"></div>
           <button id="element-picker-cancel">やめる</button>
+        </div>
+      </div>
+      <div id="card-type-picker-modal" class="hidden">
+        <div id="card-type-picker-box">
+          <p>引くカードの種類を選んでください</p>
+          <div id="card-type-picker-choices"></div>
+          <button id="card-type-picker-cancel">やめる</button>
         </div>
       </div>
       <div id="confirm-modal" class="hidden">
