@@ -188,6 +188,8 @@ export class Game {
       // 固定で強制移動させる（ほこらのforcedDiceRemainingと同じ仕組み、
       // こちらは全体ではなく対象プレイヤー個人にだけ効く）。
       hasteTurnsRemaining: 0,
+      // イカサマのサイコロ用: 直近で実際に振った（強制含む）サイコロの目。
+      lastDiceSteps: 0,
     }));
     this.currentPlayerIndex = 0;
     this.isBusy = false;
@@ -298,6 +300,7 @@ export class Game {
     this._notifyState();
 
     const player = this.currentPlayer;
+    player.lastDiceSteps = steps;
     this.onLog(`${player.name}のサイコロ: ${steps}`);
 
     await this._movePlayer(player, steps);
@@ -1277,6 +1280,17 @@ export class Game {
       return true;
     }
 
+    if (ability.type === 'grantItem') {
+      if (!(await confirmAndSpend())) return false;
+
+      const itemDef = ITEM_CATALOG[ability.itemId];
+      const card = { ...itemDef, id: `granted-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+      player.hand.push(card);
+      this.onLog(`${player.name}の${unitDef.name}が「${card.name}」を入手した`);
+      this._notifyState();
+      return true;
+    }
+
     if (ability.type === 'cursePlayerHaste') {
       const targets = this.players.filter((p) => {
         if (p.id === player.id || p.defeated) return false;
@@ -1394,7 +1408,23 @@ export class Game {
    */
   _applyEffectBonus(unit, opponentUnit, bonus) {
     const effect = unit.def.effect;
-    if (!effect) return;
+    if (effect) this._applyEffectBonusFor(unit, opponentUnit, bonus, effect);
+
+    // イカサマのサイコロ(atkFromLastDiceRoll): カード自身の効果ではなく
+    // 装備アイテムの効果なので、上のunit.def.effect起点の分岐とは別枠で
+    // チェックする（プレイヤーの直近のサイコロの目を参照するのでboard側の
+    // Gameインスタンスでないと計算できない）。
+    const diceItem = unit.items.find((i) => i.effect?.type === 'atkFromLastDiceRoll');
+    if (diceItem) {
+      const owner = this.players.find((p) => p.id === unit.ownerId);
+      const roll = owner?.lastDiceSteps || 0;
+      const atk = roll * diceItem.effect.multiplier;
+      bonus.atk += atk;
+      if (atk > 0) this.onLog(`${unit.def.name}は「${diceItem.name}」でATK+${atk}（前回の出目${roll}）`);
+    }
+  }
+
+  _applyEffectBonusFor(unit, opponentUnit, bonus, effect) {
     if (effect.type === 'statsPerElementChain') {
       const count = this._chainCount(unit.ownerId, effect.element);
       const atk = count * effect.atkPerChain;
@@ -1590,8 +1620,18 @@ export class Game {
 
     this._maybeGrantRandomSpell(attackerUnit, attackerPlayer);
     this._maybeGrantRandomSpell(defenderUnit, defenderPlayer);
+    this._maybeReturnItemToHand(attackerItem, attackerPlayer);
+    this._maybeReturnItemToHand(defenderItem, defenderPlayer);
 
     return result;
+  }
+
+  /** 不死鳥の剣: 実際に戦闘で使用された（=装備された）場合のみ、使い切った後も新しいidで持ち主の手札に戻る（手札上限で使わずに捨てられた場合はここを通らないので、通常のアイテム同様消滅する）。 */
+  _maybeReturnItemToHand(item, player) {
+    if (!item || !item.returnsToHandIfUsed) return;
+    const card = { ...item, id: `itemreturn-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+    player.hand.push(card);
+    this.onLog(`「${card.name}」は${player.name}の手札に戻った`);
   }
 
   /** 怪しい老人: 戦闘終了時（生死問わず）、レア度無視の完全ランダムでスペルカードを1枚手札に加える。 */

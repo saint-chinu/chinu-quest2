@@ -12,8 +12,21 @@ export function createFieldUnit(monsterDef, ownerId) {
   };
 }
 
+/**
+ * 常にitemDefのコピーをitemsへ積む（共有カタログの元オブジェクトを直接
+ * 参照しない）。ナンカのお守り/ライフジャケットのような「1戦闘1回」系は
+ * 消費済みフラグをこのコピー自身に立てるため、共有参照のままだと他の
+ * プレイヤー・他の戦闘にまで消費済み状態が漏れてしまう。ペーの杖の
+ * atkBonusRangeは、その延長でこの装備時に範囲内のATKボーナスを1回だけ抽選する。
+ */
 export function equipItem(unit, itemDef) {
-  unit.items.push(itemDef);
+  if (itemDef.atkBonusRange) {
+    const [min, max] = itemDef.atkBonusRange;
+    const rolled = min + Math.floor(Math.random() * (max - min + 1));
+    unit.items.push({ ...itemDef, atkBonus: rolled });
+    return;
+  }
+  unit.items.push({ ...itemDef });
 }
 
 /** Casts a spell onto a monster already on the field ("curse" status). */
@@ -66,10 +79,20 @@ function statTotals(unit, bonus = {}) {
   const override = unit.def.effect?.type === 'statOverrideInBattle' ? unit.def.effect : null;
   const baseAtk = override ? override.atk : unit.def.atk;
   const baseHp = override ? override.hp : unit.def.hp;
+  // ダンボールの鎧(forceZeroAtk): 装備中はATKが常に0になる（他の加算要素も
+  // 含め完全に上書き）。装備アイテムは常に最大1個なのでsome()で十分。
+  const forcesZeroAtk = unit.items.some((i) => i.forceZeroAtk);
   return {
-    atk: baseAtk + curseAtk + itemAtk + (bonus.atk || 0),
+    atk: forcesZeroAtk ? 0 : baseAtk + curseAtk + itemAtk + (bonus.atk || 0),
     maxHp: baseHp + curseHp + itemHp + (bonus.hp || 0),
   };
+}
+
+/** カード自身の効果、または装備中アイテムの効果から、指定typeのものを1つ返す（無ければnull）。目出し帽/斬〇剣のような「モンスター効果としても既存だがアイテムとしても同じ効果を持たせたい」ケースをまとめて拾うためのヘルパー。 */
+function getEffect(unit, type) {
+  if (unit.def.effect?.type === type) return unit.def.effect;
+  const item = unit.items.find((i) => i.effect?.type === type);
+  return item ? item.effect : null;
 }
 
 /** Call once right before a battle to lock in this fight's max HP. */
@@ -92,9 +115,9 @@ function incomingDamageMultiplier(defenderUnit, attackerUnit) {
   const isWeaknessHit = attackerUnit.def.element === weakness;
   let multiplier = isWeaknessHit ? 1.2 : 1.0;
 
-  const attackerEffect = attackerUnit.def.effect;
-  if (attackerEffect?.type === 'elementDamageBonus' && defenderUnit.def.element === attackerEffect.targetElement) {
-    multiplier *= attackerEffect.multiplier;
+  const bonusEffect = getEffect(attackerUnit, 'elementDamageBonus');
+  if (bonusEffect && defenderUnit.def.element === bonusEffect.targetElement) {
+    multiplier *= bonusEffect.multiplier;
   }
   return multiplier;
 }
@@ -116,6 +139,17 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
   // （＝相手を回復させてしまう）にはならないようクランプする。
   const damage = Math.max(0, Math.round(atkStats.atk * multiplier));
 
+  // ナンカのお守り(negateNextDamage): このアイテムで1回だけダメージを
+  // 完全無効化する（アイテム本体にconsumedを立てて再発動を防ぐ - itemsは
+  // 戦闘終了時に必ずクリアされるので使い回しの心配は無い）。
+  const negateItem = defenderUnit.items.find((i) => i.effect?.type === 'negateNextDamage' && !i.consumed);
+  if (negateItem && damage > 0) {
+    negateItem.consumed = true;
+    const message = `${defenderUnit.def.name}は「${negateItem.name}」でダメージを無効化した`;
+    log.push(message);
+    return { damage: 0, message };
+  }
+
   // くねくね(reflectDamage): 攻撃をそのまま跳ね返す - 自身はノーダメージ、
   // 攻撃側がその分のダメージを受ける。攻撃自体が「届かなかった」扱いなので
   // 命中時オンヒット効果（毒付与など）は発動させない - damage:0を返す。
@@ -127,7 +161,28 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
   }
 
   defenderUnit.currentHp -= damage;
-  const message = `${attackerUnit.def.name} → ${defenderUnit.def.name} に${damage}ダメージ（倍率${multiplier}）`;
+  let message = `${attackerUnit.def.name} → ${defenderUnit.def.name} に${damage}ダメージ（倍率${multiplier}）`;
+
+  // ライフジャケット(surviveLethalDamage): 致死ダメージでもHP1で踏みとどまる
+  // （1戦闘1回のみ - アイテム本体にconsumedを立てて再発動を防ぐ）。
+  if (defenderUnit.currentHp <= 0) {
+    const lifeJacketItem = defenderUnit.items.find((i) => i.effect?.type === 'surviveLethalDamage' && !i.consumed);
+    if (lifeJacketItem) {
+      lifeJacketItem.consumed = true;
+      defenderUnit.currentHp = 1;
+      message += `／${defenderUnit.def.name}は「${lifeJacketItem.name}」でHP1で踏みとどまった`;
+    }
+  }
+
+  // ハリネズミの服(reflectHalfDamage): くねくねと違い自分も普通にダメージを
+  // 受けたうえで、その半分を追加で攻撃側にも返す。
+  const halfReflectItem = defenderUnit.items.find((i) => i.effect?.type === 'reflectHalfDamage');
+  if (halfReflectItem && damage > 0) {
+    const reflected = Math.round(damage / 2);
+    attackerUnit.currentHp -= reflected;
+    message += `／${defenderUnit.def.name}が${reflected}ダメージを反射した`;
+  }
+
   log.push(message);
   return { damage, message };
 }
@@ -206,8 +261,9 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
       applyShock(defenderUnit, attackerEffect.chance);
       log.push(`${defenderUnit.def.name}は感電状態になった`);
     }
-    if (attackerEffect?.type === 'stealDamageMultiple') {
-      const stolen = result.damage * attackerEffect.multiplier;
+    const stealMultipleEffect = getEffect(attackerUnit, 'stealDamageMultiple');
+    if (stealMultipleEffect) {
+      const stolen = result.damage * stealMultipleEffect.multiplier;
       gold.transfer(defenderUnit.ownerId, attackerUnit.ownerId, stolen);
       log.push(`${attackerUnit.def.name}が${stolen}Gを奪った`);
     }
@@ -215,14 +271,22 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
       defenderUnit.currentHp = attackerEffect.hp;
       log.push(`${defenderUnit.def.name}のHPが${attackerEffect.hp}に固定された`);
     }
+    const instantKillEffect = getEffect(attackerUnit, 'instantKillOnHit');
     if (
       defenderUnit.currentHp > 0 &&
-      attackerEffect?.type === 'instantKillOnHit' &&
-      (!attackerEffect.targetElement || defenderUnit.def.element === attackerEffect.targetElement) &&
-      Math.random() < attackerEffect.chance
+      instantKillEffect &&
+      (!instantKillEffect.targetElement || defenderUnit.def.element === instantKillEffect.targetElement) &&
+      Math.random() < instantKillEffect.chance
     ) {
       defenderUnit.currentHp = 0;
       log.push(`${defenderUnit.def.name}は即死した`);
+    }
+    // 電流ムチ(chanceBlindOnHit): 命中時、一定確率で相手を1ターン行動不能
+    // にする（目くらまし=blindedと同じ「次の自分の攻撃を1回潰す」仕組み）。
+    const chanceBlindEffect = getEffect(attackerUnit, 'chanceBlindOnHit');
+    if (chanceBlindEffect && Math.random() < chanceBlindEffect.chance) {
+      defenderUnit.blinded = true;
+      log.push(`${defenderUnit.def.name}は行動不能になった`);
     }
   }
 
@@ -289,15 +353,28 @@ function strikeOrderScore(unit) {
 export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defenderBonus = {}) {
   const log = [];
 
-  // 攻撃開始前効果: アイテム破壊（海賊S）。prepareForBattleより前でないと
-  // 破壊したアイテムのHPボーナスがmaxHpに残ってしまう。
-  if (attacker.def.effect?.type === 'destroyItemBeforeAttack' && defender.items.length > 0) {
+  // 攻撃開始前効果: アイテム破壊（海賊S/ステゴロ）。prepareForBattleより
+  // 前でないと破壊したアイテムのHPボーナスがmaxHpに残ってしまう。
+  if (getEffect(attacker, 'destroyItemBeforeAttack') && defender.items.length > 0) {
     defender.items = [];
     log.push(`${attacker.def.name}が${defender.def.name}のアイテムを破壊した`);
   }
-  if (defender.def.effect?.type === 'destroyItemBeforeAttack' && attacker.items.length > 0) {
+  if (getEffect(defender, 'destroyItemBeforeAttack') && attacker.items.length > 0) {
     attacker.items = [];
     log.push(`${defender.def.name}が${attacker.def.name}のアイテムを破壊した`);
+  }
+
+  // 攻撃開始前効果: アイテム強奪（真剣白刃取り）。破壊と同じタイミングで
+  // 判定する（相手のアイテムを消す代わりに自分の装備に加える）。
+  if (getEffect(attacker, 'stealItemBeforeAttack') && defender.items.length > 0) {
+    attacker.items = [...attacker.items, ...defender.items];
+    defender.items = [];
+    log.push(`${attacker.def.name}が${defender.def.name}のアイテムを奪い装備した`);
+  }
+  if (getEffect(defender, 'stealItemBeforeAttack') && attacker.items.length > 0) {
+    defender.items = [...defender.items, ...attacker.items];
+    attacker.items = [];
+    log.push(`${defender.def.name}が${attacker.def.name}のアイテムを奪い装備した`);
   }
 
   prepareForBattle(attacker, attackerBonus);
@@ -315,23 +392,30 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     ? { unit: attacker, target: defender, bonus: attackerBonus, side: 'attacker' }
     : { unit: defender, target: attacker, bonus: defenderBonus, side: 'defender' };
 
-  const exchanges = [];
-  const firstStrike = performStrike(first.unit, first.target, first.bonus, log, gold);
-  const firstTargetSurvived = first.target.currentHp > 0;
-  exchanges.push({ side: first.side, message: firstStrike.message, damage: firstStrike.damage, targetDied: !firstTargetSurvived });
+  // ツインハンマー(doubleStrike): 装備している側は自分の番に1回ではなく
+  // 連続2回攻撃する（相手が1発目で力尽きれば2発目は撃たない）。単発の場合
+  // strikeCount=1なのでループは従来通り1回で終わる。
+  const strikeCount = (unit) => (unit.items.some((i) => i.effect?.type === 'doubleStrike') ? 2 : 1);
 
-  const secondStrike = firstTargetSurvived ? performStrike(second.unit, second.target, second.bonus, log, gold) : null;
-  if (secondStrike) {
-    exchanges.push({
-      side: second.side,
-      message: secondStrike.message,
-      damage: secondStrike.damage,
-      targetDied: second.target.currentHp <= 0,
-    });
+  const exchanges = [];
+  let firstTargetSurvived = true;
+  for (let i = 0; i < strikeCount(first.unit) && firstTargetSurvived; i++) {
+    const strike = performStrike(first.unit, first.target, first.bonus, log, gold);
+    firstTargetSurvived = first.target.currentHp > 0;
+    exchanges.push({ side: first.side, message: strike.message, damage: strike.damage, targetDied: !firstTargetSurvived });
   }
 
-  const dmgToDefender = (first.side === 'attacker' ? firstStrike : second.side === 'attacker' ? secondStrike : null)?.damage ?? 0;
-  const dmgToAttacker = (first.side === 'defender' ? firstStrike : second.side === 'defender' ? secondStrike : null)?.damage ?? 0;
+  if (firstTargetSurvived) {
+    let secondTargetSurvived = true;
+    for (let i = 0; i < strikeCount(second.unit) && secondTargetSurvived; i++) {
+      const strike = performStrike(second.unit, second.target, second.bonus, log, gold);
+      secondTargetSurvived = second.target.currentHp > 0;
+      exchanges.push({ side: second.side, message: strike.message, damage: strike.damage, targetDied: !secondTargetSurvived });
+    }
+  }
+
+  const dmgToDefender = exchanges.filter((e) => e.side === 'attacker').reduce((sum, e) => sum + e.damage, 0);
+  const dmgToAttacker = exchanges.filter((e) => e.side === 'defender').reduce((sum, e) => sum + e.damage, 0);
 
   // 強盗: 実際に与えたダメージの3倍を奪う（どちら側が持っていても効く）。
   if (hasTrait(attacker, 'robber') && dmgToDefender > 0) {

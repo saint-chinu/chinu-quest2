@@ -83,7 +83,11 @@ export const NEUTRAL_MONSTER_CATALOG = {
     ability: { type: 'changeOwnLandElement' },
     effectDescription: '土地コマンド（30G）: 自身の所有する土地の属性を任意に選択・変更できる',
   }),
-  katanakaji: neutralMonster('katanakaji', '刀鍛冶', Rarity.S, 30, 30),
+  katanakaji: neutralMonster('katanakaji', '刀鍛冶', Rarity.S, 30, 30, {
+    commandCost: 100,
+    ability: { type: 'grantItem', itemId: 'osafune' },
+    effectDescription: '土地コマンド（100G）: アイテムカード「オサフネ」を入手',
+  }),
   metaOn: neutralMonster('metaOn', 'メタ〇ン', Rarity.S, 10, 10, {
     effect: { type: 'copyOnSummon' },
     effectDescription: '盤面に存在するモンスターの中から1体を選択し変身する（基礎値のみコピー）',

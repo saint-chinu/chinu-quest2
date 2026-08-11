@@ -753,7 +753,8 @@ function describeCardDetail(card) {
     lines.push(`属性: ${card.element ? ELEMENT_LABEL[card.element] : '無属性'}`);
     lines.push(`ATK ${card.atk} / HP ${card.hp} / コスト ${card.cost}`);
   } else if (card.type === CardType.GEAR) {
-    lines.push(`ATK+${card.atkBonus} / HP+${card.hpBonus} / コスト ${card.cost}`);
+    const atkText = card.atkBonusRange ? `${card.atkBonusRange[0]}〜${card.atkBonusRange[1]}(ランダム)` : card.atkBonus;
+    lines.push(`ATK+${atkText} / HP+${card.hpBonus} / コスト ${card.cost}`);
   } else if (card.type === CardType.SPELL) {
     if (card.addedAtk != null) lines.push(`ATK+${card.addedAtk} / HP+${card.addedHp}（永続）`);
   }
