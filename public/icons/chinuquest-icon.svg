@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="104" fill="#101828"/>
+  <rect x="22" y="22" width="468" height="468" rx="86" fill="none" stroke="#f3c969" stroke-width="18"/>
+  <path d="M66 344c58-38 110-38 160 0s102 38 220-8v76H66z" fill="#176b87"/>
+  <path d="M66 371c58-38 110-38 160 0s102 38 220-8" fill="none" stroke="#69d2e7" stroke-width="14" stroke-linecap="round"/>
+  <text x="256" y="272" fill="#fff7dd" font-size="106" font-weight="900" text-anchor="middle" font-family="'Yu Gothic','Noto Sans JP',sans-serif" letter-spacing="-8">チヌクエ</text>
+  <text x="256" y="326" fill="#f3c969" font-size="38" font-weight="800" text-anchor="middle" font-family="sans-serif" letter-spacing="8">QUEST 2</text>
+</svg>

@@ -1,4 +1,5 @@
 import './style.css';
+import './pwa.js';
 import { GameScene, PIECE_REST_Y } from './scene.js';
 import { createBoard, MAPS, createMapThumbnailCanvas, getMapBackground } from './board.js';
 import { Game } from './game.js';

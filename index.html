@@ -9,12 +9,19 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="チヌクエスト2" />
     <title>チヌクエスト2</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icons/chinuquest-icon-192.png" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
     <div id="pre-game">
       <div id="login-screen" class="pg-screen">
         <img id="title-logo" src="/images/title-logo.webp" alt="チヌクエスト2" />
+
+        <div id="install-app-panel">
+          <p id="install-app-message">快適に遊ぶため、ホーム画面への追加を推奨します。</p>
+          <button id="install-app-button" class="pg-button" type="button">ホーム画面に追加</button>
+        </div>
 
         <div class="pg-field">
           <label for="login-id">ID</label>

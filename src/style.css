@@ -84,6 +84,28 @@ html, body {
   height: auto;
 }
 
+#install-app-panel {
+  width: min(520px, 90vw);
+  padding: 14px 18px;
+  border: 1px solid rgba(243, 201, 105, 0.65);
+  border-radius: 12px;
+  background: rgba(16, 24, 40, 0.88);
+  text-align: center;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+#install-app-message {
+  margin: 0 0 10px;
+  color: #fff7dd;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+#install-app-button {
+  width: 100%;
+  margin: 0;
+}
+
 #title-intro {
   display: flex;
   flex-direction: column;

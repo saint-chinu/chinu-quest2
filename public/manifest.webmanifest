@@ -1,0 +1,16 @@
+{
+  "name": "チヌクエスト2",
+  "short_name": "チヌクエ",
+  "description": "盤面を巡ってモンスターカードで戦うボードゲーム",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#101018",
+  "theme_color": "#101018",
+  "icons": [
+    { "src": "icons/chinuquest-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/chinuquest-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/chinuquest-icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
