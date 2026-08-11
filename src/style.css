@@ -67,6 +67,58 @@ html, body {
   display: none;
 }
 
+#login-screen {
+  justify-content: flex-start;
+  padding-top: 32px;
+  padding-bottom: 40px;
+  background-image: linear-gradient(rgba(10, 14, 24, 0.6), rgba(10, 14, 24, 0.82)), url('/images/title-background.jpg');
+  background-size: cover;
+  background-position: center;
+}
+
+#title-logo {
+  max-width: min(520px, 90vw);
+  width: 100%;
+  height: auto;
+}
+
+#title-intro {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: min(640px, 92vw);
+}
+
+.title-intro-block {
+  background: rgba(16, 16, 24, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  padding: 14px 16px;
+  text-align: left;
+}
+
+.title-intro-block h3 {
+  color: #6ee7d9;
+  font-size: 14px;
+  margin-bottom: 6px;
+}
+
+.title-intro-block p {
+  color: #e4e4f0;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+#title-screenshot {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  border-radius: 8px;
+  margin-top: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
+}
+
 .pg-title {
   color: #fff;
   font-size: 22px;

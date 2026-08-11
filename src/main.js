@@ -1,6 +1,6 @@
 import './style.css';
 import { GameScene, PIECE_REST_Y } from './scene.js';
-import { createBoard, MAPS, createMapThumbnailCanvas } from './board.js';
+import { createBoard, MAPS, createMapThumbnailCanvas, getMapBackground } from './board.js';
 import { Game } from './game.js';
 import { CardType, CARD_COLOR, ELEMENT_LABEL, Element, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
 import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, ITEM_CATALOG } from './battleCards.js';
@@ -1198,6 +1198,11 @@ function playBoardOrBossTheme() {
   else playBoardTheme();
 }
 
+/** #appの背景（CSSの静的ルールをインラインstyleで上書き）をそのマップの実素材に合わせる。実素材の無いマップはboard.js側で共通のstage1.pngにフォールバック済み。 */
+function applyMapBackground(mapId) {
+  appEl.style.backgroundImage = `url('${getMapBackground(mapId)}')`;
+}
+
 function animate() {
   // Stops this loop for good once the battle is exited (see
   // exitBattleButton) - startBattle() kicks off a fresh loop next time, so
@@ -1218,6 +1223,7 @@ function animate() {
  */
 function startBattle(character, storyOptions = {}) {
   currentMapId = storyOptions.mapId ?? null;
+  applyMapBackground(currentMapId);
   scene = new GameScene(canvas);
   tiles = createBoard(storyOptions.mapId);
   scene.buildBoard(tiles);
@@ -3119,6 +3125,7 @@ function startPvpGuestBattle() {
   appEl.classList.remove('hidden');
 
   currentMapId = pvpLastRoom?.mapId ?? null;
+  applyMapBackground(currentMapId);
   scene = new GameScene(canvas);
   tiles = createBoard(pvpLastRoom?.mapId);
   scene.buildBoard(tiles);

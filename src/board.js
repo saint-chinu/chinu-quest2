@@ -100,19 +100,24 @@ const DANBALL_ROWS = [
 // idはstory.jsの各ステージ`key`と揃えてある - ストーリーモードは自ステージ
 // のkeyをそのままmapIdとしてcreateBoard()へ渡すだけで対応する専用マップに
 // なる（story.js側に別途mapIdフィールドを持たせる必要はない）。
-// 背景画像（アセット）はまだ1種類しか無いため全マップ共通のプレースホルダー
-// - 盤面の形だけを変えて対人戦のマップ選択に意味を持たせている。
+// background: 盤面の背景画像（main.jsが#appのCSS background-imageに反映
+// - applyMapBackground参照）。実素材が無いマップは共通のstage1.jpgのまま。
 // requireAllCheckpoints: 全マップ共通で「全チェックポイントを通過しないと
 // ゴールにならない」ルールが有効（ユーザー指定、2026-08-11）。
 export const MAPS = [
-  { id: 'hitode', name: '① ヒトデの縄張り', rows: HITODE_ROWS, requireAllCheckpoints: true },
-  { id: 'madai', name: '② マダイの岩礁', rows: MADAI_ROWS, requireAllCheckpoints: true },
-  { id: 'budou', name: '③ 決闘の浜辺', rows: BUDOU_ROWS, requireAllCheckpoints: true },
-  { id: 'danball', name: '④ 暗転した世界', rows: DANBALL_ROWS, requireAllCheckpoints: true },
+  { id: 'hitode', name: '① ヒトデの縄張り', rows: HITODE_ROWS, requireAllCheckpoints: true, background: '/images/stage/stage1.png' },
+  { id: 'madai', name: '② マダイの岩礁', rows: MADAI_ROWS, requireAllCheckpoints: true, background: '/images/stage/stage2.jpg' },
+  { id: 'budou', name: '③ 決闘の浜辺', rows: BUDOU_ROWS, requireAllCheckpoints: true, background: '/images/stage/stage1.png' },
+  { id: 'danball', name: '④ 暗転した世界', rows: DANBALL_ROWS, requireAllCheckpoints: true, background: '/images/stage/stage1.png' },
 ];
 
 function getMap(mapId) {
   return MAPS.find((m) => m.id === mapId) ?? MAPS[0];
+}
+
+/** そのマップの背景画像URL（main.jsが#appのCSS背景に反映する）。 */
+export function getMapBackground(mapId) {
+  return getMap(mapId).background;
 }
 
 /** そのマップで「全チェックポイントを通過しないとゴールにならない」ルールが有効かどうか（Game側のGoal判定が参照する）。 */
