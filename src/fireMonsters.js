@@ -32,7 +32,11 @@ export const FIRE_MONSTER_CATALOG = {
     effect: { type: 'selfDamageAfterAttack', damage: 5 },
     effectDescription: '攻撃終了時、自身が5ダメージを受ける',
   }),
-  fireStarter: fireMonster('fireStarter', '火付け役', Rarity.N, 20, 20, { cost: 10 }),
+  fireStarter: fireMonster('fireStarter', '火付け役', Rarity.N, 20, 20, {
+    cost: 10,
+    traits: ['firstStrike'],
+    effectDescription: '先制',
+  }),
   magman: fireMonster('magman', 'マグマン', Rarity.N, 20, 20, {
     effect: { type: 'chanceDamageReduction', chance: 0.5, multiplier: 0.5 },
     effectDescription: '相手の攻撃を1/2の確率で半減する',
@@ -53,8 +57,9 @@ export const FIRE_MONSTER_CATALOG = {
   flameLizard: fireMonster('flameLizard', '炎トカゲ', Rarity.N, 30, 30, { cost: 40 }),
 
   flameChallenger: fireMonster('flameChallenger', '炎のチャレンジャー', Rarity.S, 30, 40, {
+    traits: ['firstStrike'],
     effect: { type: 'challengeOdds', attackFailureChance: 1 / 3, negateIncomingChance: 1 / 3 },
-    effectDescription: '1/3の確率で攻撃失敗。1/3の確率で相手の攻撃を無効化する',
+    effectDescription: '先制。1/3の確率で攻撃失敗。1/3の確率で相手の攻撃を無効化する',
   }),
   kaentake: fireMonster('kaentake', 'カエンタケ', Rarity.S, 30, 30, {
     effect: { type: 'poisonOnHit', baseHpRatio: 0.15, duration: 'untilSwapOrDeath' },

@@ -238,23 +238,34 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
   return result;
 }
 
+// 先制(firstStrike)は+1、後攻(lastStrike)は-1、どちらも無ければ0。スコアが
+// 高い方が先に攻撃する（同スコア同士は下のresolveBattleが従来通り攻撃側を
+// 先にする）。先制と後攻が同じ戦闘に両方出てきても、単純に「先制側が先・
+// 後攻側が後」で矛盾なく解決できる設計。
+function strikeOrderScore(unit) {
+  if (hasTrait(unit, 'firstStrike')) return 1;
+  if (hasTrait(unit, 'lastStrike')) return -1;
+  return 0;
+}
+
 /**
  * Sequential single exchange: whoever goes first strikes, and only if their
  * target survives that hit does it get to strike back. A target killed
  * outright never counters, so the first striker takes zero damage in that
  * case (this is why "mutual destruction" can't happen in ordinary combat -
  * it would need a special ability that damages the first striker outside of
- * a counter-attack, none of which exist). The attacker goes first UNLESS
- * the defender carries 先制 (firstStrike) and the attacker doesn't (if both
- * do, it reverts to the normal attacker-first order - no concrete card has
- * ever exercised that tie yet). Items are consumed regardless of outcome;
- * curses persist unless their unit died. `attackerBonus`/`defenderBonus`
- * ({atk, hp}) carry this battle's 同属性ボーナス/応援ボーナス/カード固有の
- * 連鎖・レアリティ補正 (see Game._battleBonus/_applyEffectBonus) - purely
- * situational, never stored on the unit. `exchanges` lists each strike in
- * the order it actually happened ({side, message, damage, targetDied}), so
- * the caller's UI can animate them in the right sequence regardless of who
- * went first.
+ * a counter-attack, none of which exist). The attacker goes first UNLESS the
+ * defender's strikeOrderScore is higher than the attacker's (先制/firstStrike
+ * = +1, 後攻/lastStrike = -1 - see strikeOrderScore) - ties (including the
+ * common "neither has either trait" case, or both having the same trait)
+ * revert to the normal attacker-first order. Items are consumed regardless
+ * of outcome; curses persist unless their unit died. `attackerBonus`/
+ * `defenderBonus` ({atk, hp}) carry this battle's 同属性ボーナス/応援
+ * ボーナス/カード固有の連鎖・レアリティ補正 (see Game._battleBonus/
+ * _applyEffectBonus) - purely situational, never stored on the unit.
+ * `exchanges` lists each strike in the order it actually happened ({side,
+ * message, damage, targetDied}), so the caller's UI can animate them in the
+ * right sequence regardless of who went first.
  */
 export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defenderBonus = {}) {
   const log = [];
@@ -277,7 +288,7 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
       `${defender.def.name}(ATK${statTotals(defender, defenderBonus).atk}/HP${defender.currentHp})`
   );
 
-  const defenderGoesFirst = hasTrait(defender, 'firstStrike') && !hasTrait(attacker, 'firstStrike');
+  const defenderGoesFirst = strikeOrderScore(defender) > strikeOrderScore(attacker);
   const first = defenderGoesFirst
     ? { unit: defender, target: attacker, bonus: defenderBonus, side: 'defender' }
     : { unit: attacker, target: defender, bonus: attackerBonus, side: 'attacker' };

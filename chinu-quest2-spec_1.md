@@ -52,6 +52,14 @@
 
 ---
 
+## 火・水属性モンスターの微調整＋後攻(lastStrike)特性の新設（2026-08-12実装）
+ユーザーがカタログ一覧を見て指示した6件の修正。
+- **後攻(lastStrike)特性を新設**（`battle.js`）: 先制(firstStrike)の対になる特性。`strikeOrderScore(unit)`ヘルパーで先制=+1／後攻=-1／どちらも無し=0のスコアを算出し、スコアが高い側が先に攻撃する形へ`resolveBattle`の順序判定を一般化（旧実装は`hasTrait(defender,'firstStrike') && !hasTrait(attacker,'firstStrike')`という先制専用の分岐だった）。同スコア同士（無特性同士・先制同士・後攻同士）は従来通り攻撃側が先。後攻側が防御側になった場合は元々防御側は2番手なので見た目上の変化はなく、後攻側が攻撃側になった場合だけ防御側に先を譲る。先制と後攻が同じ戦闘に同時に出ても矛盾なく解決できる
+- 火付け役・炎のチャレンジャー・半魚人・ファイヤーマンに`traits:['firstStrike']`を追加
+- アオリイカに`traits:['lastStrike']`を追加、ステータスを30/30→**HP40/ATK30**に変更
+- 嵐を呼ぶ〇女のコストを50G→**100G**に変更
+- 検証: `resolveBattle`を直接叩くNode単体テスト5件（後攻単独／後攻が防御側の場合は変化なし／先制と後攻が同時に出た場合／後攻同士のタイブレーク／既存の先制のみの回帰確認）で全パス、実機でも6件の変更値が正しく読み込まれることを確認
+
 ## 雷・森属性モンスター40種＋特殊能力（2026-08-12実装、火・水属性40種で確立した実装に合流）
 火・水（20種ずつ、`src/fireMonsters.js`/`src/waterMonsters.js`）に続き、`src/thunderMonsters.js`/`src/forestMonsters.js`で雷・森属性を追加。これで4属性×20種＝**モンスターカタログ全80種が揃った**（`MONSTER_CATALOG`はfire/water/thunder/forestの4カタログをスプレッドするだけの構成に）。既存の効果体系（`effect.type`/`ability.type`ディスパッチ、`chainRequired`、`statsPerElementChain`、`atkBonusAgainstRarity`、`warpToEmptyElementLand`、`challengeOdds`等）を最大限再利用しつつ、雷・森ならではの新規効果を追加実装した。
 

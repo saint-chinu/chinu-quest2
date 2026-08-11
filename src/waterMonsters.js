@@ -38,7 +38,10 @@ export const WATER_MONSTER_CATALOG = {
     effectDescription: '戦闘終了時に基礎HP10回復し30G消費する',
   }),
   suikenKurage: waterMonster('suikenKurage', '泥酔クラゲ', Rarity.N, 20, 20, { cost: 10 }),
-  hangyojin: waterMonster('hangyojin', '半魚人', Rarity.N, 30, 30),
+  hangyojin: waterMonster('hangyojin', '半魚人', Rarity.N, 30, 30, {
+    traits: ['firstStrike'],
+    effectDescription: '先制',
+  }),
   penpen: waterMonster('penpen', 'ペンペン', Rarity.N, 40, 25),
   shinkaigyoX: waterMonster('shinkaigyoX', '深海魚X', Rarity.N, 30, 20, {
     commandCost: 80,
@@ -58,17 +61,19 @@ export const WATER_MONSTER_CATALOG = {
     effect: { type: 'destroyItemBeforeAttack' },
     effectDescription: '召喚コスト100G。攻撃開始前に相手のアイテムを破壊する',
   }),
-  aoriika: waterMonster('aoriika', 'アオリイカ', Rarity.S, 30, 30, {
+  aoriika: waterMonster('aoriika', 'アオリイカ', Rarity.S, 40, 30, {
+    traits: ['lastStrike'],
     effect: { type: 'blindOnHit' },
-    effectDescription: '攻撃成功時、相手を目くらまし状態にする（次の攻撃を1回スキップさせる）',
+    effectDescription: '後攻。攻撃成功時、相手を目くらまし状態にする（次の攻撃を1回スキップさせる）',
   }),
   tsurara: waterMonster('tsurara', '氷柱', Rarity.S, 60, 10, {
     effect: { type: 'selfDamageAfterBattle', damage: 10 },
     effectDescription: '戦闘終了時にHPマイナス10',
   }),
   fireman: waterMonster('fireman', 'ファイヤーマン', Rarity.S, 30, 20, {
+    traits: ['firstStrike'],
     effect: { type: 'elementDamageBonus', targetElement: Element.FIRE, multiplier: 2 },
-    effectDescription: '火属性モンスターに2倍ダメージ（アイテム効果も対象）',
+    effectDescription: '先制。火属性モンスターに2倍ダメージ（アイテム効果も対象）',
   }),
   azarashisan: waterMonster('azarashisan', 'あざらしさん', Rarity.S, 30, 30, {
     commandCost: 30,
@@ -83,6 +88,7 @@ export const WATER_MONSTER_CATALOG = {
   }),
 
   arashiwoyobuOnna: waterMonster('arashiwoyobuOnna', '嵐を呼ぶ〇女', Rarity.R, 50, 50, {
+    cost: 100,
     effect: { type: 'chanceSelfDamageOnAttack', chance: 0.5, damage: 10 },
     effectDescription: '攻撃時、1/2の確率で自身にも10ダメージ',
   }),
