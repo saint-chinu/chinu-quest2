@@ -1,11 +1,12 @@
 import { TileType, mapRequiresAllCheckpoints } from './board.js';
 import { PIECE_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity, buildCardPool } from './cards.js';
-import { buildStarterExtraCards, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, catalogIdOf } from './battleCards.js';
+import { buildStarterExtraCards, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf } from './battleCards.js';
 import { createFieldUnit, resolveBattle, equipItem, applyCurse } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay } from './utils.js';
 import { DENCHU_FIELD_MONSTER } from './thunderMonsters.js';
+import { GASHAAN_FIELD_MONSTER } from './neutralMonsters.js';
 
 const SHOP_OPTION_COUNT = 3;
 
@@ -439,8 +440,13 @@ export class Game {
       this.onLog(`${player.name}はゴールを通過（チェックポイント未通過のためボーナスなし）`);
       return;
     }
-    player.currency += START_BONUS;
-    this.onLog(`${player.name}はゴールを通過！ +${START_BONUS}`);
+    // フリーランサー: 自分の盤面のどこかに配置されていれば周回ボーナスが増える。
+    const freelancerTile = this.tiles.find(
+      (t) => t.unit && t.unit.ownerId === player.id && t.unit.def.effect?.type === 'lapBonusMultiplier',
+    );
+    const bonus = freelancerTile ? Math.round(START_BONUS * freelancerTile.unit.def.effect.multiplier) : START_BONUS;
+    player.currency += bonus;
+    this.onLog(`${player.name}はゴールを通過！ +${bonus}`);
     if (this.requireAllCheckpoints) player.passedCheckpoints.clear();
   }
 
@@ -738,6 +744,32 @@ export class Game {
     return { ...this.getTileSummary(tile), isMine: tile.owner === player.id && tile.unit != null };
   }
 
+  /**
+   * メタ〇ン: 盤面に存在するモンスターの中から1体を選んで変身する
+   * （基礎値のみコピーし、バフ・デバフは引き継がない＝新しいdefへの
+   * 差し替えなので既存のcurses/itemsはそのまま、currentHpだけ変身後の
+   * 素のHPにリセットする）。対象がいなければ何もしない。CPU（対人戦の
+   * 簡易AI）は変身させず素の姿のまま運用する。
+   */
+  async _maybeCopyOnSummon(tile, player) {
+    const targets = this.tiles.filter((t) => t.unit && t !== tile);
+    if (targets.length === 0) return;
+
+    const targetId = await this.onPickAbilityTarget(
+      targets.map((t) => ({ ...this._browseTileSummary(t, player), label: `${t.unit.def.name}に変身` })),
+      player.id,
+    );
+    if (targetId == null) return;
+    const targetTile = this.tiles.find((t) => t.id === targetId);
+    if (!targetTile?.unit) return;
+
+    const newDef = { ...targetTile.unit.def, id: tile.unit.def.id, catalogId: catalogIdOf(targetTile.unit.def) };
+    tile.unit.def = newDef;
+    tile.unit.currentHp = newDef.hp;
+    this.onLog(`${player.name}のモンスターが${newDef.name}に変身した！`);
+    this._notifyState();
+  }
+
   /** 召喚条件chainRequired（例: 「火の土地1連鎖以上」）を満たすか。無指定なら常にtrue。 */
   _meetsChainRequirement(player, card) {
     if (!card.chainRequired) return true;
@@ -834,6 +866,9 @@ export class Game {
       }
       this._placeUnit(tile, player, card);
       this.onLog(`${player.name}は${card.name}を${actionType === 'summon' ? '召喚' : '入れ替え'}した (-${card.cost}G)`);
+      if (card.effect?.type === 'copyOnSummon') {
+        await this._maybeCopyOnSummon(tile, player);
+      }
     } else {
       await this._runInvasion(player, tile, card);
     }
@@ -1179,6 +1214,69 @@ export class Game {
       return true;
     }
 
+    if (ability.type === 'changeOwnLandElement') {
+      const ownedLands = this._ownedTiles(player);
+      if (ownedLands.length === 0) {
+        this.onLog('対象の土地がありません');
+        return false;
+      }
+      const targetId = await this.onPickAbilityTarget(
+        ownedLands.map((t) => ({ ...this._browseTileSummary(t, player), label: `${t.id}番地（${ELEMENT_LABEL[t.element]}）` })),
+        player.id,
+      );
+      if (targetId == null) return false;
+      const targetTile = this.tiles.find((t) => t.id === targetId);
+      const newElement = await this.onPickElement(CHANGEABLE_ELEMENTS.filter((e) => e !== targetTile.element), player.id);
+      if (newElement == null) return false;
+      if (!(await confirmAndSpend())) return false;
+
+      targetTile.element = newElement;
+      this.onLog(`${player.name}の${unitDef.name}が${targetTile.id}番地の属性を${ELEMENT_LABEL[newElement]}に変更した`);
+      this._notifyState();
+      return true;
+    }
+
+    if (ability.type === 'damageAndSelfDestruct') {
+      const targets = this.tiles.filter((t) => {
+        if (t.owner == null || t.owner === player.id) return false;
+        const owner = this.players.find((p) => p.id === t.owner);
+        if (owner?.allianceId != null && owner.allianceId === player.allianceId) return false;
+        return true;
+      });
+      if (targets.length === 0) {
+        this.onLog('対象の敵がいません');
+        return false;
+      }
+      const targetId = await this.onPickAbilityTarget(targets.map((t) => this._browseTileSummary(t, player)), player.id);
+      if (targetId == null) return false;
+      if (!(await confirmAndSpend())) return false;
+
+      const targetTile = this.tiles.find((t) => t.id === targetId);
+      const targetUnit = targetTile.unit;
+      targetUnit.currentHp -= ability.power;
+      this.onLog(`${player.name}の${unitDef.name}が特殊能力で${targetUnit.def.name}に${ability.power}ダメージを与え、自身は消滅した！`);
+
+      const casterUnit = tile.unit;
+      tile.unit = null;
+      tile.owner = null;
+      tile.transparentCursed = false;
+      this._repaintTileToElement(tile);
+      this._notifyState();
+      await this._handleUnitDeath(casterUnit, player);
+
+      if (targetUnit.currentHp <= 0) {
+        const targetOwner = this.players.find((p) => p.id === targetTile.owner);
+        targetTile.unit = null;
+        targetTile.owner = null;
+        targetTile.transparentCursed = false;
+        this._repaintTileToElement(targetTile);
+        this.onLog(`${targetOwner.name}の${targetUnit.def.name}は倒された`);
+        await this._handleUnitDeath(targetUnit, targetOwner);
+      }
+      this._notifyState();
+      return true;
+    }
+
     if (ability.type === 'cursePlayerHaste') {
       const targets = this.players.filter((p) => {
         if (p.id === player.id || p.defeated) return false;
@@ -1247,7 +1345,9 @@ export class Game {
    */
   _elementHpBonus(unit, positionTile) {
     if (!positionTile || positionTile.owner !== unit.ownerId) return 0;
-    if (positionTile.element !== unit.def.element) return 0;
+    // レインボーカメレオン: 属性一致を問わず土地レベル×10を受け取る。
+    const ignoresElement = unit.def.effect?.type === 'elementHpBonusIgnoreElement';
+    if (!ignoresElement && positionTile.element !== unit.def.element) return 0;
     return Math.min(positionTile.level * 10, 50);
   }
 
@@ -1320,6 +1420,20 @@ export class Game {
         bonus.atk += atk;
         this.onLog(`${unit.def.name}は所持Gで上回りATKが2倍になった`);
       }
+    } else if (effect.type === 'atkMultiplier') {
+      const atk = Math.round(unit.def.atk * (effect.multiplier - 1));
+      bonus.atk += atk;
+      if (atk !== 0) this.onLog(`${unit.def.name}は狂戦士の力でATK+${atk}`);
+    } else if (effect.type === 'statsPerTotalChain') {
+      const totalChain = [Element.FIRE, Element.WATER, Element.THUNDER, Element.FOREST].reduce(
+        (sum, el) => sum + this._chainCount(unit.ownerId, el),
+        0,
+      );
+      const atk = totalChain * effect.atkPerChain;
+      const hp = totalChain * effect.hpPerChain;
+      bonus.atk += atk;
+      bonus.hp += hp;
+      if (atk > 0 || hp > 0) this.onLog(`${unit.def.name}は総連鎖${totalChain}でATK+${atk}/HP+${hp}`);
     }
   }
 
@@ -1474,7 +1588,21 @@ export class Game {
       unitName: won ? attackerUnit.def.name : defenderUnit.def.name,
     });
 
+    this._maybeGrantRandomSpell(attackerUnit, attackerPlayer);
+    this._maybeGrantRandomSpell(defenderUnit, defenderPlayer);
+
     return result;
+  }
+
+  /** 怪しい老人: 戦闘終了時（生死問わず）、レア度無視の完全ランダムでスペルカードを1枚手札に加える。 */
+  _maybeGrantRandomSpell(unit, player) {
+    if (unit.def.effect?.type !== 'randomSpellAfterBattle') return;
+    const pool = Object.values(SPELL_CATALOG);
+    if (pool.length === 0) return;
+    const picked = pool[Math.floor(Math.random() * pool.length)];
+    const card = { ...picked, id: `spell-summon-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+    player.hand.push(card);
+    this.onLog(`${player.name}の${unit.def.name}が「${card.name}」を手に入れた`);
   }
 
   async _runInvasion(player, tile, card) {
@@ -1547,9 +1675,28 @@ export class Game {
    * 無ければ何もしない。
    */
   async _handleUnitDeath(unit, ownerPlayer) {
+    if (unit.def.effect?.type === 'deathRespawnChance' && Math.random() < unit.def.effect.chance) {
+      const emptyLands = this.tiles.filter((t) => t.type === TileType.LAND && t.owner == null);
+      if (emptyLands.length > 0) {
+        const targetTile = emptyLands[Math.floor(Math.random() * emptyLands.length)];
+        const respawnCard = {
+          ...unit.def,
+          id: `zombie-${ownerPlayer.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          catalogId: catalogIdOf(unit.def),
+        };
+        this._placeUnit(targetTile, ownerPlayer, respawnCard);
+        this.onLog(`${unit.def.name}が${targetTile.id}番地に再出現した！`);
+        this._notifyState();
+      }
+    }
+
     if (!unit.def.traits?.includes('phoenix')) return;
 
-    const card = { ...unit.def, id: `phoenix-${ownerPlayer.id}-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+    const card = {
+      ...unit.def,
+      id: `phoenix-${ownerPlayer.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      catalogId: catalogIdOf(unit.def),
+    };
     ownerPlayer.hand.push(card);
     this.onLog(`${unit.def.name}は不死鳥の力で${ownerPlayer.name}の手札に戻った`);
     this._notifyState();
@@ -1579,6 +1726,34 @@ export class Game {
       player.hand.push(item);
       this.onLog(`${player.name}の${card.name}が「${item.name}」を手に入れた`);
     }
+    if (card.effect?.type === 'fusionSummon') {
+      this._maybeFuseGear(tile, player, card);
+    }
+  }
+
+  /**
+   * 古代のギアA・B・C: 自分の盤面に残り2種類のギアが既に配置されている
+   * 状態でギアのいずれかを召喚すると、その2枚を消滅させ、召喚した
+   * このマスを合体ロボ「ガシャーン」に差し替える（召喚コストは0扱いなので
+   * 先に払った分をここで払い戻す）。揃っていなければ何もせずギアのまま。
+   */
+  _maybeFuseGear(tile, player, card) {
+    const partnerTiles = card.effect.partners.map((catalogId) =>
+      this.tiles.find((t) => t !== tile && t.unit && t.unit.ownerId === player.id && catalogIdOf(t.unit.def) === catalogId),
+    );
+    if (partnerTiles.some((t) => !t)) return;
+
+    for (const t of partnerTiles) {
+      t.unit = null;
+      t.owner = null;
+      t.transparentCursed = false;
+      this._repaintTileToElement(t);
+    }
+    player.currency += card.cost;
+    const fusedDef = { ...GASHAAN_FIELD_MONSTER, id: `gashaan-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+    tile.unit = createFieldUnit(fusedDef, player.id);
+    this.onLog(`${player.name}のギアが合体し「${fusedDef.name}」が誕生した！ (召喚コスト${card.cost}Gを払い戻し)`);
+    this._notifyState();
   }
 
   /**

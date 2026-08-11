@@ -54,13 +54,21 @@ function randomStep(min, max, step) {
 // the caller (Game, which has the board) computes these per-battle and
 // passes them in, same shape as items/curses but never persisted on the unit.
 function statTotals(unit, bonus = {}) {
-  const itemAtk = unit.items.reduce((sum, i) => sum + (i.atkBonus || 0), 0);
-  const itemHp = unit.items.reduce((sum, i) => sum + (i.hpBonus || 0), 0);
+  // Ninja(doubleItemEffect): 装備アイテムのatk/hpボーナスだけを2倍にする
+  // （プラスもマイナスも対象）。ネット弁慶(statOverrideInBattle): 素の
+  // def.atk/hpの代わりに固定値20/20を基準にする（アイテム・呪い・状況
+  // ボーナスはその上にそのまま乗る＝弱体化はあくまで「素の数値」だけ）。
+  const itemMultiplier = unit.def.effect?.type === 'doubleItemEffect' ? 2 : 1;
+  const itemAtk = unit.items.reduce((sum, i) => sum + (i.atkBonus || 0), 0) * itemMultiplier;
+  const itemHp = unit.items.reduce((sum, i) => sum + (i.hpBonus || 0), 0) * itemMultiplier;
   const curseAtk = unit.curses.reduce((sum, c) => sum + (c.addedAtk || 0), 0);
   const curseHp = unit.curses.reduce((sum, c) => sum + (c.addedHp || 0), 0);
+  const override = unit.def.effect?.type === 'statOverrideInBattle' ? unit.def.effect : null;
+  const baseAtk = override ? override.atk : unit.def.atk;
+  const baseHp = override ? override.hp : unit.def.hp;
   return {
-    atk: unit.def.atk + curseAtk + itemAtk + (bonus.atk || 0),
-    maxHp: unit.def.hp + curseHp + itemHp + (bonus.hp || 0),
+    atk: baseAtk + curseAtk + itemAtk + (bonus.atk || 0),
+    maxHp: baseHp + curseHp + itemHp + (bonus.hp || 0),
   };
 }
 
@@ -107,6 +115,17 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
   // ATKダウンの呪い（静電気野郎）が重なって0未満になっても、マイナスダメージ
   // （＝相手を回復させてしまう）にはならないようクランプする。
   const damage = Math.max(0, Math.round(atkStats.atk * multiplier));
+
+  // くねくね(reflectDamage): 攻撃をそのまま跳ね返す - 自身はノーダメージ、
+  // 攻撃側がその分のダメージを受ける。攻撃自体が「届かなかった」扱いなので
+  // 命中時オンヒット効果（毒付与など）は発動させない - damage:0を返す。
+  if (defenderUnit.def.effect?.type === 'reflectDamage' && damage > 0) {
+    attackerUnit.currentHp -= damage;
+    const message = `${defenderUnit.def.name}が反射！ ${attackerUnit.def.name}に${damage}ダメージ`;
+    log.push(message);
+    return { damage: 0, message };
+  }
+
   defenderUnit.currentHp -= damage;
   const message = `${attackerUnit.def.name} → ${defenderUnit.def.name} に${damage}ダメージ（倍率${multiplier}）`;
   log.push(message);
