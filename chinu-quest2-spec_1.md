@@ -340,6 +340,7 @@
 - ステージ背景: `public/images/stage/stage1.png`（海底イラスト）を盤面の地面（ground plane）テクスチャとして適用済み（`scene.js`）
 - キャラアイコン: `public/images/player/icons6.png`（3×2グリッドの魚＋うさぎ6種シート）を`src/iconSheet.js`がブラウザ側でCanvas分割し、6枚の個別アイコンとして扱う（サーバー側の画像加工は不要）。キャラメイクのアイコン選択と、盤面上の自キャラ駒（ビルボードスプライト）の両方に使用
 - **既知の問題**: `icons6.png`の各アイコンの「透明に見える」市松模様部分は、実際には透過（アルファチャンネル）ではなくピクセルとして描き込まれた市松模様そのもの。そのため盤面の駒やキャラメイクのアイコンにもこの市松模様がそのまま表示される。本当に背景を透過させたい場合は、元画像を実際にアルファ抜きした状態で差し替える必要がある
+- **BGM（2026-08-11実装）**: `public/audio/board-theme.mp3`（盤面用）・`battle-theme.mp3`（バトル用、30秒ループ想定）のユーザー提供実音源に差し替え済み。以前は`src/audio.js`がWeb Audio APIで音声ファイル無しにプロシージャル生成していたが、そのコードは全て削除し、`HTMLAudioElement`でMP3を再生する方式にした（`playBoardTheme()`/`playBattleTheme()`/`stopMusic()`/`setMuted()`等のエクスポート名・呼び出し元は変更していないので、main.js側の配線は無改修）。曲の割り当ては元ファイル名（`chinuquest2_boss_bgm.mp3`→盤面用、`chinuquest2_battle_loop_30s.mp3`→バトル用）から名前で判断した割り当てなので、逆の方が良ければ`public/audio/`内の2ファイルの中身を入れ替えるだけで直せる
 
 ## フェーズ5: 対戦モード
 - Firebaseを使ったリアルタイムマルチプレイ
