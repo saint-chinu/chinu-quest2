@@ -340,7 +340,11 @@
 - ステージ背景: `public/images/stage/stage1.png`（海底イラスト）を盤面の地面（ground plane）テクスチャとして適用済み（`scene.js`）
 - キャラアイコン: `public/images/player/icons6.png`（3×2グリッドの魚＋うさぎ6種シート）を`src/iconSheet.js`がブラウザ側でCanvas分割し、6枚の個別アイコンとして扱う（サーバー側の画像加工は不要）。キャラメイクのアイコン選択と、盤面上の自キャラ駒（ビルボードスプライト）の両方に使用
 - **既知の問題**: `icons6.png`の各アイコンの「透明に見える」市松模様部分は、実際には透過（アルファチャンネル）ではなくピクセルとして描き込まれた市松模様そのもの。そのため盤面の駒やキャラメイクのアイコンにもこの市松模様がそのまま表示される。本当に背景を透過させたい場合は、元画像を実際にアルファ抜きした状態で差し替える必要がある
-- **BGM（2026-08-11実装）**: `public/audio/board-theme.mp3`（盤面用）・`battle-theme.mp3`（バトル用、30秒ループ想定）のユーザー提供実音源に差し替え済み。以前は`src/audio.js`がWeb Audio APIで音声ファイル無しにプロシージャル生成していたが、そのコードは全て削除し、`HTMLAudioElement`でMP3を再生する方式にした（`playBoardTheme()`/`playBattleTheme()`/`stopMusic()`/`setMuted()`等のエクスポート名・呼び出し元は変更していないので、main.js側の配線は無改修）。曲の割り当ては元ファイル名（`chinuquest2_boss_bgm.mp3`→盤面用、`chinuquest2_battle_loop_30s.mp3`→バトル用）から名前で判断した割り当てなので、逆の方が良ければ`public/audio/`内の2ファイルの中身を入れ替えるだけで直せる
+- **BGM（2026-08-11〜12実装）**: `src/audio.js`は以前Web Audio APIで音声ファイル無しにプロシージャル生成していたが、そのコードは全て削除し、`HTMLAudioElement`でユーザー提供のMP3実音源（`public/audio/`）を再生する方式にした（`playBoardTheme()`/`playBattleTheme()`/`stopMusic()`/`setMuted()`等のエクスポート名は変更していない）。3曲構成:
+  - `board-theme.mp3`: 通常ステージの盤面用
+  - `battle-theme.mp3`: バトルシーン用（30秒ループ想定）
+  - `boss-theme.mp3`: ④ダンボール男戦（ラスボス）専用の盤面BGM。`main.js`が現在の対戦の`mapId`を`currentMapId`というモジュール変数で覚えておき、盤面BGMを鳴らす箇所（バトル開始時・バトルシーン終了後の3箇所、全て`playBoardOrBossTheme()`に統一）で`mapId==='danball'`ならボス曲、それ以外なら通常の盤面曲を選ぶ。バトルシーン自体（`playBattleTheme()`）は専用のボス戦闘曲が無いため通常のまま
+  - PvPで④のマップを選んだ場合もゲスト側含め同じ分岐が効く（`pvpLastRoom.mapId`から`currentMapId`を設定）
 
 ## フェーズ5: 対戦モード
 - Firebaseを使ったリアルタイムマルチプレイ

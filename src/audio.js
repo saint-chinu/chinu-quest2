@@ -1,7 +1,12 @@
 // BGM再生。以前はWeb Audio APIによるプロシージャル生成（音声ファイル無し）
 // だったが、ユーザー提供の実音源（MP3、public/audio/）に差し替えた。
-//   board-theme.mp3: 盤面用（元ファイル名 chinuquest2_boss_bgm.mp3）
-//   battle-theme.mp3: バトル用（元ファイル名 chinuquest2_battle_loop_30s.mp3、30秒ループ想定）
+//   board-theme.mp3: 盤面用（通常ステージ、chinuquest2_board_bgm.mp3）
+//   battle-theme.mp3: バトル用（chinuquest2_battle_loop_30s.mp3、30秒ループ想定）
+//   boss-theme.mp3: ④ダンボール男戦（ラスボス）専用の盤面BGM
+//                    （chinuquest2_boss_bgm.mp3 - main.jsがストーリー
+//                    ④の間だけplayBoardTheme()の代わりにplayBossTheme()を
+//                    呼ぶ。バトルシーン自体は通常のbattle-theme.mp3のまま
+//                    - 専用のボス戦闘曲は無いため）。
 // ブラウザの自動再生ポリシー上、最初のユーザー操作（クリック等）が起きる
 // までplay()が失敗しうる - 失敗は無視する（次にテーマ切り替えが呼ばれた
 // 時に再度play()される想定なので、実害はゲーム開始後の最初の一瞬だけ）。
@@ -9,12 +14,13 @@
 const TRACK_SRC = {
   board: '/audio/board-theme.mp3',
   battle: '/audio/battle-theme.mp3',
+  boss: '/audio/boss-theme.mp3',
 };
 
 const VOLUME = 0.5;
 
 let muted = false;
-let currentTrack = null; // 'board' | 'battle' | null
+let currentTrack = null; // 'board' | 'battle' | 'boss' | null
 const audioEls = {}; // track -> HTMLAudioElement（遅延生成、以後使い回す）
 
 function getAudioEl(track) {
@@ -53,6 +59,9 @@ export function playBoardTheme() {
 }
 export function playBattleTheme() {
   playTrack('battle');
+}
+export function playBossTheme() {
+  playTrack('boss');
 }
 export function stopMusic() {
   if (currentTrack) getAudioEl(currentTrack).pause();
