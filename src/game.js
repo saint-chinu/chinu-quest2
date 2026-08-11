@@ -1588,7 +1588,11 @@ export class Game {
     // "nominal" bonus, since traits (unlike items) aren't secret and the
     // pierce interaction is meant to land as a damage-calc surprise, not an
     // upfront display change. Item HP bonuses are untouched either way.
-    const battleDefenderBonus = attackerUnit.def.traits?.includes('pierce') ? { ...defenderBonus, hp: 0 } : defenderBonus;
+    // モンスター自身のtraitsだけでなく、装備アイテムが持つpierce（にょ〇棒/
+    // イカサマのサイコロ/斬〇剣）も対象にする。
+    const attackerHasPierce =
+      attackerUnit.def.traits?.includes('pierce') || attackerUnit.items.some((i) => i.traits?.includes('pierce'));
+    const battleDefenderBonus = attackerHasPierce ? { ...defenderBonus, hp: 0 } : defenderBonus;
 
     const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, battleDefenderBonus);
     result.log.forEach((line) => this.onLog(line));

@@ -139,10 +139,15 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
   // （＝相手を回復させてしまう）にはならないようクランプする。
   const damage = Math.max(0, Math.round(atkStats.atk * multiplier));
 
+  // 貫通(pierce): 反射・無効化系（ナンカのお守り/くねくね/ハリネズミの服）を
+  // 全て無視して素通りする。同属性ボーナス（土地レベルのHP加算）を無視する
+  // 側の処理はgame.js側で別途行う（_runBattleScene参照）。
+  const pierces = hasTrait(attackerUnit, 'pierce');
+
   // ナンカのお守り(negateNextDamage): このアイテムで1回だけダメージを
   // 完全無効化する（アイテム本体にconsumedを立てて再発動を防ぐ - itemsは
   // 戦闘終了時に必ずクリアされるので使い回しの心配は無い）。
-  const negateItem = defenderUnit.items.find((i) => i.effect?.type === 'negateNextDamage' && !i.consumed);
+  const negateItem = !pierces && defenderUnit.items.find((i) => i.effect?.type === 'negateNextDamage' && !i.consumed);
   if (negateItem && damage > 0) {
     negateItem.consumed = true;
     const message = `${defenderUnit.def.name}は「${negateItem.name}」でダメージを無効化した`;
@@ -153,7 +158,7 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
   // くねくね(reflectDamage): 攻撃をそのまま跳ね返す - 自身はノーダメージ、
   // 攻撃側がその分のダメージを受ける。攻撃自体が「届かなかった」扱いなので
   // 命中時オンヒット効果（毒付与など）は発動させない - damage:0を返す。
-  if (defenderUnit.def.effect?.type === 'reflectDamage' && damage > 0) {
+  if (!pierces && defenderUnit.def.effect?.type === 'reflectDamage' && damage > 0) {
     attackerUnit.currentHp -= damage;
     const message = `${defenderUnit.def.name}が反射！ ${attackerUnit.def.name}に${damage}ダメージ`;
     log.push(message);
@@ -176,7 +181,7 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
 
   // ハリネズミの服(reflectHalfDamage): くねくねと違い自分も普通にダメージを
   // 受けたうえで、その半分を追加で攻撃側にも返す。
-  const halfReflectItem = defenderUnit.items.find((i) => i.effect?.type === 'reflectHalfDamage');
+  const halfReflectItem = !pierces && defenderUnit.items.find((i) => i.effect?.type === 'reflectHalfDamage');
   if (halfReflectItem && damage > 0) {
     const reflected = Math.round(damage / 2);
     attackerUnit.currentHp -= reflected;
