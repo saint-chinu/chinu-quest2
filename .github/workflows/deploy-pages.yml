@@ -1,0 +1,49 @@
+name: Deploy GitHub Pages
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          VITE_FIREBASE_API_KEY: AIzaSyC9ncbemina3ur2F-e7vX07OtqiPEu0EmE
+          VITE_FIREBASE_AUTH_DOMAIN: chinuquest-87b81.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: chinuquest-87b81
+          VITE_FIREBASE_STORAGE_BUCKET: chinuquest-87b81.firebasestorage.app
+          VITE_FIREBASE_MESSAGING_SENDER_ID: '546856004041'
+          VITE_FIREBASE_APP_ID: 1:546856004041:web:1bfc48e4d7d6418324a018
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4
