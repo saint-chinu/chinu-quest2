@@ -18,7 +18,11 @@ const TILE_COLOR = {
 // 15% closer than the original (14.5, 25, 14.5) - board was reading too
 // distant/small. Scaling this vector uniformly zooms in without touching
 // the diagonal viewing angle that makes tiles read as diamonds.
-const CAMERA_OFFSET = new THREE.Vector3(14.5, 25, 14.5).multiplyScalar(0.85);
+// Y raised from 25→32 (2026-08-12) for a steeper, more overhead look-down
+// angle (~50.6°→~58°) per user feedback that the original felt too shallow/
+// tilted - X/Z left untouched so the diagonal isometric diamond read on
+// tiles is unaffected.
+const CAMERA_OFFSET = new THREE.Vector3(14.5, 32, 14.5).multiplyScalar(0.85);
 const CAMERA_FOV = 45;
 const PAN_DURATION_MS = 900;
 

@@ -693,10 +693,6 @@ export class Game {
         const action = await this.onLandSubmenu(this._browseTileSummary(tile, player), player.id);
         if (action == null || action === 'back') break;
 
-        if (action === 'info') {
-          await this.onShowTileInfo(this._browseTileSummary(tile, player), player.id);
-          continue;
-        }
         if (action === 'swap' && (await this._humanSummonFlow(player, tile))) return true;
         if (action === 'levelup' && (await this._humanLevelUpFlowForTile(player, tile))) return true;
         if (action === 'element' && (await this._humanChangeElementFlowForTile(player, tile))) return true;

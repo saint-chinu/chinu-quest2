@@ -16,6 +16,17 @@
       <div id="login-screen" class="pg-screen">
         <img id="title-logo" src="/images/title-logo.webp" alt="チヌクエスト2" />
 
+        <div class="pg-field">
+          <label for="login-id">ID</label>
+          <input id="login-id" type="text" autocomplete="username" />
+        </div>
+        <div class="pg-field">
+          <label for="login-password">パスワード</label>
+          <input id="login-password" type="password" autocomplete="current-password" />
+        </div>
+        <p id="login-error" class="pg-error hidden"></p>
+        <button id="login-submit" class="pg-button">ログイン／新規登録</button>
+
         <div id="title-intro">
           <div class="title-intro-block">
             <h3>盤面を巡って陣地を広げよう</h3>
@@ -35,17 +46,6 @@
             <p>対戦の報酬やショップのパック購入でカードを集め、40枚のデッキ（ブック）を自由に編成。レアリティはN・S・R・EXの4段階で、集めたカードは図鑑でいつでも見返せます。</p>
           </div>
         </div>
-
-        <div class="pg-field">
-          <label for="login-id">ID</label>
-          <input id="login-id" type="text" autocomplete="username" />
-        </div>
-        <div class="pg-field">
-          <label for="login-password">パスワード</label>
-          <input id="login-password" type="password" autocomplete="current-password" />
-        </div>
-        <p id="login-error" class="pg-error hidden"></p>
-        <button id="login-submit" class="pg-button">ログイン／新規登録</button>
       </div>
 
       <div id="charmake-screen" class="pg-screen hidden">
@@ -156,11 +156,11 @@
         <h3 class="pg-subtitle">パック購入</h3>
         <div id="shop-pack-list"></div>
         <div id="shop-pack-result" class="hidden">
-          <h3 class="pg-subtitle">獲得カード</h3>
+          <h3 class="pg-subtitle">獲得結果</h3>
           <div id="shop-pack-cards"></div>
           <button id="shop-pack-result-close" class="pg-button">閉じる</button>
         </div>
-        <h3 class="pg-subtitle">ブリードパーツ購入</h3>
+        <h3 class="pg-subtitle">ブリードパーツガチャ</h3>
         <div id="shop-parts-list"></div>
         <h3 class="pg-subtitle">カード売却</h3>
         <div id="shop-list"></div>
@@ -252,8 +252,6 @@
     </div>
     <div id="app" class="hidden">
       <canvas id="game-canvas"></canvas>
-      <button id="exit-battle-button" aria-label="対戦をやめてMを受け取る">退出</button>
-      <button id="mute-button" aria-label="BGMのオン/オフ">🔊</button>
       <div id="hud">
         <div id="player-panel-0" class="player-panel corner-tl hidden"></div>
         <div id="player-panel-1" class="player-panel corner-tr hidden"></div>
@@ -261,7 +259,24 @@
         <div id="player-panel-3" class="player-panel corner-br hidden"></div>
         <div id="log"></div>
         <div id="hand-panel"></div>
+        <button id="menu-button" aria-label="メニュー">メニュー</button>
         <div id="stage-goal-display" class="hidden">目標G: <span id="stage-goal-amount"></span></div>
+      </div>
+      <div id="game-menu-modal" class="hidden">
+        <div id="game-menu-box">
+          <button id="game-menu-land-info">土地情報</button>
+          <button id="game-menu-mute" aria-label="BGMのオン/オフ">🔊 BGM</button>
+          <button id="game-menu-help">ヘルプ</button>
+          <button id="game-menu-exit">退出</button>
+          <button id="game-menu-close" class="pg-button-secondary">閉じる</button>
+        </div>
+      </div>
+      <div id="help-modal" class="hidden">
+        <div id="help-box">
+          <h3>あそびかた</h3>
+          <div id="help-text"></div>
+          <button id="help-close">閉じる</button>
+        </div>
       </div>
       <div id="story-overlay-dialogue" class="hidden">
         <div id="story-overlay-portrait-left" class="story-overlay-portrait">
@@ -316,7 +331,6 @@
             <button id="land-submenu-move">移動</button>
             <button id="land-submenu-sell">土地を売る</button>
             <button id="land-submenu-ability" class="hidden">特殊能力</button>
-            <button id="land-submenu-info">情報</button>
             <button id="land-submenu-back">もどる</button>
           </div>
         </div>

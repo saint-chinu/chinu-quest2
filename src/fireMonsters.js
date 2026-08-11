@@ -1,4 +1,5 @@
 import { CardType, Element, Rarity } from './cards.js';
+import { assetUrl } from './assetUrl.js';
 
 const NORMAL_COST = 50;
 const fireMonster = (id, name, rarity, hp, atk, options = {}) => ({
@@ -16,13 +17,15 @@ const fireMonster = (id, name, rarity, hp, atk, options = {}) => ({
   ...(options.traits ? { traits: options.traits } : {}),
   ...(options.effect ? { effect: options.effect } : {}),
   ...(options.effectDescription ? { effectDescription: options.effectDescription } : {}),
+  ...(options.imageDataUrl ? { imageDataUrl: options.imageDataUrl } : {}),
 });
 
-/** 火属性モンスター20種。画像未指定時はcardArt.jsの火属性共通画像を使う。 */
+/** 火属性モンスター20種。画像未指定時はcardArt.jsの火属性共通画像を使う（renderCardElがcard.imageDataUrlを優先するので、指定した分だけ自然に上書きされる）。 */
 export const FIRE_MONSTER_CATALOG = {
   salarymander: fireMonster('salarymander', 'サラリーマンダー', Rarity.N, 30, 30, {
     effect: { type: 'survivalGold', multiplier: 2 },
     effectDescription: '戦闘で生き残った場合、残りHP×2Gを得る',
+    imageDataUrl: assetUrl('/images/card-art/salarymander.webp'),
   }),
   moeMoeKyun: fireMonster('moeMoeKyun', '燃え燃えきゅん', Rarity.N, 20, 30),
   heavySmoker: fireMonster('heavySmoker', 'ヘビースモーカー', Rarity.N, 40, 30, {

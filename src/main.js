@@ -17,6 +17,8 @@ import {
   canEquipPart,
   breedPartBadges,
   buildBreedCardDef,
+  BREED_PART_PACK,
+  drawBreedPartPack,
 } from './breedParts.js';
 import { STORY_STAGES, isStageUnlocked, isStageCleared } from './story.js';
 import { NPC_PORTRAIT_URL, loadNpcTokenImage } from './npcArt.js';
@@ -37,7 +39,7 @@ import {
   finishPvpRoom,
   beginPvpMatch,
 } from './pvp.js';
-import { playMapTheme, playBattleTheme, stopMusic, toggleMuted } from './audio.js';
+import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted } from './audio.js';
 
 const canvas = document.getElementById('game-canvas');
 const turnIndicator = document.getElementById('turn-indicator');
@@ -68,7 +70,6 @@ const landSubmenuElement = document.getElementById('land-submenu-element');
 const landSubmenuMove = document.getElementById('land-submenu-move');
 const landSubmenuSell = document.getElementById('land-submenu-sell');
 const landSubmenuAbility = document.getElementById('land-submenu-ability');
-const landSubmenuInfo = document.getElementById('land-submenu-info');
 const landSubmenuBack = document.getElementById('land-submenu-back');
 const abilityTargetModal = document.getElementById('ability-target-modal');
 const abilityTargetChoices = document.getElementById('ability-target-choices');
@@ -279,7 +280,10 @@ function promptLandCommand(tile, { canSummon }) {
  * The 土地-browse tile's vertical submenu (own tile with a garrisoned
  * monster only - see Game._runLandBrowse, which never opens this for a
  * tile that isn't the player's own): 入れ替え/土地Lvアップ/属性変更/移動/
- * 情報/もどる. Resolves the chosen action string, or 'back'/null.
+ * もどる. Resolves the chosen action string, or 'back'/null. 「情報」は
+ * 2026-08-12にここから廃止し、メニューの「土地情報」に統合した
+ * （showLandInfoFromMenu参照 - いつでも見られる形にするため、特定の1マスに
+ * 紐づくこのサブメニューからは切り離した）。
  */
 function promptLandSubmenu(tile) {
   return new Promise((resolve) => {
@@ -295,7 +299,6 @@ function promptLandSubmenu(tile) {
       landSubmenuMove.removeEventListener('click', onMove);
       landSubmenuSell.removeEventListener('click', onSell);
       landSubmenuAbility.removeEventListener('click', onAbility);
-      landSubmenuInfo.removeEventListener('click', onInfo);
       landSubmenuBack.removeEventListener('click', onBack);
       resolve(result);
     }
@@ -317,9 +320,6 @@ function promptLandSubmenu(tile) {
     function onAbility() {
       cleanup('ability');
     }
-    function onInfo() {
-      cleanup('info');
-    }
     function onBack() {
       cleanup('back');
     }
@@ -329,7 +329,6 @@ function promptLandSubmenu(tile) {
     landSubmenuMove.addEventListener('click', onMove);
     landSubmenuSell.addEventListener('click', onSell);
     landSubmenuAbility.addEventListener('click', onAbility);
-    landSubmenuInfo.addEventListener('click', onInfo);
     landSubmenuBack.addEventListener('click', onBack);
   });
 }
@@ -1231,7 +1230,7 @@ function applyMapBackground(mapId) {
 
 function animate() {
   // Stops this loop for good once the battle is exited (see
-  // exitBattleButton) - startBattle() kicks off a fresh loop next time, so
+  // gameMenuExit) - startBattle() kicks off a fresh loop next time, so
   // loops never pile up across repeated enter/exit cycles. PvPのゲスト側は
   // gameを持たない（scene/tilesだけをローカルで描画するのでpvpMatchで
   // 続行判定する）。
@@ -1348,12 +1347,88 @@ function startBattle(character, storyOptions = {}) {
 
 const preGame = document.getElementById('pre-game');
 const appEl = document.getElementById('app');
-const exitBattleButton = document.getElementById('exit-battle-button');
-const muteButton = document.getElementById('mute-button');
-muteButton.addEventListener('click', () => {
-  const muted = toggleMuted();
-  muteButton.textContent = muted ? '🔇' : '🔊';
+const menuButton = document.getElementById('menu-button');
+const gameMenuModal = document.getElementById('game-menu-modal');
+const gameMenuLandInfo = document.getElementById('game-menu-land-info');
+const gameMenuMute = document.getElementById('game-menu-mute');
+const gameMenuHelp = document.getElementById('game-menu-help');
+const gameMenuExit = document.getElementById('game-menu-exit');
+const gameMenuClose = document.getElementById('game-menu-close');
+const helpModal = document.getElementById('help-modal');
+const helpText = document.getElementById('help-text');
+const helpClose = document.getElementById('help-close');
+
+function syncMuteButtonLabel() {
+  gameMenuMute.textContent = isMuted() ? '🔇 BGM' : '🔊 BGM';
+}
+syncMuteButtonLabel();
+gameMenuMute.addEventListener('click', () => {
+  toggleMuted();
+  syncMuteButtonLabel();
 });
+
+menuButton.addEventListener('click', () => {
+  gameMenuModal.classList.remove('hidden');
+});
+gameMenuClose.addEventListener('click', () => {
+  gameMenuModal.classList.add('hidden');
+});
+
+const HELP_TEXT = `【勝敗の目標】
+盤面右下の「目標G」が、そのステージで所持Gの目安になります（表示のみで自動判定はされません）。
+
+【サイコロ・移動】
+自分のターンになったらサイコロを振って盤面を進みます。分かれ道では進む方向を選べます。
+
+【止まったマスでできること】
+・召喚／侵略: 手札のモンスターを空き地に召喚、または敵の土地に攻め込みます
+・土地: 自分がこれまでに通った土地（START/イベントマスなら所有地全部）を選んで、入れ替え・土地Lvアップ・属性変更・移動・土地を売る・特殊能力を行えます
+・終了: 何もせずターンを終えます
+
+【通行料】
+敵の土地に足を踏み入れて奪えなかった場合、地価に応じた通行料を支払います。同盟仲間の土地では発生しません。
+
+【バトルボーナス】
+・同属性ボーナス: 自分の土地と同じ属性のモンスターはHPが上がります
+・応援ボーナス: 隣接マスに味方がいるとATKが上がります
+
+【特殊能力】
+モンスターによっては土地コマンドの「特殊能力」からGを消費して固有の効果を使えます。`;
+helpText.textContent = HELP_TEXT;
+
+gameMenuHelp.addEventListener('click', () => {
+  gameMenuModal.classList.add('hidden');
+  helpModal.classList.remove('hidden');
+});
+helpClose.addEventListener('click', () => {
+  helpModal.classList.add('hidden');
+});
+
+/** メニューの「土地情報」: 自分が所有する土地を一覧から選んで情報を見る（何度でも選び直せる、「やめる」で閉じる）。既存のonPickAbilityTarget/onShowTileInfo用のモーダルをそのまま再利用する。 */
+async function showLandInfoFromMenu() {
+  gameMenuModal.classList.add('hidden');
+  if (!game) {
+    logEl.textContent = '対人戦のゲスト側では現在利用できません';
+    return;
+  }
+  const player = game.players[0];
+  for (;;) {
+    const ownedTiles = tiles.filter((t) => t.owner === player.id);
+    if (ownedTiles.length === 0) {
+      logEl.textContent = '所有している土地がありません';
+      return;
+    }
+    const summaries = ownedTiles.map((t) => {
+      const summary = game.getTileSummary(t);
+      return { ...summary, label: `${ELEMENT_LABEL[t.element]}の土地（Lv${summary.level}）${summary.unitName ? ' - ' + summary.unitName : ''}` };
+    });
+    const pickedId = await promptPickAbilityTarget(summaries);
+    if (pickedId == null) return;
+    const tile = tiles.find((t) => t.id === pickedId);
+    await promptShowTileInfo(game.getTileSummary(tile));
+  }
+}
+gameMenuLandInfo.addEventListener('click', showLandInfoFromMenu);
 const loginScreen = document.getElementById('login-screen');
 const loginId = document.getElementById('login-id');
 const loginPassword = document.getElementById('login-password');
@@ -2628,46 +2703,34 @@ function showShopScreen() {
   }
 
   if (!currentCharacter.ownedPartIds) currentCharacter.ownedPartIds = [];
-  for (const part of BREED_PARTS) {
-    const owned = currentCharacter.ownedPartIds.includes(part.id);
-
-    const row = document.createElement('div');
-    row.className = 'shop-pack-row';
-
-    const info = document.createElement('div');
-    info.className = 'deck-row-info';
-    const name = document.createElement('div');
-    name.className = 'shop-pack-name';
-    name.textContent = part.name;
-    const badges = document.createElement('div');
-    badges.className = 'breed-part-badges';
-    for (const badge of breedPartBadges(part)) {
-      const badgeEl = document.createElement('span');
-      badgeEl.className = 'breed-part-badge';
-      badgeEl.textContent = `${badge.icon}${badge.text}`;
-      badges.appendChild(badgeEl);
-    }
-    info.append(name, badges);
-
-    const buyButton = document.createElement('button');
-    buyButton.className = 'deck-row-sell';
-    if (owned) {
-      buyButton.textContent = '購入済み';
-      buyButton.disabled = true;
-    } else {
-      buyButton.textContent = `${part.price}Mで購入`;
-      buyButton.disabled = currentCharacter.m < part.price;
-      buyButton.addEventListener('click', () => {
-        if (currentCharacter.m < part.price || currentCharacter.ownedPartIds.includes(part.id)) return;
-        currentCharacter.m -= part.price;
-        currentCharacter.ownedPartIds.push(part.id);
-        saveCharacter(currentUserId, currentCharacter);
-        showShopScreen();
-      });
-    }
-    row.append(info, buyButton);
-    shopPartsList.appendChild(row);
-  }
+  const partPackRow = document.createElement('div');
+  partPackRow.className = 'shop-pack-row';
+  const partPackInfo = document.createElement('div');
+  partPackInfo.className = 'deck-row-info';
+  const partPackName = document.createElement('div');
+  partPackName.className = 'shop-pack-name';
+  partPackName.textContent = 'ブリードパーツパック';
+  const partPackMeta = document.createElement('div');
+  partPackMeta.className = 'deck-row-meta';
+  partPackMeta.textContent = `${BREED_PART_PACK.count}個 / N65%・S25%・R10% / 最低1個S以上 / ${BREED_PART_PACK.cost}M`;
+  partPackInfo.append(partPackName, partPackMeta);
+  const partPackButton = document.createElement('button');
+  partPackButton.className = 'deck-row-sell';
+  partPackButton.textContent = `${BREED_PART_PACK.cost}Mで引く`;
+  partPackButton.disabled = currentCharacter.m < BREED_PART_PACK.cost;
+  partPackButton.addEventListener('click', () => {
+    if (currentCharacter.m < BREED_PART_PACK.cost) return;
+    const parts = drawBreedPartPack();
+    currentCharacter.m -= BREED_PART_PACK.cost;
+    currentCharacter.ownedPartIds.push(...parts.map((part) => part.id));
+    saveCharacter(currentUserId, currentCharacter);
+    showPackResult(parts, null);
+    shopCurrency.textContent = `所持M: ${currentCharacter.m}`;
+    partPackButton.disabled = currentCharacter.m < BREED_PART_PACK.cost;
+    renderPackButtons();
+  });
+  partPackRow.append(partPackInfo, partPackButton);
+  shopPartsList.appendChild(partPackRow);
 
   for (const [key, owned] of Object.entries(currentCharacter.ownedCards || {})) {
     if (owned <= 0) continue;
@@ -2720,7 +2783,7 @@ function renderPackButtons() {
   }
 }
 
-function showPackResult(cards) {
+function showPackResult(cards, onDetail = showCardDetail) {
   shopPackCards.replaceChildren();
   for (const card of cards) {
     const el = document.createElement('button');
@@ -2732,7 +2795,7 @@ function showPackResult(cards) {
     const name = document.createElement('span');
     name.textContent = card.name;
     el.append(rarity, name);
-    el.addEventListener('click', () => showCardDetail(card));
+    if (onDetail) el.addEventListener('click', () => onDetail(card));
     shopPackCards.appendChild(el);
   }
   shopPackResult.classList.remove('hidden');
@@ -2763,10 +2826,15 @@ function renderBreedScreen() {
   breedStats.textContent = `属性: ${ELEMENT_LABEL[stats.element]} / ATK ${stats.atk} / HP ${stats.hp} / 召喚コスト ${stats.cost}G`;
 
   breedPartsList.replaceChildren();
-  for (const part of currentCharacter.ownedPartIds || []) {
-    const def = BREED_PARTS.find((p) => p.id === part);
+  const ownedPartCounts = new Map();
+  for (const partId of currentCharacter.ownedPartIds || []) {
+    ownedPartCounts.set(partId, (ownedPartCounts.get(partId) || 0) + 1);
+  }
+  for (const [partId, ownedCount] of ownedPartCounts) {
+    const def = BREED_PARTS.find((p) => p.id === partId);
     if (!def) continue;
-    const equipped = currentCharacter.breedMonster.equippedPartIds.includes(def.id);
+    const equippedCount = currentCharacter.breedMonster.equippedPartIds.filter((id) => id === def.id).length;
+    const canAddCopy = equippedCount < ownedCount;
 
     const row = document.createElement('div');
     row.className = 'deck-row';
@@ -2775,8 +2843,8 @@ function renderBreedScreen() {
     info.className = 'deck-row-info';
     const nameEl = document.createElement('div');
     nameEl.className = 'deck-row-name';
-    nameEl.textContent = def.name;
-    if (equipped && def.chooseElement && currentCharacter.breedMonster.elementPatchChoice) {
+    nameEl.textContent = `${def.name}（所持${ownedCount} / 装着${equippedCount}）`;
+    if (equippedCount > 0 && def.chooseElement && currentCharacter.breedMonster.elementPatchChoice) {
       const meta = document.createElement('div');
       meta.className = 'deck-row-meta';
       meta.textContent = `属性→${ELEMENT_LABEL[currentCharacter.breedMonster.elementPatchChoice]}に上書き中`;
@@ -2799,67 +2867,60 @@ function renderBreedScreen() {
       renderBreedScreen();
     }
 
-    if (!equipped && def.chooseElement) {
-      // 属性パッチ: needs an element picked before it can actually equip -
-      // validate the numeric caps first (same as any other part), then show
-      // 4 element swatches in place of the toggle button.
-      const check = canEquipPart(currentCharacter.breedMonster, def);
-      if (!check.ok) {
-        const disabledBtn = document.createElement('button');
-        disabledBtn.className = 'deck-row-sell';
-        disabledBtn.textContent = '装着';
-        disabledBtn.disabled = true;
-        disabledBtn.title = check.error;
-        row.append(info, disabledBtn);
-      } else {
-        const choices = document.createElement('div');
-        choices.className = 'breed-element-choices';
-        for (const element of CHANGEABLE_BREED_ELEMENTS) {
-          const swatch = document.createElement('button');
-          swatch.className = 'breed-element-choice';
-          swatch.style.background = CARD_COLOR[element];
-          swatch.textContent = ELEMENT_LABEL[element];
-          swatch.addEventListener('click', () => {
-            breedError.classList.add('hidden');
-            currentCharacter.breedMonster.elementPatchChoice = element;
-            equip();
-          });
-          choices.appendChild(swatch);
-        }
-        row.append(info, choices);
-      }
-      breedPartsList.appendChild(row);
-      continue;
-    }
+    const equipCheck = canAddCopy ? canEquipPart(currentCharacter.breedMonster, def) : { ok: false };
+    const actions = document.createElement('div');
+    actions.className = 'breed-element-choices';
 
-    const toggleBtn = document.createElement('button');
-    toggleBtn.className = 'deck-row-sell';
-    toggleBtn.textContent = equipped ? '外す' : '装着';
-    if (!equipped) {
-      const check = canEquipPart(currentCharacter.breedMonster, def);
-      toggleBtn.disabled = !check.ok;
-      toggleBtn.title = check.ok ? '' : check.error;
-    }
-    toggleBtn.addEventListener('click', () => {
-      breedError.classList.add('hidden');
-      if (equipped) {
-        currentCharacter.breedMonster.equippedPartIds = currentCharacter.breedMonster.equippedPartIds.filter(
-          (id) => id !== def.id
-        );
+    if (equippedCount > 0) {
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'deck-row-sell';
+      removeBtn.textContent = '1個外す';
+      removeBtn.addEventListener('click', () => {
+        breedError.classList.add('hidden');
+        const removeIndex = currentCharacter.breedMonster.equippedPartIds.lastIndexOf(def.id);
+        if (removeIndex >= 0) currentCharacter.breedMonster.equippedPartIds.splice(removeIndex, 1);
         saveCharacter(currentUserId, currentCharacter);
         renderBreedScreen();
-        return;
-      }
-      const check = canEquipPart(currentCharacter.breedMonster, def);
-      if (!check.ok) {
-        breedError.textContent = check.error;
-        breedError.classList.remove('hidden');
-        return;
-      }
-      equip();
-    });
+      });
+      actions.appendChild(removeBtn);
+    }
 
-    row.append(info, toggleBtn);
+    if (canAddCopy && def.chooseElement && equipCheck.ok) {
+      const choices = document.createElement('div');
+      choices.className = 'breed-element-choices';
+      for (const element of CHANGEABLE_BREED_ELEMENTS) {
+        const swatch = document.createElement('button');
+        swatch.className = 'breed-element-choice';
+        swatch.style.background = CARD_COLOR[element];
+        swatch.textContent = ELEMENT_LABEL[element];
+        swatch.addEventListener('click', () => {
+          breedError.classList.add('hidden');
+          currentCharacter.breedMonster.elementPatchChoice = element;
+          equip();
+        });
+        choices.appendChild(swatch);
+      }
+      actions.appendChild(choices);
+    } else if (canAddCopy) {
+      const equipBtn = document.createElement('button');
+      equipBtn.className = 'deck-row-sell';
+      equipBtn.textContent = '装着';
+      equipBtn.disabled = !equipCheck.ok;
+      equipBtn.title = equipCheck.ok ? '' : equipCheck.error;
+      equipBtn.addEventListener('click', () => {
+        breedError.classList.add('hidden');
+        const check = canEquipPart(currentCharacter.breedMonster, def);
+        if (!check.ok) {
+          breedError.textContent = check.error;
+          breedError.classList.remove('hidden');
+          return;
+        }
+        equip();
+      });
+      actions.appendChild(equipBtn);
+    }
+
+    row.append(info, actions);
     breedPartsList.appendChild(row);
   }
 }
@@ -3333,7 +3394,8 @@ pvpRoomStart.addEventListener('click', async () => {
 
 // ---- Leaving a battle: cash out the ending in-battle G into persistent M (20%, 50 minimum) ----
 
-exitBattleButton.addEventListener('click', async () => {
+gameMenuExit.addEventListener('click', async () => {
+  gameMenuModal.classList.add('hidden');
   const isPvpGuest = pvpMatch && !pvpMatch.isHost;
   if (!game && !isPvpGuest) return;
 
