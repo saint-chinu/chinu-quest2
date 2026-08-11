@@ -10,40 +10,103 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /pvpRooms/{roomCode} {
+      function signedIn() {
+        return request.auth != null;
+      }
+
       function isParticipant() {
-        return request.auth != null &&
+        return signedIn() &&
           (resource.data.hostUid == request.auth.uid || resource.data.guestUid == request.auth.uid);
       }
 
-      allow read: if isParticipant();
+      function isWaitingRoom() {
+        return resource.data.status == 'waiting' && resource.data.guestUid == null;
+      }
 
-      allow create: if request.auth != null &&
+      function isValidJoin() {
+        return signedIn() &&
+          isWaitingRoom() &&
+          request.resource.data.hostUid == resource.data.hostUid &&
+          request.resource.data.guestUid == request.auth.uid &&
+          request.resource.data.status == 'active' &&
+          request.resource.data.guestName is string &&
+          request.resource.data.guestName.size() > 0 &&
+          request.resource.data.guestName.size() <= 10 &&
+          request.resource.data.guestColor is int &&
+          request.resource.data.guestDeckList is list &&
+          request.resource.data.guestDeckList.size() == 40 &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['guestUid', 'guestName', 'guestColor', 'guestDeckList', 'status']);
+      }
+
+      function isValidGuestResponse() {
+        return resource.data.guestUid == request.auth.uid &&
+          request.resource.data.guestResponseId is int &&
+          request.resource.data.guestResponseId == resource.data.hostRequestId &&
+          request.resource.data.guestResponseId > resource.data.guestResponseId &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['guestResponse', 'guestResponseId']);
+      }
+
+      function isValidGuestAction() {
+        return resource.data.guestUid == request.auth.uid &&
+          request.resource.data.guestActionId is int &&
+          request.resource.data.guestActionId == resource.data.guestActionId + 1 &&
+          request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['guestAction', 'guestActionId']);
+      }
+
+      // A signed-in user may read a waiting room only when they already know
+      // its unguessable document ID. This is required by the join flow's getDoc.
+      allow read: if isParticipant() || (signedIn() && isWaitingRoom());
+
+      allow create: if signedIn() &&
         request.resource.data.hostUid == request.auth.uid &&
         request.resource.data.guestUid == null &&
-        request.resource.data.status == 'waiting';
+        request.resource.data.status == 'waiting' &&
+        request.resource.data.hostName is string &&
+        request.resource.data.hostName.size() > 0 &&
+        request.resource.data.hostName.size() <= 10 &&
+        request.resource.data.hostColor is int &&
+        request.resource.data.keys().hasOnly([
+          'hostUid', 'hostName', 'hostColor', 'mapId',
+          'guestUid', 'guestName', 'guestColor', 'guestDeckList',
+          'status', 'createdAt', 'publicState',
+          'hostRequestId', 'hostRequest',
+          'guestResponseId', 'guestResponse',
+          'guestActionId', 'guestAction'
+        ]);
 
       // ホストは全フィールド更新可。ゲストは「部屋への参加」または
       // 「guestResponse系フィールドのみの更新」だけが許される。
-      allow update: if request.auth != null && (
-        resource.data.hostUid == request.auth.uid ||
+      allow update: if signedIn() && (
         (
-          resource.data.guestUid == null &&
-          request.resource.data.guestUid == request.auth.uid &&
-          resource.data.status == 'waiting'
+          resource.data.hostUid == request.auth.uid &&
+          request.resource.data.hostUid == resource.data.hostUid &&
+          request.resource.data.guestUid == resource.data.guestUid
         ) ||
-        (
-          resource.data.guestUid == request.auth.uid &&
-          request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['guestResponse', 'guestResponseId', 'guestAction', 'guestActionId'])
-        )
+        isValidJoin() ||
+        isValidGuestResponse() ||
+        isValidGuestAction()
       );
 
-      allow delete: if request.auth != null && resource.data.hostUid == request.auth.uid;
+      allow delete: if signedIn() && resource.data.hostUid == request.auth.uid;
 
       match /private/{uid} {
-        allow read: if request.auth != null && request.auth.uid == uid;
+        function parentRoom() {
+          return get(/databases/$(database)/documents/pvpRooms/$(roomCode));
+        }
+
+        function uidIsParticipant() {
+          return parentRoom().data.hostUid == uid || parentRoom().data.guestUid == uid;
+        }
+
+        allow read: if request.auth != null && request.auth.uid == uid && uidIsParticipant();
         allow write: if request.auth != null &&
-          get(/databases/$(database)/documents/pvpRooms/$(roomCode)).data.hostUid == request.auth.uid;
+          parentRoom().data.hostUid == request.auth.uid && uidIsParticipant() &&
+          request.resource.data.keys().hasOnly(['hand']) &&
+          request.resource.data.hand is list &&
+          request.resource.data.hand.size() <= 7;
       }
     }
   }

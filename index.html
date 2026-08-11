@@ -155,7 +155,7 @@
         <p class="pg-label">または部屋コードで参加</p>
         <div class="pg-field">
           <label for="pvp-join-code">部屋コード</label>
-          <input id="pvp-join-code" type="text" maxlength="5" autocapitalize="characters" />
+          <input id="pvp-join-code" type="text" minlength="8" maxlength="8" pattern="[A-HJ-NP-Z2-9]{8}" autocapitalize="characters" autocomplete="off" />
         </div>
         <button id="pvp-join-button" class="pg-button">部屋に入る</button>
         <p id="pvp-menu-error" class="pg-error hidden"></p>

@@ -20,12 +20,14 @@ import {
 } from 'firebase/firestore';
 
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 紛らわしい0/O・1/I/Lは除外
-const ROOM_CODE_LENGTH = 5;
+const ROOM_CODE_LENGTH = 8;
 
 function randomRoomCode() {
+  const randomBytes = new Uint32Array(ROOM_CODE_LENGTH);
+  crypto.getRandomValues(randomBytes);
   let code = '';
   for (let i = 0; i < ROOM_CODE_LENGTH; i++) {
-    code += ROOM_CODE_CHARS[Math.floor(Math.random() * ROOM_CODE_CHARS.length)];
+    code += ROOM_CODE_CHARS[randomBytes[i] % ROOM_CODE_CHARS.length];
   }
   return code;
 }
@@ -67,13 +69,13 @@ export async function createPvpRoom({ name, color, mapId }) {
 /** Joins an existing waiting room as guest, submitting their deck choice in the same write (guests can only write further fields once past 'waiting' status per firestore.rules, so the deck has to ride along with the join itself). Throws a Japanese-language Error on failure (room not found / already full). */
 export async function joinPvpRoom(roomCodeInput, { name, color, deckList }) {
   const roomCode = roomCodeInput.trim().toUpperCase();
+  const uid = await ensurePvpUser();
   const ref = roomRef(roomCode);
   const snap = await getDoc(ref);
   if (!snap.exists()) throw new Error('その部屋コードは見つかりませんでした');
   const room = snap.data();
   if (room.status !== 'waiting' || room.guestUid) throw new Error('その部屋にはもう入れません（満員または対戦中）');
 
-  const uid = await ensurePvpUser();
   await updateDoc(ref, {
     guestUid: uid,
     guestName: name,

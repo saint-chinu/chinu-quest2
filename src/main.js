@@ -3186,12 +3186,18 @@ exitBattleButton.addEventListener('click', async () => {
   // ゲスト側はGameを持たないので、直近のpublicStateから自分のGを読む
   // （publicStateがまだ届いていない対戦開始直後は0扱い）。
   const endingG = isPvpGuest ? pvpMatch.lastCurrency ?? 0 : game.players[0].currency;
-  const earnedM = Math.max(Math.round(endingG * M_CONVERSION_RATE), M_CONVERSION_MIN);
-  const confirmed = await confirmYesNo(`対戦をやめますか？\n所持${endingG}Gの20%（${earnedM}M、下限50M）を獲得します。`);
+  const isPvp = Boolean(pvpMatch);
+  const earnedM = isPvp ? 0 : Math.max(Math.round(endingG * M_CONVERSION_RATE), M_CONVERSION_MIN);
+  const rewardMessage = isPvp
+    ? '対人戦の報酬は、サーバー側の検証機能を実装するまで付与されません。'
+    : `所持${endingG}Gの20%（${earnedM}M、下限50M）を獲得します。`;
+  const confirmed = await confirmYesNo(`対戦をやめますか？\n${rewardMessage}`);
   if (!confirmed) return;
 
-  currentCharacter.m += earnedM;
-  saveCharacter(currentUserId, currentCharacter);
+  if (earnedM > 0) {
+    currentCharacter.m += earnedM;
+    saveCharacter(currentUserId, currentCharacter);
+  }
 
   if (pvpMatch?.isHost) {
     pvpMatch.relay.destroy();

@@ -10,6 +10,7 @@
 // ビルドで設定値が無い場合はfirebaseReady=falseになり、対人戦系の呼び出
 // し元はそれを見て「準備中」表示にフォールバックできる。
 import { initializeApp } from 'firebase/app';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import { getAuth, signInAnonymously, onAuthStateChanged, connectAuthEmulator } from 'firebase/auth';
 import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 
@@ -23,6 +24,7 @@ const envConfig = {
 };
 
 const hasRealConfig = Boolean(envConfig.apiKey && envConfig.projectId);
+const appCheckSiteKey = import.meta.env.VITE_FIREBASE_APPCHECK_SITE_KEY;
 // firebase.jsonのemulators設定と対応するダミープロジェクトID・ポート。
 const DEMO_PROJECT_ID = 'demo-chinuquest2';
 const useEmulator = !hasRealConfig && import.meta.env.DEV;
@@ -36,6 +38,7 @@ export const firebaseReady = hasRealConfig || useEmulator;
 let app = null;
 let authInstance = null;
 let dbInstance = null;
+let appCheckInstance = null;
 
 if (firebaseReady) {
   app = initializeApp(firebaseConfig);
@@ -44,11 +47,20 @@ if (firebaseReady) {
   if (useEmulator) {
     connectAuthEmulator(authInstance, 'http://127.0.0.1:9099', { disableWarnings: true });
     connectFirestoreEmulator(dbInstance, '127.0.0.1', 8080);
+  } else if (appCheckSiteKey) {
+    appCheckInstance = initializeAppCheck(app, {
+      provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
+      isTokenAutoRefreshEnabled: true,
+    });
+  } else {
+    console.warn('Firebase App Check site key is not configured. Do not enable production enforcement until VITE_FIREBASE_APPCHECK_SITE_KEY is set.');
   }
 }
 
 export const auth = authInstance;
 export const db = dbInstance;
+export const appCheck = appCheckInstance;
+export const appCheckReady = Boolean(appCheckInstance) || useEmulator;
 
 let anonUserPromise = null;
 
