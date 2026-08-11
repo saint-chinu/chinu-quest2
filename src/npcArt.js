@@ -1,7 +1,7 @@
 // ストーリーモードの名前付きNPCの実素材（2026-08-12反映）。キーはstory.js
 // の`speaker`/opponent`name`と完全一致する文字列 - この名前だけを頼りに
 // 立ち絵・盤面駒アイコンを引く（story.js側にidを新設する必要はない）。
-// 一覧に無いキャラ（ヒトデ等）は今まで通りプレースホルダー表示のまま。
+// 一覧に無いキャラは今まで通りプレースホルダー表示のまま。
 import { assetUrl } from './assetUrl.js';
 
 export const NPC_PORTRAIT_URL = {
@@ -11,6 +11,7 @@ export const NPC_PORTRAIT_URL = {
   '紫の魔女ホフク': assetUrl('/images/npc-portraits/hofuku.png'),
   '少女A': assetUrl('/images/npc-portraits/wonderland-girl.png'),
   'ウサギン': assetUrl('/images/npc-portraits/usagin.webp'),
+  'ヒトデ': assetUrl('/images/npc-portraits/hitode.webp'),
 };
 
 // 盤面駒用は256×256の正方形に統一済み（GameScene.createPieceFromImageが
@@ -22,6 +23,7 @@ export const NPC_TOKEN_URL = {
   '紫の魔女ホフク': assetUrl('/images/npc-tokens/hofuku.png'),
   '少女A': assetUrl('/images/npc-tokens/wonderland-girl.png'),
   'ウサギン': assetUrl('/images/npc-tokens/usagin.webp'),
+  'ヒトデ': assetUrl('/images/npc-tokens/hitode.webp'),
 };
 
 const tokenImageCache = new Map();

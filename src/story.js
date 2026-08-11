@@ -17,16 +17,16 @@ export const STORY_STAGES = [
     key: 'hitode',
     title: '① ヒトデ戦',
     format: '1vs1',
+    // 目標G（2026-08-12実装）: 盤面右下に表示するそのステージのG目標値。
+    // 現状は表示のみで勝敗判定には使わない（main.jsのstage-goal-display）。
+    goalCurrency: 4000,
     intro: [
       { speaker: '主人公', text: '魚群の王を目指して、俺は旅に出る。' },
       { speaker: 'ヒトデ', text: 'おいおい正気か？ そんな無茶、俺が止めてやる。' },
       { speaker: '主人公', text: '止めても無駄だ。行かせてもらうぞ。' },
       { speaker: 'ヒトデ', text: '……わかった。だったら俺を倒していけ！' },
     ],
-    outro: [
-      { speaker: '???', text: '突然、急流が二人を飲み込んだ……！' },
-      { speaker: '主人公', text: 'うわあああ！？ ここは……北の海？' },
-    ],
+    outro: [{ speaker: 'ヒトデ', text: '俺の・・・屍を・・・超えていけ・・・ガクっ' }],
     opponents: [
       {
         name: 'ヒトデ',
@@ -66,6 +66,7 @@ export const STORY_STAGES = [
     key: 'madai',
     title: '② 暴君マダイ＆ニュウドウカジカ戦',
     format: '1vs1vs1',
+    goalCurrency: 5000,
     intro: [
       { speaker: '主人公', text: '流れ着いた先は、見知らぬ北の海だった。' },
       { speaker: '暴君マダイ', text: 'ここは俺の縄張りだ。よそ者は歓迎しないぜ。' },
@@ -120,6 +121,7 @@ export const STORY_STAGES = [
     key: 'budou',
     title: '③ ウサギン＆少女A vs 紫の魔女ホフク＆主人公',
     format: '2vs2',
+    goalCurrency: 7000,
     intro: [
       { speaker: '主人公', text: '砂浜で何やら揉め事か……？' },
       { speaker: 'ウサギン', text: 'てめえの魔法、目障りなんだよ！' },
@@ -197,6 +199,7 @@ export const STORY_STAGES = [
     key: 'danball',
     title: '④ ダンボール男戦',
     format: '1vs1',
+    goalCurrency: 10000,
     intro: [
       { speaker: '???', text: '世界が、暗転する。' },
       { speaker: 'ダンボール男', text: 'よくここまで来た。だがお前はずっと私の駒に過ぎなかった。' },

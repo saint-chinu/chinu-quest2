@@ -1250,6 +1250,15 @@ function animate() {
 function startBattle(character, storyOptions = {}) {
   currentMapId = storyOptions.mapId ?? null;
   applyMapBackground(currentMapId);
+  // 目標G表示（2026-08-12実装）: ストーリーの各ステージが持つgoalCurrency
+  // を盤面右下に表示するだけ（表示専用、勝敗判定には使わない）。CPU戦・
+  // 対人戦などgoalCurrency未指定の対戦では非表示のまま。
+  if (storyOptions.goalCurrency != null) {
+    stageGoalAmount.textContent = storyOptions.goalCurrency.toLocaleString('ja-JP');
+    stageGoalDisplay.classList.remove('hidden');
+  } else {
+    stageGoalDisplay.classList.add('hidden');
+  }
   scene = new GameScene(canvas);
   tiles = createBoard(storyOptions.mapId);
   scene.buildBoard(tiles);
@@ -1451,6 +1460,18 @@ const storyDialoguePortrait = document.getElementById('story-dialogue-portrait')
 const storyDialogueSpeaker = document.getElementById('story-dialogue-speaker');
 const storyDialogueText = document.getElementById('story-dialogue-text');
 const storyDialogueNext = document.getElementById('story-dialogue-next');
+const stageGoalDisplay = document.getElementById('stage-goal-display');
+const stageGoalAmount = document.getElementById('stage-goal-amount');
+const storyOverlayDialogue = document.getElementById('story-overlay-dialogue');
+const storyOverlayPortraitLeft = document.getElementById('story-overlay-portrait-left');
+const storyOverlayPortraitRight = document.getElementById('story-overlay-portrait-right');
+const storyOverlayImgLeft = document.getElementById('story-overlay-img-left');
+const storyOverlayImgRight = document.getElementById('story-overlay-img-right');
+const storyOverlayNameLeft = document.getElementById('story-overlay-name-left');
+const storyOverlayNameRight = document.getElementById('story-overlay-name-right');
+const storyOverlayBubble = document.getElementById('story-overlay-bubble');
+const storyOverlaySpeaker = document.getElementById('story-overlay-speaker');
+const storyOverlayText = document.getElementById('story-overlay-text');
 
 const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, catalogScreen, cardEditorScreen, deckScreen, deckSelectScreen, shopScreen, battleMenuScreen, breedScreen, stubScreen, storyScreen, storyDialogueScreen, pvpMenuScreen, pvpRoomScreen, pvpMapSelectScreen];
 function showScreen(el) {
@@ -1652,9 +1673,59 @@ function playDialogueLines(lines) {
   });
 }
 
+/**
+ * 盤面を隠さない会話オーバーレイ（2026-08-12実装、①ヒトデ戦専用）。
+ * showScreen()もappEl/preGameの表示切り替えも一切行わない - 呼び出し時点
+ * で#appが既に表示されている前提で、その上に重ねるだけ。左右どちらの
+ * 立ち絵か（leftName/rightNameとの一致）で吹き出しの位置と立ち絵の
+ * ハイライトを切り替える。全面がクリック領域なので、表示中は盤面側の
+ * 操作（サイコロ等）を実質ブロックする。
+ */
+function playOverlayDialogueLines(lines, { leftName, leftPortraitUrl, rightName, rightPortraitUrl }) {
+  storyOverlayImgLeft.src = leftPortraitUrl || '';
+  storyOverlayNameLeft.textContent = leftName;
+  storyOverlayImgRight.src = rightPortraitUrl || '';
+  storyOverlayNameRight.textContent = rightName;
+
+  return new Promise((resolve) => {
+    let i = 0;
+    function showLine() {
+      const line = lines[i];
+      storyOverlaySpeaker.textContent = line.speaker;
+      storyOverlayText.textContent = line.text;
+      const side = line.speaker === leftName ? 'left' : line.speaker === rightName ? 'right' : null;
+      storyOverlayPortraitLeft.classList.toggle('active', side === 'left');
+      storyOverlayPortraitRight.classList.toggle('active', side === 'right');
+      storyOverlayBubble.classList.toggle('side-left', side === 'left');
+      storyOverlayBubble.classList.toggle('side-right', side === 'right');
+    }
+    function onAdvance() {
+      i += 1;
+      if (i >= lines.length) {
+        storyOverlayDialogue.removeEventListener('click', onAdvance);
+        storyOverlayDialogue.classList.add('hidden');
+        resolve();
+        return;
+      }
+      showLine();
+    }
+    storyOverlayDialogue.addEventListener('click', onAdvance);
+    storyOverlayDialogue.classList.remove('hidden');
+    showLine();
+  });
+}
+
 async function playStoryStage(index) {
+  const stage = STORY_STAGES[index];
+  // ①ヒトデ戦だけ盤面を隠さない会話演出（2026-08-12実装）: 先にデッキだけ
+  // 選び、盤面表示後にstartStoryBattle側でオーバーレイ会話を挟む。
+  if (stage.key === 'hitode') {
+    const chosenDeck = await promptDeckSelection();
+    await startStoryBattle(index, chosenDeck.deckList, false);
+    return;
+  }
   showScreen(storyDialogueScreen);
-  await playDialogueLines(STORY_STAGES[index].intro);
+  await playDialogueLines(stage.intro);
   const chosenDeck = await promptDeckSelection();
   await startStoryBattle(index, chosenDeck.deckList, false);
 }
@@ -1722,9 +1793,11 @@ async function startStoryBattle(index, heroDeckList, isReplay) {
   activeStoryStageIndex = index;
 
   let iconImage = null;
+  let iconDataUrl = null;
   if (currentCharacter.iconIndex != null) {
     const icons = await loadPlayerIcons();
     iconImage = icons[currentCharacter.iconIndex]?.canvas ?? null;
+    iconDataUrl = icons[currentCharacter.iconIndex]?.dataUrl ?? null;
   }
 
   const playerConfigs = await buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList);
@@ -1734,9 +1807,22 @@ async function startStoryBattle(index, heroDeckList, isReplay) {
   startBattle(currentCharacter, {
     storyMode: true,
     mapId: stage.key,
+    goalCurrency: stage.goalCurrency,
     playerConfigs,
     onStoryBattleEnd: (result) => (isReplay ? handleStoryReplayEnd(index, result) : handleStoryBattleEnd(index, result)),
   });
+
+  // ①ヒトデ戦だけ: 盤面が表示された直後、その上に会話をオーバーレイする
+  // （盤面は隠さない）。サイコロ等の操作はオーバーレイの全面クリック領域が
+  // 塞ぐので、会話が終わるまで実質進行できない。
+  if (!isReplay && stage.key === 'hitode') {
+    await playOverlayDialogueLines(stage.intro, {
+      leftName: 'ヒトデ',
+      leftPortraitUrl: NPC_PORTRAIT_URL['ヒトデ'],
+      rightName: currentCharacter.name,
+      rightPortraitUrl: iconDataUrl,
+    });
+  }
 }
 
 /** playStoryReplay()の決着後: 勝っても負けてもstoryProgress/rewardには一切触れない（何度でも遊べるおまけ戦闘のため）。短い一言だけ挟んでステージ一覧に戻る。 */
@@ -1758,9 +1844,16 @@ async function handleStoryReplayEnd(index, { won }) {
 
 async function handleStoryBattleEnd(index, { won }) {
   const stage = STORY_STAGES[index];
-  game = undefined;
-  appEl.classList.add('hidden');
-  preGame.classList.remove('hidden');
+  // ①ヒトデ戦の勝利時だけ、盤面をまだ隠さずに決着直後の会話をオーバーレイ
+  // で見せる（startStoryBattleのintro演出と対になる終幕演出）。それ以外
+  // （敗北時・他ステージ）は今まで通り即座に盤面を閉じてからの全画面会話。
+  const useHitodeOverlay = stage.key === 'hitode' && won;
+
+  if (!useHitodeOverlay) {
+    game = undefined;
+    appEl.classList.add('hidden');
+    preGame.classList.remove('hidden');
+  }
   activeStoryStageIndex = null;
 
   if (!won) {
@@ -1781,6 +1874,21 @@ async function handleStoryBattleEnd(index, { won }) {
     currentCharacter.storyProgress = index + 1;
   }
   saveCharacter(currentUserId, currentCharacter);
+
+  if (useHitodeOverlay) {
+    const icons = currentCharacter.iconIndex != null ? await loadPlayerIcons() : null;
+    await playOverlayDialogueLines(stage.outro, {
+      leftName: 'ヒトデ',
+      leftPortraitUrl: NPC_PORTRAIT_URL['ヒトデ'],
+      rightName: currentCharacter.name,
+      rightPortraitUrl: icons?.[currentCharacter.iconIndex]?.dataUrl ?? null,
+    });
+    game = undefined;
+    appEl.classList.add('hidden');
+    preGame.classList.remove('hidden');
+    showStoryScreen();
+    return;
+  }
 
   showScreen(storyDialogueScreen);
   await playDialogueLines(stage.outro);
