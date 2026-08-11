@@ -345,6 +345,11 @@
   - `battle-theme.mp3`: バトルシーン用（30秒ループ想定）
   - `boss-theme.mp3`: ④ダンボール男戦（ラスボス）専用の盤面BGM。`main.js`が現在の対戦の`mapId`を`currentMapId`というモジュール変数で覚えておき、盤面BGMを鳴らす箇所（バトル開始時・バトルシーン終了後の3箇所、全て`playBoardOrBossTheme()`に統一）で`mapId==='danball'`ならボス曲、それ以外なら通常の盤面曲を選ぶ。バトルシーン自体（`playBattleTheme()`）は専用のボス戦闘曲が無いため通常のまま
   - PvPで④のマップを選んだ場合もゲスト側含め同じ分岐が効く（`pvpLastRoom.mapId`から`currentMapId`を設定）
+- **ストーリー名前付きNPCの立ち絵・盤面駒（2026-08-12実装）**: `src/npcArt.js`が名前文字列（story.jsの`speaker`/opponent`name`と完全一致）から実素材のURLを引く小さなルックアップ表。対応済み5キャラ: ダンボール男・暴君マダイ・ニュウドウカジカ（お肉）・紫の魔女ホフク・某不思議の国の少女（ヒトデ・農家のウサギ等は未対応でプレースホルダーのまま）
+  - **立ち絵**（`public/images/npc-portraits/`）: 全身立ち絵、背景透過PNG。`#story-dialogue-screen`に追加した`#story-dialogue-portrait`が、`playDialogueLines`で1行進むたびに`speaker`名からルックアップして表示/非表示を切り替える（該当が無ければ非表示のまま、今まで通りテキストのみの表示）
+  - **盤面駒**（`public/images/npc-tokens/`）: 256×256の正方形、キャラごとの縦横比を保ったまま底辺揃えで配置済み（`GameScene.createPieceFromImage`が前提とする1.6×1.6の正方形スプライトに合わせた設計）。`Game`の駒生成を汎用化 - 以前は人間プレイヤーの`humanIconImage`だけが特別扱いだったが、`player.iconImage`があれば（CPU/人間問わず）`createPieceFromImage`を使うよう統一した。`main.js`の`buildBattlePlayerConfigs`が非同期になり（`npcArt.js`の`loadNpcTokenImage`がpromise）、対応キャラのally/opponent configにだけ`iconImage`を設定する
+  - 立ち絵・盤面駒とも元はAI生成の「フィギュア＋カードのモックアップ」6枚1組の合成画像から、背景（白/薄灰色）をflood-fillで透過にし、隣のキャラの絵が数px混入していた箇所を手作業で追加トリミングして作成した（`rembg`のような汎用背景除去だと枠やカード台座まで一体化していて使えなかったため、単色背景の別バージョンをユーザーに作り直してもらう方針にした）
+- **カード共通プレースホルダー画像（2026-08-12実装）**: `src/cardArt.js`の`defaultCardArtUrl(card)`が、カードに`imageDataUrl`（カードエディタで個別に設定した画像）が無い場合のフォールバック画像を種別・属性から返す（`public/images/card-art/`、モンスターは属性ごとに5種、武器防具・スペルはそれぞれ1種の計7枚）。1枚ずつ個別に画像を用意するのは非現実的という判断で、当面は全カード共通のこのフォールバックを使う（`renderCardEl`一箇所に集約してあるので、カード一覧・デッキ編成・手札・カード詳細ポップアップ・バトルシーン等どの画面にも自動で反映される）。将来カードごとの専用素材ができたら、そのカードに`imageDataUrl`を持たせるだけで自然に上書きされる
 
 ## フェーズ5: 対戦モード
 - Firebaseを使ったリアルタイムマルチプレイ

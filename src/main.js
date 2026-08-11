@@ -19,6 +19,8 @@ import {
   buildBreedCardDef,
 } from './breedParts.js';
 import { STORY_STAGES, isStageUnlocked, isStageCleared } from './story.js';
+import { NPC_PORTRAIT_URL, loadNpcTokenImage } from './npcArt.js';
+import { defaultCardArtUrl } from './cardArt.js';
 import { firebaseReady } from './firebase.js';
 import {
   createPvpRoom,
@@ -678,8 +680,9 @@ function renderPlayerPanels(players, checkpointNumbers) {
 
 /** Rarity badge (top-left) + type icon (top-right) + name, over the element/type background color. */
 function renderCardEl(el, card) {
-  el.style.background = card.imageDataUrl
-    ? `linear-gradient(rgba(0,0,0,.12), rgba(0,0,0,.72)), url("${card.imageDataUrl}") center / cover`
+  const artUrl = card.imageDataUrl || defaultCardArtUrl(card);
+  el.style.background = artUrl
+    ? `linear-gradient(rgba(0,0,0,.12), rgba(0,0,0,.72)), url("${artUrl}") center / cover`
     : cardColor(card);
   el.replaceChildren();
 
@@ -1411,6 +1414,7 @@ const storyScreen = document.getElementById('story-screen');
 const storyStageList = document.getElementById('story-stage-list');
 const storyBackButton = document.getElementById('story-back');
 const storyDialogueScreen = document.getElementById('story-dialogue-screen');
+const storyDialoguePortrait = document.getElementById('story-dialogue-portrait');
 const storyDialogueSpeaker = document.getElementById('story-dialogue-speaker');
 const storyDialogueText = document.getElementById('story-dialogue-text');
 const storyDialogueNext = document.getElementById('story-dialogue-next');
@@ -1597,6 +1601,9 @@ function playDialogueLines(lines) {
     function showLine() {
       storyDialogueSpeaker.textContent = lines[i].speaker;
       storyDialogueText.textContent = lines[i].text;
+      const portraitUrl = NPC_PORTRAIT_URL[lines[i].speaker];
+      storyDialoguePortrait.classList.toggle('hidden', !portraitUrl);
+      if (portraitUrl) storyDialoguePortrait.src = portraitUrl;
     }
     function onNext() {
       i += 1;
@@ -1637,7 +1644,7 @@ async function playStoryReplay(index) {
  * 値にフォールバックする（例: ダンボール男戦の再戦はopponents/ally/format
  * を一切上書きせず、introだけ差し替えた1vs1のまま）。
  */
-function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList) {
+async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList) {
   const ally = variant.ally ?? stage.ally;
   const opponents = variant.opponents ?? stage.opponents;
   const heroAllianceId = variant.heroAllianceId ?? stage.heroAllianceId ?? null;
@@ -1660,6 +1667,7 @@ function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList) {
       color: allyDef.color,
       allianceId: heroAllianceId,
       deckList: buildThemedDeckList(allyDef.theme),
+      iconImage: await loadNpcTokenImage(allyDef.name),
     });
   }
   for (const opponent of opponents) {
@@ -1669,6 +1677,7 @@ function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList) {
       color: opponent.color,
       allianceId: enemyAllianceId,
       deckList: buildThemedDeckList(opponent.theme),
+      iconImage: await loadNpcTokenImage(opponent.name),
     });
   }
   return configs;
@@ -1685,12 +1694,14 @@ async function startStoryBattle(index, heroDeckList, isReplay) {
     iconImage = icons[currentCharacter.iconIndex]?.canvas ?? null;
   }
 
+  const playerConfigs = await buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList);
+
   preGame.classList.add('hidden');
   appEl.classList.remove('hidden');
   startBattle(currentCharacter, {
     storyMode: true,
     mapId: stage.key,
-    playerConfigs: buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList),
+    playerConfigs,
     onStoryBattleEnd: (result) => (isReplay ? handleStoryReplayEnd(index, result) : handleStoryBattleEnd(index, result)),
   });
 }

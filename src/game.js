@@ -151,11 +151,6 @@ export class Game {
       { name: 'CPU', isCPU: true, color: 0xe63946, allianceId: null },
     ];
 
-    // A canvas cropped from the player-icon sheet (see iconSheet.js) for
-    // the human player's board piece - null falls back to the plain
-    // colored-circle token (always true for CPU, which has no character).
-    this.humanIconImage = resolvedConfigs.find((c) => !c.isCPU)?.iconImage ?? null;
-
     // tileId indexes into `tiles` (ids are assigned sequentially at parse
     // time, so id === array index). previousTileId excludes backtracking
     // when picking the next step at a branch (see _movePlayer) - null at
@@ -168,6 +163,11 @@ export class Game {
       tileId: 0,
       previousTileId: null,
       color: cfg.color,
+      // 盤面駒の見た目に使うcanvas - null なら色付き丸のプレースホルダー
+      // 駒になる（init()参照）。人間プレイヤーのアイコン選択（iconSheet.js）
+      // だけでなく、ストーリーの名前付きNPC（npcArt.js経由）も同じ仕組み
+      // に乗る - CPU/人間を問わずcfg.iconImageさえ入っていれば使われる。
+      iconImage: cfg.iconImage ?? null,
       allianceId: cfg.allianceId ?? null,
       deck: cfg.deckList ? Deck.fromCardList(cfg.deckList) : new Deck(buildStarterExtraCards(cfg.deckVariant)),
       hand: [],
@@ -203,8 +203,8 @@ export class Game {
   init() {
     for (const player of this.players) {
       const pos = this.tiles[player.tileId].position;
-      player.mesh = !player.isCPU && this.humanIconImage
-        ? this.scene.createPieceFromImage(this.humanIconImage, pos)
+      player.mesh = player.iconImage
+        ? this.scene.createPieceFromImage(player.iconImage, pos)
         : this.scene.createPiece(player.color, pos);
       for (let i = 0; i < STARTING_HAND_SIZE; i++) {
         const card = player.deck.draw();

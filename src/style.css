@@ -417,6 +417,16 @@ html, body {
   text-transform: uppercase;
 }
 
+#story-dialogue-portrait {
+  max-height: 46vh;
+  max-width: 80vw;
+  object-fit: contain;
+}
+
+#story-dialogue-portrait.hidden {
+  display: none;
+}
+
 #story-dialogue-box {
   width: min(600px, 90vw);
   min-height: 140px;
