@@ -75,15 +75,49 @@
       </div>
 
       <div id="hub-screen" class="pg-screen hidden">
-        <h2 id="hub-welcome" class="pg-title"></h2>
-        <div id="hub-tiles">
-          <button class="hub-tile" data-mode="story">ストーリー</button>
-          <button class="hub-tile" data-mode="battle">対戦</button>
-          <button class="hub-tile" data-mode="deck">デッキ</button>
-          <button class="hub-tile" data-mode="catalog">カード図鑑</button>
-          <button class="hub-tile" data-mode="shop">ショップ</button>
-          <button class="hub-tile" data-mode="breed">ブリード</button>
-          <button id="card-editor-hub" class="hub-tile hidden" data-mode="card-editor">カード作成</button>
+        <div class="hub-shell">
+          <header class="hub-header">
+            <p class="hub-eyebrow">CHINU QUEST 2</p>
+            <h2 id="hub-welcome" class="pg-title"></h2>
+            <p class="hub-guidance">次の冒険を選んでください</p>
+          </header>
+          <div id="hub-tiles">
+            <button class="hub-tile" data-mode="story">
+              <span class="hub-tile-icon" aria-hidden="true">◆</span>
+              <span class="hub-tile-copy"><strong>ストーリー</strong><small>世界を巡る冒険へ</small></span>
+              <span class="hub-tile-arrow" aria-hidden="true">›</span>
+            </button>
+            <button class="hub-tile" data-mode="battle">
+              <span class="hub-tile-icon" aria-hidden="true">⚔</span>
+              <span class="hub-tile-copy"><strong>対戦</strong><small>デッキを手に勝負</small></span>
+              <span class="hub-tile-arrow" aria-hidden="true">›</span>
+            </button>
+            <button class="hub-tile" data-mode="deck">
+              <span class="hub-tile-icon" aria-hidden="true">▣</span>
+              <span class="hub-tile-copy"><strong>デッキ</strong><small>カードを編成する</small></span>
+              <span class="hub-tile-arrow" aria-hidden="true">›</span>
+            </button>
+            <button class="hub-tile" data-mode="catalog">
+              <span class="hub-tile-icon" aria-hidden="true">▤</span>
+              <span class="hub-tile-copy"><strong>カード図鑑</strong><small>集めたカードを確認</small></span>
+              <span class="hub-tile-arrow" aria-hidden="true">›</span>
+            </button>
+            <button class="hub-tile" data-mode="shop">
+              <span class="hub-tile-icon" aria-hidden="true">✦</span>
+              <span class="hub-tile-copy"><strong>ショップ</strong><small>パック購入・カード売却</small></span>
+              <span class="hub-tile-arrow" aria-hidden="true">›</span>
+            </button>
+            <button class="hub-tile" data-mode="breed">
+              <span class="hub-tile-icon" aria-hidden="true">⌬</span>
+              <span class="hub-tile-copy"><strong>ブリード</strong><small>新たな力を生み出す</small></span>
+              <span class="hub-tile-arrow" aria-hidden="true">›</span>
+            </button>
+            <button id="card-editor-hub" class="hub-tile hidden" data-mode="card-editor">
+              <span class="hub-tile-icon" aria-hidden="true">✎</span>
+              <span class="hub-tile-copy"><strong>カード作成</strong><small>管理者用エディター</small></span>
+              <span class="hub-tile-arrow" aria-hidden="true">›</span>
+            </button>
+          </div>
         </div>
       </div>
 
