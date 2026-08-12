@@ -702,10 +702,18 @@ Node単体テスト13件（S以上のレアリティで属性不一致の土地�
 - 3連鎖が無くても、相手がレベル3以上の土地を持っていればそれを無色化する
 - どちらの条件も満たさなければ何もしない
 
-`_runCPUTurn`では`_cpuMaybeFixLandElementSpell`（自分の土地を直す）→`_cpuMaybeUseDisruptionSpell`（相手の土地を崩す）→`_cpuMaybeUseDiceSpell`の順で判断する（1ターン1枚の制約により、どれか1つが発動すれば後続はスキップされる）。
+`_runCPUTurn`では`_cpuMaybeFixLandElementSpell`（自分の土地を直す）→`_cpuMaybeUseDisruptionSpell`（相手の土地を崩す）→`_cpuMaybeUseSplitEvenlySpell`（山分け）→`_cpuMaybeUseDiceSpell`の順で判断する（1ターン1枚の制約により、どれか1つが発動すれば後続はスキップされる）。
 
 ### 検証
 Node単体テスト13件（相手のLv3+土地への使用、相手の3連鎖への使用、どちらも無ければ未使用、自分のLv3+/3連鎖には絶対に使わないこと、`_cpuMaybeFixLandElementSpell`側で無色属性の不一致に対して誤って使われないこと、同盟相手には使わないこと、所持G不足でのスキップ）で全パス。実機でも実際の`Game`インスタンス＋実際のThree.jsシーンを構築して`_cpuMaybeUseDisruptionSpell`を直接叩き、相手のLv3+土地が正しく無色化されることを確認した。
+
+## CPU AI: 山分けはコスト込みで+100G以上の時だけ使うよう実装（2026-08-12実装）
+山分け（`redistributeGoldEvenly`、場の手持ちG合計を全員で均等に分配し直す）は、それまでの「手持ちを均一にするスペル」全般ではなくこの1種のみを指す。CPUは自分の最終所持Gが、スペルのコスト（100G）を支払った後と比べて**+100G以上増える場合にのみ**使用する（損をする、あるいは得でも100G未満の増加なら使わない）。
+
+`_cpuCastSpell`はコストを効果適用より先に差し引く実装のため（`useSpell`の人間向けフローと同じ順序）、判断時点で「コストを払った後の全員の合計÷人数」を先にシミュレートしてから、自分の現在の所持G（コスト差引前）と比較する形にした（`_cpuMaybeUseSplitEvenlySpell`）。`_runCPUTurn`では`_cpuMaybeUseDisruptionSpell`の次、`_cpuMaybeUseDiceSpell`の前に判断する。
+
+### 検証
+Node単体テスト15件（+100G以上の増加で発動、ちょうど+100Gの境界値で発動、+99Gでは発動しないこと、自分が既に金持ちで損をするケースでは絶対に使わないこと、3人以上でも計算が正しいこと、spellUsedThisTurn/所持G不足でのスキップ、手札に無ければ何もしないこと）で全パス。実機でも実際の`Game`インスタンス＋実際のThree.jsシーンを構築して`_cpuMaybeUseSplitEvenlySpell`を直接叩き、100G→550Gへの再分配が正しく発動することを確認した。
 
 ## フェーズ5: 対戦モード
 - Firebaseを使ったリアルタイムマルチプレイ

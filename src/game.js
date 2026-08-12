@@ -2898,9 +2898,33 @@ export class Game {
     if (!this.currentPlayer.isCPU) return;
     await this._cpuMaybeFixLandElementSpell(this.currentPlayer);
     await this._cpuMaybeUseDisruptionSpell(this.currentPlayer);
+    await this._cpuMaybeUseSplitEvenlySpell(this.currentPlayer);
     await this._cpuMaybeUseDiceSpell(this.currentPlayer);
     const steps = await this.onCpuRoll();
     this.rollDice(steps);
+  }
+
+  /**
+   * 山分け（redistributeGoldEvenly、場の手持ちG合計を全員で均等に分配し
+   * 直す）のCPU使用判断。コスト込みで自分の最終所持Gが今より100G以上
+   * 増える場合だけ使う（コストは_cpuCastSpellが効果適用より先に差し引く
+   * ので、判断時点ではまだ払っていないコストを先に引いた上でシミュレート
+   * する）。
+   */
+  async _cpuMaybeUseSplitEvenlySpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'redistributeGoldEvenly');
+    if (!card) return;
+    const cost = card.cost || 0;
+    if (player.currency < cost) return;
+
+    const alive = this.players.filter((p) => !p.defeated);
+    const totalAfterCost = alive.reduce((sum, p) => sum + p.currency, 0) - cost;
+    const share = Math.floor(totalAfterCost / alive.length);
+    const netGain = share - player.currency;
+    if (netGain >= 100) {
+      await this._cpuCastSpell(player, card, {});
+    }
   }
 
   /**
