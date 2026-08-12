@@ -2882,7 +2882,11 @@ function showDeckScreen() {
 
     const category = DECK_CATEGORY_TABS.find((item) => item.id === deckActiveCategory) || DECK_CATEGORY_TABS[0];
     deckCatalogList.replaceChildren();
-    for (const def of catalog.filter((card) => category.test(card) && !deckHiddenRarities.has(card.rarity))) {
+    for (const def of catalog.filter((card) =>
+      category.test(card)
+      && !deckHiddenRarities.has(card.rarity)
+      && ownedCountOf(cardKey(card)) > 0
+    )) {
       const key = cardKey(def);
       const owned = ownedCountOf(key);
       const count = deckWorkingCounts.get(key) || 0;
