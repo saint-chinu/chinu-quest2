@@ -1149,6 +1149,26 @@ html, body {
   color: #fff;
 }
 
+#land-info-button {
+  position: absolute;
+  right: 16px;
+  bottom: 84px;
+  z-index: 15;
+  pointer-events: auto;
+  border: 1px solid rgba(110, 231, 217, 0.65);
+  border-radius: 10px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: bold;
+  background: rgba(16, 40, 45, 0.82);
+  color: #dffffb;
+}
+
+#land-info-button.active {
+  background: #2ec4b6;
+  color: #06231f;
+}
+
 #game-menu-modal,
 #help-modal {
   position: absolute;

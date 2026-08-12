@@ -1,7 +1,7 @@
 import './style.css';
 import './pwa.js';
 import { GameScene, PIECE_REST_Y } from './scene.js';
-import { createBoard, MAPS, createMapThumbnailCanvas, getMapBackground } from './board.js';
+import { createBoard, MAPS, TileType, createMapThumbnailCanvas, getMapBackground } from './board.js';
 import { Game } from './game.js';
 import { CardType, CARD_COLOR, ELEMENT_LABEL, Element, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
 import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, buildCharacterDeckList, ITEM_CATALOG } from './battleCards.js';
@@ -1503,8 +1503,8 @@ function startBattle(character, storyOptions = {}) {
 const preGame = document.getElementById('pre-game');
 const appEl = document.getElementById('app');
 const menuButton = document.getElementById('menu-button');
+const landInfoButton = document.getElementById('land-info-button');
 const gameMenuModal = document.getElementById('game-menu-modal');
-const gameMenuLandInfo = document.getElementById('game-menu-land-info');
 const gameMenuMute = document.getElementById('game-menu-mute');
 const gameMenuHelp = document.getElementById('game-menu-help');
 const gameMenuBan = document.getElementById('game-menu-ban');
@@ -1636,31 +1636,74 @@ helpClose.addEventListener('click', () => {
   helpModal.classList.add('hidden');
 });
 
-/** メニューの「土地情報」: 自分が所有する土地を一覧から選んで情報を見る（何度でも選び直せる、「やめる」で閉じる）。既存のonPickAbilityTarget/onShowTileInfo用のモーダルをそのまま再利用する。 */
-async function showLandInfoFromMenu() {
-  gameMenuModal.classList.add('hidden');
-  if (!game) {
-    logEl.textContent = '対人戦のゲスト側では現在利用できません';
-    return;
+/**
+ * HUDの独立「土地情報」ボタン。現在の手番や所有者に関係なく自由カメラへ
+ * 切り替え、盤面上の任意の土地を直接タップして何度でも詳細を確認できる。
+ */
+function showLandInfoCamera() {
+  if (!scene || !tiles?.length || !cameraWorkOverlay.classList.contains('hidden')) return;
+  const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+  cameraWorkOverlay.classList.remove('hidden');
+  landInfoButton.classList.add('active');
+  logEl.textContent = '確認したい土地をタップしてください';
+
+  const pan = (direction) => () => scene.panByDirection(direction);
+  const onUp = pan('up');
+  const onDown = pan('down');
+  const onLeft = pan('left');
+  const onRight = pan('right');
+
+  function tileSummaryForInfo(tile) {
+    if (game) return game.getTileSummary(tile);
+    return {
+      id: tile.id,
+      type: tile.type,
+      element: tile.element,
+      level: tile.level || 1,
+      ownerName: tile.owner == null ? null : `プレイヤー${tile.owner + 1}`,
+      unitName: tile.unit?.def?.name || null,
+      unitAtk: tile.unit?.def?.atk ?? null,
+      unitHp: tile.unit?.currentHp ?? null,
+    };
   }
-  const player = game.players[0];
-  for (;;) {
-    const ownedTiles = tiles.filter((t) => t.owner === player.id);
-    if (ownedTiles.length === 0) {
-      logEl.textContent = '所有している土地がありません';
-      return;
-    }
-    const summaries = ownedTiles.map((t) => {
-      const summary = game.getTileSummary(t);
-      return { ...summary, label: `${ELEMENT_LABEL[t.element]}の土地（Lv${summary.level}）${summary.unitName ? ' - ' + summary.unitName : ''}` };
-    });
-    const pickedId = await promptPickAbilityTarget(summaries);
-    if (pickedId == null) return;
-    const tile = tiles.find((t) => t.id === pickedId);
-    await promptShowTileInfo(game.getTileSummary(tile));
+
+  function onCanvasClick(event) {
+    const rect = canvas.getBoundingClientRect();
+    const ndcX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    const ndcY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    const tile = scene.pickTileAt(ndcX, ndcY, tiles);
+    if (!tile || tile.type !== TileType.LAND) return;
+    tileInfoText.textContent = tileSummaryText(tileSummaryForInfo(tile));
+    tileInfoModal.classList.remove('hidden');
   }
+
+  function onInfoClose() {
+    tileInfoModal.classList.add('hidden');
+  }
+
+  function finish() {
+    cameraWorkOverlay.classList.add('hidden');
+    tileInfoModal.classList.add('hidden');
+    landInfoButton.classList.remove('active');
+    canvas.removeEventListener('click', onCanvasClick);
+    camArrowUp.removeEventListener('click', onUp);
+    camArrowDown.removeEventListener('click', onDown);
+    camArrowLeft.removeEventListener('click', onLeft);
+    camArrowRight.removeEventListener('click', onRight);
+    camWorkBack.removeEventListener('click', finish);
+    tileInfoClose.removeEventListener('click', onInfoClose);
+    scene.setFocusImmediate(savedFocus.x, savedFocus.z);
+  }
+
+  canvas.addEventListener('click', onCanvasClick);
+  camArrowUp.addEventListener('click', onUp);
+  camArrowDown.addEventListener('click', onDown);
+  camArrowLeft.addEventListener('click', onLeft);
+  camArrowRight.addEventListener('click', onRight);
+  camWorkBack.addEventListener('click', finish);
+  tileInfoClose.addEventListener('click', onInfoClose);
 }
-gameMenuLandInfo.addEventListener('click', showLandInfoFromMenu);
+landInfoButton.addEventListener('click', showLandInfoCamera);
 const loginScreen = document.getElementById('login-screen');
 const loginId = document.getElementById('login-id');
 const loginPassword = document.getElementById('login-password');
