@@ -357,6 +357,7 @@ function promptLandSubmenu(tile) {
 
 /** 「特殊能力」の対象選び: 射程内の敵モンスターを一覧表示、押すと即決定。「やめる」でnull（能力不使用のまま土地サブメニューへ戻る）。 */
 function promptPickAbilityTarget(targets) {
+  if (targets.some((target) => Array.isArray(target.effectAreaIds))) return promptPickAreaTarget(targets);
   return new Promise((resolve) => {
     function cleanup(result) {
       abilityTargetModal.classList.add('hidden');
@@ -376,6 +377,59 @@ function promptPickAbilityTarget(targets) {
     }
     abilityTargetModal.classList.remove('hidden');
     abilityTargetCancel.addEventListener('click', onCancel);
+  });
+}
+
+/** 範囲土地スペル: 盤面をタップし、白点滅する効果範囲を見てから確定する。 */
+function promptPickAreaTarget(targets) {
+  return new Promise((resolve) => {
+    const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+    const byId = new Map(targets.map((target) => [target.id, target]));
+    let stopAreaHighlight = null;
+    cameraWorkOverlay.classList.remove('hidden');
+
+    async function onCanvasClick(e) {
+      const rect = canvas.getBoundingClientRect();
+      const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      const tile = scene.pickTileAt(ndcX, ndcY, tiles);
+      const target = tile && byId.get(tile.id);
+      if (!target) return;
+      canvas.removeEventListener('click', onCanvasClick);
+      stopAreaHighlight?.();
+      stopAreaHighlight = startTileHighlight(target.effectAreaIds, 0xffffff);
+      await scene.focusAndZoom(tile.position.x, tile.position.z, 1.1, 260);
+      const confirmed = await confirmYesNo('ここでよろしいですか？');
+      stopAreaHighlight?.();
+      stopAreaHighlight = null;
+      if (confirmed) finish(target.id);
+      else canvas.addEventListener('click', onCanvasClick);
+    }
+
+    const onUp = () => scene.panByDirection('up');
+    const onDown = () => scene.panByDirection('down');
+    const onLeft = () => scene.panByDirection('left');
+    const onRight = () => scene.panByDirection('right');
+    const onBack = () => finish(null);
+
+    function finish(result) {
+      stopAreaHighlight?.();
+      cameraWorkOverlay.classList.add('hidden');
+      canvas.removeEventListener('click', onCanvasClick);
+      camArrowUp.removeEventListener('click', onUp);
+      camArrowDown.removeEventListener('click', onDown);
+      camArrowLeft.removeEventListener('click', onLeft);
+      camArrowRight.removeEventListener('click', onRight);
+      camWorkBack.removeEventListener('click', onBack);
+      scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 260).then(() => resolve(result));
+    }
+
+    canvas.addEventListener('click', onCanvasClick);
+    camArrowUp.addEventListener('click', onUp);
+    camArrowDown.addEventListener('click', onDown);
+    camArrowLeft.addEventListener('click', onLeft);
+    camArrowRight.addEventListener('click', onRight);
+    camWorkBack.addEventListener('click', onBack);
   });
 }
 
@@ -570,7 +624,7 @@ function promptShowTileInfo(tile) {
 const BROWSE_HIGHLIGHT_COLOR = 0xfff2a8;
 
 /** Slow blink/faint-glow on the given tiles' meshes (via emissive), until the returned stop function is called. */
-function startTileHighlight(tileIds) {
+function startTileHighlight(tileIds, color = BROWSE_HIGHLIGHT_COLOR) {
   const meshes = tileIds.map((id) => tiles[id]?.mesh).filter(Boolean);
   const start = performance.now();
   let raf;
@@ -578,7 +632,7 @@ function startTileHighlight(tileIds) {
     const t = (now - start) / 1000;
     const intensity = 0.35 + 0.25 * Math.sin(t * 2.4);
     for (const mesh of meshes) {
-      mesh.material.emissive.setHex(BROWSE_HIGHLIGHT_COLOR);
+      mesh.material.emissive.setHex(color);
       mesh.material.emissiveIntensity = intensity;
     }
     raf = requestAnimationFrame(frame);
@@ -1060,6 +1114,13 @@ async function promptTargetEffect({ tileId = null, playerId = null, position = n
 async function promptTurnFocus({ position }) {
   if (!scene || !position) return;
   await scene.focusAndZoom(position.x, position.z, 1, 420);
+}
+
+let stopMoveDestinationHighlight = null;
+function promptMoveDestination({ tileId, active }) {
+  stopMoveDestinationHighlight?.();
+  stopMoveDestinationHighlight = null;
+  if (active && tiles[tileId]) stopMoveDestinationHighlight = startTileHighlight([tileId], 0xffffff);
 }
 
 /** 通行料支払い: 支払者へ寄り、金額を飛び出させて2秒読ませる。 */
@@ -1661,6 +1722,7 @@ function startBattle(character, storyOptions = {}) {
     onTargetEffect: relayable('targetEffect', promptTargetEffect, { broadcast: true }),
     onTurnFocus: relayable('turnFocus', promptTurnFocus, { broadcast: true }),
     onTollPayment: relayable('tollPayment', promptTollPayment, { broadcast: true }),
+    onMoveDestination: relayable('moveDestination', promptMoveDestination, { broadcast: true }),
     onCpuRoll: cpuRollDice,
     onMoveComplete,
     onLandCommand: relayable('landCommand', promptLandCommand),
@@ -4083,6 +4145,7 @@ const pvpGuestHandlers = {
   battleOutcome: promptBattleOutcome,
   damageEffect: promptDamageEffect,
   tollPayment: promptTollPayment,
+  moveDestination: promptMoveDestination,
 };
 
 const pvpPieces = new Map(); // playerId -> billboard sprite (ゲスト側のローカル駒キャッシュ)

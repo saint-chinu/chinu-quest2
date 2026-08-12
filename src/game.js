@@ -84,6 +84,7 @@ export class Game {
     onTargetEffect,
     onTurnFocus,
     onTollPayment,
+    onMoveDestination,
     onCpuRoll,
     onMoveComplete,
     onLandCommand,
@@ -133,6 +134,7 @@ export class Game {
     this.onTargetEffect = onTargetEffect;
     this.onTurnFocus = onTurnFocus;
     this.onTollPayment = onTollPayment || (() => Promise.resolve());
+    this.onMoveDestination = onMoveDestination || (() => {});
     this.onCpuRoll = onCpuRoll;
     this.onMoveComplete = onMoveComplete;
     this.onLandCommand = onLandCommand;
@@ -432,7 +434,11 @@ export class Game {
         return null;
       }
       const targetId = await this.onPickAbilityTarget(
-        tiles.map((t) => ({ ...this._browseTileSummary(t, player), label: `${t.id}番地（${ELEMENT_LABEL[t.element]}）` })),
+        tiles.map((t) => ({
+          ...this._browseTileSummary(t, player),
+          label: `${t.id}番地（${ELEMENT_LABEL[t.element]}）`,
+          effectAreaIds: card.effect?.type === 'poisonArea' ? [t.id, ...t.neighbors] : null,
+        })),
         player.id,
       );
       if (targetId == null) return null;
@@ -1072,12 +1078,12 @@ export class Game {
    */
   async _movePlayer(player, steps) {
     this._turnPathIds = [];
-    for (let i = 0; i < steps; i++) {
+    const path = await this._planForwardPath(player, steps);
+    const destinationId = path.at(-1);
+    if (destinationId != null) this.onMoveDestination({ tileId: destinationId, active: true });
+    for (let i = 0; i < path.length; i++) {
       const fromTile = this.tiles[player.tileId];
-      const forward = fromTile.neighbors.filter((id) => id !== player.previousTileId);
-      const options = forward.length > 0 ? forward : fromTile.neighbors;
-
-      const nextId = options.length === 1 ? options[0] : await this._chooseNextTile(player, fromTile, options);
+      const nextId = path[i];
       const toTile = this.tiles[nextId];
       player.previousTileId = player.tileId;
       player.tileId = nextId;
@@ -1089,7 +1095,7 @@ export class Game {
 
       if (toTile.type === TileType.EVENT) await this._visitCheckpoint(player, toTile);
 
-      if (toTile.type === TileType.START && i < steps - 1) {
+      if (toTile.type === TileType.START && i < path.length - 1) {
         await this._grantGoalBonus(player);
       }
 
@@ -1101,6 +1107,25 @@ export class Game {
         break;
       }
     }
+    if (destinationId != null) this.onMoveDestination({ tileId: destinationId, active: false });
+  }
+
+  /** 分岐を移動前に確定し、今回の到達地点を先に表示できる経路を作る。 */
+  async _planForwardPath(player, steps) {
+    const path = [];
+    let currentId = player.tileId;
+    let previousId = player.previousTileId;
+    for (let i = 0; i < steps; i++) {
+      const fromTile = this.tiles[currentId];
+      const forward = fromTile.neighbors.filter((id) => id !== previousId);
+      const options = forward.length > 0 ? forward : fromTile.neighbors;
+      const nextId = options.length === 1 ? options[0] : await this._chooseNextTile(player, fromTile, options);
+      path.push(nextId);
+      previousId = currentId;
+      currentId = nextId;
+      if (this._isForcedStopFor(player, this.tiles[nextId])) break;
+    }
+    return path;
   }
 
   /**
@@ -1111,6 +1136,13 @@ export class Game {
    */
   async _movePlayerBackward(player, steps) {
     this._turnPathIds = [];
+    const plannedPath = [];
+    for (const tileId of player.tileHistory.slice(1, steps + 1)) {
+      plannedPath.push(tileId);
+      if (this._isForcedStopFor(player, this.tiles[tileId])) break;
+    }
+    const destinationId = plannedPath.at(-1);
+    if (destinationId != null) this.onMoveDestination({ tileId: destinationId, active: true });
     for (let i = 0; i < steps; i++) {
       if (player.tileHistory.length < 2) break;
       const fromTile = this.tiles[player.tileId];
@@ -1129,6 +1161,7 @@ export class Game {
         break;
       }
     }
+    if (destinationId != null) this.onMoveDestination({ tileId: destinationId, active: false });
   }
 
   /**
