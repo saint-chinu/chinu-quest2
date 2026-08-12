@@ -181,13 +181,13 @@ const spell = (id, name, rarity, cost, target, effect, effectDescription) => ({
  */
 export const SPELL_CATALOG = {
   // ── 移動系 ──
-  diceOne: spell('diceOne', '1のダイス', Rarity.N, 30, 'enemyPlayer', { type: 'setNextDice', value: 1 }, '相手の次のサイコロを1にする'),
-  backfire: spell('backfire', 'バックファイア', Rarity.S, 50, 'enemyPlayer', { type: 'reverseNextDice' }, '相手の次のサイコロの数だけ後退させる'),
-  diceThree: spell('diceThree', '3のダイス', Rarity.N, 30, 'enemyPlayer', { type: 'setNextDice', value: 3 }, '相手の次のサイコロを3にする'),
+  diceOne: spell('diceOne', '1のダイス', Rarity.N, 30, 'anyPlayer', { type: 'setNextDice', value: 1 }, '選んだプレイヤーの次のサイコロを1にする'),
+  backfire: spell('backfire', 'バックファイア', Rarity.S, 50, 'anyPlayer', { type: 'reverseNextDice' }, '選んだプレイヤーを次のサイコロの数だけ後退させる'),
+  diceThree: spell('diceThree', '3のダイス', Rarity.N, 30, 'anyPlayer', { type: 'setNextDice', value: 3 }, '選んだプレイヤーの次のサイコロを3にする'),
   // 元データは名前「6のダイス」なのに効果文が「次のサイコロを1にする」と
   // なっていた（1のダイスとの重複ミスと判断）。名前に合わせて6として実装。
-  diceSix: spell('diceSix', '6のダイス', Rarity.N, 30, 'enemyPlayer', { type: 'setNextDice', value: 6 }, '相手の次のサイコロを6にする'),
-  iCanFly: spell('iCanFly', 'アイキャンフライ', Rarity.N, 30, 'self', { type: 'doubleNextDice' }, '自分の次のサイコロの出目×2進む'),
+  diceSix: spell('diceSix', '6のダイス', Rarity.N, 30, 'anyPlayer', { type: 'setNextDice', value: 6 }, '選んだプレイヤーの次のサイコロを6にする'),
+  iCanFly: spell('iCanFly', 'アイキャンフライ', Rarity.N, 30, 'anyPlayer', { type: 'doubleNextDice' }, '選んだプレイヤーの次のサイコロの出目×2進む'),
   blueOcean: spell(
     'blueOcean',
     'ブルーオーシャン',
@@ -247,7 +247,7 @@ export const SPELL_CATALOG = {
     { type: 'lotteryOnNextGoal' },
     '次にゴールした時、0〜500Gの間でランダムに獲得する（100G刻み、500Gのみ確率10%）',
   ),
-  walletVacuum: spell('walletVacuum', '財布チューチュー', Rarity.R, 100, 'enemyPlayer', { type: 'stealGoldRatio', ratio: 0.3 }, '対象プレイヤーから手持ちGの30%を奪う'),
+  walletVacuum: spell('walletVacuum', '財布チューチュー', Rarity.R, 100, 'anyPlayer', { type: 'stealGoldRatio', ratio: 0.3 }, '選んだプレイヤーから手持ちGの30%を奪う'),
 
   // ── 攻撃系 ──
   senbonZakura: spell('senbonZakura', '千本桜', Rarity.R, 100, 'enemyMonster', { type: 'directDamage', amount: 30 }, '対象モンスターに30ダメージ'),
