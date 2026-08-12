@@ -3,6 +3,7 @@ import { TileType } from './board.js';
 import { CARD_COLOR } from './cards.js';
 import { tween, easeInOutQuad } from './utils.js';
 import { assetUrl } from './assetUrl.js';
+import { defaultCardArtUrl } from './cardArt.js';
 
 const TILE_COLOR = {
   [TileType.START]: 0xffd166,
@@ -85,7 +86,7 @@ export const PIECE_REST_Y = 0.86;
 // タイルに埋まって「張り付いて」見えていた - ユーザー指摘により修正）。
 // 同日、召喚済みモンスターアイコンをさらに1.2倍にとの指摘でUNIT_ICON_HEIGHT
 // を1.6→1.92に拡大したため、この値も高さ/2+0.05で再計算した。
-export const UNIT_ICON_REST_Y = 1.01;
+export const UNIT_ICON_REST_Y = 1.13;
 
 // 土地レベルの縁取り。tile.mesh(2.6四方)より少し内側(2.5)に、レベルが
 // 上がるほど太い黒枠を重ねる - Lv5だけ「太くする」路線から外れて二重の
@@ -245,9 +246,9 @@ function createTokenTexture(color) {
 // 2026-08-12: タイルに埋もれて見づらいというユーザー指摘を受け1.3→1.6に拡大。
 // 同日さらに「1.2倍くらいに」との指摘で1.6→1.92に再拡大（UNIT_ICON_REST_Y
 // もこれに合わせて再計算済み）。
-export const UNIT_ICON_HEIGHT = 1.92;
+export const UNIT_ICON_HEIGHT = 2.16;
 const UNIT_CARD_CANVAS_WIDTH = 110;
-const TOLL_BADGE_HEIGHT = 26;
+const TOLL_BADGE_HEIGHT = 34;
 const HP_GAUGE_HEIGHT = 22;
 const CARD_BODY_HEIGHT = 120;
 const UNIT_CARD_CANVAS_HEIGHT = TOLL_BADGE_HEIGHT + CARD_BODY_HEIGHT + HP_GAUGE_HEIGHT;
@@ -324,14 +325,14 @@ function drawUnitCard(state) {
   ctx.fillText(displayName, w / 2, nameStripY + nameStripH / 2 + 1);
 
   if (state.toll > 0) {
-    roundRectPath(ctx, w / 2 - 27, 1, 54, TOLL_BADGE_HEIGHT - 3, 8);
+    roundRectPath(ctx, w / 2 - 38, 1, 76, TOLL_BADGE_HEIGHT - 3, 9);
     ctx.fillStyle = '#1a1a2e';
     ctx.fill();
     ctx.lineWidth = 2;
     ctx.strokeStyle = '#ffd166';
     ctx.stroke();
     ctx.fillStyle = '#ffd166';
-    ctx.font = `bold ${Math.round((TOLL_BADGE_HEIGHT - 3) * 0.6)}px sans-serif`;
+    ctx.font = `bold ${Math.round((TOLL_BADGE_HEIGHT - 3) * 0.72)}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(`${state.toll}G`, w / 2, (TOLL_BADGE_HEIGHT - 3) / 2 + 1);
@@ -363,11 +364,11 @@ function drawUnitCard(state) {
 // 来るようHEIGHT/2+0.05を目安にREST_Yを設定）。
 const OWNER_LABEL_CANVAS_WIDTH = 160;
 const OWNER_LABEL_CANVAS_HEIGHT = 40;
-export const OWNER_LABEL_HEIGHT = 0.55;
-export const OWNER_LABEL_REST_Y = 0.32;
+export const OWNER_LABEL_HEIGHT = 0.62;
+export const OWNER_LABEL_REST_Y = 0.36;
 // タイル半幅(2.6/2=1.3)より小さくして隣のタイルへはみ出さないようにする
 // （旧1.15は境界ギリギリでタイル間をまたいで見えていた）。
-export const OWNER_LABEL_Z_OFFSET = 0.85;
+export const OWNER_LABEL_Z_OFFSET = 0.98;
 
 function drawOwnerLabel(canvas, name) {
   const ctx = canvas.getContext('2d');
@@ -604,8 +605,9 @@ export class GameScene {
       artImage: null,
     };
     sprite.userData.cardState = state;
-    if (unit.def.imageDataUrl) {
-      loadUnitCardArt(unit.def.imageDataUrl, (img) => {
+    const artUrl = unit.def.imageDataUrl || defaultCardArtUrl(unit.def);
+    if (artUrl) {
+      loadUnitCardArt(artUrl, (img) => {
         state.artImage = img;
         drawUnitCard(state);
       });
