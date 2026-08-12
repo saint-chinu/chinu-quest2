@@ -843,8 +843,19 @@ function describeCardDetail(card) {
 }
 
 let cardDetailUseHandler = null;
+let cardDetailReturnLayer = null;
 
 function showCardDetail(card, onUse) {
+  // 購入結果のような全画面オーバーレイ上から開く場合は、背面側を一時的に
+  // 隠す。iOS/PWAでは別スタッキングコンテキストのz-indexが逆転することが
+  // あるため、重ねるのではなく詳細を閉じた時に元画面へ戻す。
+  const packResultLayer = document.getElementById('shop-pack-result');
+  if (packResultLayer && !packResultLayer.classList.contains('hidden')) {
+    cardDetailReturnLayer = packResultLayer;
+    packResultLayer.classList.add('hidden');
+  } else {
+    cardDetailReturnLayer = null;
+  }
   renderCardEl(cardDetailCard, card);
   cardDetailText.textContent = describeCardDetail(card);
   cardDetailUseHandler = onUse ?? null;
@@ -854,10 +865,13 @@ function showCardDetail(card, onUse) {
 
 cardDetailClose.addEventListener('click', () => {
   cardDetailModal.classList.add('hidden');
+  cardDetailReturnLayer?.classList.remove('hidden');
+  cardDetailReturnLayer = null;
 });
 
 cardDetailUse.addEventListener('click', () => {
   cardDetailModal.classList.add('hidden');
+  cardDetailReturnLayer = null;
   cardDetailUseHandler?.();
 });
 
