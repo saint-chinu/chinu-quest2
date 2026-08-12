@@ -38,11 +38,11 @@ export const TRAIT_LABEL = {
  */
 export const BREED_PARTS = [
   { id: 'part-element-patch', name: '属性パッチ', rarity: Rarity.S, costDelta: 30, chooseElement: true, price: 60 },
-  { id: 'part-atk-up', name: 'ATKアップ', rarity: Rarity.N, atkDelta: 10, costDelta: 20, price: 40 },
-  { id: 'part-hp-up', name: 'HPアップ', rarity: Rarity.N, hpDelta: 10, costDelta: 20, price: 40 },
-  { id: 'part-double-up', name: 'ダブルアップ', rarity: Rarity.R, atkDelta: 10, hpDelta: 10, costDelta: 35, price: 90 },
-  { id: 'part-atk-focus', name: '攻撃特化', rarity: Rarity.N, atkDelta: 20, hpDelta: -10, costDelta: 20, price: 40 },
-  { id: 'part-hp-focus', name: '防御特化', rarity: Rarity.N, atkDelta: -10, hpDelta: 20, costDelta: 20, price: 40 },
+  { id: 'part-atk-up', name: 'ATKアップ', rarity: Rarity.N, atkDelta: 10, costDelta: 10, price: 40 },
+  { id: 'part-hp-up', name: 'HPアップ', rarity: Rarity.N, hpDelta: 10, costDelta: 10, price: 40 },
+  { id: 'part-double-up', name: 'ダブルアップ', rarity: Rarity.R, atkDelta: 10, hpDelta: 10, costDelta: 25, price: 90 },
+  { id: 'part-atk-focus', name: '攻撃特化', rarity: Rarity.N, atkDelta: 20, hpDelta: -10, costDelta: 10, price: 40 },
+  { id: 'part-hp-focus', name: '防御特化', rarity: Rarity.N, atkDelta: -10, hpDelta: 20, costDelta: 10, price: 40 },
   { id: 'part-first-strike', name: '先制付与', rarity: Rarity.S, costDelta: 30, trait: 'firstStrike', price: 60 },
   { id: 'part-half-damage', name: '被ダメージ半減', rarity: Rarity.R, costDelta: 60, trait: 'halfDamage', price: 90 },
   { id: 'part-pierce', name: '貫通', rarity: Rarity.R, costDelta: 70, trait: 'pierce', price: 90 },
