@@ -1076,7 +1076,10 @@ const BATTLE_FADE_MS = 450;
 const BATTLE_STAGE_REVEAL_MS = 450;
 // 2026-08-13: 「文字が進むのが早すぎて読めない」との指摘で1500→2600に延長
 // （攻撃メッセージ・決着メッセージ両方がこの1定数を共用している）。
-const BATTLE_MESSAGE_HOLD_MS = 2600;
+// 戦闘中の数値・能力メッセージを読める時間を確保し、連続行動の間にも
+// 一呼吸置く。オンライン対戦でも各クライアントが同じPromiseを待つ。
+const BATTLE_MESSAGE_HOLD_MS = 3400;
+const BATTLE_ACTION_GAP_MS = 550;
 const BATTLE_RETREAT_MS = 600;
 const BATTLE_FADE_OUT_MS = 450;
 
@@ -1206,7 +1209,7 @@ function promptBattleAttack({ side, item, message, targetHp, targetDied, special
       targetEls.el.classList.remove('battle-hit');
       battleMessageText.classList.add('hidden');
       battleMessageText.classList.remove('special');
-      resolve();
+      setTimeout(resolve, BATTLE_ACTION_GAP_MS);
     }, BATTLE_MESSAGE_HOLD_MS);
   });
 }
