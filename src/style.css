@@ -1395,18 +1395,18 @@ html, body {
 
 .player-checkpoints {
   display: flex;
-  gap: 3px;
-  margin-top: 1px;
+  gap: 4px;
+  margin-top: 2px;
 }
 
 .checkpoint-num {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 13px;
-  height: 13px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  font-size: 9px;
+  font-size: 11px;
   font-weight: bold;
   color: rgba(255, 255, 255, 0.35);
   background: rgba(255, 255, 255, 0.08);
