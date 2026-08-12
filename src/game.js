@@ -22,7 +22,13 @@ function randomSample(list, count) {
 }
 
 const STEP_DURATION_MS = 300;
+// カルドセプト準拠の周回ボーナス（2026-08-12改訂）: 基本ボーナス=(周回数+1)×
+// START_BONUS（周を重ねるほど増える）＋領地ボーナス=所持土地数×
+// LAND_BONUS_RATE（2人戦）/LAND_BONUS_RATE_MULTI（3人以上）。連鎖数は
+// 領地ボーナスに影響しない（本家準拠）。_computeLapBonus参照。
 const START_BONUS = 100;
+const LAND_BONUS_RATE = 60;
+const LAND_BONUS_RATE_MULTI = 80;
 
 const STARTING_HAND_SIZE = 4;
 const HAND_LIMIT = 6;
@@ -665,15 +671,15 @@ export class Game {
     await this._beginTurn();
   }
 
-  /** 帰巣本能: スタート地点へ瞬間移動し、周回ボーナスの2倍のGを獲得する（チェックポイント条件やフリーランサー等の補正は挟まない、固定額）。呼び出し元がこの後すぐターンを終える。 */
+  /** 帰巣本能: スタート地点へ瞬間移動し、周回ボーナス（_computeLapBonus、フリーランサー・領地ボーナス込み）の2倍のGを獲得する。呼び出し元がこの後すぐターンを終える。 */
   _spellReturnToStartDoubleBonus(player) {
     const startTile = this.tiles.find((t) => t.type === TileType.START);
     player.previousTileId = null;
     player.tileId = startTile.id;
     if (player.mesh) player.mesh.position.set(startTile.position.x, PIECE_REST_Y, startTile.position.z);
     this._healOwnedUnitsOnLap(player);
+    const bonus = this._computeLapBonus(player).total * 2;
     player.lapsCompleted += 1;
-    const bonus = START_BONUS * 2;
     player.currency += bonus;
     this.onLog(`${player.name}は「帰巣本能」でスタート地点に戻り、+${bonus}Gを獲得した！`);
     if (this.requireAllCheckpoints) player.passedCheckpoints.clear();
@@ -1064,6 +1070,25 @@ export class Game {
     }
   }
 
+  /**
+   * カルドセプト準拠の周回ボーナス総額を計算する（実際に加算はしない、
+   * _grantGoalBonusと帰巣本能スペルが共用する純粋な計算のみ）。
+   * - 基本ボーナス: (周回数+1)×START_BONUS。周を重ねるほど増える。
+   *   フリーランサーが盤上にいれば倍率補正がかかる。
+   * - 領地ボーナス: 所持土地数×LAND_BONUS_RATE（2人戦）/
+   *   LAND_BONUS_RATE_MULTI（3人以上）。連鎖数・土地レベルは影響しない。
+   */
+  _computeLapBonus(player) {
+    const baseBonus = (player.lapsCompleted + 1) * START_BONUS;
+    const freelancerTile = this.tiles.find(
+      (t) => t.unit && t.unit.ownerId === player.id && t.unit.def.effect?.type === 'lapBonusMultiplier',
+    );
+    const base = freelancerTile ? Math.round(baseBonus * freelancerTile.unit.def.effect.multiplier) : baseBonus;
+    const landRate = this.players.length >= 3 ? LAND_BONUS_RATE_MULTI : LAND_BONUS_RATE;
+    const land = this._summonCountOf(player.id) * landRate;
+    return { base, land, total: base + land };
+  }
+
   /** ゴール(START)着地/通過どちらからも呼ぶ: このマップにrequireAllCheckpointsが立っていれば全チェックポイント通過済みの時だけボーナスを渡し、渡したらこのラップ分の通過記録をクリアする。立っていなければ無条件で渡す（従来通り）。 */
   _grantGoalBonus(player) {
     this._healOwnedUnitsOnLap(player);
@@ -1071,14 +1096,10 @@ export class Game {
       this.onLog(`${player.name}はゴールを通過（チェックポイント未通過のためボーナスなし）`);
       return;
     }
-    // フリーランサー: 自分の盤面のどこかに配置されていれば周回ボーナスが増える。
-    const freelancerTile = this.tiles.find(
-      (t) => t.unit && t.unit.ownerId === player.id && t.unit.def.effect?.type === 'lapBonusMultiplier',
-    );
-    const bonus = freelancerTile ? Math.round(START_BONUS * freelancerTile.unit.def.effect.multiplier) : START_BONUS;
-    player.currency += bonus;
+    const { base, land, total } = this._computeLapBonus(player);
+    player.currency += total;
     player.lapsCompleted += 1;
-    this.onLog(`${player.name}はゴールを通過！ +${bonus}`);
+    this.onLog(`${player.name}はゴールを通過！ +${total}G（基本${base}G＋領地${land}G）`);
     if (this.requireAllCheckpoints) player.passedCheckpoints.clear();
 
     // 宝くじ: 次のゴール通過で0〜500Gをランダム獲得する権利（100G刻み、500Gだけ確率10%）。
