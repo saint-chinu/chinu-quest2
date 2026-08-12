@@ -81,6 +81,32 @@ html, body {
 
 .fx-target-effect-message.fade-out { opacity: 0; }
 
+.fx-toll-payment {
+  position: absolute;
+  z-index: 46;
+  transform: translate(-50%, -50%) scale(0.25) translateY(24px);
+  opacity: 0;
+  color: #ffd166;
+  font-size: clamp(34px, 5vw, 58px);
+  font-weight: 900;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+  -webkit-text-stroke: 2px #5c1b16;
+  text-shadow: 0 4px 0 #7a241c, 0 7px 18px rgba(0, 0, 0, 0.85);
+  transition: transform 280ms cubic-bezier(0.2, 1.65, 0.35, 1), opacity 180ms ease;
+}
+
+.fx-toll-payment.show {
+  transform: translate(-50%, -50%) scale(1) translateY(0);
+  opacity: 1;
+}
+
+.fx-toll-payment.fade-out {
+  transform: translate(-50%, -50%) scale(1.08) translateY(-12px);
+  opacity: 0;
+}
+
 @keyframes fx-damage-pop {
   0% {
     transform: translate(-50%, 0) scale(0.4);

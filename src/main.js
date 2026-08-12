@@ -1062,6 +1062,28 @@ async function promptTurnFocus({ position }) {
   await scene.focusAndZoom(position.x, position.z, 1, 420);
 }
 
+/** 通行料支払い: 支払者へ寄り、金額を飛び出させて2秒読ませる。 */
+async function promptTollPayment({ position, amount }) {
+  if (!scene || !position || !Number.isFinite(amount)) return;
+  const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+  await scene.focusAndZoom(position.x, position.z, 1.35, 320);
+
+  const screen = scene.worldToScreen(position.x, PIECE_REST_Y + 1.9, position.z);
+  const amountEl = document.createElement('div');
+  amountEl.className = 'fx-toll-payment';
+  amountEl.textContent = `−${amount}G`;
+  amountEl.style.left = `${screen.x}px`;
+  amountEl.style.top = `${screen.y}px`;
+  fxLayer.appendChild(amountEl);
+  requestAnimationFrame(() => amountEl.classList.add('show'));
+
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  amountEl.classList.add('fade-out');
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  amountEl.remove();
+  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
+}
+
 function finishSpellPresentation() {
   spellEffectModal.classList.add('hidden');
   setSpellPresentationActive(false);
@@ -1638,6 +1660,7 @@ function startBattle(character, storyOptions = {}) {
     onSummonEffect: relayable('summonEffect', promptSummonEffect, { broadcast: true }),
     onTargetEffect: relayable('targetEffect', promptTargetEffect, { broadcast: true }),
     onTurnFocus: relayable('turnFocus', promptTurnFocus, { broadcast: true }),
+    onTollPayment: relayable('tollPayment', promptTollPayment, { broadcast: true }),
     onCpuRoll: cpuRollDice,
     onMoveComplete,
     onLandCommand: relayable('landCommand', promptLandCommand),
@@ -4059,6 +4082,7 @@ const pvpGuestHandlers = {
   battleRetreat: promptBattleRetreat,
   battleOutcome: promptBattleOutcome,
   damageEffect: promptDamageEffect,
+  tollPayment: promptTollPayment,
 };
 
 const pvpPieces = new Map(); // playerId -> billboard sprite (ゲスト側のローカル駒キャッシュ)

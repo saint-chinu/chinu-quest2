@@ -83,6 +83,7 @@ export class Game {
     onSummonEffect,
     onTargetEffect,
     onTurnFocus,
+    onTollPayment,
     onCpuRoll,
     onMoveComplete,
     onLandCommand,
@@ -131,6 +132,7 @@ export class Game {
     this.onSummonEffect = onSummonEffect;
     this.onTargetEffect = onTargetEffect;
     this.onTurnFocus = onTurnFocus;
+    this.onTollPayment = onTollPayment || (() => Promise.resolve());
     this.onCpuRoll = onCpuRoll;
     this.onMoveComplete = onMoveComplete;
     this.onLandCommand = onLandCommand;
@@ -1559,7 +1561,7 @@ export class Game {
 
     if (player.isCPU) {
       if (tile.type === TileType.LAND) await this._cpuLandCommand(player, tile);
-      this._settleLandingToll(player, tile, owesTollUnlessConquered);
+      await this._settleLandingToll(player, tile, owesTollUnlessConquered);
       return;
     }
 
@@ -1582,7 +1584,7 @@ export class Game {
         if (await this._runLandBrowse(player, candidateIds)) break;
       }
     }
-    this._settleLandingToll(player, tile, owesTollUnlessConquered);
+    await this._settleLandingToll(player, tile, owesTollUnlessConquered);
   }
 
   /**
@@ -1593,7 +1595,7 @@ export class Game {
    * もういないので）免除、それ以外（防衛成功、または侵略を試みなかった）
    * は今まで通り徴収する。
    */
-  _settleLandingToll(player, tile, owesTollUnlessConquered) {
+  async _settleLandingToll(player, tile, owesTollUnlessConquered) {
     if (!owesTollUnlessConquered) return;
     if (tile.owner == null || tile.owner === player.id) return;
     const owner = this.players.find((p) => p.id === tile.owner);
@@ -1618,6 +1620,12 @@ export class Game {
     owner.currency += toll;
     this.onLog(`${player.name}は通行料を支払った (-${toll}G → ${owner.name})`);
     this._notifyState();
+    await this.onTollPayment({
+      playerId: player.id,
+      playerName: player.name,
+      amount: toll,
+      position: this.tiles[player.tileId]?.position ?? null,
+    });
   }
 
   /**
