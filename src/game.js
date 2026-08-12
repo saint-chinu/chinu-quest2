@@ -3016,7 +3016,8 @@ export class Game {
     await this._cpuMaybeUseSplitEvenlySpell(this.currentPlayer);
     await this._cpuMaybeUseImmediateSpell(this.currentPlayer);
     await this._cpuMaybeUseDiceSpell(this.currentPlayer);
-    const steps = await this.onCpuRoll();
+    const fixedDiceValue = this.currentPlayer.diceCurse?.type === 'fixed' ? this.currentPlayer.diceCurse.value : null;
+    const steps = await this.onCpuRoll(fixedDiceValue);
     this.rollDice(steps);
   }
 
@@ -3374,6 +3375,7 @@ export class Game {
       centerHand: this.currentPlayer.hand,
       currentPlayerIsCPU: this.currentPlayer.isCPU,
       spellUsedThisTurn: this.currentPlayer.spellUsedThisTurn,
+      fixedDiceValue: this.currentPlayer.diceCurse?.type === 'fixed' ? this.currentPlayer.diceCurse.value : null,
     });
     this.onPvpSync?.(this._pvpSnapshot(playersPayload));
   }
@@ -3404,6 +3406,7 @@ export class Game {
       awaitingRoll: this.awaitingRoll,
       isBusy: this.isBusy,
       spellUsedThisTurn: this.currentPlayer.spellUsedThisTurn,
+      fixedDiceValue: this.currentPlayer.diceCurse?.type === 'fixed' ? this.currentPlayer.diceCurse.value : null,
       turnHand: this.awaitingRoll && !this.isBusy ? this.currentPlayer.hand : [],
       checkpointNumbers: this.checkpointNumbers,
       players: playersPayload,

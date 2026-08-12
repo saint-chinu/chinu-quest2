@@ -1278,6 +1278,7 @@ const DICE_RESULT_HOLD_MS = 1500;
 let diceState = 'idle';
 let diceValue = 1;
 let diceSpinTimer = null;
+let fixedDiceValue = null;
 
 // The hand hides the moment the roll starts (game's showCenter goes false),
 // but the dice itself stays up through the whole move animation and only
@@ -1304,8 +1305,20 @@ function resetDice() {
   diceSpinTimer = null;
   diceState = 'idle';
   diceValue = 1;
+  fixedDiceValue = null;
+  diceButton.classList.remove('fixed-dice');
   diceMoving = false;
   setDiceFace(diceValue);
+}
+
+function showFixedDice(value) {
+  clearInterval(diceSpinTimer);
+  diceSpinTimer = null;
+  fixedDiceValue = value;
+  diceValue = value;
+  diceState = 'fixed';
+  setDiceFace(value);
+  diceButton.classList.add('fixed-dice');
 }
 
 resetDice();
@@ -1355,6 +1368,15 @@ function beginDiceMove(result) {
 diceButton.addEventListener('click', () => {
   if (diceButton.disabled) return;
 
+  if (diceState === 'fixed' && fixedDiceValue != null) {
+    const result = fixedDiceValue;
+    fixedDiceValue = null;
+    diceButton.classList.remove('fixed-dice');
+    diceState = 'idle';
+    beginDiceMove(result);
+    return;
+  }
+
   if (diceState === 'idle') {
     startDiceSpin();
     return;
@@ -1366,8 +1388,20 @@ diceButton.addEventListener('click', () => {
 });
 
 /** CPU's roll: same spin/settle rhythm as the player's, just auto-triggered. */
-function cpuRollDice() {
+function cpuRollDice(forcedValue = null) {
   return new Promise((resolve) => {
+    if (forcedValue != null) {
+      showFixedDice(forcedValue);
+      setTimeout(() => {
+        fixedDiceValue = null;
+        diceButton.classList.remove('fixed-dice');
+        diceState = 'idle';
+        diceMoving = true;
+        syncCenterVisibility();
+        resolve(forcedValue);
+      }, 500);
+      return;
+    }
     const finalValue = Math.floor(Math.random() * 6) + 1;
     startDiceSpin();
     settleDiceSpin(finalValue).then((result) => {
@@ -1452,6 +1486,7 @@ function startBattle(character, storyOptions = {}) {
       centerHand,
       currentPlayerIsCPU,
       spellUsedThisTurn,
+      fixedDiceValue: stateFixedDiceValue,
     }) => {
       const localPlayerId = pvpMatch?.localPlayerId ?? game.players.find((p) => !p.isCPU)?.id;
       const isLocalTurn = currentPlayerId === localPlayerId;
@@ -1464,6 +1499,7 @@ function startBattle(character, storyOptions = {}) {
       showCenterState = showCenter;
       centerShowsOpponent = !isLocalTurn;
       if (enteringShowCenter) resetDice();
+      if (showCenter && stateFixedDiceValue != null && diceState !== 'fixed') showFixedDice(stateFixedDiceValue);
       syncCenterVisibility();
       if (showCenter && !isLocalTurn) {
         // 対人戦ホストは自分のGameインスタンスに相手(ゲスト)の本当の手札も
@@ -3839,6 +3875,7 @@ function applyPvpPublicState(publicState) {
   showCenterState = showCenter;
   centerShowsOpponent = !isMyTurn;
   if (enteringShowCenter) resetDice();
+  if (showCenter && publicState.fixedDiceValue != null && diceState !== 'fixed') showFixedDice(publicState.fixedDiceValue);
   syncCenterVisibility();
   renderCenterHand(showCenter && !isMyTurn ? (publicState.turnHand || []) : []);
 

@@ -1873,6 +1873,11 @@ html, body {
   background: rgba(0, 0, 0, 0.5);
 }
 
+/* 手札破棄の確認ダイアログは破棄カード一覧より必ず前面に出す。 */
+#confirm-modal {
+  z-index: 45;
+}
+
 #land-command-modal.hidden,
 #land-submenu-modal.hidden,
 #monster-picker-modal.hidden,
@@ -2288,8 +2293,10 @@ html, body {
 }
 
 #discard-box p {
-  margin-bottom: 14px;
+  margin: 14px 0 0;
   font-size: 14px;
+  color: #fff;
+  text-align: center;
 }
 
 #discard-choices {
@@ -2306,6 +2313,10 @@ html, body {
   width: 70px;
   height: 97px;
   font-size: 11px;
+}
+
+#dice-button.fixed-dice {
+  box-shadow: 0 0 0 4px #ffd166, 0 0 22px rgba(255, 209, 102, 0.9);
 }
 
 /* ---- バトルフェーズ (戦闘シーン) ---- */
