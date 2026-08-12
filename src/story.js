@@ -204,8 +204,9 @@ export const STORY_STAGES = [
     // 味方NPC（紫の魔女ホフク）はheroAllianceId側、敵2体はenemyAllianceId側。
     // Game側は元々allianceIdの汎用集計だけで同盟戦を処理できる設計なので、
     // 文字列キーをそのまま渡すだけで2vs2として成立する。
-    heroAllianceId: 'hero',
-    enemyAllianceId: 'enemy',
+    // 同盟戦の色: 主人公側=紅組(0)、敵側=白組(1)。
+    heroAllianceId: 0,
+    enemyAllianceId: 1,
     ally: {
       name: '紫の魔女ホフク',
       color: 0x8e5ce6,

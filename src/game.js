@@ -242,7 +242,9 @@ export class Game {
       tileHistory: [],
       };
     });
-    this.currentPlayerIndex = 0;
+    // 盤面開始時に一度だけ先攻を抽選し、以後はこの順番を固定する。
+    // プレイヤーIDや同盟順は変えず、ホスト／ゲストの同期も壊さない。
+    this.currentPlayerIndex = Math.floor(Math.random() * this.players.length);
     this.isBusy = false;
     this.tilesSincePan = 0;
     // Tile ids stepped onto during the current dice roll (landing tile
