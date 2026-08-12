@@ -167,7 +167,9 @@ export class Game {
     // time, so id === array index). previousTileId excludes backtracking
     // when picking the next step at a branch (see _movePlayer) - null at
     // game start, when every neighbor of the start tile is a fair option.
-    this.players = resolvedConfigs.map((cfg, id) => ({
+    this.players = resolvedConfigs.map((cfg, id) => {
+      const deck = Deck.fromCardList(cfg.deckList ?? buildStarterCardList(cfg.deckVariant));
+      return {
       id,
       name: cfg.name,
       isCPU: !!cfg.isCPU,
@@ -181,7 +183,14 @@ export class Game {
       // に乗る - CPU/人間を問わずcfg.iconImageさえ入っていれば使われる。
       iconImage: cfg.iconImage ?? null,
       allianceId: cfg.allianceId ?? null,
-      deck: Deck.fromCardList(cfg.deckList ?? buildStarterCardList(cfg.deckVariant)),
+      deck,
+      // HUDのデッキ比率表示用。対戦開始時の40枚から集計し、ドロー・捨て札・
+      // 盤上配置でカードが移動しても「元のデッキ構成」は変わらないよう保持。
+      deckBreakdown: deck.drawPile.reduce((counts, card) => {
+        const key = card.type === CardType.MONSTER ? `monster:${card.element ?? Element.NEUTRAL}` : card.type;
+        counts[key] = (counts[key] || 0) + 1;
+        return counts;
+      }, {}),
       hand: [],
       spellUsedThisTurn: false,
       defeated: false,
@@ -218,7 +227,8 @@ export class Game {
       allTilesAccessTurnsRemaining: 0,
       // バックファイア用: 直近に実際に着地したタイルidの履歴（新しい順が先頭）。
       tileHistory: [],
-    }));
+      };
+    });
     this.currentPlayerIndex = 0;
     this.isBusy = false;
     this.tilesSincePan = 0;
@@ -2886,6 +2896,7 @@ export class Game {
       totalAssets: this._totalAssetsOf(p),
       summonCount: this._summonCountOf(p.id),
       handCount: p.hand.length,
+      deckBreakdown: p.deckBreakdown,
       defeated: !!p.defeated,
       // このラップで通過済みのチェックポイント番号（未達成ならボーナス
       // 無しでゴールを通過しても消えない - _grantGoalBonus参照）。

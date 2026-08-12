@@ -175,6 +175,7 @@
           <input id="deck-name-input" type="text" maxlength="12" />
         </div>
         <p id="deck-count" class="pg-label">0 / 40</p>
+        <div id="deck-composition" class="deck-composition" aria-live="polite"></div>
         <div id="deck-catalog-list"></div>
         <div class="pg-actions-row">
           <button id="deck-save" class="pg-button" disabled>保存</button>
@@ -317,6 +318,13 @@
           <button id="game-menu-help">ヘルプ</button>
           <button id="game-menu-exit">退出</button>
           <button id="game-menu-close" class="pg-button-secondary">閉じる</button>
+        </div>
+      </div>
+      <div id="deck-ratio-modal" class="hidden">
+        <div id="deck-ratio-box">
+          <h3 id="deck-ratio-title">デッキ比率</h3>
+          <div id="deck-ratio-content" class="deck-composition"></div>
+          <button id="deck-ratio-close">閉じる</button>
         </div>
       </div>
       <div id="help-modal" class="hidden">

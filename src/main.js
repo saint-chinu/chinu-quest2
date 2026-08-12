@@ -51,6 +51,10 @@ const playerPanelEls = [
   document.getElementById('player-panel-2'),
   document.getElementById('player-panel-3'),
 ];
+const deckRatioModal = document.getElementById('deck-ratio-modal');
+const deckRatioTitle = document.getElementById('deck-ratio-title');
+const deckRatioContent = document.getElementById('deck-ratio-content');
+const deckRatioClose = document.getElementById('deck-ratio-close');
 const logEl = document.getElementById('log');
 const handPanel = document.getElementById('hand-panel');
 const diceButton = document.getElementById('dice-button');
@@ -707,8 +711,73 @@ function renderPlayerPanels(players, checkpointNumbers) {
     `;
 
     el.append(icon, lines);
+    el.title = 'タップしてデッキ比率を表示';
+    el.setAttribute('role', 'button');
+    el.tabIndex = 0;
+    const openDeckRatio = () => {
+      deckRatioTitle.textContent = `${player.name}のデッキ比率`;
+      renderDeckComposition(deckRatioContent, player.deckBreakdown || {});
+      deckRatioModal.classList.remove('hidden');
+    };
+    el.onclick = openDeckRatio;
+    el.onkeydown = (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        openDeckRatio();
+      }
+    };
   });
 }
+
+const DECK_RATIO_SEGMENTS = [
+  { key: `monster:${Element.FIRE}`, label: '火モンスター', short: '火', color: '#e85d4a' },
+  { key: `monster:${Element.WATER}`, label: '水モンスター', short: '水', color: '#388ad7' },
+  { key: `monster:${Element.THUNDER}`, label: '雷モンスター', short: '雷', color: '#e7be37' },
+  { key: `monster:${Element.FOREST}`, label: '森モンスター', short: '森', color: '#4ba65d' },
+  { key: `monster:${Element.NEUTRAL}`, label: '無属性モンスター', short: '無', color: '#9aa0aa' },
+  { key: CardType.GEAR, label: 'アイテム', short: 'アイテム', color: '#c67d3b' },
+  { key: CardType.SPELL, label: 'スペル', short: 'スペル', color: '#9461d5' },
+];
+
+function deckBreakdownFromCards(cards) {
+  return cards.reduce((counts, card) => {
+    const key = card.type === CardType.MONSTER ? `monster:${card.element ?? Element.NEUTRAL}` : card.type;
+    counts[key] = (counts[key] || 0) + 1;
+    return counts;
+  }, {});
+}
+
+function renderDeckComposition(container, breakdown) {
+  const entries = DECK_RATIO_SEGMENTS.map((segment) => ({ ...segment, count: breakdown[segment.key] || 0 }));
+  const total = entries.reduce((sum, entry) => sum + entry.count, 0);
+  let cursor = 0;
+  const stops = entries.filter((entry) => entry.count > 0).map((entry) => {
+    const start = cursor;
+    cursor += total ? (entry.count / total) * 100 : 0;
+    return `${entry.color} ${start}% ${cursor}%`;
+  });
+
+  const chart = document.createElement('div');
+  chart.className = 'deck-ratio-chart';
+  chart.style.background = stops.length ? `conic-gradient(${stops.join(',')})` : '#303342';
+  const center = document.createElement('span');
+  center.innerHTML = `<strong>${total}</strong><small>枚</small>`;
+  chart.appendChild(center);
+
+  const legend = document.createElement('div');
+  legend.className = 'deck-ratio-legend';
+  for (const entry of entries) {
+    const row = document.createElement('div');
+    row.innerHTML = `<i style="--ratio-color:${entry.color}"></i><span>${entry.short}</span><strong>${entry.count}</strong>`;
+    legend.appendChild(row);
+  }
+  container.replaceChildren(chart, legend);
+}
+
+deckRatioClose.addEventListener('click', () => deckRatioModal.classList.add('hidden'));
+deckRatioModal.addEventListener('click', (event) => {
+  if (event.target === deckRatioModal) deckRatioModal.classList.add('hidden');
+});
 
 /** Rarity badge (top-left) + type icon (top-right) + name, over the element/type background color. */
 function renderCardEl(el, card) {
@@ -1514,6 +1583,7 @@ const deckScreen = document.getElementById('deck-screen');
 const deckSlotTabs = document.getElementById('deck-slot-tabs');
 const deckNameInput = document.getElementById('deck-name-input');
 const deckCount = document.getElementById('deck-count');
+const deckComposition = document.getElementById('deck-composition');
 const deckCatalogList = document.getElementById('deck-catalog-list');
 const deckSave = document.getElementById('deck-save');
 const deckBack = document.getElementById('deck-back');
@@ -2489,6 +2559,13 @@ function updateDeckTotalDisplay() {
   const total = deckTotal();
   deckCount.textContent = `${total} / ${DECK_SIZE}`;
   deckSave.disabled = total !== DECK_SIZE;
+  const catalogByKey = new Map(effectiveCatalog().map((card) => [cardKey(card), card]));
+  const cards = [];
+  for (const [key, count] of deckWorkingCounts.entries()) {
+    const card = catalogByKey.get(key);
+    if (card) for (let i = 0; i < count; i++) cards.push(card);
+  }
+  renderDeckComposition(deckComposition, deckBreakdownFromCards(cards));
 }
 
 function ownedCountOf(key) {
