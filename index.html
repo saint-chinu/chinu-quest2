@@ -201,17 +201,29 @@
       <div id="shop-screen" class="pg-screen hidden">
         <h2 class="pg-title">ショップ</h2>
         <p id="shop-currency" class="pg-label">所持M: 0</p>
-        <h3 class="pg-subtitle">パック購入</h3>
-        <div id="shop-pack-list"></div>
+        <div id="shop-main-menu">
+          <button id="shop-menu-cards" class="shop-main-choice">カードパック購入</button>
+          <button id="shop-menu-parts" class="shop-main-choice">ブリードパーツ購入</button>
+          <button id="shop-menu-sell" class="shop-main-choice">売却</button>
+        </div>
+        <div id="shop-card-view" class="shop-subview hidden">
+          <h3 class="pg-subtitle">カードパック一覧</h3>
+          <div id="shop-pack-list"></div>
+        </div>
+        <div id="shop-parts-view" class="shop-subview hidden">
+          <h3 class="pg-subtitle">ブリードパーツパック購入</h3>
+          <div id="shop-parts-list"></div>
+        </div>
+        <div id="shop-sell-view" class="shop-subview hidden">
+          <h3 class="pg-subtitle">カード売却</h3>
+          <div id="shop-list"></div>
+        </div>
         <div id="shop-pack-result" class="hidden">
           <h3 class="pg-subtitle">獲得結果</h3>
           <div id="shop-pack-cards"></div>
           <button id="shop-pack-result-close" class="pg-button">閉じる</button>
         </div>
-        <h3 class="pg-subtitle">ブリードパーツガチャ</h3>
-        <div id="shop-parts-list"></div>
-        <h3 class="pg-subtitle">カード売却</h3>
-        <div id="shop-list"></div>
+        <button id="shop-section-back" class="pg-button pg-button-secondary hidden">ショップメニューへ</button>
         <button id="shop-back" class="pg-button pg-button-secondary">戻る</button>
       </div>
 

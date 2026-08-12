@@ -21,6 +21,7 @@ import {
   buildBreedCardDef,
   BREED_PART_PACK,
   drawBreedPartPack,
+  describeBreedPart,
 } from './breedParts.js';
 import { STORY_STAGES, isStageUnlocked, isStageCleared } from './story.js';
 import { NPC_PORTRAIT_URL, loadNpcTokenImage } from './npcArt.js';
@@ -1782,6 +1783,14 @@ const shopPackResultClose = document.getElementById('shop-pack-result-close');
 const shopList = document.getElementById('shop-list');
 const shopPartsList = document.getElementById('shop-parts-list');
 const shopBackButton = document.getElementById('shop-back');
+const shopMainMenu = document.getElementById('shop-main-menu');
+const shopMenuCards = document.getElementById('shop-menu-cards');
+const shopMenuParts = document.getElementById('shop-menu-parts');
+const shopMenuSell = document.getElementById('shop-menu-sell');
+const shopCardView = document.getElementById('shop-card-view');
+const shopPartsView = document.getElementById('shop-parts-view');
+const shopSellView = document.getElementById('shop-sell-view');
+const shopSectionBack = document.getElementById('shop-section-back');
 const battleMenuScreen = document.getElementById('battle-menu-screen');
 const battleCpuButton = document.getElementById('battle-cpu');
 const battlePvpButton = document.getElementById('battle-pvp');
@@ -3001,7 +3010,19 @@ function promptDeckSelection() {
   });
 }
 
-function showShopScreen() {
+let shopActiveMode = null;
+
+function setShopMode(mode) {
+  shopActiveMode = mode;
+  shopMainMenu.classList.toggle('hidden', mode != null);
+  shopCardView.classList.toggle('hidden', mode !== 'cards');
+  shopPartsView.classList.toggle('hidden', mode !== 'parts');
+  shopSellView.classList.toggle('hidden', mode !== 'sell');
+  shopSectionBack.classList.toggle('hidden', mode == null);
+  shopBackButton.classList.toggle('hidden', mode != null);
+}
+
+function showShopScreen(mode = null) {
   const catalog = getCardCatalog(currentUserId);
   const byKey = new Map(catalog.map((def) => [cardKey(def), def]));
   shopCurrency.textContent = `所持M: ${currentCharacter.m}`;
@@ -3009,6 +3030,7 @@ function showShopScreen() {
   shopPackList.replaceChildren();
   shopList.replaceChildren();
   shopPartsList.replaceChildren();
+  setShopMode(mode);
 
   for (const pack of PACKS) {
     const row = document.createElement('div');
@@ -3030,13 +3052,14 @@ function showShopScreen() {
     buyButton.addEventListener('click', () => {
       if (currentCharacter.m < pack.cost) return;
       const cards = drawPack(pack, catalog);
+      const newFlags = cards.map((card) => (currentCharacter.ownedCards[cardKey(card)] || 0) === 0);
       currentCharacter.m -= pack.cost;
       for (const card of cards) {
         const key = cardKey(card);
         currentCharacter.ownedCards[key] = (currentCharacter.ownedCards[key] || 0) + 1;
       }
       saveCharacter(currentUserId, currentCharacter);
-      showPackResult(cards);
+      showPackResult(cards, { newFlags, onDetail: showCardDetail });
       shopCurrency.textContent = `所持M: ${currentCharacter.m}`;
       renderPackButtons();
     });
@@ -3063,10 +3086,16 @@ function showShopScreen() {
   partPackButton.addEventListener('click', () => {
     if (currentCharacter.m < BREED_PART_PACK.cost) return;
     const parts = drawBreedPartPack();
+    const previouslyOwned = new Set(currentCharacter.ownedPartIds);
+    const newFlags = parts.map((part) => !previouslyOwned.has(part.id));
     currentCharacter.m -= BREED_PART_PACK.cost;
     currentCharacter.ownedPartIds.push(...parts.map((part) => part.id));
     saveCharacter(currentUserId, currentCharacter);
-    showPackResult(parts, null);
+    showPackResult(parts, {
+      newFlags,
+      onDetail: (part) => window.alert(`${part.name}\n${part.rarity}\n${describeBreedPart(part)}`),
+      isPart: true,
+    });
     shopCurrency.textContent = `所持M: ${currentCharacter.m}`;
     partPackButton.disabled = currentCharacter.m < BREED_PART_PACK.cost;
     renderPackButtons();
@@ -3109,7 +3138,7 @@ function showShopScreen() {
       currentCharacter.ownedCards[key] -= 1;
       currentCharacter.m += price;
       saveCharacter(currentUserId, currentCharacter);
-      showShopScreen();
+      showShopScreen('sell');
     });
 
     row.append(swatch, info, sellBtn);
@@ -3125,25 +3154,46 @@ function renderPackButtons() {
   }
 }
 
-function showPackResult(cards, onDetail = showCardDetail) {
+function showPackResult(cards, { newFlags = [], onDetail = showCardDetail, isPart = false } = {}) {
   shopPackCards.replaceChildren();
-  for (const card of cards) {
+  cards.forEach((card, index) => {
     const el = document.createElement('button');
     el.className = 'shop-result-card';
     el.style.borderColor = RARITY_COLOR[card.rarity];
-    const rarity = document.createElement('strong');
-    rarity.style.color = RARITY_COLOR[card.rarity];
-    rarity.textContent = card.rarity;
-    const name = document.createElement('span');
-    name.textContent = card.name;
-    el.append(rarity, name);
+    if (newFlags[index]) {
+      const badge = document.createElement('span');
+      badge.className = 'shop-new-badge';
+      badge.textContent = 'NEW';
+      el.appendChild(badge);
+    }
+    if (isPart) {
+      const rarity = document.createElement('strong');
+      rarity.style.color = RARITY_COLOR[card.rarity];
+      rarity.textContent = card.rarity;
+      const name = document.createElement('span');
+      name.textContent = card.name;
+      el.append(rarity, name);
+    } else {
+      const cardFace = document.createElement('div');
+      cardFace.className = 'card shop-result-card-face';
+      renderCardEl(cardFace, card);
+      el.appendChild(cardFace);
+    }
     if (onDetail) el.addEventListener('click', () => onDetail(card));
     shopPackCards.appendChild(el);
-  }
+  });
   shopPackResult.classList.remove('hidden');
 }
 
-shopPackResultClose.addEventListener('click', showShopScreen);
+shopPackResultClose.addEventListener('click', () => {
+  shopPackResult.classList.add('hidden');
+  showShopScreen(shopActiveMode);
+});
+
+shopMenuCards.addEventListener('click', () => setShopMode('cards'));
+shopMenuParts.addEventListener('click', () => setShopMode('parts'));
+shopMenuSell.addEventListener('click', () => setShopMode('sell'));
+shopSectionBack.addEventListener('click', () => setShopMode(null));
 
 shopBackButton.addEventListener('click', showHubScreen);
 
