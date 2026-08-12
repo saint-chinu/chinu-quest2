@@ -51,7 +51,9 @@ function loadBoardMarkerTexture(url) {
 // 2026-08-12: further zoomed in (0.85→0.72 scalar) per user feedback that
 // the board still read too distant/small - uniform scale again, so the
 // look-down angle established above is untouched.
-const CAMERA_OFFSET = new THREE.Vector3(14.5, 32, 14.5).multiplyScalar(0.72);
+// 2026-08-13: still reading too far per user feedback - one more uniform
+// zoom-in pass (0.72→0.62).
+const CAMERA_OFFSET = new THREE.Vector3(14.5, 32, 14.5).multiplyScalar(0.62);
 // Reused scratch vector for _applyCamera's per-frame zoomScale multiply, to
 // avoid allocating a new Vector3 every call (this runs during every pan/tween tick).
 const cameraOffsetScratch = new THREE.Vector3();
