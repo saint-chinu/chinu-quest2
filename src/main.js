@@ -3426,6 +3426,12 @@ function relayable(type, localPrompt, { broadcast = false } = {}) {
       localArgs.length === 1 ? localArgs[0] : Object.fromEntries(localArgs.map((v, i) => [`a${i}`, v]));
     if (!pvpMatch || !pvpMatch.isHost) return localPrompt(...localArgs);
     if (forPlayerId == null || forPlayerId === pvpMatch.localPlayerId) return localPrompt(...localArgs);
+    // The legacy room relay has one request/response lane. Never route a
+    // question for player 2+ through player 1's lane; until a dedicated
+    // prompt channel is available, resolve it locally instead of mixing turns.
+    const remoteUid = pvpMatch.uidByPlayerId?.[forPlayerId];
+    const legacyGuestOnly = Number(forPlayerId) === Number(pvpMatch.guestPlayerId);
+    if (!remoteUid || !legacyGuestOnly) return localPrompt(...localArgs);
     return pvpMatch.relay.ask(type, payload);
   };
 }
