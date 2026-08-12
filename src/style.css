@@ -2200,7 +2200,7 @@ html, body {
 #card-reveal-modal,
 #discard-modal,
 #card-detail-modal {
-  position: absolute;
+  position: fixed;
   inset: 0;
   z-index: 20;
   display: flex;

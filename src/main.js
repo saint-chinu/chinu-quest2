@@ -6,7 +6,7 @@ import { Game } from './game.js';
 import { CardType, CARD_COLOR, ELEMENT_LABEL, Element, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
 import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, buildCharacterDeckList, ITEM_CATALOG } from './battleCards.js';
 import { loginOrRegister, saveCharacter } from './auth.js';
-import { getCardCatalog } from './cardCatalog.js';
+import { getCardCatalog, isLegacyPlaceholderCardName } from './cardCatalog.js';
 import { PACKS, drawPack } from './shopPacks.js';
 import { CARD_EFFECTS, saveCustomCard, saveCustomCardsBulk, setCloudCustomCardUser, validateCustomCard } from './customCards.js';
 import { loadCharacterIconPresets, fileToCharacterIcon, resolveCharacterIcon } from './playerIcons.js';
@@ -119,6 +119,9 @@ const cardDetailCard = document.getElementById('card-detail-card');
 const cardDetailText = document.getElementById('card-detail-text');
 const cardDetailClose = document.getElementById('card-detail-close');
 const cardDetailUse = document.getElementById('card-detail-use');
+// カード詳細は盤面外（図鑑・ショップ・デッキ編集）からも開くため、
+// hiddenになる#appの外に置く共通オーバーレイとして扱う。
+document.body.appendChild(cardDetailModal);
 const centerPanel = document.getElementById('center-panel');
 const centerHandEl = document.getElementById('center-hand');
 const spellEffectModal = document.getElementById('spell-effect-modal');
@@ -2021,6 +2024,12 @@ function ensureBreedFields(character) {
   }
   for (const deck of character.decks) {
     if (/^ブック\d+$/.test(deck.name || '')) deck.name = deck.name.replace(/^ブック/, 'デッキ');
+    deck.deckList = (deck.deckList || []).filter((card) => !isLegacyPlaceholderCardName(card.name));
+  }
+  if (character.ownedCards) {
+    for (const key of Object.keys(character.ownedCards)) {
+      if (isLegacyPlaceholderCardName(key)) delete character.ownedCards[key];
+    }
   }
   return character;
 }

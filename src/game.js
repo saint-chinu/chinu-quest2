@@ -1,6 +1,6 @@
 import { TileType, mapRequiresAllCheckpoints } from './board.js';
 import { PIECE_REST_Y, UNIT_ICON_REST_Y } from './scene.js';
-import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity, buildCardPool } from './cards.js';
+import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity } from './cards.js';
 import { buildStarterCardList, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf } from './battleCards.js';
 import { createFieldUnit, resolveBattle, equipItem, applyCurse, applyPoison, GoldLedger } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
@@ -2924,13 +2924,13 @@ export class Game {
 
   /**
    * 謎の科学者「アイテムカードを1枚入手」用: 名前付きアイテム
-   * （ITEM_CATALOG）＋汎用武器防具プールを合わせたレアリティ別プールから
+   * （ITEM_CATALOG）のレアリティ別プールから
    * N70%/S20%/R10%で1枚抽選する（所持カード自体は増減せず手札に加わる
    * だけ - buildStarterExtraCard等と同じ「新しいidを振った即席インスタンス」
    * として渡す）。該当レアリティが空なら安全にNへフォールバックする。
    */
   _randomItemCardForSummon() {
-    const pool = [...Object.values(ITEM_CATALOG), ...buildCardPool({ monsterCount: 0, spellCount: 0, gearCount: 8 })];
+    const pool = Object.values(ITEM_CATALOG);
     const byRarity = { [Rarity.N]: [], [Rarity.S]: [], [Rarity.R]: [] };
     for (const c of pool) {
       if (byRarity[c.rarity]) byRarity[c.rarity].push(c);

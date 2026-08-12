@@ -106,6 +106,7 @@ export const STORY_STAGES = [
         {
           name: 'ウサギン',
           color: 0xffd166,
+          deckKey: 'usagin',
           theme: { elements: [Element.FOREST, Element.FIRE], featuredItem: ITEM_CATALOG.potLid },
         },
       ],
@@ -189,6 +190,7 @@ export const STORY_STAGES = [
         {
           name: '少女A',
           color: 0x4caf6e,
+          deckKey: 'shoujoA',
           theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi },
         },
       ],
