@@ -1647,6 +1647,7 @@ const pvpRoomScreen = document.getElementById('pvp-room-screen');
 const pvpRoomCode = document.getElementById('pvp-room-code');
 const pvpRoomStatus = document.getElementById('pvp-room-status');
 const pvpRoomSettings = document.getElementById('pvp-room-settings');
+const pvpRoomTeams = document.getElementById('pvp-room-teams');
 const pvpRoomStart = document.getElementById('pvp-room-start');
 const pvpRoomLeave = document.getElementById('pvp-room-leave');
 const pvpMapSelectScreen = document.getElementById('pvp-map-select-screen');
@@ -3236,6 +3237,12 @@ function enterPvpRoomScreen(session) {
       return;
     }
     pvpRoomSettings.textContent = `ステージ: ${MAPS.find((map) => map.id === room.mapId)?.name || room.mapId} / 目標G: ${Number(room.goalCurrency || 5000).toLocaleString('ja-JP')}G`;
+    if (room.allianceMode) {
+      const names = [room.hostName, room.guestName, ...(room.cpuNames || [])].filter(Boolean);
+      pvpRoomTeams.textContent = `🔴 紅組: ${names.filter((_, i) => i % 2 === 0).join('・') || '待機中'}　⚪ 白組: ${names.filter((_, i) => i % 2 === 1).join('・') || '待機中'}`;
+    } else {
+      pvpRoomTeams.textContent = '同盟なし（個人戦）';
+    }
     if (room.guestUid || (session.isHost && Array.isArray(room.cpuNames) && room.cpuNames.length > 0)) {
       const opponentName = session.isHost ? room.guestName : room.hostName;
       const participantCount = Array.isArray(room.participants) ? room.participants.length : 1 + (room.guestUid ? 1 : 0) + (room.cpuNames?.length || 0);
