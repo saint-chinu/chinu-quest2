@@ -2,7 +2,7 @@ import { TileType, mapRequiresAllCheckpoints } from './board.js';
 import { PIECE_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity, buildCardPool } from './cards.js';
 import { buildStarterExtraCards, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf } from './battleCards.js';
-import { createFieldUnit, resolveBattle, equipItem, applyCurse, GoldLedger } from './battle.js';
+import { createFieldUnit, resolveBattle, equipItem, applyCurse, applyPoison, GoldLedger } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay } from './utils.js';
 import { DENCHU_FIELD_MONSTER } from './thunderMonsters.js';
@@ -200,6 +200,24 @@ export class Game {
       // 持たせておくが参照されない。cfg.elements（story.jsのtheme.elements）が
       // あればそのキャラの得意属性として反映される。
       aiProfile: resolveAiProfile(cfg.name, cfg.elements ?? null),
+      // ここから下はスペル効果用の状態（chinu-quest2-spells-final_1.md参照）。
+      // diceCurse: 次の自分のサイコロにだけ効く一度きりの呪い
+      // ({type:'fixed',value}/{type:'reverse'}/{type:'double'})。nullなら無し。
+      diceCurse: null,
+      // 副業収入（周回数×50G+50G）用の通算周回数。
+      lapsCompleted: 0,
+      // 脱税: 次に支払うはずだった通行料を無効化できる残り回数。
+      tollWaiverCharges: 0,
+      // 宝くじ: 次にゴールした時0〜500Gをランダム獲得する権利があるか。
+      lotteryOnNextGoal: false,
+      // 絶対攻撃: 次の侵略で召喚したモンスターが貫通を得るか。
+      pierceNextInvasion: false,
+      // お前も〇ぬんだ: 次の侵略が戦闘無しで確定勝利になるか（発動時に700G消費）。
+      guaranteedNextInvasionWin: false,
+      // 不動産鑑〇士: 自分の全ての土地の土地コマンドにアクセスできる残りターン数。
+      allTilesAccessTurnsRemaining: 0,
+      // バックファイア用: 直近に実際に着地したタイルidの履歴（新しい順が先頭）。
+      tileHistory: [],
     }));
     this.currentPlayerIndex = 0;
     this.isBusy = false;
@@ -244,6 +262,8 @@ export class Game {
     this.isBusy = true;
     this.awaitingRoll = false;
     this.currentPlayer.spellUsedThisTurn = false;
+    // 不動産鑑〇士: 自分の手番が来るたびに残りターン数を1つ消化する。
+    if (this.currentPlayer.allTilesAccessTurnsRemaining > 0) this.currentPlayer.allTilesAccessTurnsRemaining -= 1;
     this._notifyState();
 
     await this._drawForTurn(this.currentPlayer);
@@ -275,25 +295,542 @@ export class Game {
     }
   }
 
-  /** Uses a spell from the current (human) player's hand, once per turn, before rolling. */
+  /**
+   * Uses a spell from the current (human) player's hand, once per turn,
+   * before rolling. 対象選択（あれば）はカードを消費する前に行い、
+   * キャンセルすれば何も消費しない（土地コマンドのconfirmAndSpend paternと
+   * 同じ考え方）。手札からの削除・G消費・spellUsedThisTurnの確定は
+   * 対象選択と発動がどちらも成功した後にまとめて行う。
+   */
   async useSpell(card) {
     if (this.isBusy || !this.awaitingRoll || this.currentPlayer.isCPU) return;
     const player = this.currentPlayer;
     if (player.spellUsedThisTurn) return;
     if (card.type !== CardType.SPELL) return;
     if (!player.hand.some((c) => c.id === card.id)) return;
+    if (player.currency < (card.cost || 0)) {
+      this.onLog('Gが足りずスペルを使えません');
+      return;
+    }
 
     this.isBusy = true;
     this._notifyState();
 
+    const cast = await this._resolveSpellCast(player, card);
+    if (!cast) {
+      this.isBusy = false;
+      this._notifyState();
+      return;
+    }
+
     player.hand = player.hand.filter((c) => c.id !== card.id);
     player.deck.discard(card);
+    player.currency -= card.cost || 0;
     player.spellUsedThisTurn = true;
-    this.onLog(`${player.name}は「${card.name}」を使用した`);
+    this.onLog(`${player.name}は「${card.name}」を使用した (-${card.cost || 0}G)`);
+    this._notifyState();
 
     await this.onSpellUse(card);
+    const endedTurn = await this._applySpellEffect(player, card, cast);
+    this._notifyState();
+
+    if (endedTurn) {
+      // 帰巣本能専用: 効果自体がターンを終わらせるので、通常のrollDice相当の
+      // 後始末（破産チェック→次のプレイヤーへ）をここで肩代わりする。
+      for (const p of this.players) this._checkBankruptcy(p);
+      if (!this.storyEnded) {
+        this._nextTurn();
+        await this._beginTurn();
+      }
+      return;
+    }
 
     this.isBusy = false;
+    this._notifyState();
+  }
+
+  /**
+   * カードのtargetに応じた対象選択UIを出し、`{}`（対象なし）や
+   * `{targetTileId}`/`{targetPlayerId}`/`{targetTileIds:[a,b]}`のような
+   * 選択結果を返す。キャンセルされたらnull。既存のonPickAbilityTargetを
+   * モンスター・土地・プレイヤーいずれの対象選びにも使い回す（渡す配列の
+   * 形が違うだけ）。
+   */
+  async _resolveSpellCast(player, card) {
+    const target = card.target;
+    if (target === 'self' || target === 'none') return {};
+
+    if (target === 'enemyMonster' || target === 'anyMonster' || target === 'ownMonster') {
+      const tiles = this.tiles.filter((t) => {
+        if (!t.unit) return false;
+        if (target === 'enemyMonster') return t.unit.ownerId !== player.id;
+        if (target === 'ownMonster') return t.unit.ownerId === player.id;
+        return true;
+      });
+      if (tiles.length === 0) {
+        this.onLog('対象のモンスターがいません');
+        return null;
+      }
+      const targetId = await this.onPickAbilityTarget(tiles.map((t) => this._browseTileSummary(t, player)), player.id);
+      if (targetId == null) return null;
+      return { targetTileId: targetId };
+    }
+
+    if (target === 'anyTile' || target === 'ownTile') {
+      const tiles = this.tiles.filter((t) => {
+        if (t.type !== TileType.LAND) return false;
+        if (target === 'ownTile') return t.owner === player.id;
+        return true;
+      });
+      if (tiles.length === 0) {
+        this.onLog('対象の土地がありません');
+        return null;
+      }
+      const targetId = await this.onPickAbilityTarget(
+        tiles.map((t) => ({ ...this._browseTileSummary(t, player), label: `${t.id}番地（${ELEMENT_LABEL[t.element]}）` })),
+        player.id,
+      );
+      if (targetId == null) return null;
+      return { targetTileId: targetId };
+    }
+
+    if (target === 'enemyPlayer' || target === 'anyPlayer') {
+      const targets = this.players.filter((p) => {
+        if (p.defeated) return false;
+        if (target === 'enemyPlayer' && p.id === player.id) return false;
+        if (target === 'enemyPlayer' && p.allianceId != null && p.allianceId === player.allianceId) return false;
+        return true;
+      });
+      if (targets.length === 0) {
+        this.onLog('対象にできるプレイヤーがいません');
+        return null;
+      }
+      const targetId = await this.onPickAbilityTarget(
+        targets.map((p) => ({ id: p.id, label: `${p.name}に「${card.name}」をかける` })),
+        player.id,
+      );
+      if (targetId == null) return null;
+      return { targetPlayerId: targetId };
+    }
+
+    if (target === 'twoOwnMonsters') {
+      const tiles = this._ownedTiles(player).filter((t) => t.unit);
+      if (tiles.length < 2) {
+        this.onLog('入れ替えられるモンスターが足りません');
+        return null;
+      }
+      const firstId = await this.onPickAbilityTarget(tiles.map((t) => this._browseTileSummary(t, player)), player.id);
+      if (firstId == null) return null;
+      const remaining = tiles.filter((t) => t.id !== firstId);
+      const secondId = await this.onPickAbilityTarget(remaining.map((t) => this._browseTileSummary(t, player)), player.id);
+      if (secondId == null) return null;
+      return { targetTileIds: [firstId, secondId] };
+    }
+
+    return null;
+  }
+
+  /**
+   * カードのeffect.typeをディスパッチして実際の効果を適用する。戻り値が
+   * `true`の場合、その効果自体がターン終了までを担った（帰巣本能専用）
+   * ことを示し、useSpell側の通常の後始末をスキップする。
+   */
+  async _applySpellEffect(player, card, cast) {
+    const effect = card.effect;
+    const targetTile = cast.targetTileId != null ? this.tiles.find((t) => t.id === cast.targetTileId) : null;
+    const targetPlayer = cast.targetPlayerId != null ? this.players.find((p) => p.id === cast.targetPlayerId) : null;
+
+    switch (effect.type) {
+      case 'setNextDice':
+        targetPlayer.diceCurse = { type: 'fixed', value: effect.value };
+        this.onLog(`${targetPlayer.name}は次のサイコロが${effect.value}に固定される呪いをかけられた`);
+        return false;
+
+      case 'reverseNextDice':
+        targetPlayer.diceCurse = { type: 'reverse' };
+        this.onLog(`${targetPlayer.name}は次のサイコロで後退する呪いをかけられた`);
+        return false;
+
+      case 'doubleNextDice':
+        targetPlayer.diceCurse = { type: 'double' };
+        this.onLog(`${targetPlayer.name}は次のサイコロの出目が2倍になる呪いをかけられた`);
+        return false;
+
+      case 'warpToNearbyEmptyLand':
+        await this._spellWarpToNearbyEmptyLand(player);
+        return true;
+
+      case 'curseForcedStop':
+        if (!targetTile?.unit) {
+          this.onLog('対象が既にいません');
+          return false;
+        }
+        targetTile.forcedStopCursed = player.id;
+        this.onLog(`${targetTile.unit.def.name}の土地に強制停止の呪いがかかった`);
+        return false;
+
+      case 'returnToStartDoubleBonus':
+        this._spellReturnToStartDoubleBonus(player);
+        return true;
+
+      case 'lapCountGold': {
+        const gold = player.lapsCompleted * effect.perLap + effect.flat;
+        player.currency += gold;
+        this.onLog(`${player.name}は副業収入で${gold}Gを得た`);
+        return false;
+      }
+
+      case 'tollReductionCurse':
+        if (!targetTile) return false;
+        targetTile.tollReductionRatio = effect.ratio;
+        this.onLog(`${targetTile.id}番地に通行料減少の呪いをかけた`);
+        return false;
+
+      case 'redistributeGoldEvenly': {
+        const alive = this.players.filter((p) => !p.defeated);
+        const total = alive.reduce((sum, p) => sum + p.currency, 0);
+        const share = Math.floor(total / alive.length);
+        for (const p of alive) p.currency = share;
+        this.onLog(`「山分け」で全員の所持Gが${share}Gに均等化された`);
+        return false;
+      }
+
+      case 'tollBonusOnceCurse':
+        if (!targetTile) return false;
+        targetTile.tollBonusOnceMultiplier = effect.multiplier;
+        this.onLog(`${targetTile.id}番地に追徴課税の呪いをかけた`);
+        return false;
+
+      case 'tollWaiverCurse':
+        player.tollWaiverCharges += 1;
+        this.onLog(`${player.name}は脱税の準備をした`);
+        return false;
+
+      case 'lotteryOnNextGoal':
+        player.lotteryOnNextGoal = true;
+        this.onLog(`${player.name}は宝くじを手に入れた`);
+        return false;
+
+      case 'stealGoldRatio': {
+        if (!targetPlayer) return false;
+        const amount = Math.round(targetPlayer.currency * effect.ratio);
+        targetPlayer.currency -= amount;
+        player.currency += amount;
+        this.onLog(`${player.name}が${targetPlayer.name}から${amount}Gを奪った`);
+        return false;
+      }
+
+      case 'directDamage':
+        if (!targetTile?.unit) {
+          this.onLog('対象が既にいません');
+          return false;
+        }
+        await this._spellDamageUnit(targetTile, effect.amount);
+        return false;
+
+      case 'damageAllUnits':
+        await this._spellDamageAllUnits(() => true, effect.amount);
+        return false;
+
+      case 'damageAllUnitsOfElement':
+        await this._spellDamageAllUnits((t) => t.unit.def.element === effect.element, effect.amount);
+        return false;
+
+      case 'poisonArea':
+        this._spellPoisonArea(targetTile, effect.ratio);
+        return false;
+
+      case 'grantPierceNextInvasion':
+        if (!targetPlayer) return false;
+        targetPlayer.pierceNextInvasion = true;
+        this.onLog(`${targetPlayer.name}は次の侵略で貫通を得る`);
+        return false;
+
+      case 'statCurse':
+        if (!targetTile?.unit) {
+          this.onLog('対象が既にいません');
+          return false;
+        }
+        applyCurse(targetTile.unit, { name: card.name, addedAtk: effect.addedAtk, addedHp: effect.addedHp });
+        this.onLog(`${targetTile.unit.def.name}に「${card.name}」の呪いをかけた`);
+        return false;
+
+      case 'guaranteedNextInvasionWin':
+        if (player.currency < effect.cost) {
+          this.onLog('Gが足りません');
+          return false;
+        }
+        player.guaranteedNextInvasionWin = true;
+        this.onLog(`${player.name}は禁断の呪いに手を染めた……`);
+        return false;
+
+      case 'fullHeal':
+        if (!targetTile?.unit) return false;
+        targetTile.unit.currentHp = this._baseStats(targetTile.unit).hp + this._elementHpBonus(targetTile.unit, targetTile);
+        this.onLog(`${targetTile.unit.def.name}のHPが全回復した`);
+        return false;
+
+      case 'healAllUnitsRatio':
+        this._spellHealAllUnitsRatio(effect.ratio);
+        return false;
+
+      case 'cleanseCurses':
+        player.diceCurse = null;
+        if (targetTile?.unit) targetTile.unit.curses = [];
+        this.onLog(`${player.name}は呪いを解除した`);
+        return false;
+
+      case 'surviveLethalDamageCurse':
+        if (!targetTile?.unit) return false;
+        targetTile.unit.items.push({ name: card.name, atkBonus: 0, hpBonus: 0, effect: { type: 'surviveLethalDamage' } });
+        this.onLog(`${targetTile.unit.def.name}に不死鳥の呪いをかけた`);
+        return false;
+
+      case 'enableAllOwnTileAbilities':
+        player.allTilesAccessTurnsRemaining = effect.turns;
+        this.onLog(`${player.name}は${effect.turns}ターンの間、全ての土地の土地コマンドを使えるようになった`);
+        return false;
+
+      case 'autoMatchAllTileElements':
+        this._spellAutoMatchAllTileElements();
+        return false;
+
+      case 'forceTileElement':
+        if (!targetTile) return false;
+        targetTile.element = effect.element;
+        this._repaintTileToElement(targetTile);
+        this.onLog(`${targetTile.id}番地を${ELEMENT_LABEL[effect.element]}属性に変えた`);
+        return false;
+
+      case 'swapTwoMonsters':
+        this._spellSwapTwoMonsters(cast.targetTileIds);
+        return false;
+
+      case 'forceRelocateOneStep':
+        await this._spellForceRelocateOneStep(player, targetTile);
+        return false;
+
+      case 'curseSanctuary':
+        if (!targetTile) return false;
+        targetTile.transparentCursed = true;
+        this.onLog(`${targetTile.id}番地に聖域の呪いをかけた（侵略不能・通行料ゼロ）`);
+        return false;
+
+      default:
+        return false;
+    }
+  }
+
+  /** ブルーオーシャン: 現在地からグラフ距離が最も近い空き地へ瞬間移動する（同着なら抽選）。その場で土地コマンド（土地コマンド・召喚のみ、サイコロ無し）まで済ませてターンを終える。 */
+  async _spellWarpToNearbyEmptyLand(player) {
+    const currentTile = this.tiles[player.tileId];
+    const candidates = this.tiles.filter((t) => t.type === TileType.LAND && t.owner == null && t.id !== currentTile.id);
+    if (candidates.length === 0) {
+      this.onLog('飛べる空き地がありません');
+      return;
+    }
+    let bestDist = Infinity;
+    for (const t of candidates) bestDist = Math.min(bestDist, this._tileDistance(currentTile.id, t.id));
+    const nearest = candidates.filter((t) => this._tileDistance(currentTile.id, t.id) === bestDist);
+    const target = nearest[Math.floor(Math.random() * nearest.length)];
+
+    player.previousTileId = null;
+    player.tileId = target.id;
+    if (player.mesh) player.mesh.position.set(target.position.x, PIECE_REST_Y, target.position.z);
+    this.onLog(`${player.name}は「ブルーオーシャン」で${target.id}番地に飛んだ！`);
+    this._notifyState();
+
+    await this._runLandCommand(player);
+    await delay(400);
+    for (const p of this.players) this._checkBankruptcy(p);
+    if (this.storyEnded) return;
+    this._nextTurn();
+    await this._beginTurn();
+  }
+
+  /** 帰巣本能: スタート地点へ瞬間移動し、周回ボーナスの2倍のGを獲得する（チェックポイント条件やフリーランサー等の補正は挟まない、固定額）。呼び出し元がこの後すぐターンを終える。 */
+  _spellReturnToStartDoubleBonus(player) {
+    const startTile = this.tiles.find((t) => t.type === TileType.START);
+    player.previousTileId = null;
+    player.tileId = startTile.id;
+    if (player.mesh) player.mesh.position.set(startTile.position.x, PIECE_REST_Y, startTile.position.z);
+    this._healOwnedUnitsOnLap(player);
+    player.lapsCompleted += 1;
+    const bonus = START_BONUS * 2;
+    player.currency += bonus;
+    this.onLog(`${player.name}は「帰巣本能」でスタート地点に戻り、+${bonus}Gを獲得した！`);
+    if (this.requireAllCheckpoints) player.passedCheckpoints.clear();
+  }
+
+  /**
+   * 1体へ直接ダメージを与える（火の玉演出込み）。戦闘外でHPが0以下に
+   * なった場合の後始末（土地を空ける・不死鳥特性の処理）もここでまとめて
+   * 行う - 通常のバトルでのdeath処理（_runInvasion等）と同じ形。
+   */
+  async _spellDamageUnit(tile, amount, { showEffect = true } = {}) {
+    const unit = tile.unit;
+    if (!unit) return;
+    unit.currentHp -= amount;
+    this._notifyState();
+    if (showEffect) await this.onDamageEffect?.({ tileId: tile.id, damage: amount });
+
+    if (unit.currentHp <= 0) {
+      const owner = this.players.find((p) => p.id === tile.owner);
+      tile.unit = null;
+      tile.owner = null;
+      tile.transparentCursed = false;
+      this._repaintTileToElement(tile);
+      this.onLog(`${owner.name}の${unit.def.name}は倒された`);
+      await this._handleUnitDeath(unit, owner);
+    }
+  }
+
+  /** 小隕石/洪水/干ばつ/断線事故/森林火災用: 条件に合う盤面全モンスターへ一律ダメージ。演出は1体ずつだと冗長になるので省略し、まとめて1行ログする。 */
+  async _spellDamageAllUnits(predicate, amount) {
+    const targets = this.tiles.filter((t) => t.unit && predicate(t));
+    for (const t of targets) {
+      if (!t.unit) continue; // 既に別の対象として倒れている場合はスキップ
+      await this._spellDamageUnit(t, amount, { showEffect: false });
+    }
+    this.onLog(`${targets.length}体のモンスターに${amount}ダメージ！`);
+  }
+
+  /** 毒霧: 選んだマスとその隣接マス（前後左右1マス相当）にいる全モンスターを毒状態にする。 */
+  _spellPoisonArea(tile, ratio) {
+    if (!tile) return;
+    const area = [tile, ...tile.neighbors.map((id) => this.tiles[id])];
+    let count = 0;
+    for (const t of area) {
+      if (!t.unit) continue;
+      applyPoison(t.unit, ratio);
+      count += 1;
+    }
+    this.onLog(`「毒霧」で${count}体のモンスターが毒状態になった`);
+  }
+
+  /** 博愛精神: 盤面の全モンスターのHPを最大HPの割合分だけ回復する。 */
+  _spellHealAllUnitsRatio(ratio) {
+    let count = 0;
+    for (const t of this.tiles) {
+      if (!t.unit) continue;
+      const maxHp = this._baseStats(t.unit).hp + this._elementHpBonus(t.unit, t);
+      const healed = Math.min(t.unit.currentHp + Math.round(maxHp * ratio), maxHp);
+      if (healed > t.unit.currentHp) {
+        t.unit.currentHp = healed;
+        count += 1;
+      }
+    }
+    this.onLog(`「博愛精神」で${count}体のモンスターが回復した`);
+  }
+
+  /** 最適化: 盤面の全ての土地について、配置モンスターの属性と土地属性が食い違っていれば土地側をモンスターの属性に合わせる。 */
+  _spellAutoMatchAllTileElements() {
+    let count = 0;
+    for (const t of this.tiles) {
+      if (!t.unit || t.type !== TileType.LAND) continue;
+      if (t.element === t.unit.def.element) continue;
+      t.element = t.unit.def.element;
+      this._repaintTileToElement(t);
+      count += 1;
+    }
+    this.onLog(`「最適化」で${count}箇所の土地属性が配置モンスターに合わせて変わった`);
+  }
+
+  /** シャッフル: 自分の土地2マスの配置モンスターを入れ替える。呪いは対象の呪いは消滅する（土地レベル・所有権はそのまま）。 */
+  _spellSwapTwoMonsters(tileIds) {
+    const [idA, idB] = tileIds || [];
+    const tileA = this.tiles.find((t) => t.id === idA);
+    const tileB = this.tiles.find((t) => t.id === idB);
+    if (!tileA?.unit || !tileB?.unit) return;
+    const unitA = tileA.unit;
+    const unitB = tileB.unit;
+    unitA.curses = [];
+    unitB.curses = [];
+    tileA.unit = unitB;
+    tileB.unit = unitA;
+    this.onLog(`「シャッフル」で${unitA.def.name}と${unitB.def.name}が入れ替わった`);
+  }
+
+  /**
+   * サイコキネシス: 指定モンスターを隣接1マスへ強制移動させる（移動先の
+   * 候補は「対象モンスターの持ち主」視点で味方土地・特殊マス・透過の呪い
+   * 付き土地を除外 - 空き地はOK、敵地（同盟含まない）は強制戦闘）。
+   * _humanMoveFlowの侵略分岐と同じ決着ロジックを踏襲する。
+   */
+  async _spellForceRelocateOneStep(player, targetTile) {
+    if (!targetTile?.unit) {
+      this.onLog('対象が既にいません');
+      return;
+    }
+    const unit = targetTile.unit;
+    const unitOwner = this.players.find((p) => p.id === unit.ownerId);
+    const candidates = targetTile.neighbors
+      .map((id) => this.tiles[id])
+      .filter((t) => t.type === TileType.LAND && !t.transparentCursed)
+      .filter((t) => {
+        if (t.owner == null) return true;
+        if (t.owner === unit.ownerId) return false;
+        const owner = this.players.find((p) => p.id === t.owner);
+        if (owner?.allianceId != null && owner.allianceId === unitOwner.allianceId) return false;
+        return true;
+      });
+    if (candidates.length === 0) {
+      this.onLog('移動できるマスがありません');
+      return;
+    }
+    const destId = await this.onPickAbilityTarget(
+      candidates.map((t) => ({ ...this._browseTileSummary(t, player), label: `${t.id}番地へ強制移動` })),
+      player.id,
+    );
+    if (destId == null) return;
+    const destTile = this.tiles.find((t) => t.id === destId);
+
+    if (destTile.owner == null) {
+      destTile.unit = unit;
+      destTile.owner = unit.ownerId;
+      this._paintTile(destTile, unitOwner.color);
+      targetTile.unit = null;
+      targetTile.owner = null;
+      targetTile.transparentCursed = false;
+      this._repaintTileToElement(targetTile);
+      this.onLog(`${unit.def.name}が${destTile.id}番地へ強制移動させられた`);
+    } else {
+      const defenderPlayer = this.players.find((p) => p.id === destTile.owner);
+      const defenderUnit = destTile.unit;
+      const result = await this._runBattleScene(unit, unitOwner, defenderUnit, defenderPlayer, targetTile, destTile);
+      destTile.forcedStopCursed = false;
+      await this._maybeRedirectDeathToLightningRod(defenderPlayer, destTile, result);
+
+      if (result.attackerSurvived && !result.defenderSurvived) {
+        destTile.unit = unit;
+        destTile.owner = unit.ownerId;
+        this._paintTile(destTile, unitOwner.color);
+        targetTile.unit = null;
+        targetTile.owner = null;
+        targetTile.transparentCursed = false;
+        this._repaintTileToElement(targetTile);
+        this.onLog(`${unit.def.name}が強制移動の戦闘で${destTile.id}番地を奪取した！`);
+        await this._handleUnitDeath(defenderUnit, defenderPlayer);
+      } else if (result.attackerSurvived && result.defenderSurvived) {
+        this.onLog(`${unit.def.name}は強制移動先の防衛を受け、元の土地に戻った`);
+      } else {
+        targetTile.unit = null;
+        targetTile.owner = null;
+        targetTile.transparentCursed = false;
+        this._repaintTileToElement(targetTile);
+        if (!result.defenderSurvived) {
+          destTile.unit = null;
+          destTile.owner = null;
+          destTile.transparentCursed = false;
+          this._repaintTileToElement(destTile);
+          this.onLog('強制移動の戦闘で両者相打ちになった');
+          await this._handleUnitDeath(defenderUnit, defenderPlayer);
+        } else {
+          this.onLog(`${unit.def.name}は強制移動の戦闘で倒された`);
+        }
+        await this._handleUnitDeath(unit, unitOwner);
+      }
+    }
     this._notifyState();
   }
 
@@ -310,10 +847,31 @@ export class Game {
     this._notifyState();
 
     const player = this.currentPlayer;
+    // ダイス呪い（1のダイス/3のダイス/6のダイス/アイキャンフライ/バックファイア）:
+    // 次の1回のロールだけ結果を書き換える一度きりの呪い。
+    let reverse = false;
+    if (player.diceCurse) {
+      const curse = player.diceCurse;
+      player.diceCurse = null;
+      if (curse.type === 'fixed') {
+        steps = curse.value;
+        this.onLog(`${player.name}は呪いでサイコロが${steps}に固定された！`);
+      } else if (curse.type === 'double') {
+        steps = steps * 2;
+        this.onLog(`${player.name}は呪いでサイコロの出目が2倍の${steps}になった！`);
+      } else if (curse.type === 'reverse') {
+        reverse = true;
+        this.onLog(`${player.name}は呪いで${steps}マス後退させられる！`);
+      }
+    }
     player.lastDiceSteps = steps;
-    this.onLog(`${player.name}のサイコロ: ${steps}`);
+    if (!reverse) this.onLog(`${player.name}のサイコロ: ${steps}`);
 
-    await this._movePlayer(player, steps);
+    if (reverse) {
+      await this._movePlayerBackward(player, steps);
+    } else {
+      await this._movePlayer(player, steps);
+    }
     this.onMoveComplete?.();
     await this._resolveSpecialTile(player);
     await this._runLandCommand(player);
@@ -428,6 +986,9 @@ export class Game {
       player.previousTileId = player.tileId;
       player.tileId = nextId;
       this._turnPathIds.push(nextId);
+      // バックファイア用の着地履歴（直近20マスだけ保持すれば十分）。
+      player.tileHistory.unshift(nextId);
+      if (player.tileHistory.length > 20) player.tileHistory.length = 20;
       await this._stepWithCamera(player, fromTile.position, toTile.position);
 
       if (toTile.type === TileType.EVENT) player.passedCheckpoints.add(toTile.id);
@@ -439,6 +1000,34 @@ export class Game {
       // 強制停止の呪い（ほこら効果「右の頬をシバかれたら～」）: 自分の土地・
       // 同盟仲間の土地は素通りできるが、それ以外は通過中でもここで足を
       // 止められる（このターンの残りステップは消化しない）。
+      if (this._isForcedStopFor(player, toTile)) {
+        if (i < steps - 1) this.onLog(`${player.name}は強制停止の呪いで足を止めた！`);
+        break;
+      }
+    }
+  }
+
+  /**
+   * バックファイア用: player.tileHistory（着地履歴、新しい順）を1つずつ
+   * 遡ることで後退を再現する。通常の前進と違い分岐選択は発生しない
+   * （来た道をそのまま戻るだけ）。履歴が尽きたらそこで止まる。ゴール
+   * ボーナスは付与しない（後退でゴールを通り過ぎてもボーナスの対象外）。
+   */
+  async _movePlayerBackward(player, steps) {
+    this._turnPathIds = [];
+    for (let i = 0; i < steps; i++) {
+      if (player.tileHistory.length < 2) break;
+      const fromTile = this.tiles[player.tileId];
+      player.tileHistory.shift();
+      const backId = player.tileHistory[0];
+      const toTile = this.tiles[backId];
+      player.previousTileId = player.tileId;
+      player.tileId = backId;
+      this._turnPathIds.push(backId);
+      await this._stepWithCamera(player, fromTile.position, toTile.position);
+
+      if (toTile.type === TileType.EVENT) player.passedCheckpoints.add(toTile.id);
+
       if (this._isForcedStopFor(player, toTile)) {
         if (i < steps - 1) this.onLog(`${player.name}は強制停止の呪いで足を止めた！`);
         break;
@@ -459,8 +1048,18 @@ export class Game {
     );
     const bonus = freelancerTile ? Math.round(START_BONUS * freelancerTile.unit.def.effect.multiplier) : START_BONUS;
     player.currency += bonus;
+    player.lapsCompleted += 1;
     this.onLog(`${player.name}はゴールを通過！ +${bonus}`);
     if (this.requireAllCheckpoints) player.passedCheckpoints.clear();
+
+    // 宝くじ: 次のゴール通過で0〜500Gをランダム獲得する権利（100G刻み、500Gだけ確率10%）。
+    if (player.lotteryOnNextGoal) {
+      player.lotteryOnNextGoal = false;
+      const roll = Math.random();
+      const lotteryAmount = roll < 0.1 ? 500 : Math.floor(Math.random() * 5) * 100;
+      player.currency += lotteryAmount;
+      this.onLog(`${player.name}は宝くじで${lotteryAmount}Gを獲得した！`);
+    }
   }
 
   /**
@@ -494,12 +1093,23 @@ export class Game {
       .every((t) => player.passedCheckpoints.has(t.id));
   }
 
-  /** 強制停止の呪いが今このプレイヤーに対して効くか。呪い付きの土地でも、所有者本人と同盟仲間は素通りできる。 */
+  /**
+   * 強制停止の呪いが今このプレイヤーに対して効くか。`tile.forcedStopCursed`は
+   * 通常`true`（ほこら効果 - 免除対象は土地の所有者本人）だが、アリジゴク
+   * （スペル）は免除対象を「詠唱者」に変えたいので、代わりに免除する
+   * プレイヤーidそのものを入れておける（数値idはtruthyなので`true`同様に
+   * 呪いあり判定される）。免除対象の同盟仲間も素通りできる。
+   */
   _isForcedStopFor(player, tile) {
-    if (!tile.forcedStopCursed || tile.type !== TileType.LAND || tile.owner == null) return false;
-    if (tile.owner === player.id) return false;
-    const owner = this.players.find((p) => p.id === tile.owner);
-    if (owner?.allianceId != null && owner.allianceId === player.allianceId) return false;
+    // player.idは0始まりなので、免除idがプレイヤー0の時に`!tile.forcedStopCursed`
+    // だと`!0`=trueになり「呪い無し」と誤判定してしまう - null/undefined/false
+    // だけを「呪い無し」として明示的に弾く。
+    if (tile.forcedStopCursed == null || tile.forcedStopCursed === false) return false;
+    if (tile.type !== TileType.LAND || tile.owner == null) return false;
+    const exemptId = tile.forcedStopCursed === true ? tile.owner : tile.forcedStopCursed;
+    if (exemptId === player.id) return false;
+    const exemptPlayer = this.players.find((p) => p.id === exemptId);
+    if (exemptPlayer?.allianceId != null && exemptPlayer.allianceId === player.allianceId) return false;
     return true;
   }
 
@@ -739,7 +1349,10 @@ export class Game {
    */
   async _runLandCommand(player) {
     const tile = this.tiles[player.tileId];
-    const isAdmin = tile.type === TileType.START || tile.type === TileType.EVENT;
+    // 不動産鑑〇士: 効果中は今どこに立っていてもisAdmin相当（=全所有地に土地
+    // コマンドでアクセス可能）になる。
+    const isAdmin =
+      tile.type === TileType.START || tile.type === TileType.EVENT || player.allTilesAccessTurnsRemaining > 0;
     const owesTollUnlessConquered = tile.type === TileType.LAND && tile.owner != null && tile.owner !== player.id;
     if (tile.type !== TileType.LAND && !isAdmin) return;
 
@@ -785,7 +1398,21 @@ export class Game {
     const owner = this.players.find((p) => p.id === tile.owner);
     // 同盟戦: 仲間の土地に止まっても通行料は取られない。
     if (owner.allianceId != null && owner.allianceId === player.allianceId) return;
-    const toll = this._tollOfTile(tile);
+
+    let toll = this._tollOfTile(tile);
+    // 追徴課税: 対象の土地に止まった最初の相手にだけ1.5倍（1回限り消費）。
+    if (tile.tollBonusOnceMultiplier) {
+      toll = Math.round(toll * tile.tollBonusOnceMultiplier);
+      tile.tollBonusOnceMultiplier = null;
+      this.onLog('「追徴課税」の効果で通行料が割り増しされた！');
+    }
+    // 脱税: 次に支払うはずだった通行料を1回無効化する（自分への呪い）。
+    if (player.tollWaiverCharges > 0) {
+      player.tollWaiverCharges -= 1;
+      this.onLog(`${player.name}は「脱税」の効果で通行料の支払いを免れた！`);
+      this._notifyState();
+      return;
+    }
     player.currency -= toll;
     owner.currency += toll;
     this.onLog(`${player.name}は通行料を支払った (-${toll}G → ${owner.name})`);
@@ -905,7 +1532,11 @@ export class Game {
   /** 通行料 = 地価 × 通行料倍率。透過の呪い（深海魚X）がかかった土地は通行料ゼロ。 */
   _tollOfTile(tile) {
     if (tile.transparentCursed) return 0;
-    return Math.round(this._landValueOfTile(tile) * TOLL_RATE[tile.level]);
+    let toll = Math.round(this._landValueOfTile(tile) * TOLL_RATE[tile.level]);
+    // 増税通知: 通行料を割合で恒久的に減らす呪い（表示にも反映される安定した値、
+    // 追徴課税の1回限り倍率とは別枠 - こちらは_settleLandingToll側で扱う）。
+    if (tile.tollReductionRatio) toll = Math.round(toll * (1 - tile.tollReductionRatio));
+    return toll;
   }
 
   /**
@@ -1887,9 +2518,34 @@ export class Game {
   }
 
   async _runInvasion(player, tile, card) {
+    // 絶対攻撃: 次の侵略で召喚するモンスターが一時的に貫通を得る（カードの
+    // インスタンスだけをコピーして特性を足すので、カタログの元defは汚さない）。
+    if (player.pierceNextInvasion) {
+      player.pierceNextInvasion = false;
+      card = { ...card, traits: [...(card.traits || []), 'pierce'] };
+      this.onLog(`${player.name}の${card.name}が「絶対攻撃」の効果で貫通を得た！`);
+    }
+
     const defenderPlayer = this.players.find((p) => p.id === tile.owner);
     const attackerUnit = createFieldUnit(card, player.id);
     const defenderUnit = tile.unit;
+
+    // お前も〇ぬんだ: 次の侵略が戦闘無しで確定勝利になる（700G消費、通常の
+    // 決着処理と同じ形で土地を奪う。避雷針侍の身代わり等の介入も一切挟まない）。
+    if (player.guaranteedNextInvasionWin) {
+      player.guaranteedNextInvasionWin = false;
+      player.currency -= 700;
+      this.onLog(`${player.name}は「お前も〇ぬんだ」の効果で戦闘なしに${defenderUnit.def.name}を倒した！ (-700G)`);
+      tile.unit = attackerUnit;
+      tile.owner = player.id;
+      tile.transparentCursed = false;
+      tile.forcedStopCursed = false;
+      this._paintTile(tile, player.color);
+      await this._handleUnitDeath(defenderUnit, defenderPlayer);
+      this._notifyState();
+      return;
+    }
+
     const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, null, tile);
     // 強制停止の呪いは「戦闘が終わると消える」(勝敗を問わない) - _shrineForcedStop参照。
     tile.forcedStopCursed = false;
@@ -2099,7 +2755,9 @@ export class Game {
       unitAtk: tile.unit ? this._baseStats(tile.unit).atk : null,
       unitHp: tile.unit ? (tile.unit.currentHp ?? this._baseStats(tile.unit).hp) : null,
       hasAbility: !!tile.unit?.def.ability,
-      cursed: !!tile.forcedStopCursed,
+      // forcedStopCursedはtrue（ほこら）かプレイヤーid（アリジゴク、0始まり）が
+      // 入る - !!だとid=0がfalseに化けるので明示的にnull/false判定する。
+      cursed: tile.forcedStopCursed != null && tile.forcedStopCursed !== false,
       transparentCursed: !!tile.transparentCursed,
     };
   }

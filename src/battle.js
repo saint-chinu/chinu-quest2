@@ -40,7 +40,7 @@ export function applyCurse(unit, spellDef) {
 }
 
 /** 毒状態を付与する（カエンタケ参照）。addedAtk/addedHpを持たないcurseなのでstatTotalsのステータス計算には影響しない。既に毒なら上書きしない（重ね掛け不可）。 */
-function applyPoison(unit, ratio) {
+export function applyPoison(unit, ratio) {
   if (unit.curses.some((c) => c.poisonRatio != null)) return;
   unit.curses.push({ name: '毒', poisonRatio: ratio, addedAtk: 0, addedHp: 0, traits: [] });
 }

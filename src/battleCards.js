@@ -1,4 +1,4 @@
-import { CardType, Element, Rarity, Deck } from './cards.js';
+import { CardType, Element, Rarity, Deck, DEFAULT_SPELL_COUNT } from './cards.js';
 import { FIRE_MONSTER_CATALOG } from './fireMonsters.js';
 import { WATER_MONSTER_CATALOG } from './waterMonsters.js';
 import { THUNDER_MONSTER_CATALOG } from './thunderMonsters.js';
@@ -155,17 +155,215 @@ export const ITEM_CATALOG = {
   }),
 };
 
+const spell = (id, name, rarity, cost, target, effect, effectDescription) => ({
+  id,
+  type: CardType.SPELL,
+  name,
+  rarity,
+  cost,
+  target,
+  effect,
+  effectDescription,
+});
+
+/**
+ * スペル40種。`target`はgame.jsの_resolveSpellCastが対象選択のUIフローを
+ * 出し分けるための種別で、`effect.type`が実際の効果本体（game.jsの
+ * _applySpellEffectがディスパッチする）。
+ * - 'enemyMonster'/'anyMonster'/'ownMonster': モンスター1体（onPickAbilityTarget流用）
+ * - 'enemyPlayer'/'anyPlayer': プレイヤー1人（同上、{id,label}形式）
+ * - 'anyTile'/'ownTile': 土地1マス（同上、tileSummary形式）
+ * - 'twoOwnMonsters': 自分のモンスター2体
+ * - 'self'/'none': 対象選択なし（'self'は発動者自身への適用、'none'は盤面全体等）
+ */
 export const SPELL_CATALOG = {
-  manjaro: {
-    id: 'manjaro',
-    type: CardType.SPELL,
-    name: 'マ〇ジャロ',
-    rarity: Rarity.S,
-    target: 'monster',
-    permanent: true, // a "curse" - stays until the monster it's on dies
-    addedAtk: 10,
-    addedHp: 20,
-  },
+  // ── 移動系 ──
+  diceOne: spell('diceOne', '1のダイス', Rarity.N, 30, 'enemyPlayer', { type: 'setNextDice', value: 1 }, '相手の次のサイコロを1にする'),
+  backfire: spell('backfire', 'バックファイア', Rarity.S, 50, 'enemyPlayer', { type: 'reverseNextDice' }, '相手の次のサイコロの数だけ後退させる'),
+  diceThree: spell('diceThree', '3のダイス', Rarity.N, 30, 'enemyPlayer', { type: 'setNextDice', value: 3 }, '相手の次のサイコロを3にする'),
+  // 元データは名前「6のダイス」なのに効果文が「次のサイコロを1にする」と
+  // なっていた（1のダイスとの重複ミスと判断）。名前に合わせて6として実装。
+  diceSix: spell('diceSix', '6のダイス', Rarity.N, 30, 'enemyPlayer', { type: 'setNextDice', value: 6 }, '相手の次のサイコロを6にする'),
+  iCanFly: spell('iCanFly', 'アイキャンフライ', Rarity.N, 30, 'enemyPlayer', { type: 'doubleNextDice' }, '相手の次のサイコロの出目×2進む'),
+  blueOcean: spell(
+    'blueOcean',
+    'ブルーオーシャン',
+    Rarity.S,
+    60,
+    'self',
+    { type: 'warpToNearbyEmptyLand' },
+    '近くの空き地に飛ぶ。そのターンはサイコロ不可、土地コマンド・召喚は可能',
+  ),
+  antlion: spell(
+    'antlion',
+    'アリジゴク',
+    Rarity.R,
+    150,
+    'anyMonster',
+    { type: 'curseForcedStop' },
+    '対象モンスターの土地に強制停止の呪い。使用者・同盟者以外は通過できない',
+  ),
+  homingInstinct: spell(
+    'homingInstinct',
+    '帰巣本能',
+    Rarity.S,
+    50,
+    'self',
+    { type: 'returnToStartDoubleBonus' },
+    '自分のコマをスタート地点に戻し、周回ボーナスの2倍のGを獲得する。このターンは他の行動不可',
+  ),
+
+  // ── 経済系 ──
+  sideIncome: spell('sideIncome', '副業収入', Rarity.N, 0, 'self', { type: 'lapCountGold', perLap: 50, flat: 50 }, '周回数×50G+50Gを得る'),
+  taxHike: spell(
+    'taxHike',
+    '増税通知',
+    Rarity.N,
+    40,
+    'anyTile',
+    { type: 'tollReductionCurse', ratio: 0.3 },
+    '対象の土地に「通行料30%減」の呪いをかける',
+  ),
+  splitEvenly: spell('splitEvenly', '山分け', Rarity.S, 100, 'none', { type: 'redistributeGoldEvenly' }, '場の手持ちG合計を全員で均等に分配し直す'),
+  specialAudit: spell(
+    'specialAudit',
+    '追徴課税',
+    Rarity.S,
+    70,
+    'anyTile',
+    { type: 'tollBonusOnceCurse', multiplier: 1.5 },
+    '対象の土地に止まった次の相手から、通常の1.5倍の通行料を得る（1回限り）',
+  ),
+  taxEvasion: spell('taxEvasion', '脱税', Rarity.N, 80, 'self', { type: 'tollWaiverCurse' }, '自分が次に支払うはずだった通行料を1回無効化する'),
+  lottery: spell(
+    'lottery',
+    '宝くじ',
+    Rarity.N,
+    50,
+    'self',
+    { type: 'lotteryOnNextGoal' },
+    '次にゴールした時、0〜500Gの間でランダムに獲得する（100G刻み、500Gのみ確率10%）',
+  ),
+  walletVacuum: spell('walletVacuum', '財布チューチュー', Rarity.R, 100, 'enemyPlayer', { type: 'stealGoldRatio', ratio: 0.3 }, '対象プレイヤーから手持ちGの30%を奪う'),
+
+  // ── 攻撃系 ──
+  senbonZakura: spell('senbonZakura', '千本桜', Rarity.R, 100, 'enemyMonster', { type: 'directDamage', amount: 30 }, '対象モンスターに30ダメージ'),
+  fireball: spell('fireball', 'ファイヤーボール', Rarity.N, 40, 'enemyMonster', { type: 'directDamage', amount: 15 }, '相手モンスター1体に15ダメージ'),
+  smallMeteor: spell('smallMeteor', '小隕石', Rarity.N, 50, 'none', { type: 'damageAllUnits', amount: 10 }, '場の全モンスターに10ダメージ（自分のモンスターも対象）'),
+  poisonMist: spell(
+    'poisonMist',
+    '毒霧',
+    Rarity.S,
+    60,
+    'anyTile',
+    { type: 'poisonArea', ratio: 0.15 },
+    '選んだマスと隣接マスのモンスター全員を毒状態にする（最大基礎HPの15%、戦闘終了直前にダメージ）',
+  ),
+  absoluteAttack: spell(
+    'absoluteAttack',
+    '絶対攻撃',
+    Rarity.N,
+    50,
+    'anyPlayer',
+    { type: 'grantPierceNextInvasion' },
+    '対象プレイヤーが次に侵略する時、召喚したモンスターが一時的に「貫通」を得る',
+  ),
+  manjaro: spell(
+    'manjaro',
+    'マ〇ジャロ',
+    Rarity.S,
+    30,
+    'anyMonster',
+    { type: 'statCurse', addedAtk: 10, addedHp: 20 },
+    '対象の配置モンスターは戦闘中HP+20・ATK+10になる呪い。そのモンスターがその土地にいる限り永続',
+  ),
+  dieWithMe: spell(
+    'dieWithMe',
+    'お前も〇ぬんだ',
+    Rarity.R,
+    100,
+    'self',
+    { type: 'guaranteedNextInvasionWin', cost: 700 },
+    '自分への呪い。次に相手の土地を侵略する時、700Gを失う代わりに戦闘なしでそのモンスターを倒す',
+  ),
+  floodDamage: spell('floodDamage', '洪水', Rarity.S, 80, 'none', { type: 'damageAllUnitsOfElement', element: Element.FIRE, amount: 20 }, 'すべての火属性モンスターに20ダメージ'),
+  droughtDamage: spell('droughtDamage', '干ばつ', Rarity.S, 80, 'none', { type: 'damageAllUnitsOfElement', element: Element.WATER, amount: 20 }, 'すべての水属性モンスターに20ダメージ'),
+  wireAccident: spell('wireAccident', '断線事故', Rarity.S, 80, 'none', { type: 'damageAllUnitsOfElement', element: Element.THUNDER, amount: 20 }, 'すべての雷属性モンスターに20ダメージ'),
+  forestFireDamage: spell('forestFireDamage', '森林火災', Rarity.S, 80, 'none', { type: 'damageAllUnitsOfElement', element: Element.FOREST, amount: 20 }, 'すべての森属性モンスターに20ダメージ'),
+
+  // ── 回復系 ──
+  heal: spell('heal', 'ヒール', Rarity.N, 30, 'ownMonster', { type: 'fullHeal' }, '自分のモンスター1体のHPを全回復する'),
+  philanthropy: spell('philanthropy', '博愛精神', Rarity.N, 50, 'none', { type: 'healAllUnitsRatio', ratio: 0.3 }, '場のすべてのモンスターのHPを30%回復する'),
+  curseCleanse: spell(
+    'curseCleanse',
+    '呪い解除',
+    Rarity.N,
+    40,
+    'ownMonster',
+    { type: 'cleanseCurses' },
+    '自分と選択したモンスター1体の呪い状態をすべて解除する',
+  ),
+  phoenixCurse: spell(
+    'phoenixCurse',
+    '不死鳥の呪い',
+    Rarity.R,
+    100,
+    'ownMonster',
+    { type: 'surviveLethalDamageCurse' },
+    '対象モンスターは戦闘で致死ダメージを受けてもHP1で踏みとどまり、土地も奪われない（1回限り発動）',
+  ),
+
+  // ── 土地操作系 ──
+  realEstateAppraiser: spell(
+    'realEstateAppraiser',
+    '不動産鑑〇士',
+    Rarity.S,
+    60,
+    'self',
+    { type: 'enableAllOwnTileAbilities', turns: 2 },
+    '自分への呪い。2ターンの間、自身のすべての土地の土地コマンドが使用可能になる',
+  ),
+  optimize: spell(
+    'optimize',
+    '最適化',
+    Rarity.R,
+    300,
+    'none',
+    { type: 'autoMatchAllTileElements' },
+    'すべての土地で、土地の属性と配置モンスターの属性が違う場合、モンスターの属性に合わせて土地を変更する',
+  ),
+  arson: spell('arson', '放火', Rarity.S, 150, 'anyTile', { type: 'forceTileElement', element: Element.FIRE }, '対象の土地を土地レベルによらず火の土地に変える'),
+  waterRelease: spell('waterRelease', '放水', Rarity.S, 150, 'anyTile', { type: 'forceTileElement', element: Element.WATER }, '対象の土地を土地レベルによらず水の土地に変える'),
+  electrify: spell('electrify', '放電', Rarity.S, 150, 'anyTile', { type: 'forceTileElement', element: Element.THUNDER }, '対象の土地を土地レベルによらず雷の土地に変える'),
+  grazing: spell('grazing', '放牧', Rarity.S, 150, 'anyTile', { type: 'forceTileElement', element: Element.FOREST }, '対象の土地を土地レベルによらず森の土地に変える'),
+  shuffleMonsters: spell(
+    'shuffleMonsters',
+    'シャッフル',
+    Rarity.N,
+    40,
+    'twoOwnMonsters',
+    { type: 'swapTwoMonsters' },
+    '自身の配置モンスターを2体選択し入れ替える。対象の呪いは消滅する',
+  ),
+  psychokinesis: spell(
+    'psychokinesis',
+    'サイコキネシス',
+    Rarity.R,
+    100,
+    'anyMonster',
+    { type: 'forceRelocateOneStep' },
+    '配置された全モンスターから1体選択し、1マス強制移動させる（移動先が味方土地・特殊マスなら移動不可。相手土地なら強制戦闘）',
+  ),
+  twitterLand: spell('twitterLand', 'ツイッ〇ランド', Rarity.N, 100, 'anyTile', { type: 'forceTileElement', element: Element.NEUTRAL }, '対象の土地を無色に変える'),
+  sanctuary: spell(
+    'sanctuary',
+    '聖域',
+    Rarity.N,
+    90,
+    'anyMonster',
+    { type: 'curseSanctuary' },
+    '対象のモンスターを他プレイヤーが侵略できない状態にする。通行料も発生しない',
+  ),
 };
 
 let instanceCounter = 0;
@@ -204,13 +402,35 @@ export const STARTER_DECKS = {
   },
 };
 
-/** The named cards to mix into a starter book, 4 copies of the monster/item and 2 of the shared spell. `bookId` picks which of STARTER_DECKS; defaults to the fire/forest book. */
+/**
+ * 40種のスペルからレアリティ別重み（N70%/S20%/R10%、_randomItemCardForSummon
+ * と同じ配分）で`count`枚を抽選する。以前はマ〇ジャロ固定2枚＋残りは
+ * 完全に無機能なプレースホルダー「スペル1」等（buildCardPool参照）で
+ * 埋めていたが、実在する40種を実際にデッキへ混ぜるよう置き換えた。
+ */
+function buildRandomSpellSelection(count) {
+  const pool = Object.values(SPELL_CATALOG);
+  const byRarity = { [Rarity.N]: [], [Rarity.S]: [], [Rarity.R]: [] };
+  for (const c of pool) {
+    if (byRarity[c.rarity]) byRarity[c.rarity].push(c);
+  }
+  const picks = [];
+  for (let i = 0; i < count; i++) {
+    const roll = Math.random();
+    const rarity = roll < 0.1 ? Rarity.R : roll < 0.3 ? Rarity.S : Rarity.N;
+    const tier = byRarity[rarity].length ? byRarity[rarity] : byRarity[Rarity.N];
+    picks.push(tier[Math.floor(Math.random() * tier.length)]);
+  }
+  return picks.flatMap((def) => duplicateForDeck(def, 1));
+}
+
+/** The named cards to mix into a starter book, 4 copies of the monster/item and DEFAULT_SPELL_COUNT random real spells. `bookId` picks which of STARTER_DECKS; defaults to the fire/forest book. */
 export function buildStarterExtraCards(bookId = 'fireForest') {
   const book = STARTER_DECKS[bookId] || STARTER_DECKS.fireForest;
   return [
     ...duplicateForDeck(book.featuredMonster, 4),
     ...duplicateForDeck(book.featuredItem, 4),
-    ...duplicateForDeck(SPELL_CATALOG.manjaro, 2),
+    ...buildRandomSpellSelection(DEFAULT_SPELL_COUNT),
   ];
 }
 
@@ -234,7 +454,7 @@ export function buildThemedDeckList({ elements, featuredMonster, featuredItem })
   const extra = [
     ...(featuredMonster ? duplicateForDeck(featuredMonster, 4) : []),
     ...(featuredItem ? duplicateForDeck(featuredItem, 4) : []),
-    ...duplicateForDeck(SPELL_CATALOG.manjaro, 2),
+    ...buildRandomSpellSelection(DEFAULT_SPELL_COUNT),
   ];
   return new Deck(extra, { elements }).drawPile;
 }

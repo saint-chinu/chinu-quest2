@@ -68,7 +68,7 @@ export const TYPE_ICON = {
 // baseline stats so every monster in the deck is actually summonable.
 const DEFAULT_MONSTER_COUNT = 24;
 const DEFAULT_GEAR_COUNT = 8;
-const DEFAULT_SPELL_COUNT = 8;
+export const DEFAULT_SPELL_COUNT = 8;
 
 let cardIdCounter = 0;
 function nextId() {

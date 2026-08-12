@@ -757,6 +757,7 @@ function describeCardDetail(card) {
     const atkText = card.atkBonusRange ? `${card.atkBonusRange[0]}〜${card.atkBonusRange[1]}(ランダム)` : card.atkBonus;
     lines.push(`ATK+${atkText} / HP+${card.hpBonus} / コスト ${card.cost}`);
   } else if (card.type === CardType.SPELL) {
+    if (card.cost != null) lines.push(`コスト ${card.cost}`);
     if (card.addedAtk != null) lines.push(`ATK+${card.addedAtk} / HP+${card.addedHp}（永続）`);
   }
   const effectLabels = (card.traits || []).map((id) => CARD_EFFECTS.find((effect) => effect.id === id)?.label || id);
