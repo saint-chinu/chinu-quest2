@@ -2209,7 +2209,8 @@ export class Game {
     const profile = player.aiProfile;
 
     if (tile.owner === player.id) {
-      this._cpuMaybeLevelUp(player, tile, profile);
+      const usedDamageAbility = await this._cpuMaybeUseDamageAbility(player, tile);
+      if (!usedDamageAbility) this._cpuMaybeLevelUp(player, tile, profile);
       return;
     }
 
@@ -2217,7 +2218,7 @@ export class Game {
     if (options.length === 0) return;
 
     if (tile.owner == null) {
-      const card = this._cpuChooseSummonCard(options, tile, profile);
+      const card = this._cpuChooseSummonCard(options, tile, profile, player);
       player.hand = player.hand.filter((c) => c.id !== card.id);
       player.deck.discard(card);
       player.currency -= card.cost;
@@ -2261,18 +2262,46 @@ export class Game {
   }
 
   /**
-   * 空き地への召喚カード選び: 基本は土地属性と同じ候補から選ぶが、
-   * aiProfile.offElementSummonChanceの確率であえて属性違いを選ぶ
-   * （同属性の選択肢が無ければ必然的に属性違いになる）。選んだプール内では
-   * ATK+HP合計が高いカードを優先する（同点ならコストが高い方＝より強力な
-   * 方を優先）。
+   * 空き地への召喚カード選び。手札に古代のギア（A/B/C）があれば最優先で
+   * それを召喚する（ギアシリーズは積極的に空き地へ出し、合体「ガシャーン」
+   * を狙う - 残り1種で完成する場合はそのギアを最優先、揃っていなければ
+   * 手持ちのギアのどれかを出す）。ギアが無ければ従来通り: 基本は土地属性と
+   * 同じ候補から選ぶが、aiProfile.offElementSummonChanceの確率であえて
+   * 属性違いを選ぶ（同属性の選択肢が無ければ必然的に属性違いになる）。
+   * 選んだプール内ではATK+HP合計が高いカードを優先する（同点ならコストが
+   * 高い方＝より強力な方を優先）。
    */
-  _cpuChooseSummonCard(options, tile, profile) {
+  _cpuChooseSummonCard(options, tile, profile, player) {
+    const gearCard = this._cpuPreferredGearCard(options, player);
+    if (gearCard) return gearCard;
+
     const onElement = options.filter((c) => c.element === tile.element);
     const offElement = options.filter((c) => c.element !== tile.element);
     const preferOff = onElement.length === 0 || (offElement.length > 0 && Math.random() < profile.offElementSummonChance);
     const pool = preferOff && offElement.length > 0 ? offElement : onElement.length > 0 ? onElement : offElement;
     return this._strongestCard(pool);
+  }
+
+  /**
+   * 古代のギアA/B/Cのうち、手札にあり、かつ自分の盤面に残り2種類が既に
+   * 揃っている（＝これを召喚すればガシャーンに合体する）ものを最優先で
+   * 返す。無ければ手札にあるギアの中から適当な1枚を返す（無ければnull）。
+   */
+  _cpuPreferredGearCard(options, player) {
+    const gearIds = ['kodaiNoGearA', 'kodaiNoGearB', 'kodaiNoGearC'];
+    const gearOptions = options.filter((c) => gearIds.includes(catalogIdOf(c)));
+    if (gearOptions.length === 0) return null;
+
+    const placedGearIds = new Set(
+      this.tiles
+        .filter((t) => t.unit && t.unit.ownerId === player.id && gearIds.includes(catalogIdOf(t.unit.def)))
+        .map((t) => catalogIdOf(t.unit.def)),
+    );
+    const completingCard = gearOptions.find((c) => {
+      const others = gearIds.filter((id) => id !== catalogIdOf(c));
+      return others.every((id) => placedGearIds.has(id));
+    });
+    return completingCard ?? gearOptions[0];
   }
 
   _strongestCard(cards) {
@@ -2935,10 +2964,83 @@ export class Game {
     if (!this.currentPlayer.isCPU) return;
     await this._cpuMaybeFixLandElementSpell(this.currentPlayer);
     await this._cpuMaybeUseDisruptionSpell(this.currentPlayer);
+    await this._cpuMaybeUseDamageSpell(this.currentPlayer);
     await this._cpuMaybeUseSplitEvenlySpell(this.currentPlayer);
     await this._cpuMaybeUseDiceSpell(this.currentPlayer);
     const steps = await this.onCpuRoll();
     this.rollDice(steps);
+  }
+
+  /**
+   * ダメージ系スペル/土地コマンドの対象選び: ①そのダメージ量で1撃で
+   * 倒せる相手がいれば最優先（複数いれば土地レベルが高い方）、②居なければ
+   * 候補の中で土地レベルが最も高い相手を選ぶ。candidatesが空ならnull。
+   */
+  _cpuPickDamageTarget(candidates, amount) {
+    if (candidates.length === 0) return null;
+    const killable = candidates.filter((t) => t.unit.currentHp <= amount);
+    const pool = killable.length > 0 ? killable : candidates;
+    return [...pool].sort((a, b) => b.level - a.level)[0];
+  }
+
+  /**
+   * directDamage型スペル（ファイヤーボール/千本桜等）のCPU使用判断。
+   * 対象は_cpuPickDamageTargetで選ぶ。target: 'enemyMonster'の対象範囲
+   * （_resolveSpellCastと同じ - 同盟仲間も対象に含む既存仕様に合わせる）。
+   */
+  async _cpuMaybeUseDamageSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'directDamage');
+    if (!card || player.currency < (card.cost || 0)) return;
+
+    const candidates = this.tiles.filter((t) => t.unit && t.unit.ownerId !== player.id);
+    const target = this._cpuPickDamageTarget(candidates, card.effect.amount);
+    if (!target) return;
+
+    await this._cpuCastSpell(player, card, { targetTileId: target.id });
+  }
+
+  /**
+   * 自分の土地の配置モンスターがdamage型の土地コマンド能力
+   * （火炎瓶男/マタギの小四郎等）を持つ場合のCPU使用判断。射程内の敵
+   * （同盟仲間は除外、_humanAbilityFlowと同じ条件）から_cpuPickDamage
+   * Targetで対象を選ぶ。使った場合はtrueを返す（呼び出し元がレベルアップ
+   * 判断をスキップするために使う）。
+   */
+  async _cpuMaybeUseDamageAbility(player, tile) {
+    const unitDef = tile.unit?.def;
+    const ability = unitDef?.ability;
+    if (!ability || ability.type !== 'damage') return false;
+    const commandCost = unitDef.commandCost ?? 0;
+    if (player.currency < commandCost) return false;
+
+    const candidates = this.tiles.filter((t) => {
+      if (t.owner == null || t.owner === player.id) return false;
+      const owner = this.players.find((p) => p.id === t.owner);
+      if (owner?.allianceId != null && owner.allianceId === player.allianceId) return false;
+      return this._tileDistance(tile.id, t.id) <= ability.range;
+    });
+    const target = this._cpuPickDamageTarget(candidates, ability.power);
+    if (!target) return false;
+
+    player.currency -= commandCost;
+    const targetUnit = target.unit;
+    targetUnit.currentHp -= ability.power;
+    this.onLog(`${player.name}の${unitDef.name}が特殊能力で${targetUnit.def.name}に${ability.power}ダメージ！ (-${commandCost}G)`);
+    this._notifyState();
+    await this.onDamageEffect?.({ tileId: target.id, damage: ability.power });
+
+    if (targetUnit.currentHp <= 0) {
+      const targetOwner = this.players.find((p) => p.id === target.owner);
+      target.unit = null;
+      target.owner = null;
+      target.transparentCursed = false;
+      this._repaintTileToElement(target);
+      this.onLog(`${targetOwner.name}の${targetUnit.def.name}は倒された`);
+      await this._handleUnitDeath(targetUnit, targetOwner);
+    }
+    this._notifyState();
+    return true;
   }
 
   /**

@@ -379,12 +379,19 @@ function duplicateForDeck(def, count) {
 }
 
 /**
- * The two character-creation starter books. `composition` is the fully
- * curated 40-card list from chinu-quest2-starter-decks-v3.md (20 monsters +
- * 7 items + 13 spells, exact per-card counts) - unlike buildThemedDeckList's
- * NPC decks, starter books carry NO generic/random filler at all; see
- * buildStarterCardList below. `elements` is kept only for display/theming
- * purposes (e.g. tile-preview UI), not for any generic pool fill anymore.
+ * The two character-creation starter books. `composition` is the curated
+ * 39-card list from chinu-quest2-starter-decks-v3.md (originally 20
+ * monsters + 7 items + 13 spells = 40, minus 1 monster - see the
+ * "N-1" note below) - unlike buildThemedDeckList's NPC decks, starter
+ * books carry NO generic/random filler at all; see buildStarterCardList
+ * below. `elements` is kept only for display/theming purposes (e.g.
+ * tile-preview UI), not for any generic pool fill anymore.
+ *
+ * 39ではなく40と仕様書にはあったが、main.jsのキャラメイクでブリード
+ * モンスター（レアリティEX）を必ず1枚差し込む仕様のため、両ブックとも
+ * N モンスター1種の枚数を1つ減らして合計39枚にしてある（山賊フクロウ/
+ * 静電気野郎をそれぞれ3→2）。buildStarterCardList自体は素の39枚を返し、
+ * main.jsのcharmakeSubmitがブリードモンスターを足して40枚に確定する。
  */
 export const STARTER_DECKS = {
   fireForest: {
@@ -399,7 +406,7 @@ export const STARTER_DECKS = {
         { def: MONSTER_CATALOG.magman, count: 4 },
         { def: MONSTER_CATALOG.takenokoha, count: 4 },
         { def: MONSTER_CATALOG.kinokoha, count: 4 },
-        { def: MONSTER_CATALOG.sanzokuFukurou, count: 3 },
+        { def: MONSTER_CATALOG.sanzokuFukurou, count: 2 },
         { def: MONSTER_CATALOG.kaentake, count: 1 },
       ],
       items: [
@@ -431,7 +438,7 @@ export const STARTER_DECKS = {
         { def: MONSTER_CATALOG.hangyojin, count: 4 },
         { def: MONSTER_CATALOG.hatsudenNezumi, count: 4 },
         { def: MONSTER_CATALOG.tetsuo, count: 4 },
-        { def: MONSTER_CATALOG.seidenkiYarou, count: 3 },
+        { def: MONSTER_CATALOG.seidenkiYarou, count: 2 },
         { def: MONSTER_CATALOG.fireman, count: 1 },
       ],
       items: [
@@ -481,18 +488,19 @@ function buildCardListFromComposition({ monsters, items, spells }) {
 }
 
 /**
- * The exact, fully curated 40-card list for a starter book
- * (chinu-quest2-starter-decks-v3.md: 20 monsters + 7 items + 13 spells,
- * precise per-card counts) - no generic placeholder or random-spell filler
- * at all, unlike buildThemedDeckList's NPC decks. `bookId` picks which of
- * STARTER_DECKS; defaults to the fire/forest book.
+ * The exact, fully curated 39-card list for a starter book
+ * (chinu-quest2-starter-decks-v3.md minus 1 N monster - see STARTER_DECKS'
+ * doc comment) - no generic placeholder or random-spell filler at all,
+ * unlike buildThemedDeckList's NPC decks. `bookId` picks which of
+ * STARTER_DECKS; defaults to the fire/forest book. Character creation
+ * (main.js charmakeSubmit) adds the player's breed monster as the 40th card.
  */
 export function buildStarterCardList(bookId = 'fireForest') {
   const book = STARTER_DECKS[bookId] || STARTER_DECKS.fireForest;
   return buildCardListFromComposition(book.composition);
 }
 
-/** The full 40-card starter book as a plain, persistable card-definition list (not a live Deck) - what character creation saves as the player's initial deckList. */
+/** The 39-card starter book as a plain, persistable card-definition list (not a live Deck) - character creation pushes the breed monster on top to reach 40. */
 export function buildStarterDeckList(bookId = 'fireForest') {
   return Deck.fromCardList(buildStarterCardList(bookId)).drawPile;
 }
@@ -663,6 +671,31 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.sideIncome, count: 1 }, { def: SPELL_CATALOG.shuffleMonsters, count: 1 },
         { def: SPELL_CATALOG.poisonMist, count: 1 }, { def: SPELL_CATALOG.splitEvenly, count: 1 },
         { def: SPELL_CATALOG.specialAudit, count: 1 }, { def: SPELL_CATALOG.waterRelease, count: 3 },
+      ],
+    },
+  },
+  danball: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.kodaiNoGearA, count: 2 }, { def: MONSTER_CATALOG.kodaiNoGearB, count: 2 },
+        { def: MONSTER_CATALOG.kodaiNoGearC, count: 2 }, { def: MONSTER_CATALOG.kunekune, count: 1 },
+        { def: MONSTER_CATALOG.rainbowChameleon, count: 2 }, { def: MONSTER_CATALOG.kaentake, count: 2 },
+        { def: MONSTER_CATALOG.fireKick, count: 2 }, { def: MONSTER_CATALOG.hitodama, count: 2 },
+        { def: MONSTER_CATALOG.hezumaDragon, count: 1 }, { def: MONSTER_CATALOG.flameGod, count: 1 },
+        { def: MONSTER_CATALOG.hatsudenOni, count: 2 }, { def: MONSTER_CATALOG.raiun, count: 2 },
+        { def: MONSTER_CATALOG.erekiMagician, count: 1 }, { def: MONSTER_CATALOG.aruKagakuNo, count: 1 },
+        { def: MONSTER_CATALOG.raijin, count: 1 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.morohaNoTsurugi, count: 2 }, { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 },
+        { def: ITEM_CATALOG.stegoro, count: 1 }, { def: ITEM_CATALOG.twinHammer, count: 1 },
+        { def: ITEM_CATALOG.kaenHoushakiki, count: 1 }, { def: ITEM_CATALOG.raijinKen, count: 1 },
+        { def: ITEM_CATALOG.zangokuKen, count: 1 }, { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
+        { def: ITEM_CATALOG.peeStaff, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.twitterLand, count: 2 }, { def: SPELL_CATALOG.senbonZakura, count: 2 },
+        { def: SPELL_CATALOG.sideIncome, count: 1 }, { def: SPELL_CATALOG.iCanFly, count: 1 },
       ],
     },
   },

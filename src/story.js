@@ -279,9 +279,10 @@ export const STORY_STAGES = [
       {
         name: 'ダンボール男',
         color: 0x333333,
-        // ラスボスは属性の有利/不利を受けないNEUTRALのみで構成 - 誰の
-        // デッキとも噛み合わない、正体不明な強敵という位置づけ。
-        theme: { elements: [Element.NEUTRAL], featuredMonster: MONSTER_CATALOG.salarymander, featuredItem: ITEM_CATALOG.knife },
+        deckKey: 'danball',
+        // 無属性の古代のギア/レインボーカメレオン主体に、火・雷のSクラスも
+        // 混ぜた構成（chinu-quest2-deck-danball_1.md）。
+        theme: { elements: [Element.NEUTRAL, Element.FIRE, Element.THUNDER] },
       },
     ],
     reward: null,

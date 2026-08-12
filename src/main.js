@@ -12,6 +12,7 @@ import { CARD_EFFECTS, saveCustomCard, saveCustomCardsBulk, setCloudCustomCardUs
 import { loadCharacterIconPresets, fileToCharacterIcon, resolveCharacterIcon } from './playerIcons.js';
 import {
   BREED_BASE,
+  BREED_DEFAULT_IMAGE_URL,
   BREED_PARTS,
   CHANGEABLE_BREED_ELEMENTS,
   computeBreedStats,
@@ -1654,6 +1655,7 @@ const pvpMapConfirmNo = document.getElementById('pvp-map-confirm-no');
 const breedScreen = document.getElementById('breed-screen');
 const breedName = document.getElementById('breed-name');
 const breedImage = document.getElementById('breed-image');
+const breedImageReset = document.getElementById('breed-image-reset');
 const breedImagePreview = document.getElementById('breed-image-preview');
 const breedStats = document.getElementById('breed-stats');
 const breedError = document.getElementById('breed-error');
@@ -1827,11 +1829,9 @@ charmakeSubmit.addEventListener('click', () => {
   const breedMonster = { name: BREED_BASE.defaultName, equippedPartIds: [] };
   const breedCard = { ...buildBreedCardDef({ breedMonster }), id: `breedMonster-${Date.now()}` };
 
+  // buildStarterDeckListは39枚（STARTER_DECKS側でNモンスター1種を1枚
+  // 減らして確保済み）。ブリードモンスター(レアリティEX)を40枚目として足す。
   const deckList = buildStarterDeckList(selectedDeckVariant);
-  // ブリードモンスターはレアリティEXで初期デッキに常に1枚だけ入る - 汎用
-  // モンスターを1枚外して差し替え、合計40枚を維持する。
-  const genericMonsterIndex = deckList.findIndex((c) => c.type === CardType.MONSTER && !c.catalogId);
-  if (genericMonsterIndex !== -1) deckList.splice(genericMonsterIndex, 1);
   deckList.push(breedCard);
 
   const ownedCards = {};
@@ -2987,12 +2987,9 @@ shopBackButton.addEventListener('click', showHubScreen);
 function showBreedScreen() {
   breedName.value = currentCharacter.breedMonster.name;
   breedImage.value = '';
-  if (currentCharacter.breedMonster.imageDataUrl) {
-    breedImagePreview.src = currentCharacter.breedMonster.imageDataUrl;
-    breedImagePreview.classList.remove('hidden');
-  } else {
-    breedImagePreview.classList.add('hidden');
-  }
+  breedImagePreview.src = currentCharacter.breedMonster.imageDataUrl || BREED_DEFAULT_IMAGE_URL;
+  breedImagePreview.classList.remove('hidden');
+  breedImageReset.disabled = !currentCharacter.breedMonster.imageDataUrl;
   breedError.classList.add('hidden');
   renderBreedScreen();
   showScreen(breedScreen);
@@ -3133,6 +3130,16 @@ breedImage.addEventListener('change', () => {
     breedError.classList.add('hidden');
   });
   reader.readAsDataURL(file);
+});
+
+breedImageReset.addEventListener('click', () => {
+  if (!currentCharacter.breedMonster.imageDataUrl) return;
+  delete currentCharacter.breedMonster.imageDataUrl;
+  breedImage.value = '';
+  breedImagePreview.src = BREED_DEFAULT_IMAGE_URL;
+  breedImageReset.disabled = true;
+  breedError.classList.add('hidden');
+  saveCharacter(currentUserId, currentCharacter);
 });
 
 breedBackButton.addEventListener('click', showHubScreen);
