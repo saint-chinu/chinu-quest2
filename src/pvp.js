@@ -22,6 +22,14 @@ import {
 const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 紛らわしい0/O・1/I/Lは除外
 const ROOM_CODE_LENGTH = 8;
 
+export function normalizePvpParticipants(room) {
+  if (!room) return [];
+  const list = Array.isArray(room.participants) ? room.participants.filter((p) => p?.uid) : [];
+  if (room.hostUid && !list.some((p) => p.uid === room.hostUid)) list.unshift({ uid: room.hostUid, name: room.hostName, color: room.hostColor, deckList: null, ready: true });
+  if (room.guestUid && !list.some((p) => p.uid === room.guestUid)) list.push({ uid: room.guestUid, name: room.guestName, color: room.guestColor, deckList: room.guestDeckList, ready: true });
+  return list.slice(0, 4).map((p, playerId) => ({ ...p, playerId }));
+}
+
 function randomRoomCode() {
   const randomBytes = new Uint32Array(ROOM_CODE_LENGTH);
   crypto.getRandomValues(randomBytes);

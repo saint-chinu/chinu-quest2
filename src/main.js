@@ -36,6 +36,7 @@ import {
   GuestHostListener,
   HostActionListener,
   GuestActionSender,
+  normalizePvpParticipants,
   publishPublicState,
   publishPrivateHand,
   finishPvpRoom,
@@ -3257,9 +3258,7 @@ function enterPvpRoomScreen(session) {
     }
     pvpRoomSettings.textContent = `ステージ: ${MAPS.find((map) => map.id === room.mapId)?.name || room.mapId} / 目標G: ${Number(room.goalCurrency || 5000).toLocaleString('ja-JP')}G`;
     if (room.allianceMode) {
-      const names = (Array.isArray(room.participants) && room.participants.length
-        ? room.participants.map((p) => p.name)
-        : [room.hostName, room.guestName, ...(room.cpuNames || [])]).filter(Boolean);
+      const names = normalizePvpParticipants(room).map((p) => p.name).filter(Boolean);
       if (room.randomAlliance) {
         pvpRoomTeams.textContent = `🔀 ランダム同盟（開始時に決定）　参加者: ${names.join('・') || '待機中'}`;
       } else {
@@ -3268,9 +3267,7 @@ function enterPvpRoomScreen(session) {
     } else {
       pvpRoomTeams.textContent = '同盟なし（個人戦）';
     }
-    const participantCount = Array.isArray(room.participants)
-      ? room.participants.length + (session.isHost ? (room.cpuNames?.length || 0) : 0)
-      : 1 + (room.guestUid ? 1 : 0) + (room.cpuNames?.length || 0);
+    const participantCount = normalizePvpParticipants(room).length + (session.isHost ? (room.cpuNames?.length || 0) : 0);
     if (participantCount > 1) {
       const opponentName = session.isHost ? room.guestName : room.hostName;
       const requiredCount = Math.max(2, Math.min(4, Number(room.playerCount) || 2));
