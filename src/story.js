@@ -15,7 +15,7 @@ import { MONSTER_CATALOG, ITEM_CATALOG } from './battleCards.js';
 export const STORY_STAGES = [
   {
     key: 'hitode',
-    title: '① ヒトデ戦',
+    title: '① はじまりの海',
     format: '1vs1',
     // 目標G（2026-08-12実装）: 盤面右下に表示するそのステージのG目標値。
     // 現状は表示のみで勝敗判定には使わない（main.jsのstage-goal-display）。
@@ -114,7 +114,7 @@ export const STORY_STAGES = [
   },
   {
     key: 'madai',
-    title: '② 暴君マダイ＆ニュウドウカジカ戦',
+    title: '② 北の暴君と７',
     format: '1vs1vs1',
     goalCurrency: 5000,
     intro: [
@@ -198,7 +198,7 @@ export const STORY_STAGES = [
   },
   {
     key: 'budou',
-    title: '③ ウサギン＆少女A vs 紫の魔女ホフク＆主人公',
+    title: '③ 修羅の国のA',
     format: '2vs2',
     goalCurrency: 7000,
     intro: [
@@ -287,7 +287,7 @@ export const STORY_STAGES = [
   },
   {
     key: 'danball',
-    title: '④ ダンボール男戦',
+    title: '④ 最果ての怪人',
     format: '1vs1',
     goalCurrency: 10000,
     intro: [

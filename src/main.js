@@ -2130,7 +2130,12 @@ function showStoryScreen() {
     if (unlocked) name.addEventListener('click', () => (cleared && stage.replay ? playStoryReplay(index) : playStoryStage(index)));
     const meta = document.createElement('div');
     meta.className = 'deck-row-meta';
-    meta.textContent = unlocked ? (cleared ? 'クリア済み（もう一度挑戦できます）' : `形式: ${stage.format}`) : 'ロック中';
+    const battleInfo = `形式: ${stage.format}　目標: ${stage.goalCurrency.toLocaleString('ja-JP')}G`;
+    meta.textContent = !unlocked
+      ? `ロック中　${battleInfo}`
+      : cleared
+        ? `クリア済み（もう一度挑戦できます）　${battleInfo}`
+        : battleInfo;
     info.append(name, meta);
 
     row.append(info);
