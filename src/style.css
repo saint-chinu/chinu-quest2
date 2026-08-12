@@ -960,6 +960,23 @@ html, body {
   cursor: pointer;
 }
 
+.story-skip-button {
+  position: fixed;
+  top: max(14px, env(safe-area-inset-top));
+  left: 50%;
+  z-index: 100;
+  transform: translateX(-50%);
+  min-width: 210px;
+  padding: 13px 28px;
+  border: 2px solid #fff;
+  border-radius: 12px;
+  background: rgba(20, 24, 40, 0.94);
+  color: #fff;
+  font-size: 18px;
+  font-weight: 900;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
+}
+
 #story-overlay-dialogue.hidden {
   display: none;
 }

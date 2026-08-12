@@ -1913,6 +1913,7 @@ const storyDialoguePortrait = document.getElementById('story-dialogue-portrait')
 const storyDialogueSpeaker = document.getElementById('story-dialogue-speaker');
 const storyDialogueText = document.getElementById('story-dialogue-text');
 const storyDialogueNext = document.getElementById('story-dialogue-next');
+const storyDialogueSkip = document.getElementById('story-dialogue-skip');
 const stageGoalDisplay = document.getElementById('stage-goal-display');
 const stageGoalAmount = document.getElementById('stage-goal-amount');
 const storyOverlayDialogue = document.getElementById('story-overlay-dialogue');
@@ -1925,6 +1926,7 @@ const storyOverlayNameRight = document.getElementById('story-overlay-name-right'
 const storyOverlayBubble = document.getElementById('story-overlay-bubble');
 const storyOverlaySpeaker = document.getElementById('story-overlay-speaker');
 const storyOverlayText = document.getElementById('story-overlay-text');
+const storyOverlaySkip = document.getElementById('story-overlay-skip');
 
 const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, catalogScreen, cardEditorScreen, deckScreen, deckSelectScreen, shopScreen, battleMenuScreen, breedScreen, stubScreen, storyScreen, storyDialogueScreen, pvpMenuScreen, pvpRoomScreen, pvpMapSelectScreen];
 function showScreen(el) {
@@ -2150,6 +2152,14 @@ storyBackButton.addEventListener('click', showHubScreen);
 function playDialogueLines(lines) {
   return new Promise((resolve) => {
     let i = 0;
+    let settled = false;
+    function finish() {
+      if (settled) return;
+      settled = true;
+      storyDialogueNext.removeEventListener('click', onNext);
+      storyDialogueSkip.removeEventListener('click', onSkip);
+      resolve();
+    }
     function showLine() {
       storyDialogueSpeaker.textContent = lines[i].speaker;
       storyDialogueText.textContent = lines[i].text;
@@ -2160,13 +2170,16 @@ function playDialogueLines(lines) {
     function onNext() {
       i += 1;
       if (i >= lines.length) {
-        storyDialogueNext.removeEventListener('click', onNext);
-        resolve();
+        finish();
         return;
       }
       showLine();
     }
+    function onSkip() {
+      finish();
+    }
     storyDialogueNext.addEventListener('click', onNext);
+    storyDialogueSkip.addEventListener('click', onSkip);
     showLine();
   });
 }
@@ -2187,6 +2200,15 @@ function playOverlayDialogueLines(lines, { leftName, leftPortraitUrl, rightName,
 
   return new Promise((resolve) => {
     let i = 0;
+    let settled = false;
+    function finish() {
+      if (settled) return;
+      settled = true;
+      storyOverlayDialogue.removeEventListener('click', onAdvance);
+      storyOverlaySkip.removeEventListener('click', onSkip);
+      storyOverlayDialogue.classList.add('hidden');
+      resolve();
+    }
     function showLine() {
       const line = lines[i];
       storyOverlaySpeaker.textContent = line.speaker;
@@ -2200,14 +2222,17 @@ function playOverlayDialogueLines(lines, { leftName, leftPortraitUrl, rightName,
     function onAdvance() {
       i += 1;
       if (i >= lines.length) {
-        storyOverlayDialogue.removeEventListener('click', onAdvance);
-        storyOverlayDialogue.classList.add('hidden');
-        resolve();
+        finish();
         return;
       }
       showLine();
     }
+    function onSkip(event) {
+      event.stopPropagation();
+      finish();
+    }
     storyOverlayDialogue.addEventListener('click', onAdvance);
+    storyOverlaySkip.addEventListener('click', onSkip);
     storyOverlayDialogue.classList.remove('hidden');
     showLine();
   });
