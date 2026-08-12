@@ -936,10 +936,29 @@ function showCardDetail(card, onUse) {
   } else {
     cardDetailReturnLayer = null;
   }
+  cardDetailCard.classList.remove('hidden');
   renderCardEl(cardDetailCard, card);
   cardDetailText.textContent = describeCardDetail(card);
   cardDetailUseHandler = onUse ?? null;
   cardDetailUse.classList.toggle('hidden', !onUse);
+  cardDetailModal.classList.remove('hidden');
+}
+
+function showBreedPartDetail(part, ownedCount = null, equippedCount = null) {
+  const packResultLayer = document.getElementById('shop-pack-result');
+  if (packResultLayer && !packResultLayer.classList.contains('hidden')) {
+    cardDetailReturnLayer = packResultLayer;
+    packResultLayer.classList.add('hidden');
+  } else {
+    cardDetailReturnLayer = null;
+  }
+  cardDetailCard.classList.add('hidden');
+  const counts = ownedCount == null
+    ? ''
+    : `\n所持: ${ownedCount}個 / 装着: ${equippedCount || 0}個`;
+  cardDetailText.textContent = `${part.name}\nレアリティ: ${part.rarity}\n効果: ${describeBreedPart(part)}${counts}`;
+  cardDetailUseHandler = null;
+  cardDetailUse.classList.add('hidden');
   cardDetailModal.classList.remove('hidden');
 }
 
@@ -3700,7 +3719,7 @@ function showShopScreen(mode = null) {
     saveCharacter(currentUserId, currentCharacter);
     showPackResult(parts, {
       newFlags,
-      onDetail: (part) => window.alert(`${part.name}\n${part.rarity}\n${describeBreedPart(part)}`),
+      onDetail: (part) => showBreedPartDetail(part),
       isPart: true,
     });
     shopCurrency.textContent = `所持M: ${currentCharacter.m}`;
@@ -3837,7 +3856,17 @@ function renderBreedScreen() {
     row.className = 'deck-row';
 
     const info = document.createElement('div');
-    info.className = 'deck-row-info';
+    info.className = 'deck-row-info breed-part-detail-link';
+    info.tabIndex = 0;
+    info.setAttribute('role', 'button');
+    info.setAttribute('aria-label', `${def.name}の詳細を表示`);
+    const openPartDetail = () => showBreedPartDetail(def, ownedCount, equippedCount);
+    info.addEventListener('click', openPartDetail);
+    info.addEventListener('keydown', (event) => {
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      event.preventDefault();
+      openPartDetail();
+    });
     const nameEl = document.createElement('div');
     nameEl.className = 'deck-row-name';
     nameEl.textContent = `${def.name}（所持${ownedCount} / 装着${equippedCount}）`;

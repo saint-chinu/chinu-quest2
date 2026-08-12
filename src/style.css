@@ -775,6 +775,9 @@ html, body {
 .deck-add-button:disabled { opacity: 0.3; }
 .deck-add-count { color: #ffd166; font-size: 12px; text-align: center; }
 .deck-card-detail-link { padding: 0; border: 0; background: none; color: #fff; text-align: left; }
+.breed-part-detail-link { cursor: pointer; border-radius: 8px; }
+.breed-part-detail-link:hover,
+.breed-part-detail-link:focus-visible { background: rgba(255, 255, 255, 0.08); outline: 2px solid rgba(255, 220, 100, 0.8); }
 
 #deck-current-pane h3 {
   margin: 0 0 8px;
