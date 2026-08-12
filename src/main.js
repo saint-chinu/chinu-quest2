@@ -1876,10 +1876,13 @@ async function playStoryStage(index) {
 async function playStoryReplay(index) {
   const stage = STORY_STAGES[index];
   if (!stage.replay) return;
+  const replay = stage.secretReplay && (currentCharacter.storyProgress || 0) >= stage.secretReplay.unlockProgress
+    ? stage.secretReplay
+    : stage.replay;
   showScreen(storyDialogueScreen);
-  await playDialogueLines(stage.replay.intro);
+  await playDialogueLines(replay.intro);
   const chosenDeck = await promptDeckSelection();
-  await startStoryBattle(index, chosenDeck.deckList, true);
+  await startStoryBattle(index, chosenDeck.deckList, true, replay);
 }
 
 /**
@@ -1932,9 +1935,9 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
   return configs;
 }
 
-async function startStoryBattle(index, heroDeckList, isReplay) {
+async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = null) {
   const stage = STORY_STAGES[index];
-  const variant = isReplay ? stage.replay : stage;
+  const variant = isReplay ? (replayVariant || stage.replay) : stage;
   activeStoryStageIndex = index;
 
   const characterIcon = await resolveCharacterIcon(currentCharacter);
@@ -1950,7 +1953,7 @@ async function startStoryBattle(index, heroDeckList, isReplay) {
     mapId: stage.key,
     goalCurrency: stage.goalCurrency,
     playerConfigs,
-    onStoryBattleEnd: (result) => (isReplay ? handleStoryReplayEnd(index, result) : handleStoryBattleEnd(index, result)),
+    onStoryBattleEnd: (result) => (isReplay ? handleStoryReplayEnd(index, result, variant) : handleStoryBattleEnd(index, result)),
   });
 
   // ①ヒトデ戦だけ: 盤面が表示された直後、その上に会話をオーバーレイする
@@ -1967,7 +1970,7 @@ async function startStoryBattle(index, heroDeckList, isReplay) {
 }
 
 /** playStoryReplay()の決着後: 勝っても負けてもstoryProgress/rewardには一切触れない（何度でも遊べるおまけ戦闘のため）。短い一言だけ挟んでステージ一覧に戻る。 */
-async function handleStoryReplayEnd(index, { won }) {
+async function handleStoryReplayEnd(index, { won }, replayVariant) {
   const stage = STORY_STAGES[index];
   game = undefined;
   appEl.classList.add('hidden');
@@ -1976,7 +1979,7 @@ async function handleStoryReplayEnd(index, { won }) {
 
   showScreen(storyDialogueScreen);
   if (won) {
-    await playDialogueLines(stage.replay.outro || [{ speaker: '???', text: 'また挑みに来てくれ！' }]);
+    await playDialogueLines(replayVariant.outro || [{ speaker: '???', text: 'また挑みに来てくれ！' }]);
   } else {
     await playDialogueLines([{ speaker: '???', text: '力及ばず、敗れてしまった……もう一度挑もう。' }]);
   }

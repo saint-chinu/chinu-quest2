@@ -43,10 +43,34 @@ export const STORY_STAGES = [
     replay: {
       intro: [
         { speaker: 'ヒトデ', text: 'おっ、よく来たな。遊んでいくか？ ボコボコにしてやるよ！！' },
-        { speaker: 'ウサギン', text: 'ヒトデのくせに調子にのるなよ。俺がボコボコにしてやるよ。' },
-        { speaker: '主人公', text: '二人がかりかよ……上等だ、まとめて相手してやる！' },
+        { speaker: '主人公', text: 'いいぜ。今度も一対一で決着をつけよう！' },
       ],
       outro: [{ speaker: 'ヒトデ', text: 'くそ、やっぱり強えな……また来いよ。' }],
+      format: '1vs1',
+      opponents: [
+        {
+          name: 'ヒトデ',
+          color: 0xe63946,
+          theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi, featuredItem: ITEM_CATALOG.potLid },
+        },
+      ],
+    },
+    // ステージ③クリア後にだけ現れるパラレルワールド由来の隠し再戦。
+    secretReplay: {
+      unlockProgress: 3,
+      intro: [
+        { speaker: 'ヒトデ', text: 'おっ、また来たな。今日も一対一で――' },
+        { speaker: 'ウサギン', text: '待ちな！ 面白そうなケンカやってんじゃねえか。ワイも混ぜろ！' },
+        { speaker: '主人公', text: 'ウサギン！？ なんでここにいるんだよ。' },
+        { speaker: 'ヒトデ', text: 'この3人……どこかで一緒だったような……ウッ、頭が……。' },
+        { speaker: 'ウサギン', text: '何ブツブツ言ってんだ。細けえことは勝ってから考えろ！' },
+        { speaker: '主人公', text: '妙な感じはするが……上等だ。三人で決着をつけよう！' },
+      ],
+      outro: [
+        { speaker: 'ヒトデ', text: 'また負けたか……でも、この三人で戦うのは妙に懐かしいな。' },
+        { speaker: 'ウサギン', text: '次はワイが勝つ。腐れ縁なら、またどっかで会うやろ！' },
+        { speaker: '主人公', text: '腐れ縁、か……。まあ悪くないな。また勝負しようぜ。' },
+      ],
       format: '1vs1vs1',
       opponents: [
         {
