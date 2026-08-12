@@ -2953,9 +2953,14 @@ export class Game {
     // than either card crumbling.
     if (result.attackerSurvived && result.defenderSurvived) await this.onBattleRetreat();
 
+    // ハリネズミの服(reflectHalfDamage)等で両者とも倒れた場合、旧仕様では
+    // 「防衛成功」側の勝利メッセージになっていた（wonがfalseの場合を全て
+    // 防衛成功扱いしていたため）。実際には両者死亡なので明示的に区別する。
+    const mutualDestruction = !result.attackerSurvived && !result.defenderSurvived;
     const won = result.attackerSurvived && !result.defenderSurvived;
     await this.onBattleOutcome({
       won,
+      mutualDestruction,
       ownerName: won ? attackerPlayer.name : defenderPlayer.name,
       unitName: won ? attackerUnit.def.name : defenderUnit.def.name,
     });

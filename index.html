@@ -308,6 +308,7 @@
       </div>
 
       <div id="breed-screen" class="pg-screen hidden">
+        <button id="breed-help-button" class="corner-help-button" type="button" aria-label="ブリードについて">？</button>
         <h2 class="pg-title">ブリード</h2>
         <div class="pg-field">
           <label for="breed-name">名前</label>
@@ -323,13 +324,17 @@
         <p id="breed-error" class="pg-error hidden"></p>
         <h3 class="pg-subtitle">パーツ</h3>
         <div id="breed-parts-list"></div>
-        <div class="pg-label">
+        <button id="breed-back" class="pg-button pg-button-secondary">戻る</button>
+      </div>
+
+      <div id="breed-help-modal" class="hidden">
+        <div id="breed-help-box">
           <h3 class="pg-subtitle">ブリードについて</h3>
           <p>ブリードモンスターは、入手したパーツを装着してATK・HP・属性・召喚コスト・特殊能力を自由に組み合わせられる自分専用のモンスターです。</p>
           <p>パーツは種類ではなく、重複分も数えて合計8個まで装着できます。装着と取り外しはいつでも無料です。ATKとHPは各70、召喚コストは200Gが上限です。</p>
           <p>名前と画像は能力に影響しません。画像をアップロードした場合はその画像が優先され、「初期画像に戻す」で元に戻せます。</p>
+          <button id="breed-help-close" class="pg-button pg-button-secondary" type="button">閉じる</button>
         </div>
-        <button id="breed-back" class="pg-button pg-button-secondary">戻る</button>
       </div>
 
       <div id="story-screen" class="pg-screen hidden">

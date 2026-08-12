@@ -163,6 +163,32 @@ html, body {
   pointer-events: none;
 }
 
+/* 汎用トースト（showToast参照）: 盤面終了後の報酬メッセージ等、画面のどこでも(#appの外でも)出せる簡易通知。 */
+.toast-message {
+  position: fixed;
+  z-index: 200;
+  left: 50%;
+  top: 12%;
+  transform: translate(-50%, -12px);
+  opacity: 0;
+  background: rgba(20, 20, 36, 0.94);
+  color: #ffd166;
+  font-size: 18px;
+  font-weight: 800;
+  padding: 12px 24px;
+  border-radius: 10px;
+  border: 2px solid #ffd166;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  white-space: nowrap;
+  pointer-events: none;
+  transition: opacity 300ms ease, transform 300ms ease;
+}
+
+.toast-message.show {
+  opacity: 1;
+  transform: translate(-50%, 0);
+}
+
 /* 破産演出（promptBankruptcy参照）: キャラの頭上に大きく「破産」の2文字をポップインさせ、1.5秒表示する。 */
 .fx-bankrupt-message {
   position: fixed;
@@ -302,6 +328,60 @@ html, body {
 
 .pg-screen.hidden {
   display: none;
+}
+
+/* .pg-screenの右上に置く丸い「？」ヘルプボタン（ブリード画面等、長い説明文を
+   画面内に常時表示すると縦幅の少ないスマホ横画面でパーツ選択部分が
+   隠れてしまう問題への対応 - 説明はこのボタンから開くポップアップへ移した）。 */
+.corner-help-button {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  z-index: 5;
+  width: 32px;
+  height: 32px;
+  border: none;
+  border-radius: 50%;
+  background: #444;
+  color: #fff;
+  font-size: 16px;
+  font-weight: bold;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+#breed-help-modal {
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.6);
+}
+
+#breed-help-modal.hidden {
+  display: none;
+}
+
+#breed-help-box {
+  background: #22223b;
+  border-radius: 12px;
+  padding: 20px 24px;
+  color: #cfcfe0;
+  max-width: min(480px, 88vw);
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+#breed-help-box p {
+  margin: 8px 0;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+#breed-help-box .pg-button {
+  margin-top: 10px;
 }
 
 #login-screen {
@@ -1714,6 +1794,17 @@ html, body {
   filter: grayscale(1);
 }
 
+/* 総資産が目標Gに到達済み（まだゴールには着地していない=次のラップ完走で
+   即勝利が確定する）プレイヤーのパネルを点滅させる。 */
+.player-panel.player-goal-reached {
+  animation: player-goal-reached-blink 1000ms ease-in-out infinite;
+}
+
+@keyframes player-goal-reached-blink {
+  0%, 100% { box-shadow: 0 0 0 rgba(255, 209, 102, 0); background: rgba(0, 0, 0, 0.55); }
+  50% { box-shadow: 0 0 16px 4px rgba(255, 209, 102, 0.85); background: rgba(90, 68, 8, 0.75); }
+}
+
 .player-panel .player-icon {
   width: 22px;
   height: 22px;
@@ -1949,6 +2040,16 @@ html, body {
   border-radius: 8px;
   font-size: 20px;
   font-weight: bold;
+}
+
+/* スマホの横画面（幅は広いが高さが低い）だと、相手ターン中だけ表示される
+   #turn-indicator（サイコロ横の「○○のターン」）が大きすぎて他のUIと
+   重なる、との指摘。相手ターン中しか出ない要素なのでここだけ縮小する。 */
+@media (orientation: landscape) and (max-height: 500px) {
+  #turn-indicator {
+    font-size: 13px;
+    padding: 5px 10px;
+  }
 }
 
 #center-hand {

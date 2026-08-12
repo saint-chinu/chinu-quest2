@@ -854,6 +854,19 @@ Codexが実装したPvP機能（部屋作成/最大4人ロースター参加/同
 ## 弱点属性ダメージ計算の調査（バグは見つからず、2026-08-13）
 ユーザーから「弱点属性のダメージ計算がおかしくないか」との指摘。`battle.js`の`incomingDamageMultiplier`と`battleCards.js`の`WEAK_AGAINST`（火は水に弱い→水は雷に弱い→雷は森に弱い→森は火に弱い、のサイクル）を4属性全12パターンについて実際に`resolveBattle`を実行して倍率を検証したところ、コード上のコメントで説明されている意図通りのサイクル（水>火>森>雷>水、という単一の一貫した4すくみ）が矛盾なく実装されていることを確認した。具体的な「おかしいと感じた場面」（どの属性同士の対戦で、どんな数値が出たか）を教えてもらえれば再調査する。
 
+## 相打ちメッセージ・モバイル横画面の表示・ストーリーBGM・目標達成の可視化・退出報酬トースト・ブリードのヘルプ化（2026-08-13実装）
+ユーザーから6件の指摘。
+
+- **相打ちメッセージの修正**: `_runBattleScene`の決着メッセージは、旧仕様だと`won`がfalseの場合を全て「防衛側が土地を守った」扱いにしていたため、ハリネズミの服（`reflectHalfDamage`）の反射等で攻撃側・防御側の両方が倒れた場合でも「防衛成功」という誤ったメッセージが出ていた。`mutualDestruction = !attackerSurvived && !defenderSurvived`を新たに`onBattleOutcome`のpayloadに追加し、`promptBattleOutcome`側でこの場合だけ「誰も生き残らなかった」と表示するようにした
+- **スマホ横画面での「〇〇のターン」表示**: `#turn-indicator`（相手ターン中だけ表示される、サイコロ横のインジケータ）が、縦幅の狭いスマホ横画面（`@media (orientation: landscape) and (max-height: 500px)`）だと大きすぎて崩れていたため、その条件下だけフォントサイズを20px→13pxに縮小
+- **ストーリーのステージクリア後にBGMがリセットされない不具合を修正**: `handleStoryBattleEnd`/`handleStoryReplayEnd`が`game = undefined`はしていても`stopMusic()`を一度も呼んでいなかった（`gameMenuExit`には元々あった）ため、対戦中のBGMがそのままステージ選択画面以降も鳴り続けていた。該当3箇所すべてに`stopMusic()`を追加
+- **目標総資産の到達を事前に可視化**: ゴールに実際に着地する前でも、総資産が既にステージの目標G以上に達しているプレイヤーがいれば、画面上部のプレイヤー情報パネルを点滅させるようにした（`renderPlayerPanels`に`goalCurrency`引数を追加、`.player-goal-reached`のCSSアニメーション）。実際の勝利判定自体は既存の`Game._checkGoalAchievement`（周回ボーナス獲得時にのみ判定、ユーザー確認済みの仕様）のままで変更していない - あくまで「次にラップを完走すれば即勝利」であることを視覚的に予告するだけの表示
+- **退出報酬のトースト表示**: 対戦をやめて（`gameMenuExit`）メニューに戻った直後、「報酬として◯◯M獲得しました」を2秒間トースト表示するようにした（`showToast`を新設、`grantExitReward`の戻り値`earnedM`を使用）。汎用的に`document.body`直下へ追加するため、`#app`が非表示になった後のメニュー画面上でも問題なく表示できる
+- **ブリード画面の長い説明文をヘルプボタン化**: `.pg-screen`は`justify-content: center`＋`overflow-y: auto`の組み合わせのため、内容が縦に長くなりすぎるとスマホの縦幅が狭い横画面でパーツ選択部分が実質見えなくなる（中央寄せされた状態でoverflowすると先頭側にスクロールで到達しづらいという既知のCSSの挙動）。3段落あった「ブリードについて」の説明文をインライン表示から外し、右上の丸い「？」ボタン（`.corner-help-button`、汎用クラスとして命名 - 今後他の画面でも使い回せる）から開く専用モーダル（`#breed-help-modal`）に移した
+
+### 検証
+`node --check`/`npm run build`成功。①`battle.js`の`resolveBattle`にハリネズミの服を防御側へ実際に装備させ、攻撃側の一撃で両者とも倒れる（`attackerSurvived: false`かつ`defenderSurvived: false`）シナリオを再現し、`mutualDestruction`が正しく`true`になることを確認。②ブラウザの表示サイズを844×390（スマホ横画面相当）に変更し`#turn-indicator`が13pxになること、デスクトップサイズに戻すと20pxに戻ることを`getComputedStyle`で確認。③`.player-goal-reached`のCSSアニメーションが実際に適用されることを確認。④`.toast-message`が`show`クラス付与後に十分な時間を置くと`opacity:1`まで遷移することを確認。⑤ブリード画面のヘルプボタンをクリックしてモーダルが開閉すること、インラインの説明文（`.pg-label`ブロック）が`#breed-screen`から完全に無くなっていることをDOMで確認した。
+
 ## フェーズ5: 対戦モード
 - Firebaseを使ったリアルタイムマルチプレイ
 - 盤面状態・ターン進行・プレイヤー状態の同期

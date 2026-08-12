@@ -793,7 +793,7 @@ function checkpointRowHtml(checkpointNumbers, passedCheckpointNumbers) {
   return `<div class="player-checkpoints">${nums}</div>`;
 }
 
-function renderPlayerPanels(players, checkpointNumbers) {
+function renderPlayerPanels(players, checkpointNumbers, goalCurrency = null) {
   const slots = computePlayerSlots(players);
   slots.forEach((player, i) => {
     const el = playerPanelEls[i];
@@ -802,6 +802,11 @@ function renderPlayerPanels(players, checkpointNumbers) {
 
     el.style.setProperty('--player-color', hexColor(player.color));
     el.classList.toggle('player-defeated', !!player.defeated);
+    // ゴールに到達していなくても総資産が目標Gに届いていれば、次にラップを
+    // 完走した瞬間に即勝利が確定する（周回ボーナスでの目標達成チェックは
+    // Game._checkGoalAchievement参照）。その「勝利確定間近」をひと目で
+    // 分かるようパネルを点滅させる。
+    el.classList.toggle('player-goal-reached', goalCurrency != null && !player.defeated && player.totalAssets >= goalCurrency);
     el.replaceChildren();
 
     const icon = document.createElement('div');
@@ -1593,10 +1598,12 @@ function promptBattleRetreat() {
 }
 
 /** "〇〇の□□は土地を奪った/守った" - holds 1.5秒, then fades the whole battle scene back out to the board. */
-function promptBattleOutcome({ won, ownerName, unitName }) {
+function promptBattleOutcome({ won, mutualDestruction, ownerName, unitName }) {
   playSfx('hit');
   return new Promise((resolve) => {
-    battleMessageText.textContent = `${ownerName}の${unitName}は${won ? '土地を奪った' : '土地を守った'}`;
+    battleMessageText.textContent = mutualDestruction
+      ? '誰も生き残らなかった'
+      : `${ownerName}の${unitName}は${won ? '土地を奪った' : '土地を守った'}`;
     battleMessageText.classList.remove('hidden');
     setTimeout(() => {
       battleStage.classList.remove('show');
@@ -1940,7 +1947,7 @@ function startBattle(character, storyOptions = {}) {
       const isLocalTurn = currentPlayerId === localPlayerId;
       turnIndicator.textContent = turnText;
       diceButton.disabled = !canRoll || !isLocalTurn;
-      renderPlayerPanels(players, checkpointNumbers);
+      renderPlayerPanels(players, checkpointNumbers, game?.goalCurrency);
       renderHand(hand, isLocalTurn && showCenter && !spellUsedThisTurn);
 
       const enteringShowCenter = showCenter && !showCenterState;
@@ -2347,6 +2354,9 @@ const breedStats = document.getElementById('breed-stats');
 const breedError = document.getElementById('breed-error');
 const breedPartsList = document.getElementById('breed-parts-list');
 const breedBackButton = document.getElementById('breed-back');
+const breedHelpButton = document.getElementById('breed-help-button');
+const breedHelpModal = document.getElementById('breed-help-modal');
+const breedHelpClose = document.getElementById('breed-help-close');
 const stubScreen = document.getElementById('stub-screen');
 const stubText = document.getElementById('stub-text');
 const stubBackButton = document.getElementById('stub-back');
@@ -2805,6 +2815,7 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
 async function handleStoryReplayEnd(index, { won }, replayVariant) {
   const stage = STORY_STAGES[index];
   game = undefined;
+  stopMusic();
   appEl.classList.add('hidden');
   preGame.classList.remove('hidden');
   activeStoryStageIndex = null;
@@ -2827,6 +2838,7 @@ async function handleStoryBattleEnd(index, { won }) {
 
   if (!useHitodeOverlay) {
     game = undefined;
+    stopMusic();
     appEl.classList.add('hidden');
     preGame.classList.remove('hidden');
   }
@@ -2860,6 +2872,7 @@ async function handleStoryBattleEnd(index, { won }) {
       rightPortraitUrl: characterIcon?.dataUrl ?? null,
     });
     game = undefined;
+    stopMusic();
     appEl.classList.add('hidden');
     preGame.classList.remove('hidden');
     showStoryScreen();
@@ -4053,6 +4066,13 @@ breedImageReset.addEventListener('click', () => {
 
 breedBackButton.addEventListener('click', showHubScreen);
 
+breedHelpButton.addEventListener('click', () => {
+  breedHelpModal.classList.remove('hidden');
+});
+breedHelpClose.addEventListener('click', () => {
+  breedHelpModal.classList.add('hidden');
+});
+
 battleCpuButton.addEventListener('click', async () => {
   const chosenDeck = await promptDeckSelection();
   preGame.classList.add('hidden');
@@ -4461,7 +4481,7 @@ function applyPvpPublicState(publicState) {
 
   turnIndicator.textContent = publicState.turnText;
   diceButton.disabled = !(showCenter && isMyTurn);
-  renderPlayerPanels(publicState.players, publicState.checkpointNumbers);
+  renderPlayerPanels(publicState.players, publicState.checkpointNumbers, pvpLastRoom?.goalCurrency);
   renderHand(pvpMatch.myHand, isMyTurn && showCenter && !publicState.spellUsedThisTurn);
   const me = publicState.players.find((p) => p.id === pvpMatch.localPlayerId);
   if (me) {
@@ -4680,6 +4700,19 @@ function grantExitReward(endingAssetsShare) {
   return result;
 }
 
+/** 画面のどこでも使える簡易トースト（#app配下ではなくdocument.bodyに直接足すので、盤面を閉じた後のメニュー画面上でも問題なく出せる）。durationミリ秒後に自動で消える。 */
+function showToast(text, duration = 2000) {
+  const el = document.createElement('div');
+  el.className = 'toast-message';
+  el.textContent = text;
+  document.body.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => {
+    el.classList.remove('show');
+    setTimeout(() => el.remove(), 300);
+  }, duration);
+}
+
 gameMenuExit.addEventListener('click', async () => {
   gameMenuModal.classList.add('hidden');
   const isPvpGuest = pvpMatch && !pvpMatch.isHost;
@@ -4715,7 +4748,7 @@ gameMenuExit.addEventListener('click', async () => {
   }
   if (!confirmed) return;
 
-  if (!wasStoryBattle) grantExitReward(endingAssetsShare);
+  const rewardResult = wasStoryBattle ? null : grantExitReward(endingAssetsShare);
 
   // 退出時、もし戦闘シーン演出の途中（onBattleSceneEnter等のPromiseが
   // 未解決のまま）だった場合、そのGameインスタンスの続きが後から勝手に
@@ -4749,4 +4782,5 @@ gameMenuExit.addEventListener('click', async () => {
   } else {
     showHubScreen();
   }
+  if (rewardResult) showToast(`報酬として${rewardResult.earnedM}M獲得しました`, 2000);
 });
