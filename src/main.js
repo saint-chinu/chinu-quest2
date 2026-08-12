@@ -3282,6 +3282,10 @@ function enterPvpRoomScreen(session) {
       pvpRoomStart.classList.add('hidden');
       return;
     }
+    if (!session.isHost && pvpMatch) {
+      const me = normalizePvpParticipants(room).find((participant) => participant.uid === session.uid);
+      if (me) pvpMatch.localPlayerId = me.playerId;
+    }
     if (room.status === 'finished') {
       pvpRoomStatus.textContent = '対戦は終了しました';
       pvpRoomStart.classList.add('hidden');

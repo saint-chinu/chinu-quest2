@@ -289,7 +289,8 @@ export class GuestActionSender {
   constructor(roomCode, uid) {
     this.roomCode = roomCode;
     this.uid = uid;
-    this.nextActionId = 1;
+    // 再接続・再読込後も以前のactionIdより必ず大きくなるよう時刻を起点にする。
+    this.nextActionId = Date.now();
     this.heartbeat = setInterval(() => sendParticipantAction(this.roomCode, this.uid, this.nextActionId, { type: 'heartbeat' }), 10000);
   }
   send(action) {
@@ -323,6 +324,12 @@ export class HostParticipantActionListener {
     for (const uid of (participantUids || []).filter(Boolean)) {
       const unsubscribe = onSnapshot(participantActionRef(roomCode, uid), (snap) => {
         const data = snap.data();
+        // 購読開始時にFirestoreへ残っている前回の操作は基準値として記録し、
+        // 現在の対戦で新しく届いた操作だけを実行する。
+        if (!this.lastHandled.has(uid)) {
+          this.lastHandled.set(uid, Number(data?.actionId) || 0);
+          return;
+        }
         if (!data || data.uid !== uid || Number(data.actionId) <= (this.lastHandled.get(uid) || 0)) return;
         this.lastHandled.set(uid, Number(data.actionId));
         onAction(data.action);
