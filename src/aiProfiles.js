@@ -17,7 +17,7 @@
  *   経路選択の両方に使う
  * - preferredElements: 実行時にキャラのデッキテーマ（story.jsのtheme.elements）
  *   から差し込む（このファイルには持たせない）。nullなら「どの属性でも
- *   マッチ扱い」（無属性ブック等、テーマの無い汎用CPU用）
+ *   マッチ扱い」（無属性デッキ等、テーマの無い汎用CPU用）
  */
 export const DEFAULT_AI_PROFILE = {
   offElementSummonChance: 0.15,

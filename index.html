@@ -50,7 +50,7 @@
           </div>
           <div class="title-intro-block">
             <h3>カード収集でやりこみ</h3>
-            <p>対戦の報酬やショップのパック購入でカードを集め、40枚のデッキ（ブック）を自由に編成。レアリティはN・S・R・EXの4段階で、集めたカードは図鑑でいつでも見返せます。ログイン中のキャラクター・所持M・カード・デッキ・ブリード・作成カードはクラウドにも保存されます。</p>
+            <p>対戦の報酬やショップのパック購入でカードを集め、40枚のデッキを自由に編成。レアリティはN・S・R・EXの4段階で、集めたカードは図鑑でいつでも見返せます。ログイン中のキャラクター・所持M・カード・デッキ・ブリード・作成カードはクラウドにも保存されます。</p>
           </div>
         </div>
       </div>
@@ -124,7 +124,13 @@
       <div id="catalog-screen" class="pg-screen hidden">
         <h2 class="pg-title">カード図鑑</h2>
         <p class="pg-label">所持カードは名前と枚数を表示します</p>
-        <div id="catalog-list"></div>
+        <div id="catalog-browser">
+          <div id="catalog-category-tabs"></div>
+          <div id="catalog-filtered-list">
+            <div id="catalog-rarity-filters" aria-label="レアリティ表示切替"></div>
+            <div id="catalog-list"></div>
+          </div>
+        </div>
         <button id="catalog-back" class="pg-button pg-button-secondary">戻る</button>
       </div>
 

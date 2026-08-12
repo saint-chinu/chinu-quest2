@@ -529,7 +529,8 @@ html, body {
   background: rgba(15, 19, 34, 0.9);
 }
 
-#deck-category-tabs {
+#deck-category-tabs,
+#catalog-category-tabs {
   display: flex;
   gap: 5px;
   overflow-x: auto;
@@ -553,13 +554,15 @@ html, body {
   color: #fff;
 }
 
-#deck-add-browser {
+#deck-add-browser,
+#catalog-filtered-list {
   display: grid;
   grid-template-columns: 43px minmax(0, 1fr);
   gap: 8px;
 }
 
-#deck-rarity-filters {
+#deck-rarity-filters,
+#catalog-rarity-filters {
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -655,6 +658,15 @@ html, body {
   max-height: 62vh;
   overflow-y: auto;
   padding: 5px;
+}
+
+#catalog-browser {
+  width: min(680px, 92vw);
+}
+
+#catalog-list {
+  width: auto;
+  max-height: 58vh;
 }
 
 .catalog-row {

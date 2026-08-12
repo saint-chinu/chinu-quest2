@@ -9,7 +9,7 @@ import { MONSTER_CATALOG, ITEM_CATALOG } from './battleCards.js';
 // 各NPCの`theme`はbuildThemedDeckList（battleCards.js）にそのまま渡す
 // デッキサンプル定義 - elementsで属性2種に絞った上でfeaturedMonster/
 // featuredItem（既存カタログから1体1種、任意）を4枚ずつ混ぜ、キャラごと
-// に個性のあるデッキにする（以前は全員が同じ2種の初期ブックを使い回し
+// に個性のあるデッキにする（以前は全員が同じ2種の初期デッキを使い回し
 // ていた）。カード規模がまだ小さいため名前付きカードの使い回しはあるが、
 // 属性の組み合わせだけでもキャラ差別化になるようにしてある。
 export const STORY_STAGES = [

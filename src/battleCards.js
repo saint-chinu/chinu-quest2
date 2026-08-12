@@ -391,7 +391,7 @@ function duplicateForDeck(def, count) {
  * tile-preview UI), not for any generic pool fill anymore.
  *
  * 39ではなく40と仕様書にはあったが、main.jsのキャラメイクでブリード
- * モンスター（レアリティEX）を必ず1枚差し込む仕様のため、両ブックとも
+ * モンスター（レアリティEX）を必ず1枚差し込む仕様のため、両デッキとも
  * N モンスター1種の枚数を1つ減らして合計39枚にしてある（山賊フクロウ/
  * 静電気野郎をそれぞれ3→2）。buildStarterCardList自体は素の39枚を返し、
  * main.jsのcharmakeSubmitがブリードモンスターを足して40枚に確定する。
@@ -399,7 +399,7 @@ function duplicateForDeck(def, count) {
 export const STARTER_DECKS = {
   fireForest: {
     id: 'fireForest',
-    name: '火・森ブック',
+    name: '火・森デッキ',
     elements: [Element.FIRE, Element.FOREST],
     featuredMonster: MONSTER_CATALOG.salarymander,
     featuredItem: ITEM_CATALOG.knife,
@@ -431,7 +431,7 @@ export const STARTER_DECKS = {
   },
   waterThunder: {
     id: 'waterThunder',
-    name: '水・雷ブック',
+    name: '水・雷デッキ',
     elements: [Element.WATER, Element.THUNDER],
     featuredMonster: MONSTER_CATALOG.minatoJoshi,
     featuredItem: ITEM_CATALOG.potLid,

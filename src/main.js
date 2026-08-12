@@ -1620,7 +1620,7 @@ const HELP_TEXT = `【勝敗の目標】
 盤面右下の「目標G」が、そのステージで所持Gの目安になります（表示のみで自動判定はされません）。
 
 【ゲーム開始前】
-ストーリーと対戦では、盤面開始前に使用する40枚のデッキ（ブック）を選びます。複数のブックはデッキ編集画面で作成・編集できます。
+ストーリーと対戦では、盤面開始前に使用する40枚のデッキを選びます。複数のデッキはデッキ編集画面で作成・編集できます。
 ターン順は盤面開始時にランダムで決まり、その盤面が終わるまで同じ順番で進行します。
 
 【サイコロ・移動】
@@ -1783,6 +1783,8 @@ const hubWelcome = document.getElementById('hub-welcome');
 const cardEditorHub = document.getElementById('card-editor-hub');
 const catalogScreen = document.getElementById('catalog-screen');
 const catalogList = document.getElementById('catalog-list');
+const catalogCategoryTabs = document.getElementById('catalog-category-tabs');
+const catalogRarityFilters = document.getElementById('catalog-rarity-filters');
 const catalogBack = document.getElementById('catalog-back');
 const cardEditorScreen = document.getElementById('card-editor-screen');
 const editorName = document.getElementById('editor-name');
@@ -2012,10 +2014,13 @@ function ensureBreedFields(character) {
   if (!character.breedMonster) character.breedMonster = { name: BREED_BASE.defaultName, equippedPartIds: [] };
   if (!character.ownedPartIds) character.ownedPartIds = [];
   if (character.storyProgress == null) character.storyProgress = 0;
-  // 複数デッキ(ブック)対応前のセーブデータ移行: 単一のdeckListを
+  // 複数デッキ対応前のセーブデータ移行: 単一のdeckListを
   // decks[0]として引き継ぐ（旧deckListフィールド自体はもう読まない）。
   if (!character.decks) {
-    character.decks = [{ id: `deck-${Date.now()}`, name: 'ブック1', deckList: character.deckList || [] }];
+    character.decks = [{ id: `deck-${Date.now()}`, name: 'デッキ1', deckList: character.deckList || [] }];
+  }
+  for (const deck of character.decks) {
+    if (/^ブック\d+$/.test(deck.name || '')) deck.name = deck.name.replace(/^ブック/, 'デッキ');
   }
   return character;
 }
@@ -2064,7 +2069,7 @@ charmakeSubmit.addEventListener('click', () => {
     iconImageDataUrl: selectedCharacterIcon.dataUrl || '',
     color: ICON_COLORS[selectedCharacterIcon.colorIndex] || ICON_COLORS[0],
     deckVariant: selectedDeckVariant,
-    decks: [{ id: `deck-${Date.now()}`, name: 'ブック1', deckList }],
+    decks: [{ id: `deck-${Date.now()}`, name: 'デッキ1', deckList }],
     ownedCards,
     m: STARTING_M,
     breedMonster,
@@ -2396,6 +2401,9 @@ stubBackButton.addEventListener('click', showHubScreen);
 
 const RARITY_ORDER = { [Rarity.N]: 0, [Rarity.S]: 1, [Rarity.R]: 2, [Rarity.EX]: 3 };
 
+let catalogActiveCategory = 'fire';
+const catalogHiddenRarities = new Set();
+
 function sortedCatalog() {
   return effectiveCatalog().slice().sort((a, b) =>
     (RARITY_ORDER[a.rarity] ?? 99) - (RARITY_ORDER[b.rarity] ?? 99)
@@ -2403,8 +2411,34 @@ function sortedCatalog() {
 }
 
 function showCatalogScreen() {
+  catalogCategoryTabs.replaceChildren();
+  for (const category of DECK_CATEGORY_TABS) {
+    const button = document.createElement('button');
+    button.className = `deck-category-tab${category.id === catalogActiveCategory ? ' selected' : ''}`;
+    button.textContent = category.label;
+    button.addEventListener('click', () => {
+      catalogActiveCategory = category.id;
+      showCatalogScreen();
+    });
+    catalogCategoryTabs.appendChild(button);
+  }
+
+  catalogRarityFilters.replaceChildren();
+  for (const rarity of [Rarity.N, Rarity.S, Rarity.R, Rarity.EX]) {
+    const button = document.createElement('button');
+    button.className = `deck-rarity-filter${catalogHiddenRarities.has(rarity) ? ' disabled' : ''}`;
+    button.textContent = rarity;
+    button.addEventListener('click', () => {
+      if (catalogHiddenRarities.has(rarity)) catalogHiddenRarities.delete(rarity);
+      else catalogHiddenRarities.add(rarity);
+      showCatalogScreen();
+    });
+    catalogRarityFilters.appendChild(button);
+  }
+
+  const category = DECK_CATEGORY_TABS.find((item) => item.id === catalogActiveCategory) || DECK_CATEGORY_TABS[0];
   catalogList.replaceChildren();
-  for (const card of sortedCatalog()) {
+  for (const card of sortedCatalog().filter((def) => category.test(def) && !catalogHiddenRarities.has(def.rarity))) {
     const owned = ownedCountOf(cardKey(card));
     const row = document.createElement('div');
     row.className = `catalog-row${owned ? '' : ' catalog-row-unknown'}`;
@@ -2877,7 +2911,7 @@ function renderDeckSlotTabs() {
     addTab.addEventListener('click', () => {
       currentCharacter.decks.push({
         id: `deck-${Date.now()}`,
-        name: `ブック${currentCharacter.decks.length + 1}`,
+        name: `デッキ${currentCharacter.decks.length + 1}`,
         deckList: [],
       });
       editingDeckIndex = currentCharacter.decks.length - 1;
@@ -3032,7 +3066,7 @@ function inDeckCountOf(key) {
   return count;
 }
 
-// ---- デッキ選択（対戦・ストーリー共通）: 盤面に入る直前に毎回どのブックを使うか選ばせる ----
+// ---- デッキ選択（対戦・ストーリー共通）: 盤面に入る直前に毎回どのデッキを使うか選ばせる ----
 
 /** 3冊まで並べて選ばせ、選んだ1冊を「このデッキにしますか？」で内訳付き確認してから確定する。resolveされるのは確定した{id,name,deckList}。 */
 function promptDeckSelection() {
