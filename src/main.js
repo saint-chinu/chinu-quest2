@@ -3445,7 +3445,11 @@ function handlePvpGuestAction(action) {
   if (!game) return;
   // Ignore stale/replayed actions and actions sent outside the guest's turn.
   // This prevents delayed Firestore events from consuming a later turn.
-  if (action?.playerId !== pvpMatch?.guestPlayerId || game.currentPlayer?.id !== action.playerId) return;
+  const playerId = Number(action?.playerId);
+  const knownRemoteIds = Object.keys(pvpMatch?.uidByPlayerId || {})
+    .map(Number)
+    .filter((id) => Number.isInteger(id) && id > 0);
+  if (!knownRemoteIds.includes(playerId) || game.currentPlayer?.id !== playerId) return;
   if (action.type === 'rollDice') {
     const steps = Number(action.steps);
     if (Number.isInteger(steps) && steps >= 1 && steps <= 6 && game.awaitingRoll && !game.isBusy) game.rollDice(steps);
