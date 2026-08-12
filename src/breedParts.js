@@ -1,4 +1,5 @@
 import { CardType, Element, ELEMENT_LABEL, Rarity } from './cards.js';
+import { assetUrl } from './assetUrl.js';
 
 // ブリードモンスターの初期ステータス。名前だけがブリード画面で変更可能
 // (属性/ATK/HP/コストはパーツ装着でのみ変化する)。
@@ -9,6 +10,9 @@ export const BREED_BASE = {
   hp: 15,
   cost: 30,
 };
+
+// プレイヤーが画像をアップロードしていない場合に使う、ブリモンの既定カード絵。
+export const BREED_DEFAULT_IMAGE_URL = assetUrl('/images/card-art/burimon.png');
 
 // パーツ装着の上限（それぞれ独立に判定 - どれか1つが上限に達しても、他の
 // ステータスがまだ上限未満なら、そちらを動かすパーツは引き続き装着できる）。
@@ -163,6 +167,7 @@ export function buildBreedCardDef(character) {
     hp: stats.hp,
     cost: stats.cost,
     traits: stats.traits,
-    imageDataUrl: character.breedMonster.imageDataUrl || '',
+    // アップロード画像がある場合のみそちらを優先する。
+    imageDataUrl: character.breedMonster.imageDataUrl || BREED_DEFAULT_IMAGE_URL,
   };
 }
