@@ -3368,6 +3368,7 @@ pvpRoomLeave.addEventListener('click', async () => {
   stopPvpRoomListener();
   if (pvpMatch && !pvpMatch.isHost) {
     pvpMatch.listener.destroy();
+    pvpMatch.actionSender?.destroy();
     pvpMatch = null;
   }
   if (pvpSession) {
@@ -3558,6 +3559,7 @@ function applyPvpPublicState(publicState) {
       pvpMatch.stopPublicListener?.();
       pvpMatch.stopHandListener?.();
       pvpMatch.listener?.destroy();
+      pvpMatch.actionSender?.destroy();
       pvpMatch = null;
       game = undefined;
       appEl.classList.add('hidden');
@@ -3597,6 +3599,7 @@ function startPvpGuestBattle() {
       pvpMatch?.stopPublicListener?.();
       pvpMatch?.stopHandListener?.();
       pvpMatch?.listener?.destroy();
+      pvpMatch?.actionSender?.destroy();
       pvpMatch = null;
       stopMusic();
       appEl.classList.add('hidden');
@@ -3723,11 +3726,14 @@ gameMenuExit.addEventListener('click', async () => {
   if (pvpMatch?.isHost) {
     pvpMatch.relay.destroy();
     pvpMatch.actionListener.destroy();
+    pvpMatch.participantActionListener?.destroy();
+    pvpMatch.presenceMonitor?.destroy();
     finishPvpRoom(pvpMatch.roomCode);
   } else if (isPvpGuest) {
     pvpMatch.stopPublicListener?.();
     pvpMatch.stopHandListener?.();
     pvpMatch.listener.destroy();
+    pvpMatch.actionSender?.destroy();
   }
   pvpMatch = null;
   game = undefined;
