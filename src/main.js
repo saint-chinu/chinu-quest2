@@ -3536,6 +3536,19 @@ function applyPvpPublicState(publicState) {
   if (me) {
     pvpMatch.lastCurrency = me.currency;
     pvpMatch.lastAssets = me.totalAssets;
+    if (me.banned && !pvpMatch.isHost && !pvpMatch.banned) {
+      pvpMatch.banned = true;
+      window.alert('ホストにBANされました。盤面から退出します。');
+      pvpMatch.stopPublicListener?.();
+      pvpMatch.stopHandListener?.();
+      pvpMatch.listener?.destroy();
+      pvpMatch = null;
+      game = undefined;
+      appEl.classList.add('hidden');
+      preGame.classList.remove('hidden');
+      showPvpMenuScreen();
+      return;
+    }
   }
 
   const enteringShowCenter = showCenter && !showCenterState;
