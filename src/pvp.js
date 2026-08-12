@@ -83,6 +83,7 @@ export async function createPvpRoom({ name, color, mapId, goalCurrency = 5000, p
 /** Joins an existing waiting room as guest, submitting their deck choice in the same write (guests can only write further fields once past 'waiting' status per firestore.rules, so the deck has to ride along with the join itself). Throws a Japanese-language Error on failure (room not found / already full). */
 export async function joinPvpRoom(roomCodeInput, { name, color, deckList }) {
   const roomCode = roomCodeInput.trim().toUpperCase();
+  if (!Array.isArray(deckList) || deckList.length !== 40) throw new Error('参加には40枚のデッキ確定が必要です');
   const uid = await ensurePvpUser();
   const ref = roomRef(roomCode);
   const snap = await getDoc(ref);
