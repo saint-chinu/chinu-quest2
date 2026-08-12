@@ -175,7 +175,7 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
     attackerUnit.currentHp -= damage;
     const message = `${defenderUnit.def.name}が反射！ ${attackerUnit.def.name}に${damage}ダメージ`;
     log.push(message);
-    return { damage: 0, message };
+    return { damage: 0, message, reflectedDamage: damage, reflectedTargetHp: attackerUnit.currentHp };
   }
 
   defenderUnit.currentHp -= damage;
@@ -194,15 +194,22 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
 
   // ハリネズミの服(reflectHalfDamage): くねくねと違い自分も普通にダメージを
   // 受けたうえで、その半分を追加で攻撃側にも返す。
+  let resultReflectedDamage = 0;
   const halfReflectItem = !pierces && defenderUnit.items.find((i) => i.effect?.type === 'reflectHalfDamage');
   if (halfReflectItem && damage > 0) {
     const reflected = Math.round(damage / 2);
     attackerUnit.currentHp -= reflected;
     message += `／${defenderUnit.def.name}が${reflected}ダメージを反射した`;
+    resultReflectedDamage = reflected;
   }
 
   log.push(message);
-  return { damage, message };
+  return {
+    damage,
+    message,
+    reflectedDamage: typeof resultReflectedDamage === 'number' ? resultReflectedDamage : 0,
+    reflectedTargetHp: attackerUnit.currentHp,
+  };
 }
 
 /** Minimal gold ledger so battle abilities have somewhere to move currency. */
@@ -434,28 +441,72 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   // そのまま再利用する設計。
   const exchanges = [];
   let firstTargetSurvived = true;
-  for (let i = 0; i < strikeCount(first.unit) && firstTargetSurvived; i++) {
+  for (let i = 0; i < strikeCount(first.unit) && firstTargetSurvived && first.unit.currentHp > 0; i++) {
     const beforeLen = log.length;
     const strike = performStrike(first.unit, first.target, first.bonus, log, gold);
     firstTargetSurvived = first.target.currentHp > 0;
     const special = log.slice(beforeLen).filter((line) => line !== strike.message);
     if (i === 0 && orderSpecial) special.unshift(orderSpecial);
-    exchanges.push({ side: first.side, message: strike.message, damage: strike.damage, targetDied: !firstTargetSurvived, special });
+    exchanges.push({
+      side: first.side,
+      message: strike.reflectedDamage > 0
+        ? (strike.damage > 0 ? strike.message.split('／')[0] : `${first.target.def.name}が攻撃を反射した！`)
+        : strike.message,
+      damage: strike.damage,
+      element: first.unit.def.element,
+      targetHp: first.target.currentHp,
+      targetDied: !firstTargetSurvived,
+      special,
+    });
+    if (strike.reflectedDamage > 0) {
+      exchanges.push({
+        side: first.side === 'attacker' ? 'defender' : 'attacker',
+        message: `${first.target.def.name}が反射！ ${first.unit.def.name}に${strike.reflectedDamage}ダメージ`,
+        damage: strike.reflectedDamage,
+        element: first.target.def.element,
+        targetHp: strike.reflectedTargetHp,
+        targetDied: strike.reflectedTargetHp <= 0,
+        special: ['反射！'],
+        reflected: true,
+      });
+    }
   }
 
-  if (firstTargetSurvived) {
+  if (firstTargetSurvived && first.unit.currentHp > 0) {
     let secondTargetSurvived = true;
-    for (let i = 0; i < strikeCount(second.unit) && secondTargetSurvived; i++) {
+    for (let i = 0; i < strikeCount(second.unit) && secondTargetSurvived && second.unit.currentHp > 0; i++) {
       const beforeLen = log.length;
       const strike = performStrike(second.unit, second.target, second.bonus, log, gold);
       secondTargetSurvived = second.target.currentHp > 0;
       const special = log.slice(beforeLen).filter((line) => line !== strike.message);
-      exchanges.push({ side: second.side, message: strike.message, damage: strike.damage, targetDied: !secondTargetSurvived, special });
+      exchanges.push({
+        side: second.side,
+        message: strike.reflectedDamage > 0
+          ? (strike.damage > 0 ? strike.message.split('／')[0] : `${second.target.def.name}が攻撃を反射した！`)
+          : strike.message,
+        damage: strike.damage,
+        element: second.unit.def.element,
+        targetHp: second.target.currentHp,
+        targetDied: !secondTargetSurvived,
+        special,
+      });
+      if (strike.reflectedDamage > 0) {
+        exchanges.push({
+          side: second.side === 'attacker' ? 'defender' : 'attacker',
+          message: `${second.target.def.name}が反射！ ${second.unit.def.name}に${strike.reflectedDamage}ダメージ`,
+          damage: strike.reflectedDamage,
+          element: second.target.def.element,
+          targetHp: strike.reflectedTargetHp,
+          targetDied: strike.reflectedTargetHp <= 0,
+          special: ['反射！'],
+          reflected: true,
+        });
+      }
     }
   }
 
-  const dmgToDefender = exchanges.filter((e) => e.side === 'attacker').reduce((sum, e) => sum + e.damage, 0);
-  const dmgToAttacker = exchanges.filter((e) => e.side === 'defender').reduce((sum, e) => sum + e.damage, 0);
+  const dmgToDefender = exchanges.filter((e) => e.side === 'attacker' && !e.reflected).reduce((sum, e) => sum + e.damage, 0);
+  const dmgToAttacker = exchanges.filter((e) => e.side === 'defender' && !e.reflected).reduce((sum, e) => sum + e.damage, 0);
 
   // 強盗: 実際に与えたダメージの3倍を奪う（どちら側が持っていても効く）。
   if (hasTrait(attacker, 'robber') && dmgToDefender > 0) {

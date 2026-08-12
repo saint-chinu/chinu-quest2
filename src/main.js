@@ -143,6 +143,7 @@ const battleSide = {
     owner: document.getElementById('battle-attacker-owner'),
     hp: document.getElementById('battle-attacker-hp'),
     hpBonus: document.getElementById('battle-attacker-hp-bonus'),
+    hpFill: document.getElementById('battle-attacker-hp-fill'),
     atk: document.getElementById('battle-attacker-atk'),
     atkBonus: document.getElementById('battle-attacker-atk-bonus'),
     card: document.getElementById('battle-attacker-card'),
@@ -154,6 +155,7 @@ const battleSide = {
     owner: document.getElementById('battle-defender-owner'),
     hp: document.getElementById('battle-defender-hp'),
     hpBonus: document.getElementById('battle-defender-hp-bonus'),
+    hpFill: document.getElementById('battle-defender-hp-fill'),
     atk: document.getElementById('battle-defender-atk'),
     atkBonus: document.getElementById('battle-defender-atk-bonus'),
     card: document.getElementById('battle-defender-card'),
@@ -1145,6 +1147,19 @@ async function promptTollPayment({ position, amount }) {
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
 }
 
+async function promptLandLoss({ position, landLabel, chainBefore, chainAfter, assetsBefore, assetsAfter }) {
+  if (!scene || !position) return;
+  const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+  await scene.focusAndZoom(position.x, position.z, 1.35, 320);
+  const el = document.createElement('div');
+  el.className = 'fx-land-loss';
+  el.textContent = `${landLabel}：${chainBefore}連鎖→${chainAfter}連鎖\n総資産：${Math.round(assetsBefore)}G→${Math.round(assetsAfter)}G`;
+  fxLayer.appendChild(el);
+  await new Promise((resolve) => setTimeout(resolve, 2000));
+  el.remove();
+  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
+}
+
 function finishSpellPresentation() {
   spellEffectModal.classList.add('hidden');
   setSpellPresentationActive(false);
@@ -1170,6 +1185,9 @@ const BATTLE_FADE_OUT_MS = 450;
 function renderBattleStat(sideEls, data) {
   sideEls.owner.textContent = data.ownerName;
   sideEls.hp.textContent = data.hp;
+  sideEls.hp.dataset.current = String(data.hp + (data.elementHp || 0));
+  sideEls.hp.dataset.max = String(data.hp + (data.elementHp || 0));
+  sideEls.hpFill.style.width = '100%';
   sideEls.atk.textContent = data.atk;
   sideEls.hpBonus.classList.toggle('hidden', !(data.elementHp > 0));
   if (data.elementHp > 0) sideEls.hpBonus.textContent = `+${data.elementHp}`;
@@ -1264,8 +1282,7 @@ function promptPickBattleItem({ hand, side, ownerName, unitName }) {
  * として目立たせる: メッセージを一回り大きく表示し、発動した側（この一撃
  * を放った側=attackerEls）のカードを一瞬拡大させて光らせる。
  */
-function promptBattleAttack({ side, item, message, targetHp, targetDied, special }) {
-  return new Promise((resolve) => {
+async function promptBattleAttack({ side, item, message, damage = 0, element, targetHp, targetDied, special, targetName }) {
     const attackerEls = battleSide[side];
     const targetEls = battleSide[side === 'attacker' ? 'defender' : 'attacker'];
     const hasSpecial = Array.isArray(special) && special.length > 0;
@@ -1279,39 +1296,117 @@ function promptBattleAttack({ side, item, message, targetHp, targetDied, special
     }
 
     attackerEls.el.classList.add('battle-attacking');
+    await playBattleElementBeam(attackerEls.card, targetEls.card, CARD_COLOR[element] || '#ffffff');
+    if (damage > 0) await showBattleDamageNumber(targetEls.card, damage);
     targetEls.el.classList.add('battle-hit');
-    targetEls.hp.textContent = Math.max(targetHp, 0);
+    await animateBattleHp(targetEls, Math.max(targetHp, 0));
     battleMessageText.textContent = hasSpecial ? `${special.join(' / ')}\n${message}` : message;
     battleMessageText.classList.toggle('special', hasSpecial);
     battleMessageText.classList.remove('hidden');
     if (hasSpecial) attackerEls.el.classList.add('battle-special-glow');
-    if (targetDied) targetEls.card.classList.add('battle-crumble');
+    if (targetDied) {
+      await new Promise((resolve) => setTimeout(resolve, 1800));
+      targetEls.card.classList.add('battle-crumble');
+      battleMessageText.textContent = `${targetName || 'モンスター'}は倒された`;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, BATTLE_MESSAGE_HOLD_MS));
+    }
+    attackerEls.el.classList.remove('battle-attacking', 'battle-special-glow');
+    targetEls.el.classList.remove('battle-hit');
+    battleMessageText.classList.add('hidden');
+    battleMessageText.classList.remove('special');
+    await new Promise((resolve) => setTimeout(resolve, BATTLE_ACTION_GAP_MS));
+}
 
+function playBattleElementBeam(sourceCard, targetCard, color) {
+  return new Promise((resolve) => {
+    const layerRect = fxLayer.getBoundingClientRect();
+    const from = sourceCard.getBoundingClientRect();
+    const to = targetCard.getBoundingClientRect();
+    const x1 = from.left + from.width / 2 - layerRect.left;
+    const y1 = from.top + from.height / 2 - layerRect.top;
+    const x2 = to.left + to.width / 2 - layerRect.left;
+    const y2 = to.top + to.height / 2 - layerRect.top;
+    const beam = document.createElement('div');
+    beam.className = 'battle-element-beam';
+    beam.style.left = `${x1}px`;
+    beam.style.top = `${y1}px`;
+    beam.style.width = `${Math.hypot(x2 - x1, y2 - y1)}px`;
+    beam.style.setProperty('--beam-color', color);
+    beam.style.setProperty('--beam-angle', `${Math.atan2(y2 - y1, x2 - x1)}rad`);
+    fxLayer.appendChild(beam);
+    requestAnimationFrame(() => beam.classList.add('show'));
     setTimeout(() => {
-      attackerEls.el.classList.remove('battle-attacking', 'battle-special-glow');
-      targetEls.el.classList.remove('battle-hit');
-      battleMessageText.classList.add('hidden');
-      battleMessageText.classList.remove('special');
-      setTimeout(resolve, BATTLE_ACTION_GAP_MS);
-    }, BATTLE_MESSAGE_HOLD_MS);
+      beam.classList.add('fade-out');
+      setTimeout(() => { beam.remove(); resolve(); }, 180);
+    }, 520);
+  });
+}
+
+function showBattleDamageNumber(targetCard, damage) {
+  return new Promise((resolve) => {
+    const layerRect = fxLayer.getBoundingClientRect();
+    const rect = targetCard.getBoundingClientRect();
+    const el = document.createElement('div');
+    el.className = 'battle-damage-number';
+    el.textContent = `−${damage}`;
+    el.style.left = `${rect.left + rect.width / 2 - layerRect.left}px`;
+    el.style.top = `${rect.top + rect.height * 0.35 - layerRect.top}px`;
+    fxLayer.appendChild(el);
+    el.addEventListener('animationend', () => { el.remove(); resolve(); }, { once: true });
+  });
+}
+
+function animateBattleHp(targetEls, targetHp) {
+  const from = Number(targetEls.hp.dataset.current ?? targetEls.hp.textContent) || 0;
+  targetEls.hpBonus.classList.add('hidden');
+  return new Promise((resolve) => {
+    const started = performance.now();
+    const duration = 650;
+    function frame(now) {
+      const t = Math.min(1, (now - started) / duration);
+      const value = Math.round(from + (targetHp - from) * t);
+      targetEls.hp.textContent = String(value);
+      const maxHp = Number(targetEls.hp.dataset.max) || Math.max(from, 1);
+      targetEls.hpFill.style.width = `${Math.max(0, Math.min(100, (value / maxHp) * 100))}%`;
+      if (t < 1) requestAnimationFrame(frame);
+      else {
+        targetEls.hp.dataset.current = String(targetHp);
+        resolve();
+      }
+    }
+    requestAnimationFrame(frame);
   });
 }
 
 /** 直接ダメージ系の土地コマンド（火炎瓶男/センチネル等）用の演出: 対象マスへ火の玉を落としてから、ダメージ数値をぴょんと跳ねさせて約1秒表示する。tileIdはFirestore中継できるようgame.js側で本物のtileオブジェクトの代わりに渡されるので、ここでローカルのtiles配列から引き直す。 */
-function promptDamageEffect({ tileId, damage }) {
+function promptDamageEffect({ tileId, damage, targetDied = false, targetName = '' }) {
   playSfx(damage > 0 ? 'hit' : 'block');
   const tile = tiles.find((t) => t.id === tileId);
   if (!tile) return Promise.resolve();
-  return playDamageEffect(tile, damage);
+  return playDamageEffect(tile, damage, { targetDied, targetName });
 }
 
-async function playDamageEffect(tile, damage) {
+async function playDamageEffect(tile, damage, { targetDied = false, targetName = '' } = {}) {
   const savedFocus = { x: scene.focus.x, z: scene.focus.z };
   await scene.focusAndZoom(tile.position.x, tile.position.z, 1.35, 320);
-  await showTargetEffectMessage(tile.position, `${damage}ダメージ！`);
   await scene.playFireballImpact(tile.position);
   await showDamageNumber(tile, damage);
+  if (targetDied) await showDefeatMessage(tile, `${targetName}は倒された`);
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
+}
+
+async function showDefeatMessage(tile, message) {
+  const pos = scene.worldToScreen(tile.position.x, PIECE_REST_Y + 1.8, tile.position.z);
+  const el = document.createElement('div');
+  el.className = 'fx-defeat-message';
+  el.textContent = message;
+  el.style.left = `${pos.x}px`;
+  el.style.top = `${pos.y}px`;
+  fxLayer.appendChild(el);
+  await new Promise((resolve) => setTimeout(resolve, 1000));
+  el.remove();
 }
 
 /** ダメージ数値のポップアップ（DOM）。3D座標をscene.worldToScreenで画面座標に変換し、CSSのfx-damage-popアニメーション（跳ねる→約1秒静止→フェードアウト）が終わったらresolveする。 */
@@ -1723,6 +1818,7 @@ function startBattle(character, storyOptions = {}) {
     onTurnFocus: relayable('turnFocus', promptTurnFocus, { broadcast: true }),
     onTollPayment: relayable('tollPayment', promptTollPayment, { broadcast: true }),
     onMoveDestination: relayable('moveDestination', promptMoveDestination, { broadcast: true }),
+    onLandLoss: relayable('landLoss', promptLandLoss, { broadcast: true }),
     onCpuRoll: cpuRollDice,
     onMoveComplete,
     onLandCommand: relayable('landCommand', promptLandCommand),
@@ -4146,6 +4242,7 @@ const pvpGuestHandlers = {
   damageEffect: promptDamageEffect,
   tollPayment: promptTollPayment,
   moveDestination: promptMoveDestination,
+  landLoss: promptLandLoss,
 };
 
 const pvpPieces = new Map(); // playerId -> billboard sprite (ゲスト側のローカル駒キャッシュ)

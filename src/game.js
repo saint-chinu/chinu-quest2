@@ -85,6 +85,7 @@ export class Game {
     onTurnFocus,
     onTollPayment,
     onMoveDestination,
+    onLandLoss,
     onCpuRoll,
     onMoveComplete,
     onLandCommand,
@@ -135,6 +136,7 @@ export class Game {
     this.onTurnFocus = onTurnFocus;
     this.onTollPayment = onTollPayment || (() => Promise.resolve());
     this.onMoveDestination = onMoveDestination || (() => {});
+    this.onLandLoss = onLandLoss || (() => Promise.resolve());
     this.onCpuRoll = onCpuRoll;
     this.onMoveComplete = onMoveComplete;
     this.onLandCommand = onLandCommand;
@@ -732,16 +734,23 @@ export class Game {
     if (!unit) return;
     unit.currentHp -= amount;
     this._notifyState();
-    if (showEffect) await this.onDamageEffect?.({ tileId: tile.id, damage: amount });
+    if (showEffect) await this.onDamageEffect?.({
+      tileId: tile.id,
+      damage: amount,
+      targetDied: unit.currentHp <= 0,
+      targetName: unit.def.name,
+    });
 
     if (unit.currentHp <= 0) {
       const owner = this.players.find((p) => p.id === tile.owner);
+      const landLoss = this._captureLandLoss(owner, tile);
       tile.unit = null;
       tile.owner = null;
       tile.transparentCursed = false;
       this._repaintTileToElement(tile);
       this.onLog(`${owner.name}の${unit.def.name}は倒された`);
       await this._handleUnitDeath(unit, owner);
+      await this._presentLandLoss(landLoss);
     }
   }
 
@@ -1760,6 +1769,33 @@ export class Game {
     }).length;
   }
 
+  _captureLandLoss(ownerPlayer, tile) {
+    if (!ownerPlayer || !tile || tile.owner !== ownerPlayer.id || tile.element === Element.NEUTRAL) return null;
+    return {
+      player: ownerPlayer,
+      element: tile.element,
+      chainBefore: this._chainCount(ownerPlayer.id, tile.element),
+      assetsBefore: this._totalAssetsOf(ownerPlayer),
+    };
+  }
+
+  async _presentLandLoss(snapshot) {
+    if (!snapshot) return;
+    const { player, element, chainBefore, assetsBefore } = snapshot;
+    const chainAfter = this._chainCount(player.id, element);
+    if (chainAfter === chainBefore) return;
+    await this.onLandLoss({
+      playerId: player.id,
+      playerName: player.name,
+      landLabel: `${ELEMENT_LABEL[element]}の土地`,
+      chainBefore,
+      chainAfter,
+      assetsBefore,
+      assetsAfter: this._totalAssetsOf(player),
+      position: this.tiles[player.tileId]?.position ?? null,
+    });
+  }
+
   /** 連鎖倍率: 連鎖数をCHAIN_MULTIPLIERテーブルに当てはめる（地価/通行料計算専用）。無所有・無色は連鎖1扱い。 */
   _chainMultiplier(ownerId, element) {
     const count = this._chainCount(ownerId, element);
@@ -2082,16 +2118,18 @@ export class Game {
       targetUnit.currentHp -= ability.power;
       this.onLog(`${player.name}の${unitDef.name}が特殊能力で${targetUnit.def.name}に${ability.power}ダメージ！`);
       this._notifyState();
-      await this.onDamageEffect?.({ tileId: targetTile.id, damage: ability.power });
+      await this.onDamageEffect?.({ tileId: targetTile.id, damage: ability.power, targetDied: targetUnit.currentHp <= 0, targetName: targetUnit.def.name });
 
       if (targetUnit.currentHp <= 0) {
         const targetOwner = this.players.find((p) => p.id === targetTile.owner);
+        const landLoss = this._captureLandLoss(targetOwner, targetTile);
         targetTile.unit = null;
         targetTile.owner = null;
         targetTile.transparentCursed = false;
         this._repaintTileToElement(targetTile);
         this.onLog(`${targetOwner.name}の${targetUnit.def.name}は倒された`);
         await this._handleUnitDeath(targetUnit, targetOwner);
+        await this._presentLandLoss(landLoss);
       }
       this._notifyState();
       return true;
@@ -2229,7 +2267,7 @@ export class Game {
       const targetUnit = targetTile.unit;
       targetUnit.currentHp -= ability.power;
       this.onLog(`${player.name}の${unitDef.name}が特殊能力で${targetUnit.def.name}に${ability.power}ダメージを与え、自身は消滅した！`);
-      await this.onDamageEffect?.({ tileId: targetTile.id, damage: ability.power });
+      await this.onDamageEffect?.({ tileId: targetTile.id, damage: ability.power, targetDied: targetUnit.currentHp <= 0, targetName: targetUnit.def.name });
 
       const casterUnit = tile.unit;
       tile.unit = null;
@@ -2241,12 +2279,14 @@ export class Game {
 
       if (targetUnit.currentHp <= 0) {
         const targetOwner = this.players.find((p) => p.id === targetTile.owner);
+        const landLoss = this._captureLandLoss(targetOwner, targetTile);
         targetTile.unit = null;
         targetTile.owner = null;
         targetTile.transparentCursed = false;
         this._repaintTileToElement(targetTile);
         this.onLog(`${targetOwner.name}の${targetUnit.def.name}は倒された`);
         await this._handleUnitDeath(targetUnit, targetOwner);
+        await this._presentLandLoss(landLoss);
       }
       this._notifyState();
       return true;
@@ -2768,9 +2808,13 @@ export class Game {
         side: exchange.side,
         item,
         message: exchange.message,
-        targetHp: Math.max(targetUnit.currentHp, 0),
+        damage: exchange.damage,
+        element: exchange.element,
+        targetHp: Math.max(exchange.targetHp ?? targetUnit.currentHp, 0),
         targetDied: exchange.targetDied,
         special: exchange.special,
+        reflected: !!exchange.reflected,
+        targetName: targetUnit.def.name,
       });
     }
     // Both sides got to strike and both survived - a genuine draw (見た目上
@@ -2824,6 +2868,7 @@ export class Game {
     const defenderPlayer = this.players.find((p) => p.id === tile.owner);
     const attackerUnit = createFieldUnit(card, player.id);
     const defenderUnit = tile.unit;
+    const defenderLandLoss = this._captureLandLoss(defenderPlayer, tile);
 
     // お前も〇ぬんだ: 次の侵略が戦闘無しで確定勝利になる（700G消費、通常の
     // 決着処理と同じ形で土地を奪う。避雷針侍の身代わり等の介入も一切挟まない）。
@@ -2837,6 +2882,7 @@ export class Game {
       tile.forcedStopCursed = false;
       this._paintTile(tile, player.color);
       await this._handleUnitDeath(defenderUnit, defenderPlayer);
+      await this._presentLandLoss(defenderLandLoss);
       this._notifyState();
       return;
     }
@@ -2866,6 +2912,7 @@ export class Game {
       this.onLog(`${defenderPlayer.name}の${defenderUnit.def.name}が防衛に成功した`);
       if (!result.attackerSurvived) await this._handleUnitDeath(attackerUnit, player);
     }
+    if (tile.owner !== defenderPlayer.id) await this._presentLandLoss(defenderLandLoss);
   }
 
   /**
@@ -3156,16 +3203,18 @@ export class Game {
     targetUnit.currentHp -= ability.power;
     this.onLog(`${player.name}の${unitDef.name}が特殊能力で${targetUnit.def.name}に${ability.power}ダメージ！ (-${commandCost}G)`);
     this._notifyState();
-    await this.onDamageEffect?.({ tileId: target.id, damage: ability.power });
+    await this.onDamageEffect?.({ tileId: target.id, damage: ability.power, targetDied: targetUnit.currentHp <= 0, targetName: targetUnit.def.name });
 
     if (targetUnit.currentHp <= 0) {
       const targetOwner = this.players.find((p) => p.id === target.owner);
+      const landLoss = this._captureLandLoss(targetOwner, target);
       target.unit = null;
       target.owner = null;
       target.transparentCursed = false;
       this._repaintTileToElement(target);
       this.onLog(`${targetOwner.name}の${targetUnit.def.name}は倒された`);
       await this._handleUnitDeath(targetUnit, targetOwner);
+      await this._presentLandLoss(landLoss);
     }
     this._notifyState();
     return true;
