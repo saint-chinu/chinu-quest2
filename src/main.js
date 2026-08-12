@@ -3517,7 +3517,10 @@ function applyPvpPublicState(publicState) {
   renderPlayerPanels(publicState.players, publicState.checkpointNumbers);
   if (isMyTurn) renderHand(pvpMatch.myHand);
   const me = publicState.players.find((p) => p.id === pvpMatch.localPlayerId);
-  if (me) pvpMatch.lastCurrency = me.currency;
+  if (me) {
+    pvpMatch.lastCurrency = me.currency;
+    pvpMatch.lastAssets = me.totalAssets;
+  }
 
   const enteringShowCenter = showCenter && !showCenterState;
   showCenterState = showCenter;
@@ -3634,15 +3637,17 @@ gameMenuExit.addEventListener('click', async () => {
 
   // ゲスト側はGameを持たないので、直近のpublicStateから自分のGを読む
   // （publicStateがまだ届いていない対戦開始直後は0扱い）。
-  const endingG = isPvpGuest ? pvpMatch.lastCurrency ?? 0 : game.players[0].currency;
+  const endingAssets = isPvpGuest
+    ? pvpMatch.lastAssets ?? pvpMatch.lastCurrency ?? 0
+    : game._totalAssetsOf(game.players[0]);
   const isPvp = Boolean(pvpMatch);
   // 4人同盟戦は通常対戦報酬の2.5倍。現行のPvP報酬はサーバー検証導入まで
   // 無効だが、4人同盟ルームの報酬倍率はここで一元管理する。
   const pvpAllianceMultiplier = pvpLastRoom?.allianceMode === true && pvpLastRoom?.playerCount === 4 ? 2.5 : 1;
-  const earnedM = Math.max(Math.round(endingG * M_CONVERSION_RATE * pvpAllianceMultiplier), M_CONVERSION_MIN);
+  const earnedM = Math.max(Math.round(endingAssets * M_CONVERSION_RATE * pvpAllianceMultiplier), M_CONVERSION_MIN);
   const rewardMessage = isPvp
-    ? `対戦終了報酬：所持${endingG}Gの20%（${earnedM}M、下限50M）${pvpAllianceMultiplier > 1 ? '／4人同盟戦2.5倍' : ''}を獲得します。`
-    : `所持${endingG}Gの20%（${earnedM}M、下限50M）を獲得します。`;
+    ? `対戦終了報酬：総資産${endingAssets}Gの20%（${earnedM}M、下限50M）${pvpAllianceMultiplier > 1 ? '／4人同盟戦2.5倍' : ''}を獲得します。`
+    : `総資産${endingAssets}Gの20%（${earnedM}M、下限50M）を獲得します。`;
   const confirmed = await confirmYesNo(`対戦をやめますか？\n${rewardMessage}`);
   if (!confirmed) return;
 
