@@ -3274,7 +3274,8 @@ function enterPvpRoomScreen(session) {
       pvpRoomStatus.textContent = session.isHost
         ? `参加者 ${participantCount}/${requiredCount}人（${opponentName}）`
         : `ホスト: ${opponentName} / 参加者 ${participantCount}/${requiredCount}人`;
-      pvpRoomStart.classList.toggle('hidden', !session.isHost || participantCount < requiredCount);
+      const rosterReady = normalizePvpParticipants(room).every((p) => p.ready === true && (p.uid === room.hostUid || Array.isArray(p.deckList)));
+      pvpRoomStart.classList.toggle('hidden', !session.isHost || participantCount < requiredCount || !rosterReady);
     } else {
       pvpRoomStatus.textContent = session.isHost ? '対戦相手を待っています…' : 'ホストの開始を待っています…';
       pvpRoomStart.classList.add('hidden');
