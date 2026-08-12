@@ -807,6 +807,17 @@ Codexが実装したPvP機能（部屋作成/最大4人ロースター参加/同
 ### 検証
 `npm run build`成功。実際の`GameScene`を直接構築し、キャスター駒・対象駒・対象モンスターアイコンを配置した上で①→②→③の一連の流れを実行し、各フェーズの描画結果を画像で確認（カメラがキャスターへズームしオーラが表示される、対象へカメラが切り替わり駒が揺れる、最終的にカメラが元の位置・ズーム倍率へ厳密に戻ることをそれぞれ確認）。アプリ起動時のコンソールエラーも新規発生なしを確認。
 
+## 戦闘中の特殊効果発動を目立たせる演出（2026-08-13実装）
+ユーザーから「戦闘中に先制効果のような特殊効果が発動する際には、メッセージを少し大きめに表示して、モンスターカードを一瞬大きくして光らせてほしい」との指摘。
+
+- **`battle.js`（`resolveBattle`）**: 先制/後攻(`firstStrike`/`lastStrike`)によって通常の「攻撃側が先」から順番が入れ替わった場合、`「〇〇の先制発動！」`のようなログを追加した上で、そのフラグを`exchanges`配列の最初の要素の`special`に載せるようにした。加えて`毒付与・G略奪・即死・反射・無効化`等、`performStrike`/`dealDamage`内の20以上ある個別の特殊効果分岐は1つずつ書き換えず、各`performStrike`呼び出しの前後で`log.length`を比較する差分方式（ログ差分）で「その一撃の間に増えた行」を拾い、通常のダメージメッセージ(`strike.message`)を除いたものをその撃の`special`配列として`exchanges`の各要素に付与する設計にした（新しい効果分岐が今後追加されても、log.pushさえしていれば自動的にspecialへ拾われる）
+- **`game.js`**: `_runBattleScene`が`onBattleAttack`へ渡すペイロードに`special: exchange.special`を追加しただけ（既存の`exchanges`ループ構造はそのまま）
+- **`main.js`（`promptBattleAttack`）**: `special`配列が空でなければ、攻撃側の`.battle-side`要素に`battle-special-glow`クラスを追加し、メッセージ本文の先頭に特殊効果の説明行を足した上で`#battle-message-text`に`special`クラスを付与する。表示終了時（`BATTLE_MESSAGE_HOLD_MS`後）に両クラスとも確実に外す
+- **`style.css`**: `.battle-special-glow .card-large`（0.9秒かけてスケール1→1.28→1・金色のdrop-shadowグロー）、`#battle-message-text.special`（フォント20px→26px・金色の縁取り+box-shadow・0.35秒のポップイン`battle-message-pop`アニメーション）を新設。既存の`.battle-attacking`（静的な持ち上げ）・`.battle-hit`（震え）と同じ「`.battle-side`にクラスを足す→CSSが子要素の見た目を変える」パターンを踏襲
+
+### 検証
+`node --check`で3つのJSファイルを構文確認、`npm run build`成功。実際にブラウザで`battle.js`の`resolveBattle`を先制持ちモンスター同士・毒付与持ちモンスター同士でそれぞれ直接実行し、`exchanges[].special`に想定通りのメッセージ（先制発動・毒付与）だけが入り通常の一撃では空配列になることをJSONで確認。さらに実際のDOM（`battle-scene-modal`）上で`promptBattleAttack`と同じクラス付与処理を再現し、`getComputedStyle`で特殊効果発動時（フォント26px・金枠・`battle-special-glow`アニメーションがカードに適用）と通常時（フォント20px・枠なし・アニメーションなし）の両方の見た目が設計通り切り替わることを確認。
+
 ## フェーズ5: 対戦モード
 - Firebaseを使ったリアルタイムマルチプレイ
 - 盤面状態・ターン進行・プレイヤー状態の同期

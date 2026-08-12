@@ -410,25 +410,47 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     ? { unit: attacker, target: defender, bonus: attackerBonus, side: 'attacker' }
     : { unit: defender, target: attacker, bonus: defenderBonus, side: 'defender' };
 
+  // 通常（攻撃側が先）から順番が入れ替わった時だけ、先制/後攻が実際に
+  // 発動したこととして明示する（ユーザー向けの「特殊効果が発動」演出の
+  // トリガーに使う - resolveBattleの戻り値exchangesの最初の要素のspecial
+  // に載せる）。
+  let orderSpecial = null;
+  if (defenderGoesFirst) {
+    if (hasTrait(defender, 'firstStrike')) orderSpecial = `${defender.def.name}の先制発動！`;
+    else if (hasTrait(attacker, 'lastStrike')) orderSpecial = `${attacker.def.name}は後攻に回った`;
+    if (orderSpecial) log.push(orderSpecial);
+  }
+
   // ツインハンマー(doubleStrike): 装備している側は自分の番に1回ではなく
   // 連続2回攻撃する（相手が1発目で力尽きれば2発目は撃たない）。単発の場合
   // strikeCount=1なのでループは従来通り1回で終わる。
   const strikeCount = (unit) => (unit.items.some((i) => i.effect?.type === 'doubleStrike') ? 2 : 1);
 
+  // performStrike/dealDamageは特殊効果が発動するたびに専用のlog行を
+  // 追加で積む（毒付与・G略奪・即死・反射・無効化等）。この一撃の間に
+  // 増えたlog行のうち、通常のダメージ行（strike.message、それ自体が
+  // returnされる）以外を「特殊効果の発動メッセージ」として拾う - 個々の
+  // 効果分岐を1つずつ書き換えなくて済むよう、既存のlog.push呼び出しを
+  // そのまま再利用する設計。
   const exchanges = [];
   let firstTargetSurvived = true;
   for (let i = 0; i < strikeCount(first.unit) && firstTargetSurvived; i++) {
+    const beforeLen = log.length;
     const strike = performStrike(first.unit, first.target, first.bonus, log, gold);
     firstTargetSurvived = first.target.currentHp > 0;
-    exchanges.push({ side: first.side, message: strike.message, damage: strike.damage, targetDied: !firstTargetSurvived });
+    const special = log.slice(beforeLen).filter((line) => line !== strike.message);
+    if (i === 0 && orderSpecial) special.unshift(orderSpecial);
+    exchanges.push({ side: first.side, message: strike.message, damage: strike.damage, targetDied: !firstTargetSurvived, special });
   }
 
   if (firstTargetSurvived) {
     let secondTargetSurvived = true;
     for (let i = 0; i < strikeCount(second.unit) && secondTargetSurvived; i++) {
+      const beforeLen = log.length;
       const strike = performStrike(second.unit, second.target, second.bonus, log, gold);
       secondTargetSurvived = second.target.currentHp > 0;
-      exchanges.push({ side: second.side, message: strike.message, damage: strike.damage, targetDied: !secondTargetSurvived });
+      const special = log.slice(beforeLen).filter((line) => line !== strike.message);
+      exchanges.push({ side: second.side, message: strike.message, damage: strike.damage, targetDied: !secondTargetSurvived, special });
     }
   }
 

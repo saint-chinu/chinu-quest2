@@ -2674,6 +2674,7 @@ export class Game {
         message: exchange.message,
         targetHp: Math.max(targetUnit.currentHp, 0),
         targetDied: exchange.targetDied,
+        special: exchange.special,
       });
     }
     // Both sides got to strike and both survived - a genuine draw (見た目上

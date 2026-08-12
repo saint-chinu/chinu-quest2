@@ -1082,14 +1082,21 @@ function promptPickBattleItem({ hand, side, ownerName, unitName }) {
 /**
  * One side's strike: its item (if used) appears at 1/4 size over its own
  * card's top-left corner, the target's card flashes/shakes, the damage
- * calculation message shows for 1.5s, and the target's displayed HP
- * updates to match. If the target died, its card crumbles from the bottom
- * during that same hold.
+ * calculation message shows for BATTLE_MESSAGE_HOLD_MS, and the target's
+ * displayed HP updates to match. If the target died, its card crumbles
+ * from the bottom during that same hold.
+ *
+ * `special`（先制発動・毒付与・G略奪・即死・反射等、この一撃で発動した
+ * 特殊効果のメッセージ配列、battle.jsのresolveBattleが積む）が1件以上
+ * あれば、通常の淡々としたダメージ表示ではなく「特殊効果が発動した瞬間」
+ * として目立たせる: メッセージを一回り大きく表示し、発動した側（この一撃
+ * を放った側=attackerEls）のカードを一瞬拡大させて光らせる。
  */
-function promptBattleAttack({ side, item, message, targetHp, targetDied }) {
+function promptBattleAttack({ side, item, message, targetHp, targetDied, special }) {
   return new Promise((resolve) => {
     const attackerEls = battleSide[side];
     const targetEls = battleSide[side === 'attacker' ? 'defender' : 'attacker'];
+    const hasSpecial = Array.isArray(special) && special.length > 0;
 
     if (item) {
       const el = document.createElement('div');
@@ -1102,14 +1109,17 @@ function promptBattleAttack({ side, item, message, targetHp, targetDied }) {
     attackerEls.el.classList.add('battle-attacking');
     targetEls.el.classList.add('battle-hit');
     targetEls.hp.textContent = Math.max(targetHp, 0);
-    battleMessageText.textContent = message;
+    battleMessageText.textContent = hasSpecial ? `${special.join(' / ')}\n${message}` : message;
+    battleMessageText.classList.toggle('special', hasSpecial);
     battleMessageText.classList.remove('hidden');
+    if (hasSpecial) attackerEls.el.classList.add('battle-special-glow');
     if (targetDied) targetEls.card.classList.add('battle-crumble');
 
     setTimeout(() => {
-      attackerEls.el.classList.remove('battle-attacking');
+      attackerEls.el.classList.remove('battle-attacking', 'battle-special-glow');
       targetEls.el.classList.remove('battle-hit');
       battleMessageText.classList.add('hidden');
+      battleMessageText.classList.remove('special');
       resolve();
     }, BATTLE_MESSAGE_HOLD_MS);
   });
