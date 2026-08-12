@@ -120,6 +120,7 @@ export function saveCharacter(id, character) {
   if (firebaseReady && auth?.currentUser?.uid === id) {
     return setDoc(doc(db, 'players', id), {
       character: cleanForFirestore(character),
+      customCards: cleanForFirestore(loadCustomCards(id)),
       updatedAt: serverTimestamp(),
     }, { merge: true }).catch((error) => console.warn('Cloud save failed; local play continues.', error));
   }
