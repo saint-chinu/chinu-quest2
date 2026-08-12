@@ -765,6 +765,7 @@ html, body {
 
 #story-overlay-portrait-left {
   left: 2vw;
+  bottom: 57px;
 }
 
 #story-overlay-portrait-right {
@@ -789,7 +790,7 @@ html, body {
 
 #story-overlay-bubble {
   position: absolute;
-  bottom: 3vh;
+  bottom: calc(3vh + 19px);
   left: 50%;
   transform: translateX(-50%);
   width: min(520px, 60vw);
