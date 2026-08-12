@@ -224,6 +224,16 @@
 
       <div id="pvp-menu-screen" class="pg-screen hidden">
         <h2 class="pg-title">対人戦</h2>
+        <div class="pg-form-row">
+          <label for="pvp-goal-currency">目標G</label>
+          <select id="pvp-goal-currency">
+            <option value="3000">3,000G</option><option value="4000">4,000G</option>
+            <option value="5000">5,000G</option><option value="6000">6,000G</option>
+            <option value="7000">7,000G</option><option value="8000">8,000G</option>
+            <option value="9000">9,000G</option><option value="10000">10,000G</option>
+            <option value="11000">11,000G</option><option value="12000">12,000G</option>
+          </select>
+        </div>
         <button id="pvp-create-button" class="pg-button">部屋を作る</button>
         <p class="pg-label">または部屋コードで参加</p>
         <div class="pg-field">
@@ -239,6 +249,7 @@
         <h2 class="pg-title">対人戦ルーム</h2>
         <p id="pvp-room-code" class="pg-label"></p>
         <p id="pvp-room-status" class="pg-label"></p>
+        <p id="pvp-room-settings" class="pg-label"></p>
         <button id="pvp-room-start" class="pg-button hidden">対戦開始</button>
         <button id="pvp-room-leave" class="pg-button pg-button-secondary">やめる</button>
       </div>
@@ -270,6 +281,7 @@
           <label for="breed-image">画像</label>
           <input id="breed-image" type="file" accept="image/*" />
         </div>
+        <button id="breed-image-reset" class="pg-button pg-button-secondary" type="button">初期画像に戻す</button>
         <img id="breed-image-preview" class="hidden" alt="ブリードモンスター画像プレビュー" />
         <p id="breed-stats" class="pg-label"></p>
         <p id="breed-error" class="pg-error hidden"></p>

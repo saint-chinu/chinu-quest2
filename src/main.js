@@ -1635,6 +1635,7 @@ const battlePvpButton = document.getElementById('battle-pvp');
 const battleBackButton = document.getElementById('battle-back');
 const pvpMenuScreen = document.getElementById('pvp-menu-screen');
 const pvpCreateButton = document.getElementById('pvp-create-button');
+const pvpGoalCurrency = document.getElementById('pvp-goal-currency');
 const pvpJoinCode = document.getElementById('pvp-join-code');
 const pvpJoinButton = document.getElementById('pvp-join-button');
 const pvpMenuError = document.getElementById('pvp-menu-error');
@@ -1642,6 +1643,7 @@ const pvpMenuBack = document.getElementById('pvp-menu-back');
 const pvpRoomScreen = document.getElementById('pvp-room-screen');
 const pvpRoomCode = document.getElementById('pvp-room-code');
 const pvpRoomStatus = document.getElementById('pvp-room-status');
+const pvpRoomSettings = document.getElementById('pvp-room-settings');
 const pvpRoomStart = document.getElementById('pvp-room-start');
 const pvpRoomLeave = document.getElementById('pvp-room-leave');
 const pvpMapSelectScreen = document.getElementById('pvp-map-select-screen');
@@ -3189,6 +3191,7 @@ function enterPvpRoomScreen(session) {
   pvpSession = session;
   pvpRoomCode.textContent = `部屋コード: ${session.roomCode}`;
   pvpRoomStatus.textContent = session.isHost ? '対戦相手を待っています…' : 'ホストの開始を待っています…';
+  pvpRoomSettings.textContent = session.goalCurrency ? `目標G: ${Number(session.goalCurrency).toLocaleString('ja-JP')}G` : '';
   pvpRoomStart.classList.add('hidden');
   pvpGuestBattleStarted = false;
   showScreen(pvpRoomScreen);
@@ -3229,6 +3232,7 @@ function enterPvpRoomScreen(session) {
       }
       return;
     }
+    pvpRoomSettings.textContent = `ステージ: ${MAPS.find((map) => map.id === room.mapId)?.name || room.mapId} / 目標G: ${Number(room.goalCurrency || 5000).toLocaleString('ja-JP')}G`;
     if (room.guestUid) {
       const opponentName = session.isHost ? room.guestName : room.hostName;
       pvpRoomStatus.textContent = session.isHost ? `対戦相手: ${opponentName}（準備完了）` : `対戦相手: ${opponentName}`;
@@ -3276,7 +3280,8 @@ function showPvpMapConfirm(map) {
     cleanup();
     pvpMenuError.classList.add('hidden');
     try {
-      const session = await createPvpRoom({ name: currentCharacter.name, color: currentCharacter.color, mapId: map.id });
+      const goalCurrency = Number(pvpGoalCurrency.value);
+      const session = await createPvpRoom({ name: currentCharacter.name, color: currentCharacter.color, mapId: map.id, goalCurrency });
       enterPvpRoomScreen(session);
     } catch {
       pvpMenuError.textContent = '部屋を作成できませんでした';
@@ -3561,6 +3566,7 @@ pvpRoomStart.addEventListener('click', async () => {
   appEl.classList.remove('hidden');
   startBattle(currentCharacter, {
     mapId: pvpLastRoom.mapId,
+    goalCurrency: pvpLastRoom.goalCurrency || 5000,
     playerConfigs: [
       { name: currentCharacter.name, isCPU: false, color: currentCharacter.color, deckList: hostDeck.deckList, iconImage },
       { name: pvpLastRoom.guestName, isCPU: false, color: pvpLastRoom.guestColor, deckList: guestDeckList },
