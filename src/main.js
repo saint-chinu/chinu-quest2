@@ -35,6 +35,7 @@ import {
   HostGuestRelay,
   GuestHostListener,
   HostActionListener,
+  HostParticipantActionListener,
   GuestActionSender,
   normalizePvpParticipants,
   publishPublicState,
@@ -3232,7 +3233,7 @@ function enterPvpRoomScreen(session) {
       localPlayerId: 1,
       myHand: [],
       listener: new GuestHostListener(session.roomCode, session.uid, pvpGuestHandlers),
-      actionSender: new GuestActionSender(session.roomCode),
+      actionSender: new GuestActionSender(session.roomCode, session.uid),
     };
   }
 
@@ -3625,6 +3626,11 @@ pvpRoomStart.addEventListener('click', async () => {
     uidByPlayerId: { 0: pvpSession.uid, 1: pvpLastRoom.guestUid },
   };
   pvpMatch.actionListener = new HostActionListener(pvpSession.roomCode, handlePvpGuestAction);
+  pvpMatch.participantActionListener = new HostParticipantActionListener(
+    pvpSession.roomCode,
+    (pvpLastRoom.participants || []).map((participant) => participant.uid).filter((uid) => uid !== pvpSession.uid),
+    handlePvpGuestAction,
+  );
 
   // status:'battling'への更新がゲスト側のroomリスナーに届き、それを合図に
   // ゲストもstartPvpGuestBattle()で盤面構築を始める（enterPvpRoomScreen参照）。

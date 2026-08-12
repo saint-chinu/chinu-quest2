@@ -225,17 +225,44 @@ export function sendGuestAction(roomCode, actionId, action) {
   return updateDoc(roomRef(roomCode), { guestActionId: actionId, guestAction: action });
 }
 
+function participantActionRef(roomCode, uid) {
+  return doc(db, 'pvpRooms', roomCode.toUpperCase(), 'actions', uid);
+}
+
+export function sendParticipantAction(roomCode, uid, actionId, action) {
+  return setDoc(participantActionRef(roomCode, uid), { actionId, action, uid });
+}
+
 /** ゲスト側で使う、送信ごとにactionIdを自動採番する薄いラッパー。 */
 export class GuestActionSender {
-  constructor(roomCode) {
+  constructor(roomCode, uid = null) {
     this.roomCode = roomCode;
+    this.uid = uid;
     this.nextActionId = 1;
   }
   send(action) {
     const actionId = this.nextActionId;
     this.nextActionId += 1;
-    return sendGuestAction(this.roomCode, actionId, { ...action, actionId });
+    const payload = { ...action, actionId, uid: this.uid };
+    return this.uid ? sendParticipantAction(this.roomCode, this.uid, actionId, payload) : sendGuestAction(this.roomCode, actionId, payload);
   }
+}
+
+export class HostParticipantActionListener {
+  constructor(roomCode, participantUids, onAction) {
+    this.unsubscribers = [];
+    this.lastHandled = new Map();
+    for (const uid of (participantUids || []).filter(Boolean)) {
+      const unsubscribe = onSnapshot(participantActionRef(roomCode, uid), (snap) => {
+        const data = snap.data();
+        if (!data || data.uid !== uid || Number(data.actionId) <= (this.lastHandled.get(uid) || 0)) return;
+        this.lastHandled.set(uid, Number(data.actionId));
+        onAction(data.action);
+      });
+      this.unsubscribers.push(unsubscribe);
+    }
+  }
+  destroy() { this.unsubscribers.splice(0).forEach((unsubscribe) => unsubscribe()); }
 }
 
 /** ホスト側: ゲストの自発的アクションを購読する。onActionは新しいアクションが来るたびに呼ばれる。 */

@@ -133,6 +133,21 @@ service cloud.firestore {
           request.resource.data.hand is list &&
           request.resource.data.hand.size() <= 7;
       }
+
+      match /actions/{uid} {
+        function parentRoom() {
+          return get(/databases/$(database)/documents/pvpRooms/$(roomCode));
+        }
+        function isRoomParticipant() {
+          return parentRoom().data.hostUid == uid ||
+            (parentRoom().data.participantUids is list && uid in parentRoom().data.participantUids);
+        }
+        allow read: if signedIn() && parentRoom().data.hostUid == request.auth.uid && isRoomParticipant();
+        allow create, update: if signedIn() && request.auth.uid == uid && isRoomParticipant() &&
+          request.resource.data.keys().hasOnly(['actionId', 'action', 'uid']) &&
+          request.resource.data.uid == uid && request.resource.data.actionId is int &&
+          request.resource.data.action is map;
+      }
     }
   }
 }
