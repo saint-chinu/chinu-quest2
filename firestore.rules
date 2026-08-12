@@ -145,7 +145,7 @@ service cloud.firestore {
         }
         allow read: if signedIn() && parentRoom().data.hostUid == request.auth.uid && isRoomParticipant();
         allow create, update: if signedIn() && request.auth.uid == uid && isRoomParticipant() &&
-          request.resource.data.keys().hasOnly(['actionId', 'action', 'uid']) &&
+          request.resource.data.keys().hasOnly(['actionId', 'action', 'uid', 'lastSeen']) &&
           request.resource.data.uid == uid && request.resource.data.actionId is int &&
           request.resource.data.action is map;
       }

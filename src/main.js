@@ -36,6 +36,7 @@ import {
   GuestHostListener,
   HostActionListener,
   HostParticipantActionListener,
+  HostParticipantPresenceMonitor,
   GuestActionSender,
   normalizePvpParticipants,
   publishPublicState,
@@ -3637,6 +3638,15 @@ pvpRoomStart.addEventListener('click', async () => {
     pvpSession.roomCode,
     (pvpLastRoom.participants || []).map((participant) => participant.uid).filter((uid) => uid !== pvpSession.uid),
     handlePvpGuestAction,
+  );
+  pvpMatch.presenceMonitor = new HostParticipantPresenceMonitor(
+    pvpSession.roomCode,
+    (pvpLastRoom.participants || []).map((participant) => participant.uid).filter((uid) => uid !== pvpSession.uid),
+    (uid) => {
+      const playerId = Object.entries(pvpMatch.uidByPlayerId).find(([, participantUid]) => participantUid === uid)?.[0];
+      const player = game?.players?.find((entry) => entry.id === Number(playerId));
+      if (player && !player.isCPU) { player.isCPU = true; game.onLog(`${player.name}の通信が切断されたためAIへ切り替え`); game._notifyState(); }
+    },
   );
 
   // status:'battling'への更新がゲスト側のroomリスナーに届き、それを合図に

@@ -279,7 +279,7 @@ function participantActionRef(roomCode, uid) {
 }
 
 export function sendParticipantAction(roomCode, uid, actionId, action) {
-  return setDoc(participantActionRef(roomCode, uid), { actionId, action, uid });
+  return setDoc(participantActionRef(roomCode, uid), { actionId, action, uid, lastSeen: serverTimestamp() });
 }
 
 /** ゲスト側で使う、送信ごとにactionIdを自動採番する薄いラッパー。 */
@@ -288,6 +288,7 @@ export class GuestActionSender {
     this.roomCode = roomCode;
     this.uid = uid;
     this.nextActionId = 1;
+    this.heartbeat = uid ? setInterval(() => sendParticipantAction(this.roomCode, this.uid, this.nextActionId, { type: 'heartbeat' }), 10000) : null;
   }
   send(action) {
     const actionId = this.nextActionId;
@@ -295,6 +296,22 @@ export class GuestActionSender {
     const payload = { ...action, actionId, uid: this.uid };
     return this.uid ? sendParticipantAction(this.roomCode, this.uid, actionId, payload) : sendGuestAction(this.roomCode, actionId, payload);
   }
+  destroy() { if (this.heartbeat) clearInterval(this.heartbeat); }
+}
+
+export class HostParticipantPresenceMonitor {
+  constructor(roomCode, participantUids, onOffline) {
+    this.lastSeen = new Map();
+    this.timers = (participantUids || []).filter(Boolean).map((uid) => setInterval(() => {
+      const seen = this.lastSeen.get(uid);
+      if (seen && Date.now() - seen > 30000) { this.lastSeen.delete(uid); onOffline(uid); }
+    }, 10000));
+    this.unsubscribe = (participantUids || []).filter(Boolean).map((uid) => onSnapshot(participantActionRef(roomCode, uid), (snap) => {
+      const ts = snap.data()?.lastSeen;
+      if (ts?.toMillis) this.lastSeen.set(uid, ts.toMillis());
+    }));
+  }
+  destroy() { this.timers.forEach(clearInterval); this.unsubscribe.forEach((stop) => stop()); }
 }
 
 export class HostParticipantActionListener {
