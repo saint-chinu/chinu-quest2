@@ -9,6 +9,13 @@ rules_version = '2';
 // - 各プレイヤーの手札（private/{uid}.hand）はそのuid本人しか読めない。
 service cloud.firestore {
   match /databases/{database}/documents {
+    // ログイン済み本人だけが自分のセーブデータを読書きできる。
+    // M・ガチャ結果の正当性検証はFunctions導入後にサーバー側で行う。
+    match /players/{uid} {
+      allow read, create, update: if request.auth != null && request.auth.uid == uid;
+      allow delete: if false;
+    }
+
     match /pvpRooms/{roomCode} {
       function signedIn() {
         return request.auth != null;

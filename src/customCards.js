@@ -1,8 +1,27 @@
 import { CardType, Element, Rarity } from './cards.js';
+import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
+import { auth, db, firebaseReady } from './firebase.js';
 
 // ユーザーごとに独立したキーに保存する（以前はアカウント横断の共通キー
 // 1本で、別アカウントでも同じカスタムカード一覧が見えてしまっていた）。
 const STORAGE_KEY_PREFIX = 'chinuquest2_custom_cards_';
+let cloudUserId = null;
+
+function syncCustomCards(userId, cards) {
+  if (!firebaseReady || !userId || auth?.currentUser?.uid !== userId) return;
+  setDoc(doc(db, 'players', userId), {
+    customCards: cards,
+    updatedAt: serverTimestamp(),
+  }, { merge: true }).catch((error) => console.warn('Custom-card cloud save failed.', error));
+}
+
+/** Firebase profile read after login. Keeps a local cache for offline continuity. */
+export function setCloudCustomCardUser(userId, cards = []) {
+  cloudUserId = userId || null;
+  if (!cloudUserId) return;
+  const safeCards = Array.isArray(cards) ? cards : [];
+  localStorage.setItem(STORAGE_KEY_PREFIX + cloudUserId, JSON.stringify(safeCards));
+}
 
 export const CARD_EFFECTS = [
   { id: 'firstStrike', label: '先制', types: [CardType.MONSTER, CardType.GEAR, CardType.SPELL] },
@@ -60,6 +79,7 @@ export function saveCustomCard(userId, input) {
   const card = buildCustomCard(input);
   cards.push(card);
   localStorage.setItem(STORAGE_KEY_PREFIX + userId, JSON.stringify(cards));
+  if (userId === cloudUserId) syncCustomCards(userId, cards);
   return card;
 }
 
@@ -69,6 +89,7 @@ export function saveCustomCardsBulk(userId, inputs) {
   const saved = inputs.map((input) => buildCustomCard(input));
   cards.push(...saved);
   localStorage.setItem(STORAGE_KEY_PREFIX + userId, JSON.stringify(cards));
+  if (userId === cloudUserId) syncCustomCards(userId, cards);
   return saved;
 }
 

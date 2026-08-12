@@ -8,7 +8,7 @@ import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, buildCharacte
 import { loginOrRegister, saveCharacter } from './auth.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { PACKS, drawPack } from './shopPacks.js';
-import { CARD_EFFECTS, saveCustomCard, saveCustomCardsBulk, validateCustomCard } from './customCards.js';
+import { CARD_EFFECTS, saveCustomCard, saveCustomCardsBulk, setCloudCustomCardUser, validateCustomCard } from './customCards.js';
 import { loadCharacterIconPresets, fileToCharacterIcon, resolveCharacterIcon } from './playerIcons.js';
 import {
   BREED_BASE,
@@ -1796,8 +1796,14 @@ function ensureBreedFields(character) {
   return character;
 }
 
-loginSubmit.addEventListener('click', () => {
-  const result = loginOrRegister(loginId.value.trim(), loginPassword.value);
+loginSubmit.addEventListener('click', async () => {
+  if (loginSubmit.disabled) return;
+  loginSubmit.disabled = true;
+  const originalLabel = loginSubmit.textContent;
+  loginSubmit.textContent = 'ログイン中…';
+  const result = await loginOrRegister(loginId.value.trim(), loginPassword.value);
+  loginSubmit.disabled = false;
+  loginSubmit.textContent = originalLabel;
   if (!result.ok) {
     loginError.textContent = result.error;
     loginError.classList.remove('hidden');
@@ -1805,6 +1811,7 @@ loginSubmit.addEventListener('click', () => {
   }
   loginError.classList.add('hidden');
   currentUserId = result.id;
+  setCloudCustomCardUser(currentUserId, result.customCards || []);
   if (result.isNew || !result.character) {
     showCharmakeScreen();
   } else {

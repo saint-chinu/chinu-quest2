@@ -68,6 +68,12 @@ let anonUserPromise = null;
 export function ensurePvpUser() {
   if (!firebaseReady) return Promise.reject(new Error('Firebase未設定'));
   if (anonUserPromise) return anonUserPromise;
+  // 通常ログイン済みなら、その認証IDをPvPにも使用する。ここで匿名ログイン
+  // するとメール/パスワードのセッションを上書きしてしまうため、作成しない。
+  if (auth.currentUser) {
+    anonUserPromise = Promise.resolve(auth.currentUser.uid);
+    return anonUserPromise;
+  }
 
   anonUserPromise = new Promise((resolve, reject) => {
     const unsubscribe = onAuthStateChanged(
