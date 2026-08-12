@@ -3236,9 +3236,9 @@ function enterPvpRoomScreen(session) {
       return;
     }
     pvpRoomSettings.textContent = `ステージ: ${MAPS.find((map) => map.id === room.mapId)?.name || room.mapId} / 目標G: ${Number(room.goalCurrency || 5000).toLocaleString('ja-JP')}G`;
-    if (room.guestUid) {
+    if (room.guestUid || (session.isHost && Array.isArray(room.cpuNames) && room.cpuNames.length > 0)) {
       const opponentName = session.isHost ? room.guestName : room.hostName;
-      const participantCount = Array.isArray(room.participants) ? room.participants.length : (room.guestUid ? 2 : 1);
+      const participantCount = Array.isArray(room.participants) ? room.participants.length : 1 + (room.guestUid ? 1 : 0) + (room.cpuNames?.length || 0);
       const requiredCount = Math.max(2, Math.min(4, Number(room.playerCount) || 2));
       pvpRoomStatus.textContent = session.isHost
         ? `参加者 ${participantCount}/${requiredCount}人（${opponentName}）`
@@ -3546,7 +3546,7 @@ function startPvpGuestBattle() {
 }
 
 pvpRoomStart.addEventListener('click', async () => {
-  if (!pvpSession?.isHost || !pvpLastRoom?.guestUid) return;
+  if (!pvpSession?.isHost || (!pvpLastRoom?.guestUid && !(pvpLastRoom?.cpuNames?.length))) return;
   pvpRoomStart.disabled = true;
   const hostDeck = await promptDeckSelection();
 
@@ -3574,13 +3574,31 @@ pvpRoomStart.addEventListener('click', async () => {
   stopPvpRoomListener();
   preGame.classList.add('hidden');
   appEl.classList.remove('hidden');
+  const playerConfigs = [
+    { name: currentCharacter.name, isCPU: false, color: currentCharacter.color, deckList: hostDeck.deckList, iconImage },
+  ];
+  if (pvpLastRoom.guestUid) playerConfigs.push({ name: pvpLastRoom.guestName, isCPU: false, color: pvpLastRoom.guestColor, deckList: guestDeckList });
+  const cpuNames = Array.isArray(pvpLastRoom.cpuNames) ? pvpLastRoom.cpuNames : [];
+  const seen = new Set(playerConfigs.map((p) => p.name));
+  for (const cpuName of cpuNames) {
+    if (seen.has(cpuName) || playerConfigs.length >= (pvpLastRoom.playerCount || 2)) continue;
+    const npc = STORY_STAGES.flatMap((stage) => [stage.ally, ...(stage.opponents || [])]).find((entry) => entry?.name === cpuName);
+    if (!npc) continue;
+    seen.add(cpuName);
+    playerConfigs.push({
+      name: cpuName,
+      isCPU: true,
+      color: npc.color,
+      deckList: npc.deckKey ? buildCharacterDeckList(npc.deckKey) : buildThemedDeckList(npc.theme),
+      elements: npc.theme?.elements,
+      iconImage: await loadNpcTokenImage(cpuName),
+    });
+  }
+  if (pvpLastRoom.allianceMode && playerConfigs.length === 4) playerConfigs.forEach((config, index) => { config.allianceId = index % 2; });
   startBattle(currentCharacter, {
     mapId: pvpLastRoom.mapId,
     goalCurrency: pvpLastRoom.goalCurrency || 5000,
-    playerConfigs: [
-      { name: currentCharacter.name, isCPU: false, color: currentCharacter.color, deckList: hostDeck.deckList, iconImage },
-      { name: pvpLastRoom.guestName, isCPU: false, color: pvpLastRoom.guestColor, deckList: guestDeckList },
-    ],
+    playerConfigs,
   });
   pvpRoomStart.disabled = false;
 });
