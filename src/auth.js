@@ -65,9 +65,17 @@ export async function loginOrRegister(id, password) {
     try {
       credential = await signInWithEmailAndPassword(auth, email, password);
     } catch (error) {
-      if (error?.code !== 'auth/user-not-found') throw error;
-      credential = await createUserWithEmailAndPassword(auth, email, password);
-      registered = true;
+      // Firebase's email-enumeration protection reports an unknown account as
+      // invalid-credential instead of user-not-found. Try registration for both;
+      // an existing ID with a wrong password is then identified by email-already-in-use.
+      if (error?.code !== 'auth/user-not-found' && error?.code !== 'auth/invalid-credential') throw error;
+      try {
+        credential = await createUserWithEmailAndPassword(auth, email, password);
+        registered = true;
+      } catch (registerError) {
+        if (registerError?.code === 'auth/email-already-in-use') throw error;
+        throw registerError;
+      }
     }
 
     const uid = credential.user.uid;
