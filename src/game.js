@@ -33,6 +33,13 @@ const LAND_BONUS_RATE_MULTI = 80;
 const STARTING_HAND_SIZE = 4;
 const HAND_LIMIT = 6;
 
+// CPUの捨て札AI（_cpuChooseDiscard）が目指す手札構成。所持土地数6以上で
+// アイテム偏重に切り替わる（土地が多い＝守りを固めたい局面という想定）。
+const DISCARD_TARGET_COMPOSITION_DEFAULT = { [CardType.MONSTER]: 2, [CardType.GEAR]: 2, [CardType.SPELL]: 2 };
+const DISCARD_TARGET_COMPOSITION_LAND_HEAVY = { [CardType.MONSTER]: 1, [CardType.GEAR]: 3, [CardType.SPELL]: 2 };
+const DISCARD_TARGET_LAND_THRESHOLD = 6;
+const DISCARD_RARITY_RANK = { [Rarity.N]: 0, [Rarity.S]: 1, [Rarity.R]: 2, [Rarity.EX]: 3 };
+
 // The camera doesn't chase every step - it only pans once movement adds up
 // to this many tiles since its last pan (across turns, not reset per
 // roll), so small moves leave it completely still.
@@ -989,7 +996,7 @@ export class Game {
       let discarded;
       if (player.isCPU) {
         await delay(CPU_DECISION_MS);
-        discarded = player.hand[0];
+        discarded = this._cpuChooseDiscard(player);
       } else {
         discarded = await this.onDiscardChoice(player.hand, player.id);
       }
@@ -998,6 +1005,36 @@ export class Game {
       if (player.isCPU) this.onLog(`${player.name}は手札を1枚捨てた`);
       this._notifyState();
     }
+  }
+
+  /**
+   * CPUの手札超過時の捨て札選択。所持土地数に応じた目標構成
+   * （`DISCARD_TARGET_LAND_THRESHOLD`未満: モンスター2/アイテム2/
+   * スペル2、以上: モンスター1/アイテム3/スペル2）に対して、現在の枚数が
+   * 目標を超えているカード種別だけを候補にする（超過が無ければ手札全体を
+   * 候補にする保険付き）。候補の中からレアリティが低い順に選び、モンスター
+   * 同士の同レアリティはATKが低い方（＝残したいのはATKが高い方）を選ぶ。
+   */
+  _cpuChooseDiscard(player) {
+    const landCount = this._summonCountOf(player.id);
+    const target = landCount >= DISCARD_TARGET_LAND_THRESHOLD
+      ? DISCARD_TARGET_COMPOSITION_LAND_HEAVY
+      : DISCARD_TARGET_COMPOSITION_DEFAULT;
+
+    const countsByType = {};
+    for (const c of player.hand) countsByType[c.type] = (countsByType[c.type] ?? 0) + 1;
+
+    const candidates = player.hand.filter((c) => (countsByType[c.type] ?? 0) > (target[c.type] ?? 0));
+    const pool = candidates.length > 0 ? candidates : player.hand;
+
+    const sorted = [...pool].sort((a, b) => {
+      const rarityDiff = DISCARD_RARITY_RANK[a.rarity] - DISCARD_RARITY_RANK[b.rarity];
+      if (rarityDiff !== 0) return rarityDiff;
+      const aAtk = a.type === CardType.MONSTER ? (a.atk ?? 0) : 0;
+      const bAtk = b.type === CardType.MONSTER ? (b.atk ?? 0) : 0;
+      return aAtk - bAtk;
+    });
+    return sorted[0];
   }
 
   /**
@@ -2759,7 +2796,7 @@ export class Game {
       let discarded;
       if (ownerPlayer.isCPU) {
         await delay(CPU_DECISION_MS);
-        discarded = ownerPlayer.hand[0];
+        discarded = this._cpuChooseDiscard(ownerPlayer);
       } else {
         discarded = await this.onDiscardChoice(ownerPlayer.hand, ownerPlayer.id);
       }
