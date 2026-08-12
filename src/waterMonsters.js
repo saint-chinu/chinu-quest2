@@ -1,4 +1,5 @@
 import { CardType, Element, Rarity } from './cards.js';
+import { assetUrl } from './assetUrl.js';
 
 const NORMAL_COST = 50;
 const waterMonster = (id, name, rarity, hp, atk, options = {}) => ({
@@ -16,6 +17,7 @@ const waterMonster = (id, name, rarity, hp, atk, options = {}) => ({
   ...(options.traits ? { traits: options.traits } : {}),
   ...(options.effect ? { effect: options.effect } : {}),
   ...(options.effectDescription ? { effectDescription: options.effectDescription } : {}),
+  ...(options.imageDataUrl ? { imageDataUrl: options.imageDataUrl } : {}),
 });
 
 /**
@@ -60,6 +62,7 @@ export const WATER_MONSTER_CATALOG = {
     cost: 100,
     effect: { type: 'destroyItemBeforeAttack' },
     effectDescription: '召喚コスト100G。攻撃開始前に相手のアイテムを破壊する',
+    imageDataUrl: assetUrl('/images/card-art/kaizokuS.webp'),
   }),
   aoriika: waterMonster('aoriika', 'アオリイカ', Rarity.S, 40, 30, {
     traits: ['lastStrike'],

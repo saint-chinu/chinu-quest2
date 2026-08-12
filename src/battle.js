@@ -29,9 +29,24 @@ export function equipItem(unit, itemDef) {
   unit.items.push({ ...itemDef });
 }
 
-/** Casts a spell onto a monster already on the field ("curse" status). */
+// 呪い状態は常に1つしか保持されない: 新しい呪いをかけると、モンスターに
+// 既にかかっていた呪い（種類問わず）は上書きされて消える。以下の
+// apply系関数は全てこのsetCurseを経由し、unit.cursesを「置き換え」る
+// （追加ではない）。
+function setCurse(unit, curse) {
+  unit.curses = [
+    {
+      addedAtk: 0,
+      addedHp: 0,
+      traits: [],
+      ...curse,
+    },
+  ];
+}
+
+/** Casts a spell onto a monster already on the field ("curse" status)。既存の呪いは上書きされる。 */
 export function applyCurse(unit, spellDef) {
-  unit.curses.push({
+  setCurse(unit, {
     name: spellDef.name,
     addedAtk: spellDef.addedAtk || 0,
     addedHp: spellDef.addedHp || 0,
@@ -39,21 +54,19 @@ export function applyCurse(unit, spellDef) {
   });
 }
 
-/** 毒状態を付与する（カエンタケ参照）。addedAtk/addedHpを持たないcurseなのでstatTotalsのステータス計算には影響しない。既に毒なら上書きしない（重ね掛け不可）。 */
+/** 毒状態を付与する（カエンタケ参照）。addedAtk/addedHpを持たないcurseなのでstatTotalsのステータス計算には影響しない。既存の呪いは上書きされる。 */
 export function applyPoison(unit, ratio) {
-  if (unit.curses.some((c) => c.poisonRatio != null)) return;
-  unit.curses.push({ name: '毒', poisonRatio: ratio, addedAtk: 0, addedHp: 0, traits: [] });
+  setCurse(unit, { name: '毒', poisonRatio: ratio });
 }
 
-/** 感電状態を付与する（雷雲参照）。以後この個体が攻撃する度に一定確率で攻撃そのものが不発になる（目くらましと違い1回で消費されず、毒同様に入れ替え/死亡まで持続）。既に感電なら上書きしない。 */
+/** 感電状態を付与する（雷雲参照）。以後この個体が攻撃する度に一定確率で攻撃そのものが不発になる（目くらましと違い1回で消費されず、入れ替え/死亡/移動まで持続）。既存の呪いは上書きされる。 */
 function applyShock(unit, chance) {
-  if (unit.curses.some((c) => c.shockChance != null)) return;
-  unit.curses.push({ name: '感電', shockChance: chance, addedAtk: 0, addedHp: 0, traits: [] });
+  setCurse(unit, { name: '感電', shockChance: chance });
 }
 
-/** ATKダウンの呪い（静電気野郎参照）。既存のaddedAtk汎用curseをそのまま流用 - 通常の永続呪いと全く同じ仕組みで、重ね掛けもされる（複数回被弾すればその分下がり続ける）。 */
+/** ATKダウンの呪い（静電気野郎参照）。既存のaddedAtk汎用curseをそのまま流用。既存の呪いは上書きされる（以前は重ね掛けだったが、呪いは1つしか保持できない仕様に変更）。 */
 function applyAtkDown(unit, amount) {
-  unit.curses.push({ name: 'ATKダウン', addedAtk: -amount, addedHp: 0, traits: [] });
+  setCurse(unit, { name: 'ATKダウン', addedAtk: -amount });
 }
 
 function randomStep(min, max, step) {

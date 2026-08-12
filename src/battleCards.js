@@ -271,7 +271,7 @@ export const SPELL_CATALOG = {
   manjaro: spell(
     'manjaro',
     'マ〇ジャロ',
-    Rarity.S,
+    Rarity.N,
     30,
     'anyMonster',
     { type: 'statCurse', addedAtk: 10, addedHp: 20 },

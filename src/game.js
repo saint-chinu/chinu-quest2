@@ -575,7 +575,14 @@ export class Game {
         return false;
 
       case 'cleanseCurses':
+        // 有益な呪い（宝くじ・絶対攻撃・お前も〇ぬんだ・不動産鑑〇士・脱税）も
+        // 対象に含める＝自分にかかっている呪い状態を種類を問わず全て解除する。
         player.diceCurse = null;
+        player.tollWaiverCharges = 0;
+        player.lotteryOnNextGoal = false;
+        player.pierceNextInvasion = false;
+        player.guaranteedNextInvasionWin = false;
+        player.allTilesAccessTurnsRemaining = 0;
         if (targetTile?.unit) targetTile.unit.curses = [];
         this.onLog(`${player.name}は呪いを解除した`);
         return false;
@@ -786,6 +793,7 @@ export class Game {
     const destTile = this.tiles.find((t) => t.id === destId);
 
     if (destTile.owner == null) {
+      unit.curses = []; // モンスターの呪いは移動すると消滅する
       destTile.unit = unit;
       destTile.owner = unit.ownerId;
       this._paintTile(destTile, unitOwner.color);
@@ -802,6 +810,7 @@ export class Game {
       await this._maybeRedirectDeathToLightningRod(defenderPlayer, destTile, result);
 
       if (result.attackerSurvived && !result.defenderSurvived) {
+        unit.curses = []; // モンスターの呪いは移動（侵略成功）すると消滅する
         destTile.unit = unit;
         destTile.owner = unit.ownerId;
         this._paintTile(destTile, unitOwner.color);
@@ -1674,6 +1683,7 @@ export class Game {
     const attackerName = attackerUnit.def.name;
 
     if (targetTile.owner == null) {
+      attackerUnit.curses = []; // モンスターの呪いは移動すると消滅する
       targetTile.unit = attackerUnit;
       targetTile.owner = player.id;
       this._paintTile(targetTile, player.color);
@@ -1690,6 +1700,7 @@ export class Game {
       await this._maybeRedirectDeathToLightningRod(defenderPlayer, targetTile, result);
 
       if (result.attackerSurvived && !result.defenderSurvived) {
+        attackerUnit.curses = []; // モンスターの呪いは移動（侵略成功）すると消滅する
         targetTile.unit = attackerUnit;
         targetTile.owner = player.id;
         this._paintTile(targetTile, player.color);
