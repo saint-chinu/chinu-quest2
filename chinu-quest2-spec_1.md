@@ -756,6 +756,12 @@ Node単体テスト6件（デフォルト構成でのモンスター/アイテ�
 ### 検証（4項目共通）
 Node単体テストで、`CHARACTER_DECKS.danball`が全40枚（内訳含む）で構築できること、`story.js`のステージ4対戦相手が`deckKey: 'danball'`を正しく参照すること、`STARTER_DECKS`両方が39枚でブリードカード追加後に40枚になること、`_cpuPreferredGearCard`がギア2種所持時に完成用の3種目を優先選択すること・未所持時は手札のギアをそのまま選ぶこと、`_cpuPickDamageTarget`が1撃撃破可能な相手を土地レベルより優先すること・撃破不可なら土地レベル最大を選ぶこと、を確認。さらに最終統合チェックとして、全7種の`CHARACTER_DECKS`キーがそれぞれ40枚で構築できること、`story.js`内の全`deckKey`参照が実在の`CHARACTER_DECKS`エントリに解決すること、新設したCPU AI関連メソッド全てが`Game.prototype`に存在することを検証（22項目全パス）。実機でも実際の`Game`インスタンス＋実際のThree.jsシーンを構築し、ギア優先召喚とダメージターゲット優先度の両方を直接叩いて確認した。Codexが並行して実装した機能（Firebase認証、ステージ3/4の固定デッキ・背景、デッキ構成チャート表示、ブリード画像リセット）との衝突は無いことも別途確認済み。
 
+## アイテム「ペーの杖」の専用カード画像を実装（2026-08-12実装）
+`image/card/penotue.png`を`public/images/card-art/penotue.png`として配置し、`ITEM_CATALOG.peeStaff`に`imageDataUrl`を設定した。これまで`item()`ヘルパーには`imageDataUrl`オプションが無く（`monster()`ヘルパーのみ対応済みだった）、アイテムカードは全て属性・種別共通のプレースホルダー画像（`cardArt.js`の`TYPE_ART_URL[CardType.GEAR]`）にフォールバックしていたため、`item()`にも同オプションを追加した。renderCardEl側（`card.imageDataUrl || defaultCardArtUrl(card)`）は既存のまま変更不要で、個別画像を持たせるだけで自然に専用画像が優先される。
+
+### 検証
+実際のVite開発サーバー上でモジュールを直接importし、`ITEM_CATALOG.peeStaff.imageDataUrl`が正しいパスを指すこと、およびその画像が実際に読み込めて元画像と同じ解像度（1086×1448）で表示されることを確認した。
+
 ## フェーズ5: 対戦モード
 - Firebaseを使ったリアルタイムマルチプレイ
 - 盤面状態・ターン進行・プレイヤー状態の同期

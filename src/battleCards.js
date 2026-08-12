@@ -1,4 +1,5 @@
 import { CardType, Element, Rarity, Deck, DEFAULT_SPELL_COUNT } from './cards.js';
+import { assetUrl } from './assetUrl.js';
 import { FIRE_MONSTER_CATALOG } from './fireMonsters.js';
 import { WATER_MONSTER_CATALOG } from './waterMonsters.js';
 import { THUNDER_MONSTER_CATALOG } from './thunderMonsters.js';
@@ -50,6 +51,7 @@ const item = (id, name, rarity, itemType, cost, atkBonus, hpBonus, options = {})
   ...(options.atkBonusRange ? { atkBonusRange: options.atkBonusRange } : {}),
   ...(options.forceZeroAtk ? { forceZeroAtk: true } : {}),
   ...(options.returnsToHandIfUsed ? { returnsToHandIfUsed: true } : {}),
+  ...(options.imageDataUrl ? { imageDataUrl: options.imageDataUrl } : {}),
 });
 
 /**
@@ -152,6 +154,7 @@ export const ITEM_CATALOG = {
     traits: ['firstStrike'],
     atkBonusRange: [25, 50],
     effectDescription: '先制。ATKボーナスは装備するたびに25〜50でランダムに決まる',
+    imageDataUrl: assetUrl('/images/card-art/penotue.png'),
   }),
 };
 
