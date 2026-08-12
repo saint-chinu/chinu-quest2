@@ -63,10 +63,13 @@ const DEADZONE_MARGIN = 0.65;
 
 export const PIECE_REST_Y = 0.7;
 
-// 配置モンスターの盤上アイコン用。プレイヤー駒(0.7・スケール1.6)より低く
-// 小さくして、通行中のプレイヤー駒と土地に常駐するモンスターアイコンを
-// 見分けられるようにする。
-export const UNIT_ICON_REST_Y = 0.5;
+// 配置モンスターの盤上アイコン用。プレイヤー駒より低く小さくして、通行中の
+// プレイヤー駒と土地に常駐するモンスターアイコンを見分けられるようにする。
+// Y位置はカードの下端がタイル表面(y=0)よりわずかに高い位置(0.05)に来る
+// よう、高さ(UNIT_ICON_HEIGHT)の半分を足して算出する（2026-08-12調整前は
+// 下端が-0.15とタイル面より下に沈み込み、急な俯瞰カメラ角度だとカードが
+// タイルに埋まって「張り付いて」見えていた - ユーザー指摘により修正）。
+export const UNIT_ICON_REST_Y = 0.9;
 
 // 土地レベルの縁取り。tile.mesh(2.6四方)より少し内側(2.5)に、レベルが
 // 上がるほど太い黒枠を重ねる - Lv5だけ「太くする」路線から外れて二重の
@@ -191,7 +194,9 @@ function createTokenTexture(color) {
 }
 
 // 配置モンスターの盤上アイコン用ミニカード(通行料バッジ+カード本体+HPゲージ)。
-export const UNIT_ICON_HEIGHT = 1.3;
+// 2026-08-12: タイルに埋もれて見づらいというユーザー指摘を受け1.3→1.6に拡大
+// （UNIT_ICON_REST_Yもこれに合わせて再計算済み）。
+export const UNIT_ICON_HEIGHT = 1.6;
 const UNIT_CARD_CANVAS_WIDTH = 110;
 const TOLL_BADGE_HEIGHT = 26;
 const HP_GAUGE_HEIGHT = 22;
@@ -304,11 +309,16 @@ function drawUnitCard(state) {
 }
 
 // 所有者名ラベル（マスの手前下端に置くテキストbillboard）。
+// 2026-08-12: ユニットアイコン同様、タイル面(y=0)より下に沈み込んで
+// 見づらかったため拡大・かさ上げ（下端がタイル面よりわずかに高い位置に
+// 来るようHEIGHT/2+0.05を目安にREST_Yを設定）。
 const OWNER_LABEL_CANVAS_WIDTH = 160;
 const OWNER_LABEL_CANVAS_HEIGHT = 40;
-export const OWNER_LABEL_HEIGHT = 0.5;
-export const OWNER_LABEL_REST_Y = 0.08;
-export const OWNER_LABEL_Z_OFFSET = 1.15;
+export const OWNER_LABEL_HEIGHT = 0.55;
+export const OWNER_LABEL_REST_Y = 0.32;
+// タイル半幅(2.6/2=1.3)より小さくして隣のタイルへはみ出さないようにする
+// （旧1.15は境界ギリギリでタイル間をまたいで見えていた）。
+export const OWNER_LABEL_Z_OFFSET = 0.85;
 
 function drawOwnerLabel(canvas, name) {
   const ctx = canvas.getContext('2d');
