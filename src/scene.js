@@ -190,6 +190,132 @@ function createTokenTexture(color) {
   return new THREE.CanvasTexture(canvas);
 }
 
+// 配置モンスターの盤上アイコン用ミニカード(通行料バッジ+カード本体+HPゲージ)。
+export const UNIT_ICON_HEIGHT = 1.3;
+const UNIT_CARD_CANVAS_WIDTH = 110;
+const TOLL_BADGE_HEIGHT = 26;
+const HP_GAUGE_HEIGHT = 22;
+const CARD_BODY_HEIGHT = 120;
+const UNIT_CARD_CANVAS_HEIGHT = TOLL_BADGE_HEIGHT + CARD_BODY_HEIGHT + HP_GAUGE_HEIGHT;
+
+const unitCardArtCache = new Map();
+/** 同じURLの実イラストは1度だけロードして使い回す（複数体を盤面に出しても再ダウンロードしない）。 */
+function loadUnitCardArt(url, onLoad) {
+  const cached = unitCardArtCache.get(url);
+  if (cached) {
+    if (cached.complete) onLoad(cached);
+    else cached.addEventListener('load', () => onLoad(cached), { once: true });
+    return;
+  }
+  const img = new Image();
+  img.addEventListener('load', () => onLoad(img), { once: true });
+  img.src = url;
+  unitCardArtCache.set(url, img);
+}
+
+function roundRectPath(ctx, x, y, w, h, r) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+/**
+ * ミニカード(属性色の背景+名前、`imageDataUrl`があれば実イラストを上部に
+ * 描く)＋上部の通行料バッジ＋下部のHPゲージを、1枚のcanvasテクスチャに
+ * まとめて描画する。`createUnitIcon`/`updateUnitIcon`（Sceneクラス）から呼ぶ。
+ */
+function drawUnitCard(state) {
+  const { canvas } = state;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;
+  ctx.clearRect(0, 0, w, canvas.height);
+
+  const bodyY = TOLL_BADGE_HEIGHT;
+  const bodyH = CARD_BODY_HEIGHT;
+  roundRectPath(ctx, 2, bodyY, w - 4, bodyH, 10);
+  ctx.fillStyle = CARD_COLOR[state.element] || '#888888';
+  ctx.fill();
+  ctx.lineWidth = 3;
+  ctx.strokeStyle = '#ffffff';
+  ctx.stroke();
+
+  if (state.artImage) {
+    ctx.save();
+    roundRectPath(ctx, 2, bodyY, w - 4, bodyH * 0.72, 10);
+    ctx.clip();
+    ctx.drawImage(state.artImage, 2, bodyY, w - 4, bodyH * 0.72);
+    ctx.restore();
+  }
+
+  const nameStripY = bodyY + bodyH * 0.72;
+  const nameStripH = bodyY + bodyH - nameStripY;
+  ctx.fillStyle = 'rgba(0,0,0,0.55)';
+  ctx.fillRect(2, nameStripY, w - 4, nameStripH);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold ${Math.round(nameStripH * 0.55)}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  const displayName = state.name.length > 6 ? `${state.name.slice(0, 5)}…` : state.name;
+  ctx.fillText(displayName, w / 2, nameStripY + nameStripH / 2 + 1);
+
+  if (state.toll > 0) {
+    roundRectPath(ctx, w / 2 - 27, 1, 54, TOLL_BADGE_HEIGHT - 3, 8);
+    ctx.fillStyle = '#1a1a2e';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ffd166';
+    ctx.stroke();
+    ctx.fillStyle = '#ffd166';
+    ctx.font = `bold ${Math.round((TOLL_BADGE_HEIGHT - 3) * 0.6)}px sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(`${state.toll}G`, w / 2, (TOLL_BADGE_HEIGHT - 3) / 2 + 1);
+  }
+
+  const gaugeY = bodyY + bodyH + 4;
+  const gaugeH = HP_GAUGE_HEIGHT - 6;
+  const ratio = state.maxHp > 0 ? Math.max(0, Math.min(1, state.hp / state.maxHp)) : 0;
+  roundRectPath(ctx, 4, gaugeY, w - 8, gaugeH, 4);
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fill();
+  if (ratio > 0) {
+    roundRectPath(ctx, 4, gaugeY, (w - 8) * ratio, gaugeH, 4);
+    ctx.fillStyle = ratio > 0.5 ? '#4caf6e' : ratio > 0.25 ? '#f0b429' : '#e6553a';
+    ctx.fill();
+  }
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold ${Math.round(gaugeH * 0.75)}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(`${Math.max(0, state.hp)}/${state.maxHp}`, w / 2, gaugeY + gaugeH / 2 + 1);
+
+  state.texture.needsUpdate = true;
+}
+
+// 所有者名ラベル（マスの手前下端に置くテキストbillboard）。
+const OWNER_LABEL_CANVAS_WIDTH = 160;
+const OWNER_LABEL_CANVAS_HEIGHT = 40;
+export const OWNER_LABEL_HEIGHT = 0.5;
+export const OWNER_LABEL_REST_Y = 0.08;
+export const OWNER_LABEL_Z_OFFSET = 1.15;
+
+function drawOwnerLabel(canvas, name) {
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.font = `bold ${Math.round(canvas.height * 0.6)}px sans-serif`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.lineWidth = 5;
+  ctx.strokeStyle = 'rgba(0,0,0,0.85)';
+  ctx.strokeText(name, canvas.width / 2, canvas.height / 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(name, canvas.width / 2, canvas.height / 2);
+}
+
 // How far the free-look camera (land-info mode) can pan away from wherever
 // it started, in world units - keeps the player from wandering the focus
 // off into empty space indefinitely. The board itself only spans roughly
@@ -374,16 +500,81 @@ export class GameScene {
     return sprite;
   }
 
-  /** 配置モンスターを表す盤上アイコン（土地に常駐する小さなbillboardトークン、色は属性色）。 */
-  createUnitIcon(colorHex, tilePosition) {
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: createTokenTexture(colorHex) }));
-    sprite.scale.set(1.0, 1.0, 1);
+  /**
+   * 配置モンスターを表す盤上アイコン（土地に常駐するbillboardスプライト）。
+   * 縮小したミニカード（属性色の背景＋名前、`imageDataUrl`があれば実イラスト
+   * を上半分に描く）に、上部の通行料バッジ・下部のHPゲージを重ねた1枚の
+   * canvasテクスチャとして描画する（drawUnitCard参照）。HP/通行料は
+   * `updateUnitIcon`で頻繁に変わる部分だけ再描画する。
+   */
+  createUnitIcon(unit, tilePosition) {
+    const canvas = document.createElement('canvas');
+    canvas.width = UNIT_CARD_CANVAS_WIDTH;
+    canvas.height = UNIT_CARD_CANVAS_HEIGHT;
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+    const aspect = UNIT_CARD_CANVAS_WIDTH / UNIT_CARD_CANVAS_HEIGHT;
+    sprite.scale.set(UNIT_ICON_HEIGHT * aspect, UNIT_ICON_HEIGHT, 1);
     sprite.position.set(tilePosition.x, UNIT_ICON_REST_Y, tilePosition.z);
+    this.scene.add(sprite);
+
+    const state = {
+      canvas,
+      texture,
+      name: unit.def.name,
+      element: unit.def.element,
+      hp: unit.currentHp,
+      maxHp: unit.def.hp,
+      toll: 0,
+      artImage: null,
+    };
+    sprite.userData.cardState = state;
+    if (unit.def.imageDataUrl) {
+      loadUnitCardArt(unit.def.imageDataUrl, (img) => {
+        state.artImage = img;
+        drawUnitCard(state);
+      });
+    }
+    drawUnitCard(state);
+    return sprite;
+  }
+
+  /** HP・通行料など頻繁に変わる部分だけを再描画する（値が変化していなければ何もしない）。 */
+  updateUnitIcon(sprite, { hp, maxHp, toll }) {
+    const state = sprite?.userData?.cardState;
+    if (!state) return;
+    if (state.hp === hp && state.maxHp === maxHp && state.toll === toll) return;
+    state.hp = hp;
+    state.maxHp = maxHp;
+    state.toll = toll;
+    drawUnitCard(state);
+  }
+
+  removeUnitIcon(sprite) {
+    if (!sprite) return;
+    this.scene.remove(sprite);
+    sprite.material.map?.dispose?.();
+    sprite.material.dispose();
+  }
+
+  /** 土地の所有者名を表示するラベル（マスの手前下端に置く小さなテキストbillboard）。 */
+  createOwnerLabel(name, tilePosition) {
+    const canvas = document.createElement('canvas');
+    canvas.width = OWNER_LABEL_CANVAS_WIDTH;
+    canvas.height = OWNER_LABEL_CANVAS_HEIGHT;
+    drawOwnerLabel(canvas, name);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+    const aspect = OWNER_LABEL_CANVAS_WIDTH / OWNER_LABEL_CANVAS_HEIGHT;
+    sprite.scale.set(OWNER_LABEL_HEIGHT * aspect, OWNER_LABEL_HEIGHT, 1);
+    sprite.position.set(tilePosition.x, OWNER_LABEL_REST_Y, tilePosition.z + OWNER_LABEL_Z_OFFSET);
     this.scene.add(sprite);
     return sprite;
   }
 
-  removeUnitIcon(sprite) {
+  removeOwnerLabel(sprite) {
     if (!sprite) return;
     this.scene.remove(sprite);
     sprite.material.map?.dispose?.();

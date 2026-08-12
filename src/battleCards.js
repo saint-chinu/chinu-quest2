@@ -475,6 +475,11 @@ function buildRandomSpellSelection(count) {
   return picks.flatMap((def) => duplicateForDeck(def, 1));
 }
 
+/** Expands a `{monsters, items, spells}` composition (each a `{def, count}` array) into a flat card list via duplicateForDeck - shared by starter books and character-fixed decks, neither of which use any generic/random filler. */
+function buildCardListFromComposition({ monsters, items, spells }) {
+  return [...monsters, ...items, ...spells].flatMap(({ def, count }) => duplicateForDeck(def, count));
+}
+
 /**
  * The exact, fully curated 40-card list for a starter book
  * (chinu-quest2-starter-decks-v3.md: 20 monsters + 7 items + 13 spells,
@@ -484,13 +489,57 @@ function buildRandomSpellSelection(count) {
  */
 export function buildStarterCardList(bookId = 'fireForest') {
   const book = STARTER_DECKS[bookId] || STARTER_DECKS.fireForest;
-  const { monsters, items, spells } = book.composition;
-  return [...monsters, ...items, ...spells].flatMap(({ def, count }) => duplicateForDeck(def, count));
+  return buildCardListFromComposition(book.composition);
 }
 
 /** The full 40-card starter book as a plain, persistable card-definition list (not a live Deck) - what character creation saves as the player's initial deckList. */
 export function buildStarterDeckList(bookId = 'fireForest') {
   return Deck.fromCardList(buildStarterCardList(bookId)).drawPile;
+}
+
+/**
+ * Character-specific fixed 40-card decks for story-mode NPCs (chinu-quest2-deck-<name>_1.md).
+ * Same shape/spirit as STARTER_DECKS.composition - a fully curated, closed
+ * list with no generic/random filler - but keyed by a story.js `deckKey`
+ * instead of a book id. Characters without an entry here still fall back to
+ * buildThemedDeckList's themed-random deck (see main.js buildBattlePlayerConfigs).
+ */
+export const CHARACTER_DECKS = {
+  hitode: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.minatoJoshi, count: 4 },
+        { def: MONSTER_CATALOG.hangyojin, count: 4 },
+        { def: MONSTER_CATALOG.penpen, count: 4 },
+        { def: MONSTER_CATALOG.shinkaigyoX, count: 4 },
+        { def: MONSTER_CATALOG.fireman, count: 1 },
+        { def: MONSTER_CATALOG.sekizou, count: 2 },
+        { def: MONSTER_CATALOG.kunekune, count: 1 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.kombo, count: 4 },
+        { def: ITEM_CATALOG.boudanChokki, count: 3 },
+        { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.diceOne, count: 3 },
+        { def: SPELL_CATALOG.diceThree, count: 3 },
+        { def: SPELL_CATALOG.diceSix, count: 2 },
+        { def: SPELL_CATALOG.iCanFly, count: 2 },
+        { def: SPELL_CATALOG.waterRelease, count: 2 },
+      ],
+    },
+  },
+};
+
+/** The exact 40-card list for a story-mode character's fixed deck (see CHARACTER_DECKS). */
+export function buildCharacterCardList(deckKey) {
+  return buildCardListFromComposition(CHARACTER_DECKS[deckKey].composition);
+}
+
+/** Plain, shuffled 40-card list (same return shape as buildThemedDeckList) for a character's fixed deck. */
+export function buildCharacterDeckList(deckKey) {
+  return Deck.fromCardList(buildCharacterCardList(deckKey)).drawPile;
 }
 
 /**

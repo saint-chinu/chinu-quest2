@@ -1258,24 +1258,44 @@ export class Game {
   }
 
   /**
-   * `tile.unit`の有無と盤上アイコン（`tile.unitMesh`）の有無を突き合わせて
-   * 作成/削除する。_notifyStateから毎回呼ぶことで、召喚・侵略・死亡・
-   * 売却・融合等tile.unitを書き換えるあらゆる箇所を個別に触らずに済む
-   * （移動時のホップ演出だけは_humanMoveFlow/_spellForceRelocateOneStepが
-   * 事前にtile.unitMeshを付け替えてから呼ぶので、ここでは何もしない）。
+   * `tile.unit`の有無と盤上アイコン（`tile.unitMesh`、ミニカード＋通行料
+   * バッジ＋HPゲージ）・所有者名ラベル（`tile.ownerLabelMesh`）の有無を
+   * 突き合わせて作成/削除・更新する。_notifyStateから毎回呼ぶことで、
+   * 召喚・侵略・死亡・売却・融合等tile.unitを書き換えるあらゆる箇所を
+   * 個別に触らずに済む（移動時のホップ演出だけは_humanMoveFlow/
+   * _spellForceRelocateOneStepが事前にtile.unitMeshを付け替えてから呼ぶ
+   * ので、ここでは何もしない）。HP/通行料は毎回updateUnitIconに渡すが、
+   * 値が変わっていなければscene側で再描画をスキップする。
    */
   _syncUnitIcons() {
     for (const tile of this.tiles) {
       if (tile.unit) {
         if (!tile.unitMesh || tile.unitMesh.userData.unit !== tile.unit) {
           if (tile.unitMesh) this.scene.removeUnitIcon?.(tile.unitMesh);
-          const colorHex = parseInt(CARD_COLOR[tile.unit.def.element].slice(1), 16);
-          tile.unitMesh = this.scene.createUnitIcon?.(colorHex, tile.position) ?? null;
+          tile.unitMesh = this.scene.createUnitIcon?.(tile.unit, tile.position) ?? null;
           if (tile.unitMesh) tile.unitMesh.userData.unit = tile.unit;
         }
-      } else if (tile.unitMesh) {
-        this.scene.removeUnitIcon?.(tile.unitMesh);
-        tile.unitMesh = null;
+        this.scene.updateUnitIcon?.(tile.unitMesh, {
+          hp: tile.unit.currentHp,
+          maxHp: tile.unit.def.hp,
+          toll: this._tollOfTile(tile),
+        });
+
+        const ownerName = this.players.find((p) => p.id === tile.owner)?.name ?? '';
+        if (!tile.ownerLabelMesh || tile.ownerLabelMesh.userData.ownerName !== ownerName) {
+          if (tile.ownerLabelMesh) this.scene.removeOwnerLabel?.(tile.ownerLabelMesh);
+          tile.ownerLabelMesh = this.scene.createOwnerLabel?.(ownerName, tile.position) ?? null;
+          if (tile.ownerLabelMesh) tile.ownerLabelMesh.userData.ownerName = ownerName;
+        }
+      } else {
+        if (tile.unitMesh) {
+          this.scene.removeUnitIcon?.(tile.unitMesh);
+          tile.unitMesh = null;
+        }
+        if (tile.ownerLabelMesh) {
+          this.scene.removeOwnerLabel?.(tile.ownerLabelMesh);
+          tile.ownerLabelMesh = null;
+        }
       }
     }
   }

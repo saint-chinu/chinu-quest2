@@ -31,7 +31,8 @@ export const STORY_STAGES = [
       {
         name: 'ヒトデ',
         color: 0xe63946,
-        theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi, featuredItem: ITEM_CATALOG.potLid },
+        deckKey: 'hitode',
+        theme: { elements: [Element.WATER, Element.NEUTRAL] },
       },
     ],
     reward: null,
@@ -51,7 +52,8 @@ export const STORY_STAGES = [
         {
           name: 'ヒトデ',
           color: 0xe63946,
-          theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi, featuredItem: ITEM_CATALOG.potLid },
+          deckKey: 'hitode',
+          theme: { elements: [Element.WATER, Element.NEUTRAL] },
         },
       ],
     },
@@ -76,7 +78,8 @@ export const STORY_STAGES = [
         {
           name: 'ヒトデ',
           color: 0xe63946,
-          theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi, featuredItem: ITEM_CATALOG.potLid },
+          deckKey: 'hitode',
+          theme: { elements: [Element.WATER, Element.NEUTRAL] },
         },
         {
           name: 'ウサギン',

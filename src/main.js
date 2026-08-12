@@ -4,7 +4,7 @@ import { GameScene, PIECE_REST_Y } from './scene.js';
 import { createBoard, MAPS, createMapThumbnailCanvas, getMapBackground } from './board.js';
 import { Game } from './game.js';
 import { CardType, CARD_COLOR, ELEMENT_LABEL, Element, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
-import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, ITEM_CATALOG } from './battleCards.js';
+import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, buildCharacterDeckList, ITEM_CATALOG } from './battleCards.js';
 import { loginOrRegister, saveCharacter } from './auth.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { PACKS, drawPack } from './shopPacks.js';
@@ -1500,7 +1500,28 @@ const HELP_TEXT = `【勝敗の目標】
 ・応援ボーナス: 隣接マスに味方がいるとATKが上がります
 
 【特殊能力】
-モンスターによっては土地コマンドの「特殊能力」からGを消費して固有の効果を使えます。`;
+モンスターによっては土地コマンドの「特殊能力」からGを消費して固有の効果を使えます。
+
+【周回ボーナス】
+STARTマスを通過・着地すると+100Gを獲得します（全チェックポイント制のマップでは、その周でチェックポイントを全て通過していないとボーナスはありません）。フリーランサーの効果や「帰巣本能」「宝くじ」等のスペルで金額が変わることもあります。
+
+【土地レベルと連鎖】
+・土地レベルアップ: 自分の土地を強化してレベル1〜5にできます。レベルが上がるほど地価が上がり、通行料も高くなります
+・連鎖: 同じ属性の自分の土地が隣接して繋がっていると「連鎖」になり、繋がっている数だけ地価・通行料の倍率が上がります（無色の土地は連鎖しません）
+・地価 = 基本地価 × レベル倍率 × 連鎖倍率、通行料 = 地価 × 通行料率（レベルが高いほど通行料率も上がります）
+
+【土地コマンド】
+自分が通ったことのある土地を選ぶと、以下の操作ができます。
+・入れ替え: 配置済みモンスターを手札のモンスターと交換します
+・土地Lvアップ: Gを払って土地レベルを1段階上げます
+・属性変更: Gを払って土地の属性を変更します
+・移動: 配置モンスターを隣接する土地へ移動させます（空き地ならそのまま移動、敵地なら戦闘になります）
+・土地を売る: 土地を手放してGを得ます（レベルはリセットされます）
+・特殊能力: モンスター固有の効果をGを払って発動します（使えるモンスターのみ）
+
+【呪い】
+・プレイヤー呪い: スペル等でかかる呪いで、コマを動かしても効果は本人についてきます（サイコロ操作、通行料減免など）
+・モンスター呪い: 配置モンスターにかかる呪いで、そのモンスターが少しでも移動すると消えます。呪いは1体につき1つしか保持できず、新しい呪いをかけると上書きされます`;
 helpText.textContent = HELP_TEXT;
 
 gameMenuHelp.addEventListener('click', () => {
@@ -1986,7 +2007,7 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
       isCPU: true,
       color: allyDef.color,
       allianceId: heroAllianceId,
-      deckList: buildThemedDeckList(allyDef.theme),
+      deckList: allyDef.deckKey ? buildCharacterDeckList(allyDef.deckKey) : buildThemedDeckList(allyDef.theme),
       iconImage: await loadNpcTokenImage(allyDef.name),
       elements: allyDef.theme.elements,
     });
@@ -1997,7 +2018,7 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
       isCPU: true,
       color: opponent.color,
       allianceId: enemyAllianceId,
-      deckList: buildThemedDeckList(opponent.theme),
+      deckList: opponent.deckKey ? buildCharacterDeckList(opponent.deckKey) : buildThemedDeckList(opponent.theme),
       iconImage: await loadNpcTokenImage(opponent.name),
       elements: opponent.theme.elements,
     });
