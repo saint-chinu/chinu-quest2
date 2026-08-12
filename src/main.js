@@ -1891,10 +1891,11 @@ async function playStoryReplay(index) {
  * を一切上書きせず、introだけ差し替えた1vs1のまま）。
  */
 async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList) {
-  const ally = variant.ally ?? stage.ally;
+  // 再戦データでnullを明示した場合は、本編の同盟設定を引き継がず無効化する。
+  const ally = Object.hasOwn(variant, 'ally') ? variant.ally : stage.ally;
   const opponents = variant.opponents ?? stage.opponents;
-  const heroAllianceId = variant.heroAllianceId ?? stage.heroAllianceId ?? null;
-  const enemyAllianceId = variant.enemyAllianceId ?? stage.enemyAllianceId ?? null;
+  const heroAllianceId = Object.hasOwn(variant, 'heroAllianceId') ? variant.heroAllianceId : (stage.heroAllianceId ?? null);
+  const enemyAllianceId = Object.hasOwn(variant, 'enemyAllianceId') ? variant.enemyAllianceId : (stage.enemyAllianceId ?? null);
 
   const configs = [
     {

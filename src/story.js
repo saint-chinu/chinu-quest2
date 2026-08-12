@@ -195,32 +195,26 @@ export const STORY_STAGES = [
     reward: 'peeStaff',
     replay: {
       intro: [
-        { speaker: '紫の魔女ホフク', text: 'また会いましたね！ 今日はもっと強い相手が待ち構えていますよ。' },
-        { speaker: 'ヒトデ', text: 'おっと、俺も混ぜてくれよ！ 恩返しさせてくれ！' },
-        { speaker: 'ウサギン', text: 'チッ、また数で勝負かよ。上等だ！' },
-        { speaker: '主人公', text: '心強いな……三人がかりで叩き潰すぞ！' },
+        { speaker: '紫の魔女ホフク', text: 'あら、回遊魚さん。またこの危険な地域へ来たんですか？' },
+        { speaker: '少女A', text: 'ちょうどいいところに来たゆ。前の決着には納得してないゆ。' },
+        { speaker: '主人公', text: '俺も同じだ。今日は誰が一番強いのか、三人だけではっきりさせよう。' },
+        { speaker: '紫の魔女ホフク', text: 'いいでしょう。今日は味方ではなく、二人とも私の相手です！' },
+        { speaker: '少女A', text: 'まとめて地価ごと叩き下げてやるゆ！' },
       ],
-      outro: [{ speaker: '紫の魔女ホフク', text: '今日も助かりました！ また力を貸してくださいね。' }],
-      format: '3vs2',
-      heroAllianceId: 'hero',
-      enemyAllianceId: 'enemy',
-      ally: {
-        name: '紫の魔女ホフク',
-        color: 0x8e5ce6,
-        theme: { elements: [Element.WATER, Element.THUNDER], featuredItem: ITEM_CATALOG.knife },
-      },
-      // 2人目の味方はallyフィールド1つでは表現できないため、opponents同様
-      // extraAllyという専用フィールドに乗せ、main.js側で組み立てる。
-      extraAlly: {
-        name: 'ヒトデ',
-        color: 0x2ec4b6,
-        theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi, featuredItem: ITEM_CATALOG.potLid },
-      },
+      outro: [
+        { speaker: '少女A', text: 'また負けたゆ……。でも次は税制から作戦を練り直すゆ。' },
+        { speaker: '紫の魔女ホフク', text: 'やっぱり強いですね、回遊魚さん。次は私が勝ちますからね。' },
+        { speaker: '主人公', text: 'いつでも受けて立つ。二人とも、また勝負しよう！' },
+      ],
+      format: '1vs1vs1',
+      heroAllianceId: null,
+      enemyAllianceId: null,
+      ally: null,
       opponents: [
         {
-          name: 'ウサギン',
-          color: 0xe63946,
-          theme: { elements: [Element.FOREST, Element.FIRE], featuredItem: ITEM_CATALOG.potLid },
+          name: '紫の魔女ホフク',
+          color: 0x8e5ce6,
+          theme: { elements: [Element.WATER, Element.THUNDER], featuredItem: ITEM_CATALOG.knife },
         },
         {
           name: '少女A',
