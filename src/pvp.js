@@ -227,6 +227,7 @@ export class GuestHostListener {
     this.uid = uid;
     this.handlers = handlers;
     this.lastHandledRequestId = 0;
+    this.lastHandledPromptId = 0;
     this.unsubscribe = listenToRoom(roomCode, (room) => {
       if (!room || !room.hostRequest) return;
       if (room.hostRequestId <= this.lastHandledRequestId) return;
@@ -235,8 +236,8 @@ export class GuestHostListener {
     });
     this.promptUnsubscribe = onSnapshot(promptRef(roomCode, uid), (snap) => {
       const prompt = snap.data();
-      if (!prompt || prompt.requestId <= this.lastHandledRequestId) return;
-      this.lastHandledRequestId = prompt.requestId;
+      if (!prompt || prompt.requestId <= this.lastHandledPromptId) return;
+      this.lastHandledPromptId = prompt.requestId;
       this._handleParticipant(prompt.requestId, prompt);
     });
   }
