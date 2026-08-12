@@ -1460,6 +1460,7 @@ const gameMenuModal = document.getElementById('game-menu-modal');
 const gameMenuLandInfo = document.getElementById('game-menu-land-info');
 const gameMenuMute = document.getElementById('game-menu-mute');
 const gameMenuHelp = document.getElementById('game-menu-help');
+const gameMenuBan = document.getElementById('game-menu-ban');
 const gameMenuExit = document.getElementById('game-menu-exit');
 const gameMenuClose = document.getElementById('game-menu-close');
 const helpModal = document.getElementById('help-modal');
@@ -1477,6 +1478,21 @@ gameMenuMute.addEventListener('click', () => {
 
 menuButton.addEventListener('click', () => {
   gameMenuModal.classList.remove('hidden');
+  gameMenuBan.classList.toggle('hidden', !(pvpMatch?.isHost && game));
+});
+
+gameMenuBan.addEventListener('click', () => {
+  if (!pvpMatch?.isHost || !game) return;
+  const candidates = game.players.filter((p) => !p.isCPU && p.id !== 0 && !p.defeated);
+  if (!candidates.length) return;
+  const targetName = window.prompt(`BANするプレイヤー名を入力：${candidates.map((p) => p.name).join(' / ')}`);
+  const target = candidates.find((p) => p.name === targetName);
+  if (!target || !window.confirm(`${target.name}をBANしてAIに切り替えますか？`)) return;
+  target.isCPU = true;
+  target.banned = true;
+  game.onLog(`${target.name}はホストにBANされ、AI操作へ切り替わった`);
+  game._notifyState();
+  gameMenuModal.classList.add('hidden');
 });
 gameMenuClose.addEventListener('click', () => {
   gameMenuModal.classList.add('hidden');
