@@ -3013,7 +3013,10 @@ function showDeckScreen() {
         deckWorkingCounts.set(key, count + 1);
         renderEditor();
       });
-      row.append(rarity, makeInfo(def, ` / 所持${owned} / デッキ${count}`), plusBtn);
+      const addedCount = document.createElement('strong');
+      addedCount.className = 'deck-add-count';
+      addedCount.textContent = `×${count}`;
+      row.append(rarity, makeInfo(def, ` / 所持${owned}`), addedCount, plusBtn);
       deckCatalogList.appendChild(row);
     }
 
@@ -3030,12 +3033,21 @@ function showDeckScreen() {
       const countEl = document.createElement('strong');
       countEl.textContent = `×${count}`;
       const minusBtn = document.createElement('button');
+      minusBtn.className = 'deck-current-minus';
       minusBtn.textContent = '−';
       minusBtn.addEventListener('click', () => {
         deckWorkingCounts.set(key, count - 1);
         renderEditor();
       });
-      row.append(info, countEl, minusBtn);
+      const plusBtn = document.createElement('button');
+      plusBtn.className = 'deck-current-plus';
+      plusBtn.textContent = '＋';
+      plusBtn.disabled = count >= Math.min(MAX_COPIES_PER_CARD, ownedCountOf(key)) || deckTotal() >= DECK_SIZE;
+      plusBtn.addEventListener('click', () => {
+        deckWorkingCounts.set(key, count + 1);
+        renderEditor();
+      });
+      row.append(info, minusBtn, countEl, plusBtn);
       deckCurrentList.appendChild(row);
     }
   }
