@@ -3616,6 +3616,7 @@ pvpRoomStart.addEventListener('click', async () => {
 
   const iconImage = (await resolveCharacterIcon(currentCharacter))?.canvas ?? null;
 
+  const roster = normalizePvpParticipants(pvpLastRoom);
   pvpMatch = {
     isHost: true,
     roomCode: pvpSession.roomCode,
@@ -3623,7 +3624,7 @@ pvpRoomStart.addEventListener('click', async () => {
     localPlayerId: 0,
     guestPlayerId: 1,
     relay,
-    uidByPlayerId: { 0: pvpSession.uid, 1: pvpLastRoom.guestUid },
+    uidByPlayerId: Object.fromEntries(roster.map((participant) => [participant.playerId, participant.uid])),
   };
   pvpMatch.actionListener = new HostActionListener(pvpSession.roomCode, handlePvpGuestAction);
   pvpMatch.participantActionListener = new HostParticipantActionListener(
@@ -3642,7 +3643,11 @@ pvpRoomStart.addEventListener('click', async () => {
   const playerConfigs = [
     { name: currentCharacter.name, isCPU: false, color: currentCharacter.color, deckList: hostDeck.deckList, iconImage },
   ];
-  if (pvpLastRoom.guestUid) playerConfigs.push({ name: pvpLastRoom.guestName, isCPU: false, color: pvpLastRoom.guestColor, deckList: guestDeckList });
+  for (const participant of roster.filter((entry) => entry.uid !== pvpSession.uid)) {
+    if (Array.isArray(participant.deckList) && participant.deckList.length === 40) {
+      playerConfigs.push({ name: participant.name, isCPU: false, color: participant.color, deckList: participant.deckList });
+    }
+  }
   const cpuNames = Array.isArray(pvpLastRoom.cpuNames) ? pvpLastRoom.cpuNames : [];
   const seen = new Set(playerConfigs.map((p) => p.name));
   for (const cpuName of cpuNames) {
