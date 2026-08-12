@@ -1068,10 +1068,10 @@ export class Game {
       if (player.tileHistory.length > 20) player.tileHistory.length = 20;
       await this._stepWithCamera(player, fromTile.position, toTile.position);
 
-      if (toTile.type === TileType.EVENT) player.passedCheckpoints.add(toTile.id);
+      if (toTile.type === TileType.EVENT) await this._visitCheckpoint(player, toTile);
 
       if (toTile.type === TileType.START && i < steps - 1) {
-        this._grantGoalBonus(player);
+        await this._grantGoalBonus(player);
       }
 
       // 強制停止の呪い（ほこら効果「右の頬をシバかれたら～」）: 自分の土地・
@@ -1103,7 +1103,7 @@ export class Game {
       this._turnPathIds.push(backId);
       await this._stepWithCamera(player, fromTile.position, toTile.position);
 
-      if (toTile.type === TileType.EVENT) player.passedCheckpoints.add(toTile.id);
+      if (toTile.type === TileType.EVENT) await this._visitCheckpoint(player, toTile);
 
       if (this._isForcedStopFor(player, toTile)) {
         if (i < steps - 1) this.onLog(`${player.name}は強制停止の呪いで足を止めた！`);
@@ -1132,10 +1132,14 @@ export class Game {
   }
 
   /** ゴール(START)着地/通過どちらからも呼ぶ: このマップにrequireAllCheckpointsが立っていれば全チェックポイント通過済みの時だけボーナスを渡し、渡したらこのラップ分の通過記録をクリアする。立っていなければ無条件で渡す（従来通り）。 */
-  _grantGoalBonus(player) {
+  async _grantGoalBonus(player) {
     this._healOwnedUnitsOnLap(player);
     if (this.requireAllCheckpoints && !this._hasPassedAllCheckpoints(player)) {
-      this.onLog(`${player.name}はゴールを通過（チェックポイント未通過のためボーナスなし）`);
+      const remaining = this.tiles
+        .filter((tile) => tile.type === TileType.EVENT && !player.passedCheckpoints.has(tile.id))
+        .map((tile) => tile.checkpointNumber);
+      this.onLog(`${player.name}はゴールを通過（ボーナスなし）　残りのCPは${remaining.map((number) => `${number}番`).join('、')}です`);
+      await delay(900);
       return;
     }
     const { base, land, total } = this._computeLapBonus(player);
@@ -1152,6 +1156,24 @@ export class Game {
       player.currency += lotteryAmount;
       this.onLog(`${player.name}は宝くじで${lotteryAmount}Gを獲得した！`);
     }
+    this._notifyState();
+    await delay(900);
+  }
+
+  /** 初めて通過したCPだけ100Gを付与し、残り番号を案内して一瞬停止する。 */
+  async _visitCheckpoint(player, tile) {
+    if (player.passedCheckpoints.has(tile.id)) return;
+    player.passedCheckpoints.add(tile.id);
+    player.currency += 100;
+    const remaining = this.tiles
+      .filter((candidate) => candidate.type === TileType.EVENT && !player.passedCheckpoints.has(candidate.id))
+      .map((candidate) => candidate.checkpointNumber);
+    const guidance = remaining.length
+      ? `残りのCPは${remaining.map((number) => `${number}番`).join('、')}です`
+      : 'すべてのCPを通過しました。ゴールしてください';
+    this.onLog(`${player.name}はCP${tile.checkpointNumber}を通過！ +100G　${guidance}`);
+    this._notifyState();
+    await delay(900);
   }
 
   /**
@@ -1383,15 +1405,20 @@ export class Game {
     const tile = this.tiles[player.tileId];
 
     if (tile.type === TileType.START) {
-      this._grantGoalBonus(player);
+      await this._grantGoalBonus(player);
     } else if (tile.type === TileType.EVENT) {
-      this.onLog(`${player.name}はチェックポイントに止まった`);
+      // 通過報酬と残りCP案内は移動中の_visitCheckpointで処理済み。
     } else if (tile.type === TileType.SHOP) {
       await this._resolveShopTile(player);
     } else if (tile.type === TileType.SHRINE) {
       await this._resolveShrineTile(player);
     } else if (tile.type === TileType.WARP) {
       await this._resolveWarpTile(player);
+    }
+
+    if (tile.type === TileType.START || tile.type === TileType.EVENT) {
+      this.onLog(`${player.name}は${tile.type === TileType.START ? 'ゴール' : `CP${tile.checkpointNumber}`}にちょうど停止！ このターンは保有するすべての土地で土地コマンドを使えます`);
+      await delay(900);
     }
 
     await delay(200);

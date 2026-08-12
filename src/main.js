@@ -2211,7 +2211,8 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
   appEl.classList.remove('hidden');
   startBattle(currentCharacter, {
     storyMode: true,
-    mapId: stage.key,
+    // ヒトデ初戦だけ短い導入用マップ。再戦は従来の長いhitodeマップを使う。
+    mapId: !isReplay && stage.key === 'hitode' ? 'hitode-first' : stage.key,
     goalCurrency: stage.goalCurrency,
     playerConfigs,
     onStoryBattleEnd: (result) => (isReplay ? handleStoryReplayEnd(index, result, variant) : handleStoryBattleEnd(index, result)),

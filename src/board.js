@@ -38,6 +38,16 @@ const HITODE_ROWS = [
   'CMMMMMS',
 ];
 
+// ステージ1初戦専用の短い外周マップ。従来のHITODE_ROWSは再戦および
+// 対戦モード用としてそのまま残す。
+const HITODE_FIRST_ROWS = [
+  'GFFFFW',
+  'T....W',
+  'T....W',
+  'T....W',
+  'TMMMMC',
+];
+
 // ②暴君マダイ戦のマップ - ユーザー指定のレイアウト。15マス×5マスで、
 // 左右2つの縦長ループ（外周の上下段でつながる）を、中央のGを通る横一列
 // の通路が橋渡しする「めがね」型。四隅がH（ほこら）とC（チェックポイント）
@@ -112,7 +122,16 @@ export const MAPS = [
   { id: 'danball', name: '④ 暗転した世界', rows: DANBALL_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage4.png') },
 ];
 
+const HITODE_FIRST_MAP = {
+  id: 'hitode-first',
+  name: '① ヒトデ戦（初戦）',
+  rows: HITODE_FIRST_ROWS,
+  requireAllCheckpoints: true,
+  background: assetUrl('/images/stage/stage1.png'),
+};
+
 function getMap(mapId) {
+  if (mapId === HITODE_FIRST_MAP.id) return HITODE_FIRST_MAP;
   return MAPS.find((m) => m.id === mapId) ?? MAPS[0];
 }
 
