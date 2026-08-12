@@ -2896,8 +2896,79 @@ export class Game {
   async _runCPUTurn() {
     await delay(CPU_PRE_ROLL_MS);
     if (!this.currentPlayer.isCPU) return;
+    await this._cpuMaybeUseDiceSpell(this.currentPlayer);
     const steps = await this.onCpuRoll();
     this.rollDice(steps);
+  }
+
+  /**
+   * ダイス系スペル（1/3/6のダイス＝setNextDice、アイキャンフライ＝
+   * doubleNextDice）のCPU使用判断（ロール前に1回だけ）。
+   * ①敵地を避けてゴールへ向かう通常の経路取りは既に_cpuChooseNextTile
+   * （aiProfile.highValueAvoidance）が担っており、ここでは呪いカード
+   * そのものを使うかどうかだけを決める。
+   * ②自分が所有するレベル2以上の配置済み土地（守れそうな土地）があれば、
+   * 相手の現在地からの距離が一致する固定値（1/3/6）のダイス系スペルを
+   * 最優先で使い、その土地へ誘導する（相手が踏めば迎撃を狙える）。
+   * ③②の罠が組めなければ、1のダイス/3のダイスは特に理由がなくても
+   * 相手の足止めとして気軽に使う（出目を大きく進めてしまう6のダイス/
+   * アイキャンフライは、罠目的以外では使わない）。
+   */
+  async _cpuMaybeUseDiceSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const diceCards = player.hand.filter(
+      (c) => c.type === CardType.SPELL && (c.effect?.type === 'setNextDice' || c.effect?.type === 'doubleNextDice'),
+    );
+    if (diceCards.length === 0) return;
+    const affordable = diceCards.filter((c) => player.currency >= (c.cost || 0));
+    if (affordable.length === 0) return;
+
+    const target = this._cpuPickDiceSpellTarget(player);
+    if (!target) return;
+
+    const defensibleTiles = this.tiles.filter((t) => t.owner === player.id && t.level >= 2 && t.unit);
+    for (const tile of defensibleTiles) {
+      const distance = this._tileDistance(target.tileId, tile.id);
+      const trapCard = affordable.find((c) => c.effect.type === 'setNextDice' && c.effect.value === distance);
+      if (trapCard) {
+        await this._cpuCastSpellOnPlayer(player, trapCard, target);
+        return;
+      }
+    }
+
+    const nuisanceCard = affordable.find((c) => c.effect.type === 'setNextDice' && (c.effect.value === 1 || c.effect.value === 3));
+    if (nuisanceCard) {
+      await this._cpuCastSpellOnPlayer(player, nuisanceCard, target);
+    }
+  }
+
+  /** ダイス系スペルの標的にするプレイヤーを選ぶ: 人間プレイヤーがいれば優先、いなければ自分・同盟以外で最も所持Gが多い相手。 */
+  _cpuPickDiceSpellTarget(player) {
+    const candidates = this.players.filter(
+      (p) => !p.defeated && p.id !== player.id && !(p.allianceId != null && p.allianceId === player.allianceId),
+    );
+    if (candidates.length === 0) return null;
+    const human = candidates.find((p) => !p.isCPU);
+    if (human) return human;
+    return candidates.reduce((best, p) => (p.currency > best.currency ? p : best));
+  }
+
+  /**
+   * useSpellの人間向けフローと同じ後始末（手札除去・discard・G消費・
+   * spellUsedThisTurn確定・ログ・演出・効果適用）をCPU向けに行う。
+   * 対象選択のUIプロンプト（_resolveSpellCastのonPickAbilityTarget）は
+   * 挟まず、決め打ちしたtargetを直接_applySpellEffectへ渡す。
+   */
+  async _cpuCastSpellOnPlayer(player, card, target) {
+    player.hand = player.hand.filter((c) => c.id !== card.id);
+    player.deck.discard(card);
+    player.currency -= card.cost || 0;
+    player.spellUsedThisTurn = true;
+    this.onLog(`${player.name}は「${card.name}」を使用した (-${card.cost || 0}G)`);
+    this._notifyState();
+    await this.onSpellUse(card);
+    await this._applySpellEffect(player, card, { targetPlayerId: target.id });
+    this._notifyState();
   }
 
   /** Total assets' land component: sum of 地価 (see _landValueOfTile) across owned tiles. */
