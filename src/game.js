@@ -2897,25 +2897,31 @@ export class Game {
     await delay(CPU_PRE_ROLL_MS);
     if (!this.currentPlayer.isCPU) return;
     await this._cpuMaybeFixLandElementSpell(this.currentPlayer);
+    await this._cpuMaybeUseDisruptionSpell(this.currentPlayer);
     await this._cpuMaybeUseDiceSpell(this.currentPlayer);
     const steps = await this.onCpuRoll();
     this.rollDice(steps);
   }
 
   /**
-   * 土地属性変更系スペル（放火/放水/放電/放牧/ツイッ〇ランド＝
-   * forceTileElement、最適化＝autoMatchAllTileElements）のCPU使用判断
-   * （ロール前・ダイス系スペルより優先）。自分の土地にS以上のレアリティの
-   * モンスターを配置しているのに、その土地の属性がモンスターの属性と
-   * 合っていない（＝同属性ボーナスを取り逃している）場合、最優先でこの
-   * 系統のスペルを使って属性を揃える。最適化があれば全ての不一致を
-   * まとめて直せるので優先し、無ければ該当する属性のforceTileElementを
-   * 1件だけ使う（1ターン1枚のため）。
+   * 土地属性変更系スペル（放火/放水/放電/放牧＝forceTileElement、
+   * 最適化＝autoMatchAllTileElements）のCPU使用判断（ロール前・ダイス系
+   * スペルより優先）。自分の土地にS以上のレアリティのモンスターを
+   * 配置しているのに、その土地の属性がモンスターの属性と合っていない
+   * （＝同属性ボーナスを取り逃している）場合、最優先でこの系統のスペルを
+   * 使って属性を揃える。最適化があれば全ての不一致をまとめて直せるので
+   * 優先し、無ければ該当する属性のforceTileElementを1件だけ使う
+   * （1ターン1枚のため）。ツイッ〇ランド（無色化）は自分の土地を直す
+   * 用途では使わない（無色は同属性ボーナス自体が発生しないうえ、本質的に
+   * 相手の連鎖・地価を崩す妨害専用スペルのため） - 除外し
+   * _cpuMaybeUseDisruptionSpellで別途扱う。
    */
   async _cpuMaybeFixLandElementSpell(player) {
     if (player.spellUsedThisTurn) return;
     const landFixCards = player.hand.filter(
-      (c) => c.type === CardType.SPELL && (c.effect?.type === 'forceTileElement' || c.effect?.type === 'autoMatchAllTileElements'),
+      (c) => c.type === CardType.SPELL
+        && (c.effect?.type === 'autoMatchAllTileElements'
+          || (c.effect?.type === 'forceTileElement' && c.effect.element !== Element.NEUTRAL)),
     );
     if (landFixCards.length === 0) return;
     const affordable = landFixCards.filter((c) => player.currency >= (c.cost || 0));
@@ -2939,6 +2945,44 @@ export class Game {
       const fixCard = affordable.find((c) => c.effect.type === 'forceTileElement' && c.effect.element === tile.unit.def.element);
       if (fixCard) {
         await this._cpuCastSpell(player, fixCard, { targetTileId: tile.id });
+        return;
+      }
+    }
+  }
+
+  /**
+   * ツイッ〇ランド（forceTileElement→NEUTRAL）専用のCPU使用判断。
+   * これは自分の土地を整える系のスペルとは違い、相手の土地を無色化して
+   * 連鎖・地価を崩す妨害専用スペル - 自分の土地には絶対に使わない。
+   * 相手（同盟以外）がレベル3以上の土地を持っているか、いずれかの属性で
+   * 3連鎖以上を組んでいる場合に、その土地を無色化する（3連鎖を崩せる
+   * 土地を最優先、無ければレベル3以上の土地）。
+   */
+  async _cpuMaybeUseDisruptionSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find(
+      (c) => c.type === CardType.SPELL && c.effect?.type === 'forceTileElement' && c.effect.element === Element.NEUTRAL,
+    );
+    if (!card || player.currency < (card.cost || 0)) return;
+
+    const opponents = this.players.filter(
+      (p) => !p.defeated && p.id !== player.id && !(p.allianceId != null && p.allianceId === player.allianceId),
+    );
+
+    for (const opponent of opponents) {
+      const ownedElements = new Set(
+        this.tiles.filter((t) => t.owner === opponent.id && t.element !== Element.NEUTRAL).map((t) => t.element),
+      );
+      for (const element of ownedElements) {
+        if (this._chainCount(opponent.id, element) >= 3) {
+          const chainTile = this.tiles.find((t) => t.owner === opponent.id && t.element === element);
+          await this._cpuCastSpell(player, card, { targetTileId: chainTile.id });
+          return;
+        }
+      }
+      const highLevelTile = this.tiles.find((t) => t.owner === opponent.id && t.level >= 3);
+      if (highLevelTile) {
+        await this._cpuCastSpell(player, card, { targetTileId: highLevelTile.id });
         return;
       }
     }
