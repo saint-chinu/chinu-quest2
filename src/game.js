@@ -79,6 +79,7 @@ export class Game {
     onDiscardChoice,
     onSpellUse,
     onSpellCastEffect,
+    onSpellComplete,
     onCpuRoll,
     onMoveComplete,
     onLandCommand,
@@ -123,6 +124,7 @@ export class Game {
     this.onDiscardChoice = onDiscardChoice;
     this.onSpellUse = onSpellUse;
     this.onSpellCastEffect = onSpellCastEffect;
+    this.onSpellComplete = onSpellComplete || (() => {});
     this.onCpuRoll = onCpuRoll;
     this.onMoveComplete = onMoveComplete;
     this.onLandCommand = onLandCommand;
@@ -360,6 +362,7 @@ export class Game {
     await this.onSpellUse(card);
     await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast));
     const endedTurn = await this._applySpellEffect(player, card, cast);
+    await this.onSpellComplete();
     this._notifyState();
 
     if (endedTurn) {
@@ -3307,6 +3310,7 @@ export class Game {
     await this.onSpellUse(card);
     await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast));
     await this._applySpellEffect(player, card, cast);
+    await this.onSpellComplete();
     this._notifyState();
   }
 
@@ -3335,6 +3339,7 @@ export class Game {
 
   _notifyState() {
     this._syncUnitIcons();
+    this._syncPieceRenderOrder();
     const human = this.players.find((p) => !p.isCPU);
     const showCenter = this.awaitingRoll && !this.isBusy;
     const playersPayload = this.players.map((p) => ({
@@ -3371,6 +3376,15 @@ export class Game {
       spellUsedThisTurn: this.currentPlayer.spellUsedThisTurn,
     });
     this.onPvpSync?.(this._pvpSnapshot(playersPayload));
+  }
+
+  /** 行動者を最前面にし、以降の手番順にプレイヤー駒の描画優先度を下げる。 */
+  _syncPieceRenderOrder() {
+    const count = this.players.length;
+    for (let offset = 0; offset < count; offset++) {
+      const player = this.players[(this.currentPlayerIndex + offset) % count];
+      this.scene.setPieceRenderOrder?.(player.mesh, 100 + count - offset);
+    }
   }
 
   /**

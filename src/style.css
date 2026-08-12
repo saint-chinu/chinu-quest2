@@ -1659,6 +1659,11 @@ html, body {
   pointer-events: auto;
 }
 
+#hand-panel.spell-hidden {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 #center-panel {
   position: absolute;
   top: 50%;

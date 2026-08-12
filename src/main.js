@@ -921,10 +921,18 @@ function promptCardReveal(card) {
 }
 
 const SPELL_EFFECT_MS = 1200;
+let spellPresentationActive = false;
+
+function setSpellPresentationActive(active) {
+  spellPresentationActive = active;
+  handPanel.classList.toggle('spell-hidden', active);
+  syncCenterVisibility();
+}
 
 /** Placeholder for spell resolution - actual effects land with battle design in phase 2. */
 function promptSpellUse(card) {
   return new Promise((resolve) => {
+    setSpellPresentationActive(true);
     spellEffectText.textContent = `『${card.name}』発動！`;
     spellEffectModal.classList.remove('hidden');
     setTimeout(() => {
@@ -972,6 +980,11 @@ async function promptSpellCastEffect({ casterPosition, targetPlayerId, targetTil
   }
 
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1);
+}
+
+function finishSpellPresentation() {
+  spellEffectModal.classList.add('hidden');
+  setSpellPresentationActive(false);
 }
 
 const MATCHUP_LABEL = {
@@ -1274,7 +1287,7 @@ let diceMoving = false;
 let centerShowsOpponent = false;
 
 function syncCenterVisibility() {
-  centerPanel.classList.toggle('hidden', !(showCenterState || diceMoving));
+  centerPanel.classList.toggle('hidden', spellPresentationActive || !(showCenterState || diceMoving));
   centerPanel.classList.toggle('opponent-turn', centerShowsOpponent);
   centerPanel.classList.toggle('local-turn', !centerShowsOpponent);
   // visibility (not display) so the hand keeps reserving its layout space -
@@ -1465,6 +1478,7 @@ function startBattle(character, storyOptions = {}) {
     onDiscardChoice: relayable('discardChoice', promptDiscardChoice),
     onSpellUse: relayable('spellUse', promptSpellUse, { broadcast: true }),
     onSpellCastEffect: relayable('spellCastEffect', promptSpellCastEffect, { broadcast: true }),
+    onSpellComplete: relayable('spellComplete', finishSpellPresentation, { broadcast: true }),
     onCpuRoll: cpuRollDice,
     onMoveComplete,
     onLandCommand: relayable('landCommand', promptLandCommand),
@@ -3730,6 +3744,7 @@ const pvpGuestHandlers = {
   discardChoice: promptDiscardChoice,
   spellUse: promptSpellUse,
   spellCastEffect: promptSpellCastEffect,
+  spellComplete: finishSpellPresentation,
   // landCommand/shopPurchaseはgame.js側でpayloadとplayer.idの間に追加引数を
   // 挟む型なので、relayable()が[複数引数]の配列としてまとめて送ってくる -
   // ここで展開してローカルのprompt関数へ渡す（他の型は単一値のまま素通し）。
@@ -3828,6 +3843,15 @@ function applyPvpPublicState(publicState) {
   renderCenterHand(showCenter && !isMyTurn ? (publicState.turnHand || []) : []);
 
   applyPvpBoardState(publicState);
+
+  const activeIndex = publicState.players.findIndex((player) => player.id === publicState.currentPlayerId);
+  if (activeIndex >= 0) {
+    for (let offset = 0; offset < publicState.players.length; offset++) {
+      const player = publicState.players[(activeIndex + offset) % publicState.players.length];
+      scene?.setPieceRenderOrder?.(pvpPieces.get(player.id), 100 + publicState.players.length - offset);
+    }
+  }
+
 }
 
 /** ゲスト側専用: room.statusが'battling'になった合図で呼ばれる（enterPvpRoomScreen参照）。ホストと同じcreateBoard(mapId)で作った盤面をローカルに構築し、以後はpublicState/自分の手札の購読だけで描画し続ける（Gameインスタンスは持たない）。 */
