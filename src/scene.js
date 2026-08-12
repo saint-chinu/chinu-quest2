@@ -47,7 +47,10 @@ function loadBoardMarkerTexture(url) {
 // angle (~50.6°→~58°) per user feedback that the original felt too shallow/
 // tilted - X/Z left untouched so the diagonal isometric diamond read on
 // tiles is unaffected.
-const CAMERA_OFFSET = new THREE.Vector3(14.5, 32, 14.5).multiplyScalar(0.85);
+// 2026-08-12: further zoomed in (0.85→0.72 scalar) per user feedback that
+// the board still read too distant/small - uniform scale again, so the
+// look-down angle established above is untouched.
+const CAMERA_OFFSET = new THREE.Vector3(14.5, 32, 14.5).multiplyScalar(0.72);
 const CAMERA_FOV = 45;
 const PAN_DURATION_MS = 900;
 
@@ -69,7 +72,9 @@ export const PIECE_REST_Y = 0.7;
 // よう、高さ(UNIT_ICON_HEIGHT)の半分を足して算出する（2026-08-12調整前は
 // 下端が-0.15とタイル面より下に沈み込み、急な俯瞰カメラ角度だとカードが
 // タイルに埋まって「張り付いて」見えていた - ユーザー指摘により修正）。
-export const UNIT_ICON_REST_Y = 0.9;
+// 同日、召喚済みモンスターアイコンをさらに1.2倍にとの指摘でUNIT_ICON_HEIGHT
+// を1.6→1.92に拡大したため、この値も高さ/2+0.05で再計算した。
+export const UNIT_ICON_REST_Y = 1.01;
 
 // 土地レベルの縁取り。tile.mesh(2.6四方)より少し内側(2.5)に、レベルが
 // 上がるほど太い黒枠を重ねる - Lv5だけ「太くする」路線から外れて二重の
@@ -194,9 +199,10 @@ function createTokenTexture(color) {
 }
 
 // 配置モンスターの盤上アイコン用ミニカード(通行料バッジ+カード本体+HPゲージ)。
-// 2026-08-12: タイルに埋もれて見づらいというユーザー指摘を受け1.3→1.6に拡大
-// （UNIT_ICON_REST_Yもこれに合わせて再計算済み）。
-export const UNIT_ICON_HEIGHT = 1.6;
+// 2026-08-12: タイルに埋もれて見づらいというユーザー指摘を受け1.3→1.6に拡大。
+// 同日さらに「1.2倍くらいに」との指摘で1.6→1.92に再拡大（UNIT_ICON_REST_Y
+// もこれに合わせて再計算済み）。
+export const UNIT_ICON_HEIGHT = 1.92;
 const UNIT_CARD_CANVAS_WIDTH = 110;
 const TOLL_BADGE_HEIGHT = 26;
 const HP_GAUGE_HEIGHT = 22;
