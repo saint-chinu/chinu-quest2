@@ -1493,14 +1493,14 @@ html, body {
 
 #center-hand {
   display: flex;
-  gap: 10px;
+  gap: 8px;
   pointer-events: none;
 }
 
 #center-hand .card {
-  width: 92px;
-  height: 128px;
-  font-size: 13px;
+  width: 78px;
+  height: 108px;
+  font-size: 11px;
   pointer-events: auto;
   cursor: pointer;
 }
@@ -1571,12 +1571,12 @@ html, body {
 
 #dice-button {
   pointer-events: auto;
-  width: 92px;
-  height: 92px;
-  padding: 14px;
+  width: 78px;
+  height: 78px;
+  padding: 12px;
   background: #fff;
   border: none;
-  border-radius: 16px;
+  border-radius: 14px;
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   grid-template-rows: repeat(3, 1fr);
