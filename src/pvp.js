@@ -54,6 +54,7 @@ export async function createPvpRoom({ name, color, mapId, goalCurrency = 5000, p
     allianceMode,
     randomAlliance,
     cpuNames: Array.isArray(cpuNames) ? cpuNames.slice(0, 3) : [],
+    participants: [{ uid, name, color, deckList: null, ready: true }],
     guestUid: null,
     guestName: null,
     guestColor: null,
