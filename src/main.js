@@ -3639,9 +3639,9 @@ gameMenuExit.addEventListener('click', async () => {
   // 4人同盟戦は通常対戦報酬の2.5倍。現行のPvP報酬はサーバー検証導入まで
   // 無効だが、4人同盟ルームの報酬倍率はここで一元管理する。
   const pvpAllianceMultiplier = pvpLastRoom?.allianceMode === true && pvpLastRoom?.playerCount === 4 ? 2.5 : 1;
-  const earnedM = isPvp ? 0 : Math.max(Math.round(endingG * M_CONVERSION_RATE * pvpAllianceMultiplier), M_CONVERSION_MIN);
+  const earnedM = Math.max(Math.round(endingG * M_CONVERSION_RATE * pvpAllianceMultiplier), M_CONVERSION_MIN);
   const rewardMessage = isPvp
-    ? '対人戦の報酬は、サーバー側の検証機能を実装するまで付与されません。'
+    ? `対戦終了報酬：所持${endingG}Gの20%（${earnedM}M、下限50M）${pvpAllianceMultiplier > 1 ? '／4人同盟戦2.5倍' : ''}を獲得します。`
     : `所持${endingG}Gの20%（${earnedM}M、下限50M）を獲得します。`;
   const confirmed = await confirmYesNo(`対戦をやめますか？\n${rewardMessage}`);
   if (!confirmed) return;
