@@ -114,6 +114,11 @@ const cardRevealCard = document.getElementById('card-reveal-card');
 const discardModal = document.getElementById('discard-modal');
 const discardHint = document.getElementById('discard-hint');
 const discardChoices = document.getElementById('discard-choices');
+const discardConfirm = document.getElementById('discard-confirm');
+const discardConfirmCard = document.getElementById('discard-confirm-card');
+const discardConfirmDetail = document.getElementById('discard-confirm-detail');
+const discardConfirmYes = document.getElementById('discard-confirm-yes');
+const discardConfirmNo = document.getElementById('discard-confirm-no');
 const cardDetailModal = document.getElementById('card-detail-modal');
 const cardDetailCard = document.getElementById('card-detail-card');
 const cardDetailText = document.getElementById('card-detail-text');
@@ -123,6 +128,7 @@ const cardDetailUse = document.getElementById('card-detail-use');
 // hiddenになる#appの外に置く共通オーバーレイとして扱う。
 document.body.appendChild(cardDetailModal);
 const centerPanel = document.getElementById('center-panel');
+const diceTapHint = document.getElementById('dice-tap-hint');
 const centerHandEl = document.getElementById('center-hand');
 const spellEffectModal = document.getElementById('spell-effect-modal');
 const spellEffectText = document.getElementById('spell-effect-text');
@@ -1038,6 +1044,11 @@ async function promptTargetEffect({ tileId = null, playerId = null, position = n
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
 }
 
+async function promptTurnFocus({ position }) {
+  if (!scene || !position) return;
+  await scene.focusAndZoom(position.x, position.z, 1, 420);
+}
+
 function finishSpellPresentation() {
   spellEffectModal.classList.add('hidden');
   setSpellPresentationActive(false);
@@ -1277,31 +1288,50 @@ function confirmYesNo(text) {
   });
 }
 
-function confirmDiscard(card) {
-  return confirmYesNo(`「${card.name}」を捨てますか？`);
-}
-
-/** Tapping a card blinks it, then asks "捨てますか？" - yes discards, no returns to the discard picker. */
+/** カードを選ぶと画像・効果詳細と捨てる確認を同じモーダル内に表示する。 */
 function promptDiscardChoice(hand) {
   return new Promise((resolve) => {
     discardHint.textContent = '手札が7枚になりました。捨てるカードを選んでください';
     discardChoices.replaceChildren();
+    discardChoices.classList.remove('hidden');
+    discardHint.classList.remove('hidden');
+    discardConfirm.classList.add('hidden');
+
+    function showPicker() {
+      discardConfirm.classList.add('hidden');
+      discardChoices.classList.remove('hidden');
+      discardHint.classList.remove('hidden');
+    }
+
+    function showConfirmation(card) {
+      renderCardEl(discardConfirmCard, card);
+      discardConfirmDetail.textContent = describeCardDetail(card);
+      discardChoices.classList.add('hidden');
+      discardHint.classList.add('hidden');
+      discardConfirm.classList.remove('hidden');
+
+      function cleanup() {
+        discardConfirmYes.removeEventListener('click', onYes);
+        discardConfirmNo.removeEventListener('click', onNo);
+      }
+      function onYes() {
+        cleanup();
+        discardModal.classList.add('hidden');
+        resolve(card);
+      }
+      function onNo() {
+        cleanup();
+        showPicker();
+      }
+      discardConfirmYes.addEventListener('click', onYes);
+      discardConfirmNo.addEventListener('click', onNo);
+    }
 
     for (const card of hand) {
-      const el = document.createElement('div');
+      const el = document.createElement('button');
       el.className = 'card';
       renderCardEl(el, card);
-      el.addEventListener('click', () => {
-        el.classList.add('blinking');
-        setTimeout(async () => {
-          el.classList.remove('blinking');
-          const confirmed = await confirmDiscard(card);
-          if (confirmed) {
-            discardModal.classList.add('hidden');
-            resolve(card);
-          }
-        }, BLINK_MS);
-      });
+      el.addEventListener('click', () => showConfirmation(card));
       discardChoices.appendChild(el);
     }
     discardModal.classList.remove('hidden');
@@ -1346,6 +1376,7 @@ let fixedDiceValue = null;
 let showCenterState = false;
 let diceMoving = false;
 let centerShowsOpponent = false;
+let dicePromptDismissed = false;
 
 function syncCenterVisibility() {
   centerPanel.classList.toggle('hidden', spellPresentationActive || !(showCenterState || diceMoving));
@@ -1358,6 +1389,14 @@ function syncCenterVisibility() {
   // - CPU's dice looks perfectly normal through its own spin/hold, same as
   // the player's, and only dims once the piece is actually moving.
   diceButton.classList.toggle('moving', diceMoving);
+  diceTapHint.classList.toggle('hidden',
+    dicePromptDismissed
+    || spellPresentationActive
+    || !showCenterState
+    || centerShowsOpponent
+    || diceMoving
+    || diceButton.disabled,
+  );
 }
 
 function resetDice() {
@@ -1427,6 +1466,8 @@ function beginDiceMove(result) {
 
 diceButton.addEventListener('click', () => {
   if (diceButton.disabled) return;
+  dicePromptDismissed = true;
+  syncCenterVisibility();
 
   if (diceState === 'fixed' && fixedDiceValue != null) {
     const result = fixedDiceValue;
@@ -1558,7 +1599,10 @@ function startBattle(character, storyOptions = {}) {
       const enteringShowCenter = showCenter && !showCenterState;
       showCenterState = showCenter;
       centerShowsOpponent = !isLocalTurn;
-      if (enteringShowCenter) resetDice();
+      if (enteringShowCenter) {
+        resetDice();
+        dicePromptDismissed = false;
+      }
       if (showCenter && stateFixedDiceValue != null && diceState !== 'fixed') showFixedDice(stateFixedDiceValue);
       syncCenterVisibility();
       if (showCenter && !isLocalTurn) {
@@ -1577,6 +1621,7 @@ function startBattle(character, storyOptions = {}) {
     onSpellComplete: relayable('spellComplete', finishSpellPresentation, { broadcast: true }),
     onSummonEffect: relayable('summonEffect', promptSummonEffect, { broadcast: true }),
     onTargetEffect: relayable('targetEffect', promptTargetEffect, { broadcast: true }),
+    onTurnFocus: relayable('turnFocus', promptTurnFocus, { broadcast: true }),
     onCpuRoll: cpuRollDice,
     onMoveComplete,
     onLandCommand: relayable('landCommand', promptLandCommand),
@@ -4068,7 +4113,10 @@ function applyPvpPublicState(publicState) {
   const enteringShowCenter = showCenter && !showCenterState;
   showCenterState = showCenter;
   centerShowsOpponent = !isMyTurn;
-  if (enteringShowCenter) resetDice();
+  if (enteringShowCenter) {
+    resetDice();
+    dicePromptDismissed = false;
+  }
   if (showCenter && publicState.fixedDiceValue != null && diceState !== 'fixed') showFixedDice(publicState.fixedDiceValue);
   syncCenterVisibility();
   renderCenterHand(showCenter && !isMyTurn ? (publicState.turnHand || []) : []);

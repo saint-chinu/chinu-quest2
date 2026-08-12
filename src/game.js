@@ -82,6 +82,7 @@ export class Game {
     onSpellComplete,
     onSummonEffect,
     onTargetEffect,
+    onTurnFocus,
     onCpuRoll,
     onMoveComplete,
     onLandCommand,
@@ -129,6 +130,7 @@ export class Game {
     this.onSpellComplete = onSpellComplete || (() => {});
     this.onSummonEffect = onSummonEffect;
     this.onTargetEffect = onTargetEffect;
+    this.onTurnFocus = onTurnFocus;
     this.onCpuRoll = onCpuRoll;
     this.onMoveComplete = onMoveComplete;
     this.onLandCommand = onLandCommand;
@@ -300,6 +302,12 @@ export class Game {
     this._notifyState();
 
     await this._drawForTurn(this.currentPlayer);
+
+    const turnTile = this.tiles[this.currentPlayer.tileId];
+    if (turnTile) await this.onTurnFocus?.({
+      playerId: this.currentPlayer.id,
+      position: { x: turnTile.position.x, z: turnTile.position.z },
+    });
 
     this.isBusy = false;
     this.awaitingRoll = true;

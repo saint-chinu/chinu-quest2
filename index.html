@@ -401,6 +401,7 @@
         </div>
       </div>
       <div id="center-panel" class="hidden">
+        <div id="dice-tap-hint" class="hidden">↓サイコロをタップ</div>
         <div id="dice-row">
           <button id="dice-button" aria-label="サイコロを振る">
             <span class="pip" data-pos="tl"></span><span class="pip" data-pos="tr"></span>
@@ -511,6 +512,12 @@
         <div id="discard-box">
           <div id="discard-choices"></div>
           <p id="discard-hint">手札が7枚になりました。捨てるカードを選んでください</p>
+          <div id="discard-confirm" class="hidden">
+            <div id="discard-confirm-card" class="card card-large"></div>
+            <p id="discard-confirm-detail"></p>
+            <p id="discard-confirm-question">このカードを捨てますか？</p>
+            <div class="pg-actions-row"><button id="discard-confirm-yes">はい</button><button id="discard-confirm-no">いいえ</button></div>
+          </div>
         </div>
       </div>
       <div id="card-detail-modal" class="hidden">
