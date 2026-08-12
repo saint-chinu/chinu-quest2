@@ -34,7 +34,6 @@ import {
   leavePvpRoom,
   HostGuestRelay,
   GuestHostListener,
-  HostActionListener,
   HostParticipantActionListener,
   HostParticipantPresenceMonitor,
   GuestActionSender,
@@ -1490,9 +1489,19 @@ gameMenuBan.addEventListener('click', () => {
   if (!pvpMatch?.isHost || !game) return;
   const candidates = game.players.filter((p) => !p.isCPU && p.id !== 0 && !p.defeated);
   if (!candidates.length) return;
-  const targetName = window.prompt(`BANするプレイヤー名を入力：${candidates.map((p) => p.name).join(' / ')}`);
-  const target = candidates.find((p) => p.name === targetName);
-  if (!target || !window.confirm(`${target.name}をBANしてAIに切り替えますか？`)) return;
+  // 名前の完全一致で選ぶと同名プレイヤーがいた場合に別人をBANしてしまう
+  // ため、番号入力に変更（idではなくリスト内の表示順で選ばせる - IDは
+  // ユーザーに見せていないため）。
+  const listText = candidates.map((p, i) => `${i + 1}: ${p.name}`).join('\n');
+  const input = window.prompt(`BANするプレイヤーの番号を入力：\n${listText}`);
+  if (input == null) return;
+  const index = Number(input) - 1;
+  const target = Number.isInteger(index) ? candidates[index] : undefined;
+  if (!target) {
+    window.alert('番号が正しくありません。BANを中止しました。');
+    return;
+  }
+  if (!window.confirm(`${target.name}をBANしてAIに切り替えますか？`)) return;
   target.isCPU = true;
   target.banned = true;
   game.onLog(`${target.name}はホストにBANされ、AI操作へ切り替わった`);
@@ -3408,7 +3417,7 @@ pvpRoomLeave.addEventListener('click', async () => {
 // ---- 対人戦(PvP)本編: ホスト権威モデルのリレー配線 ----
 // pvpMatchは対戦ロビーに入った瞬間（ゲスト側）または対戦開始した瞬間
 // （ホスト側）にセットされる実行時状態。
-//   ホスト: { isHost:true, roomCode, uid, localPlayerId:0, relay, actionListener, uidByPlayerId }
+//   ホスト: { isHost:true, roomCode, uid, localPlayerId:0, relay, participantActionListener, uidByPlayerId }
 //   ゲスト: { isHost:false, roomCode, uid, localPlayerId:1, myHand, listener, actionSender }
 
 /**
@@ -3461,7 +3470,27 @@ function relayable(type, localPrompt, { broadcast = false } = {}) {
     const remoteUid = pvpMatch.uidByPlayerId?.[forPlayerId];
     if (!remoteUid) return localPrompt(...localArgs);
     const legacyGuestOnly = Number(forPlayerId) === Number(pvpMatch.guestPlayerId);
-    return legacyGuestOnly ? pvpMatch.relay.ask(type, payload) : pvpMatch.relay.askParticipant(remoteUid, type, payload);
+    const relayPromise = legacyGuestOnly
+      ? pvpMatch.relay.ask(type, payload)
+      : pvpMatch.relay.askParticipant(remoteUid, type, payload);
+    // 質問を投げた直後に相手が切断すると、応答は45秒後にreject
+    // （HostGuestRelay参照）される。ここをcatchしないとgame.js側の
+    // await this.onXxx(...)が未捕捉の例外で止まり、盤面がフリーズしたまま
+    // 二度と動かなくなる（30秒無応答でCPU化するpresenceMonitorは「次の
+    // ターンから」しか効かず、既に発行済みのこの質問は救済しない）。
+    // タイムアウトした場合はnull（「未選択」相当、他のprompt*関数の既定の
+    // キャンセル応答と同じ扱い）にフォールバックしつつ、以後の質問が
+    // 同じ相手で毎回45秒止まらないよう即座にCPUへ切り替える。
+    return relayPromise.catch((error) => {
+      console.warn(`PvP relay timed out for type=${type}, forPlayerId=${forPlayerId}`, error);
+      const player = game?.players?.find((p) => p.id === forPlayerId);
+      if (player && !player.isCPU) {
+        player.isCPU = true;
+        game.onLog(`${player.name}の応答がタイムアウトしたためAI操作へ切り替えました`);
+        game._notifyState();
+      }
+      return null;
+    });
   };
 }
 
@@ -3580,6 +3609,7 @@ function applyPvpPublicState(publicState) {
   if (me) {
     pvpMatch.lastCurrency = me.currency;
     pvpMatch.lastAssets = me.totalAssets;
+    pvpMatch.lastAllianceSize = me.allianceSize || 1;
     if (me.banned && !pvpMatch.isHost && !pvpMatch.banned) {
       pvpMatch.banned = true;
       window.alert('ホストにBANされました。盤面から退出します。');
@@ -3623,6 +3653,11 @@ function startPvpGuestBattle() {
   pvpMatch.stopPublicListener = listenToRoom(pvpMatch.roomCode, (room) => {
     if (!room || room.status === 'finished') {
       // ホストが退出した（部屋を消した/finishedにした） - こちらも対戦を終える。
+      // ホストの退出はgameMenuExit経由の報酬確認を通らないため、ここで
+      // 代わりに直近のpublicStateから自分の取り分を換算して付与する
+      // （でなければゲストは無報酬のまま追い出されてしまう）。
+      const endingAssetsShare = (pvpMatch?.lastAssets ?? pvpMatch?.lastCurrency ?? 0) / (pvpMatch?.lastAllianceSize || 1);
+      const { earnedM } = grantExitReward(endingAssetsShare);
       pvpMatch?.stopPublicListener?.();
       pvpMatch?.stopHandListener?.();
       pvpMatch?.listener?.destroy();
@@ -3631,6 +3666,7 @@ function startPvpGuestBattle() {
       stopMusic();
       appEl.classList.add('hidden');
       preGame.classList.remove('hidden');
+      window.alert(`ホストが対戦を終了しました。獲得報酬：${earnedM}M`);
       showHubScreen();
       return;
     }
@@ -3663,7 +3699,6 @@ pvpRoomStart.addEventListener('click', async () => {
     relay,
     uidByPlayerId: Object.fromEntries(roster.map((participant) => [participant.playerId, participant.uid])),
   };
-  pvpMatch.actionListener = new HostActionListener(pvpSession.roomCode, handlePvpGuestAction);
   pvpMatch.participantActionListener = new HostParticipantActionListener(
     pvpSession.roomCode,
     (pvpLastRoom.participants || []).map((participant) => participant.uid).filter((uid) => uid !== pvpSession.uid),
@@ -3695,12 +3730,17 @@ pvpRoomStart.addEventListener('click', async () => {
     }
   }
   const cpuNames = Array.isArray(pvpLastRoom.cpuNames) ? pvpLastRoom.cpuNames : [];
-  const seen = new Set(playerConfigs.map((p) => p.name));
+  // cpuNames自体に同じCPUが重複指定されていた場合の二重追加だけを防ぐ
+  // ためのSet。人間参加者の表示名（自由入力・重複しうる）と混同すると、
+  // 偶然の名前衝突でCPU枠が丸ごとスキップされ、playerConfigsが
+  // playerCount未満のまま静かに進行してしまう（同盟モードなら下のalliance
+  // 割り当てが素通りし、UIは「同盟」と表示されたままFFA化する）。
+  const usedCpuNames = new Set();
   for (const cpuName of cpuNames) {
-    if (seen.has(cpuName) || playerConfigs.length >= (pvpLastRoom.playerCount || 2)) continue;
+    if (usedCpuNames.has(cpuName) || playerConfigs.length >= (pvpLastRoom.playerCount || 2)) continue;
     const npc = STORY_STAGES.flatMap((stage) => [stage.ally, ...(stage.opponents || [])]).find((entry) => entry?.name === cpuName);
     if (!npc) continue;
-    seen.add(cpuName);
+    usedCpuNames.add(cpuName);
     playerConfigs.push({
       name: cpuName,
       isCPU: true,
@@ -3710,9 +3750,16 @@ pvpRoomStart.addEventListener('click', async () => {
       iconImage: await loadNpcTokenImage(cpuName),
     });
   }
-  if (pvpLastRoom.allianceMode && playerConfigs.length === 4) {
-    const teams = pvpLastRoom.randomAlliance ? [0, 1, 0, 1].sort(() => Math.random() - 0.5) : [0, 1, 0, 1];
-    playerConfigs.forEach((config, index) => { config.allianceId = teams[index]; });
+  if (pvpLastRoom.allianceMode) {
+    if (playerConfigs.length === 4) {
+      const teams = pvpLastRoom.randomAlliance ? [0, 1, 0, 1].sort(() => Math.random() - 0.5) : [0, 1, 0, 1];
+      playerConfigs.forEach((config, index) => { config.allianceId = teams[index]; });
+    } else {
+      // 本来は部屋作成時にplayerCount=4へ固定され、開始ボタンも定員未満
+      // では出せないので通常は起きないはずだが、万一ズレた場合に「同盟
+      // モード表示のままFFA化する」のを黙って見過ごさないよう記録する。
+      console.warn(`PvP同盟モードだが参加者が${playerConfigs.length}人（4人ではない）のため同盟を割り当てられません`);
+    }
   }
   startBattle(currentCharacter, {
     mapId: pvpLastRoom.mapId,
@@ -3723,6 +3770,40 @@ pvpRoomStart.addEventListener('click', async () => {
 });
 
 // ---- Leaving a battle: cash out the ending in-battle G into persistent M (20%, 50 minimum) ----
+//
+// 同盟(2vs2)ではtotalAssetsがチーム合算値のため、そのまま使うとチーム全員が
+// 満額を個別に受け取れてしまう（実質的な二重取り）。呼び出し側は必ず
+// 自分の取り分（totalAssets ÷ allianceSize）に割ってから渡すこと。
+
+/**
+ * 総資産(自分の取り分換算後)からPvP/ストーリー共通のM報酬額を計算する
+ * （副作用なし・表示プレビューと実際の付与の両方がこれを経由することで
+ * 数値がズレないようにする）。
+ *
+ * 注意: このM計算はクライアント側の値をそのまま信用しており、サーバー側
+ * （Cloud Functions等）での検証は現状存在しない - `saveCharacter`は
+ * `character`をそのままFirestoreへ書き込み、セキュリティルールもuid一致
+ * しか見ていないため、理論上は改造クライアントで任意の値を書き込むことが
+ * できてしまう。特にPvPではホストがpublishする相手の資産表示を信用する
+ * 構造なので、ここに常識的な上限（部屋の目標Gの3倍、最低でも5000G相当）を
+ * 掛けて被害を抑える簡易対策のみ行っている。根本対策にはサーバー側の検証
+ * （Cloud Functions等）が別途必要。
+ */
+function computeExitRewardM(endingAssetsShare) {
+  const pvpAllianceMultiplier = pvpLastRoom?.allianceMode === true && pvpLastRoom?.playerCount === 4 ? 2.5 : 1;
+  const assetCap = Math.max((pvpLastRoom?.goalCurrency || 5000) * 3, 5000);
+  const cappedAssets = Math.min(Math.max(endingAssetsShare, 0), assetCap);
+  const earnedM = Math.max(Math.round(cappedAssets * M_CONVERSION_RATE * pvpAllianceMultiplier), M_CONVERSION_MIN);
+  return { earnedM, pvpAllianceMultiplier };
+}
+
+/** 実際にcurrentCharacter.mへ加算・保存する。呼び出しごとに一度だけ加算されるよう、必ずここを経由すること。 */
+function grantExitReward(endingAssetsShare) {
+  const result = computeExitRewardM(endingAssetsShare);
+  currentCharacter.m += result.earnedM;
+  saveCharacter(currentUserId, currentCharacter);
+  return result;
+}
 
 gameMenuExit.addEventListener('click', async () => {
   gameMenuModal.classList.add('hidden');
@@ -3730,29 +3811,27 @@ gameMenuExit.addEventListener('click', async () => {
   if (!game && !isPvpGuest) return;
 
   // ゲスト側はGameを持たないので、直近のpublicStateから自分のGを読む
-  // （publicStateがまだ届いていない対戦開始直後は0扱い）。
-  const endingAssets = isPvpGuest
-    ? pvpMatch.lastAssets ?? pvpMatch.lastCurrency ?? 0
-    : game._totalAssetsOf(game.players[0]);
+  // （publicStateがまだ届いていない対戦開始直後は0扱い）。同盟時は
+  // allianceSizeで割って「自分の取り分」だけを対象にする（同盟報酬の
+  // 二重取り防止 - grantExitReward参照）。
+  const hostPlayer = !isPvpGuest && game ? game.players[0] : null;
+  const hostAllianceSize =
+    hostPlayer?.allianceId != null ? game.players.filter((p) => p.allianceId === hostPlayer.allianceId).length : 1;
+  const endingAssetsShare = isPvpGuest
+    ? (pvpMatch.lastAssets ?? pvpMatch.lastCurrency ?? 0) / (pvpMatch.lastAllianceSize || 1)
+    : game._totalAssetsOf(hostPlayer) / hostAllianceSize;
   const isPvp = Boolean(pvpMatch);
-  // 4人同盟戦は通常対戦報酬の2.5倍。現行のPvP報酬はサーバー検証導入まで
-  // 無効だが、4人同盟ルームの報酬倍率はここで一元管理する。
-  const pvpAllianceMultiplier = pvpLastRoom?.allianceMode === true && pvpLastRoom?.playerCount === 4 ? 2.5 : 1;
-  const earnedM = Math.max(Math.round(endingAssets * M_CONVERSION_RATE * pvpAllianceMultiplier), M_CONVERSION_MIN);
+  const { earnedM: previewM, pvpAllianceMultiplier } = computeExitRewardM(endingAssetsShare);
   const rewardMessage = isPvp
-    ? `対戦終了報酬：総資産${endingAssets}Gの20%（${earnedM}M、下限50M）${pvpAllianceMultiplier > 1 ? '／4人同盟戦2.5倍' : ''}を獲得します。`
-    : `総資産${endingAssets}Gの20%（${earnedM}M、下限50M）を獲得します。`;
+    ? `対戦終了報酬：総資産(自分の取り分)${Math.round(endingAssetsShare)}Gの20%（${previewM}M、下限50M）${pvpAllianceMultiplier > 1 ? '／4人同盟戦2.5倍' : ''}を獲得します。`
+    : `総資産${Math.round(endingAssetsShare)}Gの20%（${previewM}M、下限50M）を獲得します。`;
   const confirmed = await confirmYesNo(`対戦をやめますか？\n${rewardMessage}`);
   if (!confirmed) return;
 
-  if (earnedM > 0) {
-    currentCharacter.m += earnedM;
-    saveCharacter(currentUserId, currentCharacter);
-  }
+  grantExitReward(endingAssetsShare);
 
   if (pvpMatch?.isHost) {
     pvpMatch.relay.destroy();
-    pvpMatch.actionListener.destroy();
     pvpMatch.participantActionListener?.destroy();
     pvpMatch.presenceMonitor?.destroy();
     finishPvpRoom(pvpMatch.roomCode);

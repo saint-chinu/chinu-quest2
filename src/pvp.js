@@ -82,8 +82,6 @@ export async function createPvpRoom({ name, color, mapId, goalCurrency = 5000, p
     hostRequest: null,
     guestResponseId: 0,
     guestResponse: null,
-    guestActionId: 0,
-    guestAction: null,
   });
   return { roomCode, uid, isHost: true };
 }
@@ -270,10 +268,13 @@ export class GuestHostListener {
 // 一方向チャンネル。ゲストが手番中に「自分から」起こす操作用 - 応答は
 // 待たない（ホスト側のGameシミュレーションが結果を計算し、その結果は
 // 通常のpublicState/private hand経由で両者に伝わる）。
-
-export function sendGuestAction(roomCode, actionId, action) {
-  return updateDoc(roomRef(roomCode), { guestActionId: actionId, guestAction: action });
-}
+//
+// 参加者ごとの`actions/{uid}`サブコレクション（sendParticipantAction）が
+// 唯一の経路。旧2人専用の`sendGuestAction`（room文書の`guestActionId`/
+// `guestAction`フィールド）は、GuestActionSenderが常にuid付きで生成される
+// ようになった時点で到達不能になったため削除した（`HostActionListener`も
+// 同様に不要になったため削除 - 参加者チャンネルはHostParticipantActionListener
+// が一元的にカバーする）。
 
 function participantActionRef(roomCode, uid) {
   return doc(db, 'pvpRooms', roomCode.toUpperCase(), 'actions', uid);
@@ -285,17 +286,17 @@ export function sendParticipantAction(roomCode, uid, actionId, action) {
 
 /** ゲスト側で使う、送信ごとにactionIdを自動採番する薄いラッパー。 */
 export class GuestActionSender {
-  constructor(roomCode, uid = null) {
+  constructor(roomCode, uid) {
     this.roomCode = roomCode;
     this.uid = uid;
     this.nextActionId = 1;
-    this.heartbeat = uid ? setInterval(() => sendParticipantAction(this.roomCode, this.uid, this.nextActionId, { type: 'heartbeat' }), 10000) : null;
+    this.heartbeat = setInterval(() => sendParticipantAction(this.roomCode, this.uid, this.nextActionId, { type: 'heartbeat' }), 10000);
   }
   send(action) {
     const actionId = this.nextActionId;
     this.nextActionId += 1;
     const payload = { ...action, actionId, uid: this.uid };
-    return this.uid ? sendParticipantAction(this.roomCode, this.uid, actionId, payload) : sendGuestAction(this.roomCode, actionId, payload);
+    return sendParticipantAction(this.roomCode, this.uid, actionId, payload);
   }
   destroy() { if (this.heartbeat) clearInterval(this.heartbeat); }
 }
@@ -330,22 +331,4 @@ export class HostParticipantActionListener {
     }
   }
   destroy() { this.unsubscribers.splice(0).forEach((unsubscribe) => unsubscribe()); }
-}
-
-/** ホスト側: ゲストの自発的アクションを購読する。onActionは新しいアクションが来るたびに呼ばれる。 */
-export class HostActionListener {
-  constructor(roomCode, onAction) {
-    this.roomCode = roomCode;
-    this.lastHandledActionId = 0;
-    this.unsubscribe = listenToRoom(roomCode, (room) => {
-      if (!room || !room.guestAction) return;
-      if (room.guestActionId <= this.lastHandledActionId) return;
-      this.lastHandledActionId = room.guestActionId;
-      onAction(room.guestAction);
-    });
-  }
-
-  destroy() {
-    this.unsubscribe();
-  }
 }

@@ -3286,6 +3286,10 @@ export class Game {
       tileId: p.tileId,
       currency: p.currency,
       totalAssets: this._totalAssetsOf(p),
+      // 同盟人数（ソロなら1）。totalAssetsは同盟内で合算した値なので、退出
+      // 報酬計算側（main.js）はこれで割って「自分の取り分」を出す - 割らずに
+      // 使うとチーム全員が満額を個別に受け取れてしまう（同盟報酬の二重取り）。
+      allianceSize: p.allianceId != null ? this.players.filter((other) => other.allianceId === p.allianceId).length : 1,
       summonCount: this._summonCountOf(p.id),
       handCount: p.hand.length,
       deckBreakdown: p.deckBreakdown,

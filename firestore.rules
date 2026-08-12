@@ -52,6 +52,8 @@ service cloud.firestore {
         return signedIn() && resource.data.status == 'waiting' &&
           request.resource.data.hostUid == resource.data.hostUid &&
           request.resource.data.participants is list && resource.data.participants is list &&
+          // 同じuidが既に参加者リストにいる場合の再参加（自分の枠の重複占有）を拒否する。
+          !(resource.data.participantUids is list && request.auth.uid in resource.data.participantUids) &&
           request.resource.data.participants.size() == resource.data.participants.size() + 1 &&
           request.resource.data.participants.size() <= request.resource.data.playerCount &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'participantUids', 'guestUid', 'guestName', 'guestColor', 'guestDeckList']) &&
