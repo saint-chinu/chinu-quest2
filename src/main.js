@@ -41,7 +41,7 @@ import {
   finishPvpRoom,
   beginPvpMatch,
 } from './pvp.js';
-import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted } from './audio.js';
+import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted, playSfx } from './audio.js';
 
 const canvas = document.getElementById('game-canvas');
 const fxLayer = document.getElementById('fx-layer');
@@ -1073,6 +1073,7 @@ function promptBattleAttack({ side, item, message, targetHp, targetDied }) {
 
 /** 直接ダメージ系の土地コマンド（火炎瓶男/センチネル等）用の演出: 対象マスへ火の玉を落としてから、ダメージ数値をぴょんと跳ねさせて約1秒表示する。tileIdはFirestore中継できるようgame.js側で本物のtileオブジェクトの代わりに渡されるので、ここでローカルのtiles配列から引き直す。 */
 function promptDamageEffect({ tileId, damage }) {
+  playSfx(damage > 0 ? 'hit' : 'block');
   const tile = tiles.find((t) => t.id === tileId);
   if (!tile) return Promise.resolve();
   return playDamageEffect(tile, damage);
@@ -1115,6 +1116,7 @@ function promptBattleRetreat() {
 
 /** "〇〇の□□は土地を奪った/守った" - holds 1.5秒, then fades the whole battle scene back out to the board. */
 function promptBattleOutcome({ won, ownerName, unitName }) {
+  playSfx('hit');
   return new Promise((resolve) => {
     battleMessageText.textContent = `${ownerName}の${unitName}は${won ? '土地を奪った' : '土地を守った'}`;
     battleMessageText.classList.remove('hidden');

@@ -73,3 +73,23 @@ export function stopMusic() {
   if (currentTrack) getAudioEl(currentTrack).pause();
   currentTrack = null;
 }
+
+let sfxContext = null;
+export function playSfx(type = 'hit') {
+  try {
+    sfxContext ||= new (window.AudioContext || window.webkitAudioContext)();
+    const ctx = sfxContext;
+    if (ctx.state === 'suspended') ctx.resume();
+    const now = ctx.currentTime;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type === 'block' ? 'square' : 'sawtooth';
+    osc.frequency.setValueAtTime(type === 'block' ? 180 : 120, now);
+    osc.frequency.exponentialRampToValueAtTime(type === 'block' ? 70 : 45, now + 0.12);
+    gain.gain.setValueAtTime(muted ? 0 : 0.16, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.15);
+  } catch { /* AudioContext非対応環境 */ }
+}
