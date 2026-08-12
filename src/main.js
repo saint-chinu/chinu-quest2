@@ -4627,25 +4627,47 @@ gameMenuExit.addEventListener('click', async () => {
   const isPvpGuest = pvpMatch && !pvpMatch.isHost;
   if (!game && !isPvpGuest) return;
 
-  // ゲスト側はGameを持たないので、直近のpublicStateから自分のGを読む
-  // （publicStateがまだ届いていない対戦開始直後は0扱い）。同盟時は
-  // allianceSizeで割って「自分の取り分」だけを対象にする（同盟報酬の
-  // 二重取り防止 - grantExitReward参照）。
-  const hostPlayer = !isPvpGuest && game ? game.players[0] : null;
-  const hostAllianceSize =
-    hostPlayer?.allianceId != null ? game.players.filter((p) => p.allianceId === hostPlayer.allianceId).length : 1;
-  const endingAssetsShare = isPvpGuest
-    ? (pvpMatch.lastAssets ?? pvpMatch.lastCurrency ?? 0) / (pvpMatch.lastAllianceSize || 1)
-    : game._totalAssetsOf(hostPlayer) / hostAllianceSize;
-  const isPvp = Boolean(pvpMatch);
-  const { earnedM: previewM, rewardRate } = computeExitRewardM(endingAssetsShare);
-  const rewardMessage = isPvp
-    ? `対戦終了報酬：総資産(自分の取り分)${Math.round(endingAssetsShare)}Gの${Math.round(rewardRate * 100)}%（${previewM}M、下限50M）を獲得します。`
-    : `総資産${Math.round(endingAssetsShare)}Gの${Math.round(rewardRate * 100)}%（${previewM}M、下限50M）を獲得します。`;
-  const confirmed = await confirmYesNo(`対戦をやめますか？\n${rewardMessage}`);
+  // ストーリーモードは通常の対戦(CPU戦/対人戦)と違い、M報酬の対象外
+  // （ユーザー指定 - ストーリーの報酬はステージクリア時のカード報酬のみで、
+  // 総資産に応じた通貨変換は「対戦をやめた」実績に対するものなので
+  // ストーリーの筋書きにはそぐわない）。
+  const wasStoryBattle = activeStoryStageIndex != null;
+
+  let confirmed;
+  let endingAssetsShare = 0;
+  if (wasStoryBattle) {
+    confirmed = await confirmYesNo('対戦をやめますか？');
+  } else {
+    // ゲスト側はGameを持たないので、直近のpublicStateから自分のGを読む
+    // （publicStateがまだ届いていない対戦開始直後は0扱い）。同盟時は
+    // allianceSizeで割って「自分の取り分」だけを対象にする（同盟報酬の
+    // 二重取り防止 - grantExitReward参照）。
+    const hostPlayer = !isPvpGuest && game ? game.players[0] : null;
+    const hostAllianceSize =
+      hostPlayer?.allianceId != null ? game.players.filter((p) => p.allianceId === hostPlayer.allianceId).length : 1;
+    endingAssetsShare = isPvpGuest
+      ? (pvpMatch.lastAssets ?? pvpMatch.lastCurrency ?? 0) / (pvpMatch.lastAllianceSize || 1)
+      : game._totalAssetsOf(hostPlayer) / hostAllianceSize;
+    const isPvp = Boolean(pvpMatch);
+    const { earnedM: previewM, rewardRate } = computeExitRewardM(endingAssetsShare);
+    const rewardMessage = isPvp
+      ? `対戦終了報酬：総資産(自分の取り分)${Math.round(endingAssetsShare)}Gの${Math.round(rewardRate * 100)}%（${previewM}M、下限50M）を獲得します。`
+      : `総資産${Math.round(endingAssetsShare)}Gの${Math.round(rewardRate * 100)}%（${previewM}M、下限50M）を獲得します。`;
+    confirmed = await confirmYesNo(`対戦をやめますか？\n${rewardMessage}`);
+  }
   if (!confirmed) return;
 
-  grantExitReward(endingAssetsShare);
+  if (!wasStoryBattle) grantExitReward(endingAssetsShare);
+
+  // 退出時、もし戦闘シーン演出の途中（onBattleSceneEnter等のPromiseが
+  // 未解決のまま）だった場合、そのGameインスタンスの続きが後から勝手に
+  // 進んで次のセッションのUIを巻き込むのを防ぐ（cancel()参照）。加えて
+  // battle-scene-modal自体もここで確実に閉じておく - 開いたままだと
+  // 次に#appを表示した瞬間、古い対戦内容がそのまま一瞬見えてしまう。
+  game?.cancel?.();
+  battleSceneModal.classList.add('hidden');
+  battleItemPickerBox.classList.add('hidden');
+  battleMessageText.classList.add('hidden');
 
   if (pvpMatch?.isHost) {
     pvpMatch.relay.destroy();
@@ -4663,7 +4685,6 @@ gameMenuExit.addEventListener('click', async () => {
   stopMusic();
   appEl.classList.add('hidden');
   preGame.classList.remove('hidden');
-  const wasStoryBattle = activeStoryStageIndex != null;
   activeStoryStageIndex = null;
   if (wasStoryBattle) {
     showStoryScreen();

@@ -180,6 +180,12 @@ export class Game {
     this.storyMode = storyMode;
     this.goalCurrency = Number.isFinite(Number(goalCurrency)) ? Number(goalCurrency) : null;
     this.storyEnded = false;
+    // 呼び出し元（main.jsの「退出」）がこのGameを見捨てた後も、宙に浮いた
+    // await（onBattleSceneEnter等）がいつか解決して先へ進んでしまうと、
+    // 既に始まっている次のセッションのUI/状態を巻き込んで壊してしまう。
+    // cancel()が呼ばれたら、そういった残存awaitの直後で早期returnして
+    // 何もしないようにするためのフラグ（_isCancelled/cancel参照）。
+    this._isCancelled = false;
 
     // 2人対戦（通常の対戦モード）呼び出し元との後方互換: playerConfigsが
     // 渡されなければ、これまで通りhumanPlayer+固定CPUの2人構成を組む。
@@ -288,6 +294,11 @@ export class Game {
 
   get currentPlayer() {
     return this.players[this.currentPlayerIndex];
+  }
+
+  /** 呼び出し元（main.jsの「退出」）がこのGameを見限る時に呼ぶ。以後、進行中のターン/戦闘シーンの続きは主要な再開ポイントで早期returnし、次に始まる別セッションのUIを巻き込まない。 */
+  cancel() {
+    this._isCancelled = true;
   }
 
   init() {
@@ -880,6 +891,7 @@ export class Game {
       const defenderPlayer = this.players.find((p) => p.id === destTile.owner);
       const defenderUnit = destTile.unit;
       const result = await this._runBattleScene(unit, unitOwner, defenderUnit, defenderPlayer, targetTile, destTile);
+      if (!result) return;
       destTile.forcedStopCursed = false;
       await this._maybeRedirectDeathToLightningRod(defenderPlayer, destTile, result);
 
@@ -930,7 +942,7 @@ export class Game {
    * if landed on a land tile.
    */
   async rollDice(steps) {
-    if (this.isBusy || !this.awaitingRoll) return;
+    if (this._isCancelled || this.isBusy || !this.awaitingRoll) return;
     this.isBusy = true;
     this.awaitingRoll = false;
     this._notifyState();
@@ -2015,6 +2027,7 @@ export class Game {
       const defenderPlayer = this.players.find((p) => p.id === targetTile.owner);
       const defenderUnit = targetTile.unit;
       const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, tile, targetTile);
+      if (!result) return false;
       targetTile.forcedStopCursed = false; // 戦闘が終わると消える - _shrineForcedStop参照。
       await this._maybeRedirectDeathToLightningRod(defenderPlayer, targetTile, result);
 
@@ -2808,7 +2821,17 @@ export class Game {
         matchup: defenderMatchup,
       },
     });
+    // 演出待ちの間に「退出」でこのGameが見捨てられていたら、ここで打ち切る
+    // （cancel()参照）。以後のアイテム選択UI等を今更表示しても、既に別の
+    // セッションが始まっているUIを巻き込むだけなので何もせず抜ける。
+    if (this._isCancelled) return null;
 
+    // アイテム選択は両者とも「相手が何を選んだか一切見えない」状態で行う
+    // 必要がある（後から選ぶ側が相手の装備を見てから決められると有利に
+    // なってしまう）。そのため選択(onPickBattleItem)は両者分を先に済ませ、
+    // 実際に装備した見た目の演出(onBattleEquip)は両者の選択が確定した
+    // "後" にまとめて再生する - 選択中に相手の装備が画面上に見えることは
+    // ない。
     const attackerItem = attackerPlayer.isCPU
       ? this._cpuPickBattleItem(attackerPlayer)
       : await this.onPickBattleItem(
@@ -2820,15 +2843,6 @@ export class Game {
           },
           attackerPlayer.id,
         );
-    const equippedAttackerItem = this._consumeBattleItem(attackerPlayer, attackerUnit, attackerItem);
-    if (equippedAttackerItem) {
-      await this.onBattleEquip({
-        side: 'attacker', item: equippedAttackerItem, unitName: attackerUnit.def.name,
-        baseAtk: attackerBase.atk, baseHp: attackerBase.hp,
-        existingAtkBonus: attackerBonus.atk, existingHpBonus: attackerBonus.hp,
-      });
-    }
-
     const defenderItem = defenderPlayer.isCPU
       ? this._cpuPickBattleItem(defenderPlayer)
       : await this.onPickBattleItem(
@@ -2840,7 +2854,17 @@ export class Game {
           },
           defenderPlayer.id,
         );
+    if (this._isCancelled) return null;
+
+    const equippedAttackerItem = this._consumeBattleItem(attackerPlayer, attackerUnit, attackerItem);
     const equippedDefenderItem = this._consumeBattleItem(defenderPlayer, defenderUnit, defenderItem);
+    if (equippedAttackerItem) {
+      await this.onBattleEquip({
+        side: 'attacker', item: equippedAttackerItem, unitName: attackerUnit.def.name,
+        baseAtk: attackerBase.atk, baseHp: attackerBase.hp,
+        existingAtkBonus: attackerBonus.atk, existingHpBonus: attackerBonus.hp,
+      });
+    }
     if (equippedDefenderItem) {
       await this.onBattleEquip({
         side: 'defender', item: equippedDefenderItem, unitName: defenderUnit.def.name,
@@ -2952,6 +2976,7 @@ export class Game {
     }
 
     const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, null, tile);
+    if (!result) return;
     // 強制停止の呪いは「戦闘が終わると消える」(勝敗を問わない) - _shrineForcedStop参照。
     tile.forcedStopCursed = false;
     await this._maybeRedirectDeathToLightningRod(defenderPlayer, tile, result);
