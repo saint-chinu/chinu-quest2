@@ -469,17 +469,21 @@ export class Game {
    * ボーナス無しの周回でも、ゴールを通過したこと自体は変わらないので
    * 回復は適用する。「最大基礎HP」は素のdef.hp＋永続呪いの加算に加え、
    * 同属性ボーナス（土地レベル×10）も含む＝土地情報等アイドル時のHP
-   * 上限と同じ基準（メカニックマソが以前担っていた雷属性限定の周回回復を、
-   * この汎用ルールへ統合した）。
+   * 上限と同じ基準。
+   * メカニックマソ: 自分の盤面のどこかに配置されていれば、自分が所有する
+   * 雷属性モンスターだけこの汎用10%にさらに+10%上乗せされる（合計20%）。
    */
   _healOwnedUnitsOnLap(player) {
+    const hasMechanicMaso = this._hasAllyOnBoard(player.id, 'mechanicMaso');
     for (const t of this._ownedTiles(player)) {
       if (!t.unit) continue;
+      const mechanicMasoBonus = hasMechanicMaso && t.unit.def.element === Element.THUNDER;
+      const healRatio = mechanicMasoBonus ? 0.2 : 0.1;
       const maxHp = this._baseStats(t.unit).hp + this._elementHpBonus(t.unit, t);
-      const healed = Math.min(t.unit.currentHp + Math.round(maxHp * 0.1), maxHp);
+      const healed = Math.min(t.unit.currentHp + Math.round(maxHp * healRatio), maxHp);
       if (healed > t.unit.currentHp) {
         t.unit.currentHp = healed;
-        this.onLog(`${t.unit.def.name}は周回の恩恵でHP回復`);
+        this.onLog(`${t.unit.def.name}は周回の恩恵でHP回復${mechanicMasoBonus ? '（メカニックマソの上乗せ込み）' : ''}`);
       }
     }
   }
