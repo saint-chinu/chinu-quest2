@@ -1451,12 +1451,17 @@ html, body {
 }
 
 #hand-panel {
-  align-self: flex-start;
+  position: absolute;
+  left: 16px;
+  bottom: 14px;
+  z-index: 16;
   display: flex;
-  gap: 8px;
-  pointer-events: none;
-  transform: translateY(14px) scale(0.95);
-  transform-origin: bottom left;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: calc(100% - 190px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  pointer-events: auto;
 }
 
 #center-panel {
@@ -1475,6 +1480,28 @@ html, body {
 
 #center-panel.hidden {
   display: none;
+}
+
+#center-panel.local-turn {
+  top: 61%;
+  left: 39%;
+  gap: 0;
+}
+
+#center-panel.local-turn #turn-indicator {
+  display: none;
+}
+
+#center-panel.opponent-turn {
+  top: 50%;
+  left: 50%;
+  flex-direction: row;
+  gap: 14px;
+}
+
+#center-panel.opponent-turn #dice-row {
+  flex-direction: column;
+  gap: 7px;
 }
 
 #dice-row {
@@ -1502,8 +1529,8 @@ html, body {
   width: 78px;
   height: 108px;
   font-size: 11px;
-  pointer-events: auto;
-  cursor: pointer;
+  pointer-events: none;
+  cursor: default;
 }
 
 .card {
@@ -1558,9 +1585,10 @@ html, body {
 
 #hand-panel .card {
   cursor: pointer;
-  width: 74px;
-  height: 71px;
-  font-size: 12px;
+  width: 70px;
+  height: 97px;
+  font-size: 10px;
+  flex: 0 0 auto;
 }
 
 .card-large {
@@ -1583,7 +1611,7 @@ html, body {
   grid-template-rows: repeat(3, 1fr);
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
   /* ユーザー指摘（2026-08-12）: 位置がもう少し左が良いとのことで~1cm左へ。 */
-  transform: translateX(-38px);
+  transform: none;
 }
 
 #dice-button .pip {

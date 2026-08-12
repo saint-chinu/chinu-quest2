@@ -857,45 +857,37 @@ cardDetailUse.addEventListener('click', () => {
   cardDetailUseHandler?.();
 });
 
-function renderHand(hand) {
+function renderHand(hand, spellUsable = false) {
   handPanel.replaceChildren();
   for (const card of hand) {
     const el = document.createElement('div');
     el.className = 'card';
     el.style.pointerEvents = 'auto';
     renderCardEl(el, card);
-    el.addEventListener('click', () => showCardDetail(card));
+    const canUseThis = card.type === CardType.SPELL && spellUsable;
+    el.addEventListener('click', () => showCardDetail(card, canUseThis ? () => {
+      el.classList.add('blinking');
+      setTimeout(() => {
+        if (pvpMatch && !pvpMatch.isHost) {
+          pvpMatch.actionSender.send({ type: 'useSpell', cardId: card.id, playerId: pvpMatch.localPlayerId });
+        } else {
+          game.useSpell(card);
+        }
+      }, BLINK_MS);
+    } : null));
     handPanel.appendChild(el);
   }
 }
 
-/** Center hand: whoever's turn it is, shown face-up. Only the human's own cards are interactive. */
-function renderCenterHand(hand, isCPU, spellUsable) {
+/** Opponent hand shown face-up only while they are choosing a roll/spell. */
+function renderCenterHand(hand) {
   centerHandEl.replaceChildren();
   for (const card of hand) {
     const el = document.createElement('div');
     el.className = 'card';
     renderCardEl(el, card);
 
-    if (isCPU) {
-      el.style.cursor = 'default';
-    } else {
-      const isSpell = card.type === CardType.SPELL;
-      const canUseThis = isSpell && spellUsable;
-      el.addEventListener('click', () => {
-        showCardDetail(card, canUseThis ? () => {
-          el.classList.add('blinking');
-          setTimeout(() => {
-            if (pvpMatch && !pvpMatch.isHost) {
-              pvpMatch.actionSender.send({ type: 'useSpell', cardId: card.id, playerId: pvpMatch.localPlayerId });
-            } else {
-              game.useSpell(card);
-            }
-          }, BLINK_MS);
-        } : null);
-      });
-    }
-
+    el.setAttribute('aria-disabled', 'true');
     centerHandEl.appendChild(el);
   }
 }
@@ -1278,12 +1270,15 @@ let diceSpinTimer = null;
 // clears once the piece actually reaches its tile.
 let showCenterState = false;
 let diceMoving = false;
+let centerShowsOpponent = false;
 
 function syncCenterVisibility() {
   centerPanel.classList.toggle('hidden', !(showCenterState || diceMoving));
+  centerPanel.classList.toggle('opponent-turn', centerShowsOpponent);
+  centerPanel.classList.toggle('local-turn', !centerShowsOpponent);
   // visibility (not display) so the hand keeps reserving its layout space -
   // hiding it must never shift the dice button's position.
-  centerHandEl.style.visibility = showCenterState ? '' : 'hidden';
+  centerHandEl.style.visibility = showCenterState && centerShowsOpponent ? '' : 'hidden';
   // The faded look means "riding along with the move", not "not your turn"
   // - CPU's dice looks perfectly normal through its own spin/hold, same as
   // the player's, and only dims once the piece is actually moving.
@@ -1434,6 +1429,7 @@ function startBattle(character, storyOptions = {}) {
     },
     onStateChange: ({
       turnText,
+      currentPlayerId,
       canRoll,
       players,
       checkpointNumbers,
@@ -1443,21 +1439,25 @@ function startBattle(character, storyOptions = {}) {
       currentPlayerIsCPU,
       spellUsedThisTurn,
     }) => {
+      const localPlayerId = pvpMatch?.localPlayerId ?? game.players.find((p) => !p.isCPU)?.id;
+      const isLocalTurn = currentPlayerId === localPlayerId;
       turnIndicator.textContent = turnText;
-      diceButton.disabled = !canRoll;
+      diceButton.disabled = !canRoll || !isLocalTurn;
       renderPlayerPanels(players, checkpointNumbers);
-      renderHand(hand);
+      renderHand(hand, isLocalTurn && showCenter && !spellUsedThisTurn);
 
       const enteringShowCenter = showCenter && !showCenterState;
       showCenterState = showCenter;
+      centerShowsOpponent = !isLocalTurn;
       if (enteringShowCenter) resetDice();
       syncCenterVisibility();
-      if (showCenter) {
+      if (showCenter && !isLocalTurn) {
         // 対人戦ホストは自分のGameインスタンスに相手(ゲスト)の本当の手札も
         // 持っているが、対戦相手なのでローカル画面にも表示してはいけない
         // （vs CPUなら手の内が見えても問題ないので今まで通り表示する）。
-        const isRemoteHumanTurn = pvpMatch?.isHost && !currentPlayerIsCPU && game.currentPlayer.id !== pvpMatch.localPlayerId;
-        renderCenterHand(isRemoteHumanTurn ? [] : centerHand, currentPlayerIsCPU, !spellUsedThisTurn);
+        renderCenterHand(centerHand);
+      } else {
+        renderCenterHand([]);
       }
     },
     onCardReveal: relayable('cardReveal', promptCardReveal),
@@ -3702,13 +3702,14 @@ function applyPvpBoardState(publicState) {
 /** ゲスト側専用: publicStateをGameのonStateChangeと同じ見た目になるようUIへ反映する。相手(ホスト)の本当の手札は届かない（別チャンネルで配られるのは自分の分だけ）ので、自分の番以外はcenterHandを伏せる。 */
 function applyPvpPublicState(publicState) {
   if (!publicState || !pvpMatch) return;
+  pvpMatch.latestPublicState = publicState;
   const isMyTurn = publicState.currentPlayerId === pvpMatch.localPlayerId;
   const showCenter = publicState.awaitingRoll && !publicState.isBusy;
 
   turnIndicator.textContent = publicState.turnText;
   diceButton.disabled = !(showCenter && isMyTurn);
   renderPlayerPanels(publicState.players, publicState.checkpointNumbers);
-  if (isMyTurn) renderHand(pvpMatch.myHand);
+  renderHand(pvpMatch.myHand, isMyTurn && showCenter && !publicState.spellUsedThisTurn);
   const me = publicState.players.find((p) => p.id === pvpMatch.localPlayerId);
   if (me) {
     pvpMatch.lastCurrency = me.currency;
@@ -3732,11 +3733,10 @@ function applyPvpPublicState(publicState) {
 
   const enteringShowCenter = showCenter && !showCenterState;
   showCenterState = showCenter;
+  centerShowsOpponent = !isMyTurn;
   if (enteringShowCenter) resetDice();
   syncCenterVisibility();
-  if (showCenter) {
-    renderCenterHand(isMyTurn ? pvpMatch.myHand : [], !isMyTurn, isMyTurn);
-  }
+  renderCenterHand(showCenter && !isMyTurn ? (publicState.turnHand || []) : []);
 
   applyPvpBoardState(publicState);
 }
@@ -3778,6 +3778,7 @@ function startPvpGuestBattle() {
   });
   pvpMatch.stopHandListener = listenToPrivateHand(pvpMatch.roomCode, pvpMatch.uid, (hand) => {
     pvpMatch.myHand = hand || [];
+    if (pvpMatch.latestPublicState) applyPvpPublicState(pvpMatch.latestPublicState);
   });
 }
 

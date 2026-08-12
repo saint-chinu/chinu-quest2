@@ -3333,6 +3333,7 @@ export class Game {
     }));
     this.onStateChange({
       turnText: `${this.currentPlayer.name}のターン`,
+      currentPlayerId: this.currentPlayer.id,
       canRoll: showCenter && !this.currentPlayer.isCPU,
       checkpointNumbers: this.checkpointNumbers,
       players: playersPayload,
@@ -3358,6 +3359,8 @@ export class Game {
       turnText: `${this.currentPlayer.name}のターン`,
       awaitingRoll: this.awaitingRoll,
       isBusy: this.isBusy,
+      spellUsedThisTurn: this.currentPlayer.spellUsedThisTurn,
+      turnHand: this.awaitingRoll && !this.isBusy ? this.currentPlayer.hand : [],
       checkpointNumbers: this.checkpointNumbers,
       players: playersPayload,
       tiles: this.tiles
