@@ -187,7 +187,7 @@ export const SPELL_CATALOG = {
   // 元データは名前「6のダイス」なのに効果文が「次のサイコロを1にする」と
   // なっていた（1のダイスとの重複ミスと判断）。名前に合わせて6として実装。
   diceSix: spell('diceSix', '6のダイス', Rarity.N, 30, 'enemyPlayer', { type: 'setNextDice', value: 6 }, '相手の次のサイコロを6にする'),
-  iCanFly: spell('iCanFly', 'アイキャンフライ', Rarity.N, 30, 'enemyPlayer', { type: 'doubleNextDice' }, '相手の次のサイコロの出目×2進む'),
+  iCanFly: spell('iCanFly', 'アイキャンフライ', Rarity.N, 30, 'self', { type: 'doubleNextDice' }, '自分の次のサイコロの出目×2進む'),
   blueOcean: spell(
     'blueOcean',
     'ブルーオーシャン',

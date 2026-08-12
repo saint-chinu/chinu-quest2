@@ -98,6 +98,9 @@ const cardTypePickerChoices = document.getElementById('card-type-picker-choices'
 const cardTypePickerCancel = document.getElementById('card-type-picker-cancel');
 const confirmModal = document.getElementById('confirm-modal');
 const confirmText = document.getElementById('confirm-text');
+const confirmCardPreview = document.getElementById('confirm-card-preview');
+const confirmCardFace = document.getElementById('confirm-card-face');
+const confirmCardDetail = document.getElementById('confirm-card-detail');
 const confirmYes = document.getElementById('confirm-yes');
 const confirmNo = document.getElementById('confirm-no');
 const cameraWorkOverlay = document.getElementById('camera-work-overlay');
@@ -468,10 +471,20 @@ function promptConfirmAction({ actionType, card, cost, tile, targetElement, abil
       text = `${subject}${ACTION_LABEL[actionType]}${extra}しますか？ コスト${cost}G`;
     }
     confirmText.textContent = text;
+    const showCardPreview = actionType === 'summon' && card;
+    confirmCardPreview.classList.toggle('hidden', !showCardPreview);
+    if (showCardPreview) {
+      renderCardEl(confirmCardFace, card);
+      confirmCardDetail.textContent = describeCardDetail(card);
+    } else {
+      confirmCardFace.replaceChildren();
+      confirmCardDetail.textContent = '';
+    }
     confirmModal.classList.remove('hidden');
 
     function cleanup(result) {
       confirmModal.classList.add('hidden');
+      confirmCardPreview.classList.add('hidden');
       confirmYes.removeEventListener('click', onYes);
       confirmNo.removeEventListener('click', onNo);
       resolve(result);

@@ -248,7 +248,7 @@ function createTokenTexture(color) {
 // もこれに合わせて再計算済み）。
 export const UNIT_ICON_HEIGHT = 2.16;
 const UNIT_CARD_CANVAS_WIDTH = 110;
-const TOLL_BADGE_HEIGHT = 34;
+const TOLL_BADGE_HEIGHT = 44;
 const HP_GAUGE_HEIGHT = 22;
 const CARD_BODY_HEIGHT = 120;
 const UNIT_CARD_CANVAS_HEIGHT = TOLL_BADGE_HEIGHT + CARD_BODY_HEIGHT + HP_GAUGE_HEIGHT;
@@ -325,14 +325,14 @@ function drawUnitCard(state) {
   ctx.fillText(displayName, w / 2, nameStripY + nameStripH / 2 + 1);
 
   if (state.toll > 0) {
-    roundRectPath(ctx, w / 2 - 38, 1, 76, TOLL_BADGE_HEIGHT - 3, 9);
+    roundRectPath(ctx, w / 2 - 52, 1, 104, TOLL_BADGE_HEIGHT - 3, 11);
     ctx.fillStyle = '#1a1a2e';
     ctx.fill();
     ctx.lineWidth = 2;
     ctx.strokeStyle = '#ffd166';
     ctx.stroke();
     ctx.fillStyle = '#ffd166';
-    ctx.font = `bold ${Math.round((TOLL_BADGE_HEIGHT - 3) * 0.72)}px sans-serif`;
+    ctx.font = `bold ${Math.round((TOLL_BADGE_HEIGHT - 3) * 0.76)}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(`${state.toll}G`, w / 2, (TOLL_BADGE_HEIGHT - 3) / 2 + 1);

@@ -481,7 +481,9 @@ export class Game {
   async _applySpellEffect(player, card, cast) {
     const effect = card.effect;
     const targetTile = cast.targetTileId != null ? this.tiles.find((t) => t.id === cast.targetTileId) : null;
-    const targetPlayer = cast.targetPlayerId != null ? this.players.find((p) => p.id === cast.targetPlayerId) : null;
+    const targetPlayer = cast.targetPlayerId != null
+      ? this.players.find((p) => p.id === cast.targetPlayerId)
+      : (card.target === 'self' ? player : null);
 
     switch (effect.type) {
       case 'setNextDice':
@@ -3049,11 +3051,8 @@ export class Game {
     if (player.spellUsedThisTurn) return;
     const fly = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'doubleNextDice');
     if (fly && player.currency >= (fly.cost || 0)) {
-      const target = this._cpuPickDiceSpellTarget(player);
-      if (target) {
-        await this._cpuCastSpell(player, fly, { targetPlayerId: target.id });
-        return;
-      }
+      await this._cpuCastSpell(player, fly, { targetPlayerId: player.id });
+      return;
     }
     const income = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'lapCountGold');
     if (income && player.currency >= (income.cost || 0)) await this._cpuCastSpell(player, income, {});
@@ -3255,7 +3254,7 @@ export class Game {
   async _cpuMaybeUseDiceSpell(player) {
     if (player.spellUsedThisTurn) return;
     const diceCards = player.hand.filter(
-      (c) => c.type === CardType.SPELL && (c.effect?.type === 'setNextDice' || c.effect?.type === 'doubleNextDice'),
+      (c) => c.type === CardType.SPELL && c.effect?.type === 'setNextDice',
     );
     if (diceCards.length === 0) return;
     const affordable = diceCards.filter((c) => player.currency >= (c.cost || 0));

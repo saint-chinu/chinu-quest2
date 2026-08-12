@@ -1942,6 +1942,30 @@ html, body {
   z-index: 45;
 }
 
+#confirm-card-preview {
+  display: grid;
+  grid-template-columns: auto minmax(180px, 320px);
+  align-items: center;
+  gap: 18px;
+  margin: 0 auto 18px;
+  text-align: left;
+}
+
+#confirm-card-preview.hidden {
+  display: none;
+}
+
+#confirm-card-face {
+  width: 130px;
+  min-width: 130px;
+}
+
+#confirm-card-detail {
+  margin: 0;
+  line-height: 1.6;
+  white-space: pre-line;
+}
+
 #land-command-modal.hidden,
 #land-submenu-modal.hidden,
 #monster-picker-modal.hidden,
@@ -2516,8 +2540,12 @@ html, body {
   transition: transform 200ms ease, filter 200ms ease;
 }
 
-.battle-attacking .card-large {
-  transform: scale(1.08) translateY(-6px);
+#battle-side-attacker.battle-attacking .card-large {
+  transform: translateX(48px) scale(1.1) translateY(-6px);
+}
+
+#battle-side-defender.battle-attacking .card-large {
+  transform: translateX(-48px) scale(1.1) translateY(-6px);
 }
 
 .battle-hit .card-large {
