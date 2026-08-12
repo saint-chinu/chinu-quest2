@@ -941,6 +941,46 @@ function promptSpellUse(card) {
   });
 }
 
+/** ゲスト側のプレイヤー駒スプライトを探す（pvpPieces、ホスト/ローカルではgame.players[].meshを使うのでここは通らない）。 */
+function findPvpGuestPieceSprite(playerId) {
+  return pvpPieces.get(playerId) ?? null;
+}
+
+/**
+ * スペル使用時の演出: 「『カード名』発動！」ポップアップ（promptSpellUse）
+ * の直後に呼ばれる。①キャスターへカメラをパン+ズームしオーラを出す
+ * ②対象（プレイヤーまたはモンスター）があればそこへパン+ズームして
+ * 震わせる ③元の見た目（フォーカス位置・ズーム倍率）へ戻す、の3段階。
+ * 対象の実体（プレイヤー駒/モンスターアイコンのスプライト）が見つからない
+ * 場合（PvPゲスト側はモンスターアイコンを描画していない等）は震わせず
+ * 少し間を置くだけに留める。座標はgame.js側（`_buildSpellCastEffectPayload`）
+ * が`{x,z}`まで解決済みなので、ホスト・ゲストどちらでも同じ処理で描画できる。
+ */
+async function promptSpellCastEffect({ casterPosition, targetPlayerId, targetTileId, targetPosition }) {
+  if (!scene || !casterPosition) return;
+  const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+  const isPvpGuest = pvpMatch && !pvpMatch.isHost;
+
+  await scene.focusAndZoom(casterPosition.x, casterPosition.z);
+  await scene.playSpellAura(casterPosition);
+
+  if (targetPosition) {
+    await scene.focusAndZoom(targetPosition.x, targetPosition.z);
+    const targetSprite = targetPlayerId != null
+      ? (isPvpGuest ? findPvpGuestPieceSprite(targetPlayerId) : game?.players?.find((p) => p.id === targetPlayerId)?.mesh)
+      : targetTileId != null
+      ? tiles?.find((t) => t.id === targetTileId)?.unitMesh
+      : null;
+    if (targetSprite) {
+      await scene.shakeSprite(targetSprite);
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    }
+  }
+
+  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1);
+}
+
 const MATCHUP_LABEL = {
   advantage: '有利！攻撃1.2倍',
   disadvantage: '不利…被ダメージ1.2倍',
@@ -948,7 +988,9 @@ const MATCHUP_LABEL = {
 
 const BATTLE_FADE_MS = 450;
 const BATTLE_STAGE_REVEAL_MS = 450;
-const BATTLE_MESSAGE_HOLD_MS = 1500;
+// 2026-08-13: 「文字が進むのが早すぎて読めない」との指摘で1500→2600に延長
+// （攻撃メッセージ・決着メッセージ両方がこの1定数を共用している）。
+const BATTLE_MESSAGE_HOLD_MS = 2600;
 const BATTLE_RETREAT_MS = 600;
 const BATTLE_FADE_OUT_MS = 450;
 
@@ -1411,6 +1453,7 @@ function startBattle(character, storyOptions = {}) {
     onCardReveal: relayable('cardReveal', promptCardReveal),
     onDiscardChoice: relayable('discardChoice', promptDiscardChoice),
     onSpellUse: relayable('spellUse', promptSpellUse, { broadcast: true }),
+    onSpellCastEffect: relayable('spellCastEffect', promptSpellCastEffect, { broadcast: true }),
     onCpuRoll: cpuRollDice,
     onMoveComplete,
     onLandCommand: relayable('landCommand', promptLandCommand),
@@ -3544,6 +3587,7 @@ const pvpGuestHandlers = {
   cardReveal: promptCardReveal,
   discardChoice: promptDiscardChoice,
   spellUse: promptSpellUse,
+  spellCastEffect: promptSpellCastEffect,
   // landCommand/shopPurchaseはgame.js側でpayloadとplayer.idの間に追加引数を
   // 挟む型なので、relayable()が[複数引数]の配列としてまとめて送ってくる -
   // ここで展開してローカルのprompt関数へ渡す（他の型は単一値のまま素通し）。

@@ -78,6 +78,7 @@ export class Game {
     onCardReveal,
     onDiscardChoice,
     onSpellUse,
+    onSpellCastEffect,
     onCpuRoll,
     onMoveComplete,
     onLandCommand,
@@ -121,6 +122,7 @@ export class Game {
     this.onCardReveal = onCardReveal;
     this.onDiscardChoice = onDiscardChoice;
     this.onSpellUse = onSpellUse;
+    this.onSpellCastEffect = onSpellCastEffect;
     this.onCpuRoll = onCpuRoll;
     this.onMoveComplete = onMoveComplete;
     this.onLandCommand = onLandCommand;
@@ -356,6 +358,7 @@ export class Game {
     this._notifyState();
 
     await this.onSpellUse(card);
+    await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast));
     const endedTurn = await this._applySpellEffect(player, card, cast);
     this._notifyState();
 
@@ -3234,6 +3237,31 @@ export class Game {
   }
 
   /**
+   * onSpellCastEffect用のペイロードを組み立てる。PvPゲスト側main.jsは
+   * ローカルにGameインスタンスを持たない（publicState経由の薄い描画のみ）
+   * ため、キャスター/対象の座標はここでサーバー権威側（Game）が
+   * `{x, z}`まで解決してから渡す - ホスト・ゲストどちらの描画コードも
+   * 生のtile/player参照を辿り直す必要がないようにする。
+   */
+  _buildSpellCastEffectPayload(player, cast) {
+    const casterPosition = this.tiles[player.tileId]?.position ?? null;
+    let targetPosition = null;
+    if (cast.targetPlayerId != null) {
+      const targetPlayer = this.players.find((p) => p.id === cast.targetPlayerId);
+      targetPosition = targetPlayer ? this.tiles[targetPlayer.tileId]?.position ?? null : null;
+    } else if (cast.targetTileId != null) {
+      targetPosition = this.tiles[cast.targetTileId]?.position ?? null;
+    }
+    return {
+      casterId: player.id,
+      casterPosition: casterPosition ? { x: casterPosition.x, z: casterPosition.z } : null,
+      targetPlayerId: cast.targetPlayerId ?? null,
+      targetTileId: cast.targetTileId ?? null,
+      targetPosition: targetPosition ? { x: targetPosition.x, z: targetPosition.z } : null,
+    };
+  }
+
+  /**
    * useSpellの人間向けフローと同じ後始末（手札除去・discard・G消費・
    * spellUsedThisTurn確定・ログ・演出・効果適用）をCPU向けに行う汎用
    * ヘルパー。対象選択のUIプロンプト（_resolveSpellCastのonPickAbility
@@ -3249,6 +3277,7 @@ export class Game {
     this.onLog(`${player.name}は「${card.name}」を使用した (-${card.cost || 0}G)`);
     this._notifyState();
     await this.onSpellUse(card);
+    await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast));
     await this._applySpellEffect(player, card, cast);
     this._notifyState();
   }

@@ -51,8 +51,16 @@ function loadBoardMarkerTexture(url) {
 // the board still read too distant/small - uniform scale again, so the
 // look-down angle established above is untouched.
 const CAMERA_OFFSET = new THREE.Vector3(14.5, 32, 14.5).multiplyScalar(0.72);
+// Reused scratch vector for _applyCamera's per-frame zoomScale multiply, to
+// avoid allocating a new Vector3 every call (this runs during every pan/tween tick).
+const cameraOffsetScratch = new THREE.Vector3();
 const CAMERA_FOV = 45;
 const PAN_DURATION_MS = 900;
+// スペル使用時のカメラ演出（focusAndZoom/playSpellAura/shakeSprite）用。
+const SPELL_FOCUS_DURATION_MS = 500;
+const SPELL_FOCUS_ZOOM = 1.45;
+const SPELL_AURA_DURATION_MS = 900;
+const SPELL_SHAKE_DURATION_MS = 550;
 
 // Manual free-look camera (land-info mode): one arrow press moves this far,
 // smoothly, in that screen direction.
@@ -64,7 +72,10 @@ const FREE_PAN_DURATION_MS = 350;
 // the edges of the screen.
 const DEADZONE_MARGIN = 0.65;
 
-export const PIECE_REST_Y = 0.7;
+// 2026-08-13: プレイヤー駒をもう少し大きく、との指摘でスケール1.6→1.92
+// (createPiece/createPieceFromImage参照)に合わせ、タイル面への沈み込み量
+// (0.1、建物マーカーもこれに揃えている)を保ったままY位置を再計算。
+export const PIECE_REST_Y = 0.86;
 
 // 配置モンスターの盤上アイコン用。プレイヤー駒より低く小さくして、通行中の
 // プレイヤー駒と土地に常駐するモンスターアイコンを見分けられるようにする。
@@ -176,6 +187,38 @@ function getFireballTexture() {
 
 const FIREBALL_FALL_MS = 500;
 const FIREBALL_IMPACT_MS = 220;
+
+// スペル詠唱時、キャスターの足元に出す魔法陣風のオーラ演出用テクスチャ。
+// 紫系の放射状グラデーション＋外周のリングで「発動している感」を出す
+// （属性を問わない汎用魔法エフェクトなので特定色に寄せない）。
+let spellAuraTextureCache = null;
+function getSpellAuraTexture() {
+  if (spellAuraTextureCache) return spellAuraTextureCache;
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const cx = size / 2;
+  const cy = size / 2;
+  const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, size / 2);
+  gradient.addColorStop(0, 'rgba(255,255,255,0.95)');
+  gradient.addColorStop(0.25, 'rgba(216,180,255,0.85)');
+  gradient.addColorStop(0.55, 'rgba(140,110,255,0.55)');
+  gradient.addColorStop(0.8, 'rgba(90,60,220,0.25)');
+  gradient.addColorStop(1, 'rgba(90,60,220,0)');
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)';
+  ctx.lineWidth = 3;
+  ctx.beginPath();
+  ctx.arc(cx, cy, size / 2 - 10, 0, Math.PI * 2);
+  ctx.stroke();
+  spellAuraTextureCache = new THREE.CanvasTexture(canvas);
+  return spellAuraTextureCache;
+}
 const FIREBALL_START_Y = 8;
 const FIREBALL_SIZE = 1.3;
 
@@ -373,6 +416,10 @@ export class GameScene {
     this._setupLights();
 
     this.focus = new THREE.Vector3(0, 0, 0);
+    // Temporary camera-distance multiplier for spell-cast focus effects
+    // (focusAndZoom/restoreFocus) - 1 = normal CAMERA_OFFSET distance,
+    // <1 = zoomed in. Left at 1 outside of those effects.
+    this.zoomScale = 1;
     // Safe area around the current focus, in screen-local (right, forward)
     // units - see toScreenLocal - derived from the actual camera frustum
     // by resize(). The near (bottom of screen) and far (top of screen)
@@ -507,7 +554,7 @@ export class GameScene {
    */
   createPiece(color, tilePosition) {
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: createTokenTexture(color) }));
-    sprite.scale.set(1.6, 1.6, 1);
+    sprite.scale.set(1.92, 1.92, 1);
     sprite.position.set(tilePosition.x, PIECE_REST_Y, tilePosition.z);
     this.scene.add(sprite);
     return sprite;
@@ -519,7 +566,7 @@ export class GameScene {
     texture.colorSpace = THREE.SRGBColorSpace;
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
     sprite.renderOrder = 21;
-    sprite.scale.set(1.6, 1.6, 1);
+    sprite.scale.set(1.92, 1.92, 1);
     sprite.position.set(tilePosition.x, PIECE_REST_Y, tilePosition.z);
     this.scene.add(sprite);
     return sprite;
@@ -637,6 +684,54 @@ export class GameScene {
     sprite.material.dispose();
   }
 
+  /**
+   * スペル使用演出用: 対象座標の足元に魔法陣風のオーラを出す。0から
+   * パッと現れて広がりながら薄れていく1回限りのパルス（ループしない）。
+   * `rotation`（SpriteMaterialが対応する唯一の回転軸=視線方向の回転）を
+   * 併用してくるくる感を出す。
+   */
+  async playSpellAura(position, duration = SPELL_AURA_DURATION_MS) {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: getSpellAuraTexture(), transparent: true, depthTest: false }));
+    sprite.renderOrder = 24;
+    sprite.position.set(position.x, PIECE_REST_Y - 0.5, position.z);
+    this.scene.add(sprite);
+
+    await tween(duration, (t) => {
+      // 0→1で一気に出て、後半じわっと消える(t^0.4で立ち上がりを急に)。
+      const growth = Math.pow(Math.min(t / 0.35, 1), 0.4);
+      const scale = 1.6 * growth + t * 1.2;
+      sprite.scale.set(scale, scale, 1);
+      sprite.material.opacity = t < 0.35 ? 1 : Math.max(0, 1 - (t - 0.35) / 0.65);
+      sprite.material.rotation = t * Math.PI * 1.5;
+    });
+
+    this.scene.remove(sprite);
+    sprite.material.dispose();
+  }
+
+  /**
+   * スペルの対象（プレイヤー駒/モンスターアイコンのbillboardスプライト）を
+   * 一時的にぶるぶる震わせる演出。元の座標を記録しておき、終了時に必ず
+   * ぴったり元の位置へ戻す（ズレたままにならないよう`finally`で保証）。
+   */
+  async shakeSprite(sprite, duration = SPELL_SHAKE_DURATION_MS) {
+    if (!sprite) return;
+    const baseX = sprite.position.x;
+    const baseZ = sprite.position.z;
+    try {
+      await tween(duration, (t) => {
+        // 減衰する高周波の震え（終盤ほど振幅が小さくなる）。
+        const decay = 1 - t;
+        const magnitude = 0.16 * decay;
+        sprite.position.x = baseX + Math.sin(t * 60) * magnitude;
+        sprite.position.z = baseZ + Math.cos(t * 47) * magnitude;
+      });
+    } finally {
+      sprite.position.x = baseX;
+      sprite.position.z = baseZ;
+    }
+  }
+
   /** 3Dワールド座標を画面のピクセル座標に変換する（ダメージ数値等、キャンバスの上にDOM要素を重ねて表示するためのヘルパー）。 */
   worldToScreen(x, y, z) {
     const vec = new THREE.Vector3(x, y, z).project(this.camera);
@@ -674,6 +769,25 @@ export class GameScene {
     });
   }
 
+  /**
+   * スペル使用演出用: 対象座標へパンしつつ同時にズーム倍率(距離を1/scale
+   * に縮める)を変化させる。panToより短い既定時間（SPELL_FOCUS_DURATION_MS）
+   * で、キャスター→対象と素早く切り替える用途を想定。scaleは1で通常距離、
+   * 大きいほどズームイン。
+   */
+  focusAndZoom(x, z, scale = SPELL_FOCUS_ZOOM, duration = SPELL_FOCUS_DURATION_MS) {
+    const fromFocus = this.focus.clone();
+    const toFocus = new THREE.Vector3(x, 0, z);
+    const fromZoom = this.zoomScale;
+    const toZoom = 1 / scale;
+    return tween(duration, (t) => {
+      const eased = easeInOutQuad(t);
+      this.focus.lerpVectors(fromFocus, toFocus, eased);
+      this.zoomScale = fromZoom + (toZoom - fromZoom) * eased;
+      this._applyCamera();
+    });
+  }
+
   /** Manual free-look pan for the land-info camera mode: one screen-relative step per call, clamped so the focus can't wander indefinitely far from the board. */
   panByDirection(direction) {
     const axis = { up: FORWARD, down: FORWARD, left: RIGHT, right: RIGHT }[direction];
@@ -701,7 +815,7 @@ export class GameScene {
   }
 
   _applyCamera() {
-    this.camera.position.copy(this.focus).add(CAMERA_OFFSET);
+    this.camera.position.copy(this.focus).add(cameraOffsetScratch.copy(CAMERA_OFFSET).multiplyScalar(this.zoomScale));
     this.camera.lookAt(this.focus);
   }
 
