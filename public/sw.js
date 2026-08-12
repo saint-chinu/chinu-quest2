@@ -1,5 +1,5 @@
-const CACHE_NAME = 'chinuquest2-v3';
-const APP_SHELL = ['./', './manifest.webmanifest', './icons/chinuquest-icon-192.png', './icons/chinuquest-icon-512.png'];
+const CACHE_NAME = 'chinuquest2-v4';
+const APP_SHELL = ['./', './manifest.webmanifest', './icons/danballman-icon-192.png', './icons/danballman-icon-512.png'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL)));
