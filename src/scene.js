@@ -801,6 +801,39 @@ export class GameScene {
     });
   }
 
+  /** 召喚マスの地面から放射状の光線を立ち上げ、1秒かけて回転・消失させる。 */
+  playSummonBurst(position) {
+    const group = new THREE.Group();
+    group.position.set(position.x, 0.24, position.z);
+    group.renderOrder = 18;
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xfff3a6,
+      transparent: true,
+      opacity: 0.9,
+      side: THREE.DoubleSide,
+      depthTest: false,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    for (let i = 0; i < 12; i += 1) {
+      const ray = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 2.7), material);
+      ray.position.y = 1.25;
+      ray.rotation.y = (Math.PI * 2 * i) / 12;
+      ray.rotation.x = -0.22;
+      group.add(ray);
+    }
+    this.scene.add(group);
+    return tween(1000, (t) => {
+      group.rotation.y = t * Math.PI * 1.5;
+      group.scale.setScalar(0.7 + Math.sin(Math.PI * t) * 0.45);
+      material.opacity = 0.9 * (1 - t);
+    }).finally(() => {
+      this.scene.remove(group);
+      group.traverse((object) => object.geometry?.dispose?.());
+      material.dispose();
+    });
+  }
+
   /** Manual free-look pan for the land-info camera mode: one screen-relative step per call, clamped so the focus can't wander indefinitely far from the board. */
   panByDirection(direction) {
     const axis = { up: FORWARD, down: FORWARD, left: RIGHT, right: RIGHT }[direction];

@@ -974,7 +974,22 @@ function findPvpGuestPieceSprite(playerId) {
  * 少し間を置くだけに留める。座標はgame.js側（`_buildSpellCastEffectPayload`）
  * が`{x,z}`まで解決済みなので、ホスト・ゲストどちらでも同じ処理で描画できる。
  */
-async function promptSpellCastEffect({ casterPosition, targetPlayerId, targetTileId, targetPosition }) {
+async function showTargetEffectMessage(position, message) {
+  if (!position || !message) return;
+  const screen = scene.worldToScreen(position.x, PIECE_REST_Y + 1.8, position.z);
+  const el = document.createElement('div');
+  el.className = 'fx-target-effect-message';
+  el.textContent = message;
+  el.style.left = `${screen.x}px`;
+  el.style.top = `${screen.y}px`;
+  fxLayer.appendChild(el);
+  await new Promise((resolve) => setTimeout(resolve, 1800));
+  el.classList.add('fade-out');
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  el.remove();
+}
+
+async function promptSpellCastEffect({ casterPosition, targetPlayerId, targetTileId, targetPosition, effectMessage }) {
   if (!scene || !casterPosition) return;
   const savedFocus = { x: scene.focus.x, z: scene.focus.z };
   const isPvpGuest = pvpMatch && !pvpMatch.isHost;
@@ -984,6 +999,7 @@ async function promptSpellCastEffect({ casterPosition, targetPlayerId, targetTil
 
   if (targetPosition) {
     await scene.focusAndZoom(targetPosition.x, targetPosition.z);
+    await showTargetEffectMessage(targetPosition, effectMessage);
     const targetSprite = targetPlayerId != null
       ? (isPvpGuest ? findPvpGuestPieceSprite(targetPlayerId) : game?.players?.find((p) => p.id === targetPlayerId)?.mesh)
       : targetTileId != null
@@ -997,6 +1013,29 @@ async function promptSpellCastEffect({ casterPosition, targetPlayerId, targetTil
   }
 
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1);
+}
+
+async function promptSummonEffect({ tileId, unitName }) {
+  const tile = tiles.find((entry) => entry.id === tileId);
+  if (!tile || !scene) return;
+  const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+  await scene.focusAndZoom(tile.position.x, tile.position.z, 1.28, 320);
+  await Promise.all([
+    scene.playSummonBurst(tile.position),
+    showTargetEffectMessage(tile.position, `${unitName} 召喚！`),
+  ]);
+  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
+}
+
+async function promptTargetEffect({ tileId = null, playerId = null, position = null, message }) {
+  const player = playerId != null ? game?.players?.find((entry) => entry.id === playerId) : null;
+  const tile = tileId != null ? tiles.find((entry) => entry.id === tileId) : player ? tiles[player.tileId] : null;
+  const targetPosition = position || tile?.position;
+  if (!targetPosition || !scene) return;
+  const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+  await scene.focusAndZoom(targetPosition.x, targetPosition.z, 1.35, 320);
+  await showTargetEffectMessage(targetPosition, message);
+  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
 }
 
 function finishSpellPresentation() {
@@ -1157,8 +1196,12 @@ function promptDamageEffect({ tileId, damage }) {
 }
 
 async function playDamageEffect(tile, damage) {
+  const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+  await scene.focusAndZoom(tile.position.x, tile.position.z, 1.35, 320);
+  await showTargetEffectMessage(tile.position, `${damage}ダメージ！`);
   await scene.playFireballImpact(tile.position);
   await showDamageNumber(tile, damage);
+  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
 }
 
 /** ダメージ数値のポップアップ（DOM）。3D座標をscene.worldToScreenで画面座標に変換し、CSSのfx-damage-popアニメーション（跳ねる→約1秒静止→フェードアウト）が終わったらresolveする。 */
@@ -1532,6 +1575,8 @@ function startBattle(character, storyOptions = {}) {
     onSpellUse: relayable('spellUse', promptSpellUse, { broadcast: true }),
     onSpellCastEffect: relayable('spellCastEffect', promptSpellCastEffect, { broadcast: true }),
     onSpellComplete: relayable('spellComplete', finishSpellPresentation, { broadcast: true }),
+    onSummonEffect: relayable('summonEffect', promptSummonEffect, { broadcast: true }),
+    onTargetEffect: relayable('targetEffect', promptTargetEffect, { broadcast: true }),
     onCpuRoll: cpuRollDice,
     onMoveComplete,
     onLandCommand: relayable('landCommand', promptLandCommand),

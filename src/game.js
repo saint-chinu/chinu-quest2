@@ -80,6 +80,8 @@ export class Game {
     onSpellUse,
     onSpellCastEffect,
     onSpellComplete,
+    onSummonEffect,
+    onTargetEffect,
     onCpuRoll,
     onMoveComplete,
     onLandCommand,
@@ -125,6 +127,8 @@ export class Game {
     this.onSpellUse = onSpellUse;
     this.onSpellCastEffect = onSpellCastEffect;
     this.onSpellComplete = onSpellComplete || (() => {});
+    this.onSummonEffect = onSummonEffect;
+    this.onTargetEffect = onTargetEffect;
     this.onCpuRoll = onCpuRoll;
     this.onMoveComplete = onMoveComplete;
     this.onLandCommand = onLandCommand;
@@ -360,7 +364,7 @@ export class Game {
     this._notifyState();
 
     await this.onSpellUse(card);
-    await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast));
+    await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast, card));
     const endedTurn = await this._applySpellEffect(player, card, cast);
     await this.onSpellComplete();
     this._notifyState();
@@ -1767,6 +1771,8 @@ export class Game {
       }
       this._placeUnit(tile, player, card);
       this.onLog(`${player.name}は${card.name}を${actionType === 'summon' ? '召喚' : '入れ替え'}した (-${card.cost}G)`);
+      this._notifyState();
+      await this.onSummonEffect?.({ tileId: tile.id, unitName: card.name });
       if (card.effect?.type === 'copyOnSummon') {
         await this._maybeCopyOnSummon(tile, player);
       }
@@ -2066,6 +2072,7 @@ export class Game {
       this._repaintTileToElement(tile);
       this.onLog(`${player.name}の${unitDef.name}が${targetTile.id}番地へワープした`);
       this._notifyState();
+      await this.onTargetEffect?.({ tileId: targetTile.id, position: targetTile.position, message: `${unitDef.name}がワープした！` });
       return true;
     }
 
@@ -2125,6 +2132,7 @@ export class Game {
       this._placeUnit(targetTile, player, summonedDef);
       this.onLog(`${player.name}の${unitDef.name}が${targetTile.id}番地に${summonedDef.name}を召喚した`);
       this._notifyState();
+      await this.onSummonEffect?.({ tileId: targetTile.id, unitName: summonedDef.name });
       return true;
     }
 
@@ -2147,6 +2155,7 @@ export class Game {
       targetTile.element = newElement;
       this.onLog(`${player.name}の${unitDef.name}が${targetTile.id}番地の属性を${ELEMENT_LABEL[newElement]}に変更した`);
       this._notifyState();
+      await this.onTargetEffect?.({ tileId: targetTile.id, position: targetTile.position, message: `${ELEMENT_LABEL[newElement]}属性に変化！` });
       return true;
     }
 
@@ -2224,6 +2233,11 @@ export class Game {
       targetPlayer.hasteTurnsRemaining = (targetPlayer.hasteTurnsRemaining || 0) + ability.turns;
       this.onLog(`${player.name}の${unitDef.name}が${targetPlayer.name}に高速化の呪いをかけた`);
       this._notifyState();
+      await this.onTargetEffect?.({
+        playerId: targetPlayer.id,
+        position: this.tiles[targetPlayer.tileId]?.position ?? null,
+        message: `高速化の呪い：${ability.turns}ターン`,
+      });
       return true;
     }
 
@@ -2270,6 +2284,7 @@ export class Game {
       this._placeUnit(tile, player, card);
       this.onLog(`${player.name}は${card.name}を召喚した (-${card.cost}G)`);
       this._notifyState();
+      await this.onSummonEffect?.({ tileId: tile.id, unitName: card.name });
       return;
     }
 
@@ -3275,7 +3290,7 @@ export class Game {
    * `{x, z}`まで解決してから渡す - ホスト・ゲストどちらの描画コードも
    * 生のtile/player参照を辿り直す必要がないようにする。
    */
-  _buildSpellCastEffectPayload(player, cast) {
+  _buildSpellCastEffectPayload(player, cast, card = null) {
     const casterPosition = this.tiles[player.tileId]?.position ?? null;
     let targetPosition = null;
     if (cast.targetPlayerId != null) {
@@ -3290,6 +3305,9 @@ export class Game {
       targetPlayerId: cast.targetPlayerId ?? null,
       targetTileId: cast.targetTileId ?? null,
       targetPosition: targetPosition ? { x: targetPosition.x, z: targetPosition.z } : null,
+      effectMessage: card
+        ? `${card.name}：${card.effectDescription || '効果が発動した'}`
+        : '効果が発動した',
     };
   }
 
@@ -3309,7 +3327,7 @@ export class Game {
     this.onLog(`${player.name}は「${card.name}」を使用した (-${card.cost || 0}G)`);
     this._notifyState();
     await this.onSpellUse(card);
-    await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast));
+    await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast, card));
     await this._applySpellEffect(player, card, cast);
     await this.onSpellComplete();
     this._notifyState();
