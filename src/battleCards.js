@@ -594,6 +594,78 @@ export const CHARACTER_DECKS = {
       ],
     },
   },
+  usagin: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.takenokoha, count: 2 }, { def: MONSTER_CATALOG.kinokoha, count: 2 },
+        { def: MONSTER_CATALOG.saboriTender, count: 2 }, { def: MONSTER_CATALOG.sanzokuFukurou, count: 1 },
+        { def: MONSTER_CATALOG.nashiNashiTankentai, count: 2 }, { def: MONSTER_CATALOG.matagiNoKoshirou, count: 2 },
+        { def: MONSTER_CATALOG.yamamba, count: 2 }, { def: MONSTER_CATALOG.jinmenchou, count: 1 },
+        { def: MONSTER_CATALOG.jukaiNoOnryou, count: 2 }, { def: MONSTER_CATALOG.mountGorilla, count: 1 },
+        { def: MONSTER_CATALOG.yamagami, count: 1 }, { def: MONSTER_CATALOG.rainbowChameleon, count: 3 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.kombo, count: 1 }, { def: ITEM_CATALOG.denryuMuchi, count: 1 },
+        { def: ITEM_CATALOG.potLid, count: 1 }, { def: ITEM_CATALOG.stegoro, count: 2 },
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 1 }, { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
+        { def: ITEM_CATALOG.zangokuKen, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.diceOne, count: 1 }, { def: SPELL_CATALOG.diceThree, count: 1 },
+        { def: SPELL_CATALOG.taxHike, count: 1 }, { def: SPELL_CATALOG.poisonMist, count: 1 },
+        { def: SPELL_CATALOG.splitEvenly, count: 1 }, { def: SPELL_CATALOG.specialAudit, count: 1 },
+        { def: SPELL_CATALOG.grazing, count: 4 }, { def: SPELL_CATALOG.twitterLand, count: 1 },
+      ],
+    },
+  },
+  shoujoA: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.hatsudenNezumi, count: 2 }, { def: MONSTER_CATALOG.tetsuo, count: 2 },
+        { def: MONSTER_CATALOG.ironWool, count: 2 }, { def: MONSTER_CATALOG.mechanicMaso, count: 1 },
+        { def: MONSTER_CATALOG.raiheishinZamurai, count: 3 }, { def: MONSTER_CATALOG.raiun, count: 2 },
+        { def: MONSTER_CATALOG.erekiKagayaki, count: 2 }, { def: MONSTER_CATALOG.gandamu, count: 2 },
+        { def: MONSTER_CATALOG.raijin, count: 2 }, { def: MONSTER_CATALOG.rainbowChameleon, count: 3 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.boudanChokki, count: 1 }, { def: ITEM_CATALOG.tetsuNoYoroi, count: 1 },
+        { def: ITEM_CATALOG.danboorNoYoroi, count: 1 }, { def: ITEM_CATALOG.nankaNoOmamori, count: 2 },
+        { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 }, { def: ITEM_CATALOG.fushichoNoKen, count: 2 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.heal, count: 2 }, { def: SPELL_CATALOG.curseCleanse, count: 2 },
+        { def: SPELL_CATALOG.taxEvasion, count: 1 }, { def: SPELL_CATALOG.splitEvenly, count: 1 },
+        { def: SPELL_CATALOG.poisonMist, count: 1 }, { def: SPELL_CATALOG.specialAudit, count: 1 },
+        { def: SPELL_CATALOG.electrify, count: 3 },
+      ],
+    },
+  },
+  hofuku: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.minatoJoshi, count: 2 }, { def: MONSTER_CATALOG.hangyojin, count: 2 },
+        { def: MONSTER_CATALOG.penpen, count: 2 }, { def: MONSTER_CATALOG.shinkaigyoX, count: 1 },
+        { def: MONSTER_CATALOG.kaizokuS, count: 1 }, { def: MONSTER_CATALOG.aoriika, count: 2 },
+        { def: MONSTER_CATALOG.tsurara, count: 1 }, { def: MONSTER_CATALOG.azarashisan, count: 2 },
+        { def: MONSTER_CATALOG.mizuburoShugyoso, count: 1 }, { def: MONSTER_CATALOG.bigMermaid, count: 2 },
+        { def: MONSTER_CATALOG.suijin, count: 1 }, { def: MONSTER_CATALOG.uminoieTencho, count: 1 },
+        { def: MONSTER_CATALOG.rainbowChameleon, count: 3 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.kombo, count: 1 }, { def: ITEM_CATALOG.boudanChokki, count: 1 },
+        { def: ITEM_CATALOG.nyoBou, count: 1 }, { def: ITEM_CATALOG.pegasusSword, count: 1 },
+        { def: ITEM_CATALOG.lifeJacket, count: 1 }, { def: ITEM_CATALOG.twinHammer, count: 1 },
+        { def: ITEM_CATALOG.gomuGoNoPistol, count: 1 }, { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
+        { def: ITEM_CATALOG.peeStaff, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.fireball, count: 1 }, { def: SPELL_CATALOG.heal, count: 1 },
+        { def: SPELL_CATALOG.sideIncome, count: 1 }, { def: SPELL_CATALOG.shuffleMonsters, count: 1 },
+        { def: SPELL_CATALOG.poisonMist, count: 1 }, { def: SPELL_CATALOG.splitEvenly, count: 1 },
+        { def: SPELL_CATALOG.specialAudit, count: 1 }, { def: SPELL_CATALOG.waterRelease, count: 3 },
+      ],
+    },
+  },
 };
 
 /** The exact 40-card list for a story-mode character's fixed deck (see CHARACTER_DECKS). */

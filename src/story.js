@@ -209,17 +209,20 @@ export const STORY_STAGES = [
     ally: {
       name: '紫の魔女ホフク',
       color: 0x8e5ce6,
+      deckKey: 'hofuku',
       theme: { elements: [Element.WATER, Element.THUNDER], featuredItem: ITEM_CATALOG.knife },
     },
     opponents: [
       {
         name: 'ウサギン',
         color: 0xe63946,
+        deckKey: 'usagin',
         theme: { elements: [Element.FOREST, Element.FIRE], featuredItem: ITEM_CATALOG.potLid },
       },
       {
         name: '少女A',
         color: 0x4caf6e,
+        deckKey: 'shoujoA',
         theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi },
       },
     ],
@@ -245,11 +248,13 @@ export const STORY_STAGES = [
         {
           name: '紫の魔女ホフク',
           color: 0x8e5ce6,
+          deckKey: 'hofuku',
           theme: { elements: [Element.WATER, Element.THUNDER], featuredItem: ITEM_CATALOG.knife },
         },
         {
           name: '少女A',
           color: 0x4caf6e,
+          deckKey: 'shoujoA',
           theme: { elements: [Element.WATER, Element.FOREST], featuredMonster: MONSTER_CATALOG.minatoJoshi },
         },
       ],
