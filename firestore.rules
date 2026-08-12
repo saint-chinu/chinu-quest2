@@ -43,7 +43,9 @@ service cloud.firestore {
           request.resource.data.guestDeckList is list &&
           request.resource.data.guestDeckList.size() == 40 &&
           request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['guestUid', 'guestName', 'guestColor', 'guestDeckList', 'status']);
+            .hasOnly(['guestUid', 'guestName', 'guestColor', 'guestDeckList', 'participants', 'status']) &&
+          request.resource.data.participants is list &&
+          request.resource.data.participants.size() == resource.data.participants.size() + 1;
       }
 
       function isValidGuestResponse() {

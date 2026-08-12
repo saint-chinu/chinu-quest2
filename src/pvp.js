@@ -86,6 +86,7 @@ export async function joinPvpRoom(roomCodeInput, { name, color, deckList }) {
     guestName: name,
     guestColor: color,
     guestDeckList: deckList,
+    participants: [...(Array.isArray(room.participants) ? room.participants : []), { uid, name, color, deckList, ready: true }],
     status: 'active',
   });
   return { roomCode, uid, isHost: false };
