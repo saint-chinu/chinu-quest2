@@ -2961,7 +2961,30 @@ function showDeckScreen() {
     deckWorkingCounts.set(key, (deckWorkingCounts.get(key) || 0) + 1);
   }
 
-  const makeInfo = (def, suffix = '') => {
+  const hasAbility = (def) => Boolean(
+    (def.traits && def.traits.length)
+    || def.effect
+    || def.ability
+    || def.effectDescription
+    || def.commandCost
+  );
+
+  const deckCardMeta = (def) => {
+    const owned = ownedCountOf(cardKey(def));
+    const common = `${def.cost ?? 0}G　所持${owned}　能力${hasAbility(def) ? '有' : '無'}`;
+    if (def.type === CardType.MONSTER) {
+      return `${def.rarity}${ELEMENT_LABEL[def.element] || '無'}　HP${def.hp ?? 0}　ATK${def.atk ?? 0}　${common}`;
+    }
+    if (def.type === CardType.GEAR) {
+      const atk = def.atkBonusRange
+        ? `${def.atkBonusRange[0]}〜${def.atkBonusRange[1]}`
+        : (def.atkBonus ?? 0);
+      return `${def.rarity}アイテム　HP+${def.hpBonus ?? 0}　ATK+${atk}　${common}`;
+    }
+    return `${def.rarity}スペル　${common}`;
+  };
+
+  const makeInfo = (def) => {
     const info = document.createElement('div');
     info.className = 'deck-row-info';
     const nameEl = document.createElement('button');
@@ -2970,7 +2993,7 @@ function showDeckScreen() {
     nameEl.addEventListener('click', () => showCardDetail(def));
     const meta = document.createElement('div');
     meta.className = 'deck-row-meta';
-    meta.textContent = `${def.rarity} / ${describeCard(def)}${def.cost != null ? ` / コスト${def.cost}` : ''}${suffix}`;
+    meta.textContent = deckCardMeta(def);
     info.append(nameEl, meta);
     return info;
   };
@@ -3030,7 +3053,7 @@ function showDeckScreen() {
       const addedCount = document.createElement('strong');
       addedCount.className = 'deck-add-count';
       addedCount.textContent = `×${count}`;
-      row.append(rarity, makeInfo(def, ` / 所持${owned}`), addedCount, plusBtn);
+      row.append(rarity, makeInfo(def), addedCount, plusBtn);
       deckCatalogList.appendChild(row);
     }
 
