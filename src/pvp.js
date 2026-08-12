@@ -221,7 +221,7 @@ export class GuestActionSender {
   send(action) {
     const actionId = this.nextActionId;
     this.nextActionId += 1;
-    return sendGuestAction(this.roomCode, actionId, action);
+    return sendGuestAction(this.roomCode, actionId, { ...action, actionId });
   }
 }
 

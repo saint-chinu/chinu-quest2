@@ -885,7 +885,7 @@ function renderCenterHand(hand, isCPU, spellUsable) {
           el.classList.add('blinking');
           setTimeout(() => {
             if (pvpMatch && !pvpMatch.isHost) {
-              pvpMatch.actionSender.send({ type: 'useSpell', cardId: card.id });
+              pvpMatch.actionSender.send({ type: 'useSpell', cardId: card.id, playerId: pvpMatch.localPlayerId });
             } else {
               game.useSpell(card);
             }
@@ -1281,7 +1281,7 @@ function beginDiceMove(result) {
   diceMoving = true;
   syncCenterVisibility();
   if (pvpMatch && !pvpMatch.isHost) {
-    pvpMatch.actionSender.send({ type: 'rollDice', steps: result });
+    pvpMatch.actionSender.send({ type: 'rollDice', steps: result, playerId: pvpMatch.localPlayerId });
     return;
   }
   game.rollDice(result);
@@ -3423,9 +3423,14 @@ function handlePvpSync(snapshot) {
 /** ホスト側専用: ゲスト発の自発的アクション（本人の手番のダイス/スペル使用）を受けてローカルのGameインスタンスに反映する。 */
 function handlePvpGuestAction(action) {
   if (!game) return;
+  // Ignore stale/replayed actions and actions sent outside the guest's turn.
+  // This prevents delayed Firestore events from consuming a later turn.
+  if (action?.playerId !== pvpMatch?.guestPlayerId || game.currentPlayer?.id !== action.playerId) return;
   if (action.type === 'rollDice') {
-    game.rollDice(action.steps);
+    const steps = Number(action.steps);
+    if (Number.isInteger(steps) && steps >= 1 && steps <= 6 && game.awaitingRoll && !game.isBusy) game.rollDice(steps);
   } else if (action.type === 'useSpell') {
+    if (!game.awaitingRoll || game.isBusy) return;
     const card = game.currentPlayer.hand.find((c) => c.id === action.cardId);
     if (card) game.useSpell(card);
   }
@@ -3575,6 +3580,7 @@ pvpRoomStart.addEventListener('click', async () => {
     roomCode: pvpSession.roomCode,
     uid: pvpSession.uid,
     localPlayerId: 0,
+    guestPlayerId: 1,
     relay,
     uidByPlayerId: { 0: pvpSession.uid, 1: pvpLastRoom.guestUid },
   };
