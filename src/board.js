@@ -115,11 +115,16 @@ const DANBALL_ROWS = [
 // - applyMapBackground参照）。実素材が無いマップは共通のstage1.jpgのまま。
 // requireAllCheckpoints: 全マップ共通で「全チェックポイントを通過しないと
 // ゴールにならない」ルールが有効（ユーザー指定、2026-08-11）。
+// spacing: マス間隔（世界座標）。既定はSPACING(=3.2、ヒトデ戦で使用、完成
+// 済みなので変更しない)。②③④は元の盤面がヒトデ戦より一回り広い（15列・
+// 12行・11列）ため、同じカメラ距離だと相対的に盤面が遠く/小さく見える
+// との指摘（2026-08-13）を受け、カメラ自体（角度・距離）には触れず、マス
+// 間隔を少し詰めることでその3ステージだけ見た目上ズームインさせている。
 export const MAPS = [
   { id: 'hitode', name: '① ヒトデの縄張り', rows: HITODE_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage1.png') },
-  { id: 'madai', name: '② マダイの岩礁', rows: MADAI_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage2.jpg') },
-  { id: 'budou', name: '③ 決闘の浜辺', rows: BUDOU_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage3.png') },
-  { id: 'danball', name: '④ 暗転した世界', rows: DANBALL_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage4.png') },
+  { id: 'madai', name: '② マダイの岩礁', rows: MADAI_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage2.jpg'), spacing: 2.8 },
+  { id: 'budou', name: '③ 決闘の浜辺', rows: BUDOU_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage3.png'), spacing: 2.8 },
+  { id: 'danball', name: '④ 暗転した世界', rows: DANBALL_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage4.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {
@@ -174,7 +179,9 @@ function typeForCode(code) {
  * have 3 or 4 neighbors instead of always exactly 2.
  */
 export function createBoard(mapId) {
-  const rows = getMap(mapId).rows;
+  const map = getMap(mapId);
+  const rows = map.rows;
+  const spacing = map.spacing ?? SPACING;
   const height = rows.length;
   const width = rows[0].length;
   const offsetX = (width - 1) / 2;
@@ -197,8 +204,8 @@ export function createBoard(mapId) {
       idByCoord.set(`${gx},${gz}`, id);
       const isLand = type === TileType.LAND;
       const position = {
-        x: (gx - offsetX) * SPACING,
-        z: (gz - offsetZ) * SPACING,
+        x: (gx - offsetX) * spacing,
+        z: (gz - offsetZ) * spacing,
       };
 
       tiles.push({

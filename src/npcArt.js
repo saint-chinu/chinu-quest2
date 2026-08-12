@@ -7,7 +7,7 @@ import { assetUrl } from './assetUrl.js';
 export const NPC_PORTRAIT_URL = {
   'ダンボール男': assetUrl('/images/npc-portraits/danballman.png'),
   '暴君マダイ': assetUrl('/images/npc-portraits/madai.png'),
-  'ニュウドウカジカ（お肉）': assetUrl('/images/npc-portraits/nikuchan.png'),
+  'お肉': assetUrl('/images/npc-portraits/nikuchan.png'),
   '紫の魔女ホフク': assetUrl('/images/npc-portraits/hofuku.png'),
   '少女A': assetUrl('/images/npc-portraits/wonderland-girl.png'),
   'ウサギン': assetUrl('/images/npc-portraits/usagin.webp'),
@@ -19,7 +19,7 @@ export const NPC_PORTRAIT_URL = {
 export const NPC_TOKEN_URL = {
   'ダンボール男': assetUrl('/images/npc-tokens/danballman.png'),
   '暴君マダイ': assetUrl('/images/npc-tokens/madai.png'),
-  'ニュウドウカジカ（お肉）': assetUrl('/images/npc-tokens/nikuchan.png'),
+  'お肉': assetUrl('/images/npc-tokens/nikuchan.png'),
   '紫の魔女ホフク': assetUrl('/images/npc-tokens/hofuku.png'),
   '少女A': assetUrl('/images/npc-tokens/wonderland-girl.png'),
   'ウサギン': assetUrl('/images/npc-tokens/usagin.webp'),

@@ -2696,9 +2696,10 @@ function playOverlayDialogueLines(lines, { leftName, leftPortraitUrl, rightName,
 
 async function playStoryStage(index) {
   const stage = STORY_STAGES[index];
-  // ①ヒトデ戦だけ盤面を隠さない会話演出（2026-08-12実装）: 先にデッキだけ
-  // 選び、盤面表示後にstartStoryBattle側でオーバーレイ会話を挟む。
-  if (stage.key === 'hitode') {
+  // overlayNpc持ちのステージ（①②、2026-08-12実装/2026-08-13②へ拡張）だけ
+  // 盤面を隠さない会話演出: 先にデッキだけ選び、盤面表示後にstartStoryBattle
+  // 側でオーバーレイ会話を挟む。
+  if (stage.overlayNpc) {
     const chosenDeck = await promptDeckSelection();
     await startStoryBattle(index, chosenDeck.deckList, false);
     return;
@@ -2792,16 +2793,16 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
     goalCurrency: stage.goalCurrency,
     playerConfigs,
     onStoryBattleEnd: (result) => (isReplay ? handleStoryReplayEnd(index, result, variant) : handleStoryBattleEnd(index, result)),
-    deferInit: !isReplay && stage.key === 'hitode',
+    deferInit: !isReplay && !!stage.overlayNpc,
   });
 
-  // ①ヒトデ戦だけ: 盤面が表示された直後、その上に会話をオーバーレイする
-  // （盤面は隠さない）。サイコロ等の操作はオーバーレイの全面クリック領域が
-  // 塞ぐので、会話が終わるまで実質進行できない。
-  if (!isReplay && stage.key === 'hitode') {
+  // overlayNpc持ちのステージ（①②）だけ: 盤面が表示された直後、その上に
+  // 会話をオーバーレイする（盤面は隠さない）。サイコロ等の操作はオーバー
+  // レイの全面クリック領域が塞ぐので、会話が終わるまで実質進行できない。
+  if (!isReplay && stage.overlayNpc) {
     await playOverlayDialogueLines(stage.intro, {
-      leftName: 'ヒトデ',
-      leftPortraitUrl: NPC_PORTRAIT_URL['ヒトデ'],
+      leftName: stage.overlayNpc,
+      leftPortraitUrl: NPC_PORTRAIT_URL[stage.overlayNpc],
       rightName: currentCharacter.name,
       rightPortraitUrl: iconDataUrl,
     });
@@ -2831,12 +2832,13 @@ async function handleStoryReplayEnd(index, { won }, replayVariant) {
 
 async function handleStoryBattleEnd(index, { won }) {
   const stage = STORY_STAGES[index];
-  // ①ヒトデ戦の勝利時だけ、盤面をまだ隠さずに決着直後の会話をオーバーレイ
-  // で見せる（startStoryBattleのintro演出と対になる終幕演出）。それ以外
-  // （敗北時・他ステージ）は今まで通り即座に盤面を閉じてからの全画面会話。
-  const useHitodeOverlay = stage.key === 'hitode' && won;
+  // overlayNpc持ちのステージ（①②）の勝利時だけ、盤面をまだ隠さずに決着
+  // 直後の会話をオーバーレイで見せる（startStoryBattleのintro演出と対に
+  // なる終幕演出）。それ以外（敗北時・他ステージ）は今まで通り即座に
+  // 盤面を閉じてからの全画面会話。
+  const useBoardOverlay = !!stage.overlayNpc && won;
 
-  if (!useHitodeOverlay) {
+  if (!useBoardOverlay) {
     game = undefined;
     stopMusic();
     appEl.classList.add('hidden');
@@ -2863,11 +2865,11 @@ async function handleStoryBattleEnd(index, { won }) {
   }
   saveCharacter(currentUserId, currentCharacter);
 
-  if (useHitodeOverlay) {
+  if (useBoardOverlay) {
     const characterIcon = await resolveCharacterIcon(currentCharacter);
     await playOverlayDialogueLines(stage.outro, {
-      leftName: 'ヒトデ',
-      leftPortraitUrl: NPC_PORTRAIT_URL['ヒトデ'],
+      leftName: stage.overlayNpc,
+      leftPortraitUrl: NPC_PORTRAIT_URL[stage.overlayNpc],
       rightName: currentCharacter.name,
       rightPortraitUrl: characterIcon?.dataUrl ?? null,
     });

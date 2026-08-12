@@ -54,8 +54,8 @@ export const AI_PROFILES = {
     itemGambleChance: 0.75,
     highValueAvoidance: 0.15,
   },
-  // ニュウドウカジカ（お肉）: 深く考えていないマイペースタイプ。良くも悪くも平均的で、たまに気まぐれに属性を無視する。
-  'ニュウドウカジカ（お肉）': {
+  // お肉（ニュウドウカジカ）: 深く考えていないマイペースタイプ。良くも悪くも平均的で、たまに気まぐれに属性を無視する。
+  'お肉': {
     offElementSummonChance: 0.35,
     levelUpReserve: 500,
     minWinProbabilityToInvade: 0.5,
