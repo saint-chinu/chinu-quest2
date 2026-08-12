@@ -1450,7 +1450,7 @@ function startBattle(character, storyOptions = {}) {
       : undefined,
   });
 
-  game.init();
+  if (!storyOptions.deferInit) game.init();
   playMapTheme(currentMapId);
   requestAnimationFrame(animate);
 }
@@ -2119,6 +2119,7 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
     goalCurrency: stage.goalCurrency,
     playerConfigs,
     onStoryBattleEnd: (result) => (isReplay ? handleStoryReplayEnd(index, result, variant) : handleStoryBattleEnd(index, result)),
+    deferInit: !isReplay && stage.key === 'hitode',
   });
 
   // ①ヒトデ戦だけ: 盤面が表示された直後、その上に会話をオーバーレイする
@@ -2131,6 +2132,9 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
       rightName: currentCharacter.name,
       rightPortraitUrl: iconDataUrl,
     });
+    // Only now deal the opening hand and start the first turn. This prevents
+    // draw/reveal UI and CPU activity from running under the intro dialogue.
+    game.init();
   }
 }
 
@@ -3581,8 +3585,7 @@ function applyPvpBoardState(publicState) {
       : null;
     const ownerPlayer = tile.owner != null ? publicState.players.find((p) => p.id === tile.owner) : null;
     if (tile.mesh) {
-      if (ownerPlayer) tile.mesh.material.color.setHex(ownerPlayer.color);
-      else tile.mesh.material.color.set(CARD_COLOR[tile.element]);
+      tile.mesh.material.color.set(CARD_COLOR[tile.element]);
     }
     scene.updateTileLevelBorder(tile);
   }

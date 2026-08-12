@@ -2957,8 +2957,10 @@ export class Game {
     };
   }
 
-  _paintTile(tile, colorHexInt) {
-    tile.mesh.material.color.setHex(colorHexInt);
+  _paintTile(tile, _ownerColorHexInt) {
+    // Ownership never changes a land's color. The visible color represents
+    // the fixed/current land element only; element-changing spells update it.
+    this._repaintTileToElement(tile);
   }
 
   _repaintTileToElement(tile) {

@@ -792,7 +792,7 @@ html, body {
   bottom: 3vh;
   left: 50%;
   transform: translateX(-50%);
-  width: min(560px, 78vw);
+  width: min(520px, 60vw);
   background: rgba(255, 255, 255, 0.97);
   color: #14141f;
   border-radius: 20px;
@@ -813,7 +813,7 @@ html, body {
 }
 
 #story-overlay-bubble.side-left {
-  left: 28vw;
+  left: 35vw;
 }
 
 #story-overlay-bubble.side-left::after {
@@ -821,11 +821,20 @@ html, body {
 }
 
 #story-overlay-bubble.side-right {
-  left: 72vw;
+  left: 65vw;
 }
 
 #story-overlay-bubble.side-right::after {
   left: 72%;
+}
+
+@media (max-width: 700px) {
+  #story-overlay-bubble,
+  #story-overlay-bubble.side-left,
+  #story-overlay-bubble.side-right {
+    left: 50%;
+    width: min(560px, 88vw);
+  }
 }
 
 #story-overlay-speaker {

@@ -16,10 +16,39 @@ function imageSourceToIcon(source, size = 512) {
   const context = canvas.getContext('2d');
   const sourceWidth = source.naturalWidth || source.width;
   const sourceHeight = source.naturalHeight || source.height;
-  const cropSize = Math.min(sourceWidth, sourceHeight);
-  const sourceX = (sourceWidth - cropSize) / 2;
-  const sourceY = (sourceHeight - cropSize) / 2;
-  context.drawImage(source, sourceX, sourceY, cropSize, cropSize, 0, 0, size, size);
+  // Keep the original proportions. Cropping/stretching portraits into a
+  // square made tall characters look crushed on the board.
+  const scale = Math.min(size / sourceWidth, size / sourceHeight) * 0.94;
+  const drawWidth = sourceWidth * scale;
+  const drawHeight = sourceHeight * scale;
+  context.drawImage(source, (size - drawWidth) / 2, (size - drawHeight) / 2, drawWidth, drawHeight);
+
+  // Some supplied character PNGs contain an opaque white canvas. Remove only
+  // near-white pixels connected to the outer edge, preserving white details
+  // enclosed inside the character artwork.
+  const imageData = context.getImageData(0, 0, size, size);
+  const { data } = imageData;
+  const visited = new Uint8Array(size * size);
+  const queue = [];
+  const enqueue = (x, y) => {
+    if (x < 0 || y < 0 || x >= size || y >= size) return;
+    const index = y * size + x;
+    if (visited[index]) return;
+    visited[index] = 1;
+    const offset = index * 4;
+    if (data[offset + 3] === 0 || (data[offset] >= 245 && data[offset + 1] >= 245 && data[offset + 2] >= 245)) queue.push(index);
+  };
+  for (let i = 0; i < size; i += 1) {
+    enqueue(i, 0); enqueue(i, size - 1); enqueue(0, i); enqueue(size - 1, i);
+  }
+  for (let cursor = 0; cursor < queue.length; cursor += 1) {
+    const index = queue[cursor];
+    data[index * 4 + 3] = 0;
+    const x = index % size;
+    const y = Math.floor(index / size);
+    enqueue(x - 1, y); enqueue(x + 1, y); enqueue(x, y - 1); enqueue(x, y + 1);
+  }
+  context.putImageData(imageData, 0, 0);
   return { canvas, dataUrl: canvas.toDataURL('image/webp', 0.88) };
 }
 

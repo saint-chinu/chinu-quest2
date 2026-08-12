@@ -247,7 +247,14 @@ function drawUnitCard(state) {
     ctx.save();
     roundRectPath(ctx, 2, bodyY, w - 4, bodyH * 0.72, 10);
     ctx.clip();
-    ctx.drawImage(state.artImage, 2, bodyY, w - 4, bodyH * 0.72);
+    const areaW = w - 4;
+    const areaH = bodyH * 0.72;
+    const imageW = state.artImage.naturalWidth || state.artImage.width;
+    const imageH = state.artImage.naturalHeight || state.artImage.height;
+    const scale = Math.min(areaW / imageW, areaH / imageH);
+    const drawW = imageW * scale;
+    const drawH = imageH * scale;
+    ctx.drawImage(state.artImage, 2 + (areaW - drawW) / 2, bodyY + (areaH - drawH) / 2, drawW, drawH);
     ctx.restore();
   }
 
@@ -436,7 +443,8 @@ export class GameScene {
     const def = BOARD_MARKERS[tileType];
     if (!def) return;
     const texture = loadBoardMarkerTexture(def.url);
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
+    sprite.renderOrder = 20;
     const width = BOARD_MARKER_HEIGHT * def.aspect;
     sprite.scale.set(width, BOARD_MARKER_HEIGHT, 1);
     // プレイヤー駒（PIECE_REST_Y=0.7、高さ1.6）がタイル表面(y=0)よりわずかに
@@ -493,7 +501,8 @@ export class GameScene {
   createPieceFromImage(imageSource, tilePosition) {
     const texture = new THREE.CanvasTexture(imageSource);
     texture.colorSpace = THREE.SRGBColorSpace;
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
+    sprite.renderOrder = 21;
     sprite.scale.set(1.6, 1.6, 1);
     sprite.position.set(tilePosition.x, PIECE_REST_Y, tilePosition.z);
     this.scene.add(sprite);
@@ -513,7 +522,8 @@ export class GameScene {
     canvas.height = UNIT_CARD_CANVAS_HEIGHT;
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
+    sprite.renderOrder = 22;
     const aspect = UNIT_CARD_CANVAS_WIDTH / UNIT_CARD_CANVAS_HEIGHT;
     sprite.scale.set(UNIT_ICON_HEIGHT * aspect, UNIT_ICON_HEIGHT, 1);
     sprite.position.set(tilePosition.x, UNIT_ICON_REST_Y, tilePosition.z);
@@ -566,7 +576,8 @@ export class GameScene {
     drawOwnerLabel(canvas, name);
     const texture = new THREE.CanvasTexture(canvas);
     texture.colorSpace = THREE.SRGBColorSpace;
-    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false }));
+    sprite.renderOrder = 23;
     const aspect = OWNER_LABEL_CANVAS_WIDTH / OWNER_LABEL_CANVAS_HEIGHT;
     sprite.scale.set(OWNER_LABEL_HEIGHT * aspect, OWNER_LABEL_HEIGHT, 1);
     sprite.position.set(tilePosition.x, OWNER_LABEL_REST_Y, tilePosition.z + OWNER_LABEL_Z_OFFSET);
