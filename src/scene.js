@@ -53,7 +53,10 @@ function loadBoardMarkerTexture(url) {
 // look-down angle established above is untouched.
 // 2026-08-13: still reading too far per user feedback - one more uniform
 // zoom-in pass (0.72→0.62).
-const CAMERA_OFFSET = new THREE.Vector3(14.5, 32, 14.5).multiplyScalar(0.62);
+// 2026-08-13: board/sprites still read as too oblique/"leaning into the
+// distance" per user feedback - Y raised again (32→35) for a bit more
+// overhead angle (~58°→~60.7°), same pattern as the 25→32 pass above.
+const CAMERA_OFFSET = new THREE.Vector3(14.5, 35, 14.5).multiplyScalar(0.62);
 // Reused scratch vector for _applyCamera's per-frame zoomScale multiply, to
 // avoid allocating a new Vector3 every call (this runs during every pan/tween tick).
 const cameraOffsetScratch = new THREE.Vector3();
