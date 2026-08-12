@@ -1,4 +1,4 @@
-const CACHE_NAME = 'chinuquest2-v1';
+const CACHE_NAME = 'chinuquest2-v2';
 const APP_SHELL = ['./', './manifest.webmanifest', './icons/chinuquest-icon-192.png', './icons/chinuquest-icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -15,12 +15,17 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET' || new URL(event.request.url).origin !== self.location.origin) return;
+
+  // HTML and JavaScript must never be served from an obsolete app-shell cache
+  // while online. This is especially important for authentication fixes.
+  const destination = event.request.destination;
+  const isApplicationCode = event.request.mode === 'navigate' || destination === 'script' || destination === 'style';
   event.respondWith(
     fetch(event.request)
       .then((response) => {
         if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(event.request, response.clone()));
         return response;
       })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match('./')))
+      .catch(() => caches.match(event.request).then((cached) => cached || (isApplicationCode ? caches.match('./') : undefined)))
   );
 });
