@@ -63,6 +63,11 @@ const DEADZONE_MARGIN = 0.65;
 
 export const PIECE_REST_Y = 0.7;
 
+// 配置モンスターの盤上アイコン用。プレイヤー駒(0.7・スケール1.6)より低く
+// 小さくして、通行中のプレイヤー駒と土地に常駐するモンスターアイコンを
+// 見分けられるようにする。
+export const UNIT_ICON_REST_Y = 0.5;
+
 // 土地レベルの縁取り。tile.mesh(2.6四方)より少し内側(2.5)に、レベルが
 // 上がるほど太い黒枠を重ねる - Lv5だけ「太くする」路線から外れて二重の
 // 細い枠にする（レベル1は枠なし）。各要素は{outer, width}のリング1本分。
@@ -367,6 +372,22 @@ export class GameScene {
     sprite.position.set(tilePosition.x, PIECE_REST_Y, tilePosition.z);
     this.scene.add(sprite);
     return sprite;
+  }
+
+  /** 配置モンスターを表す盤上アイコン（土地に常駐する小さなbillboardトークン、色は属性色）。 */
+  createUnitIcon(colorHex, tilePosition) {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: createTokenTexture(colorHex) }));
+    sprite.scale.set(1.0, 1.0, 1);
+    sprite.position.set(tilePosition.x, UNIT_ICON_REST_Y, tilePosition.z);
+    this.scene.add(sprite);
+    return sprite;
+  }
+
+  removeUnitIcon(sprite) {
+    if (!sprite) return;
+    this.scene.remove(sprite);
+    sprite.material.map?.dispose?.();
+    sprite.material.dispose();
   }
 
   /**

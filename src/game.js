@@ -1,7 +1,7 @@
 import { TileType, mapRequiresAllCheckpoints } from './board.js';
-import { PIECE_REST_Y } from './scene.js';
+import { PIECE_REST_Y, UNIT_ICON_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity, buildCardPool } from './cards.js';
-import { buildStarterExtraCards, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf } from './battleCards.js';
+import { buildStarterCardList, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf } from './battleCards.js';
 import { createFieldUnit, resolveBattle, equipItem, applyCurse, applyPoison, GoldLedger } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay } from './utils.js';
@@ -181,7 +181,7 @@ export class Game {
       // に乗る - CPU/人間を問わずcfg.iconImageさえ入っていれば使われる。
       iconImage: cfg.iconImage ?? null,
       allianceId: cfg.allianceId ?? null,
-      deck: cfg.deckList ? Deck.fromCardList(cfg.deckList) : new Deck(buildStarterExtraCards(cfg.deckVariant)),
+      deck: Deck.fromCardList(cfg.deckList ?? buildStarterCardList(cfg.deckVariant)),
       hand: [],
       spellUsedThisTurn: false,
       defeated: false,
@@ -791,17 +791,21 @@ export class Game {
     );
     if (destId == null) return;
     const destTile = this.tiles.find((t) => t.id === destId);
+    unit.curses = []; // モンスターの呪いは一瞬でも移動すれば消滅する（防衛されて元の土地に戻った場合も含む）
 
     if (destTile.owner == null) {
-      unit.curses = []; // モンスターの呪いは移動すると消滅する
+      const mesh = targetTile.unitMesh;
+      targetTile.unitMesh = null;
       destTile.unit = unit;
       destTile.owner = unit.ownerId;
+      destTile.unitMesh = mesh;
       this._paintTile(destTile, unitOwner.color);
       targetTile.unit = null;
       targetTile.owner = null;
       targetTile.transparentCursed = false;
       this._repaintTileToElement(targetTile);
       this.onLog(`${unit.def.name}が${destTile.id}番地へ強制移動させられた`);
+      await this._hopUnitIcon(mesh, targetTile.position, destTile.position);
     } else {
       const defenderPlayer = this.players.find((p) => p.id === destTile.owner);
       const defenderUnit = destTile.unit;
@@ -810,9 +814,12 @@ export class Game {
       await this._maybeRedirectDeathToLightningRod(defenderPlayer, destTile, result);
 
       if (result.attackerSurvived && !result.defenderSurvived) {
-        unit.curses = []; // モンスターの呪いは移動（侵略成功）すると消滅する
+        const mesh = targetTile.unitMesh;
+        targetTile.unitMesh = null;
+        this.scene.removeUnitIcon?.(destTile.unitMesh);
         destTile.unit = unit;
         destTile.owner = unit.ownerId;
+        destTile.unitMesh = mesh;
         this._paintTile(destTile, unitOwner.color);
         targetTile.unit = null;
         targetTile.owner = null;
@@ -820,8 +827,11 @@ export class Game {
         this._repaintTileToElement(targetTile);
         this.onLog(`${unit.def.name}が強制移動の戦闘で${destTile.id}番地を奪取した！`);
         await this._handleUnitDeath(defenderUnit, defenderPlayer);
+        await this._hopUnitIcon(mesh, targetTile.position, destTile.position);
       } else if (result.attackerSurvived && result.defenderSurvived) {
         this.onLog(`${unit.def.name}は強制移動先の防衛を受け、元の土地に戻った`);
+        await this._hopUnitIcon(targetTile.unitMesh, targetTile.position, destTile.position);
+        await this._hopUnitIcon(targetTile.unitMesh, destTile.position, targetTile.position);
       } else {
         targetTile.unit = null;
         targetTile.owner = null;
@@ -1223,6 +1233,41 @@ export class Game {
       const hop = Math.sin(Math.PI * t) * 0.5;
       player.mesh.position.set(x, PIECE_REST_Y + hop, z);
     });
+  }
+
+  /** 配置モンスターの盤上アイコンが一マス分ホップ移動する演出（_tweenStepの駒版）。侵略で防衛された場合の「元の土地に戻る」往復にも使う。 */
+  _hopUnitIcon(mesh, from, to) {
+    if (!mesh) return Promise.resolve();
+    return tween(STEP_DURATION_MS, (t) => {
+      const eased = easeInOutQuad(t);
+      const x = from.x + (to.x - from.x) * eased;
+      const z = from.z + (to.z - from.z) * eased;
+      const hop = Math.sin(Math.PI * t) * 0.5;
+      mesh.position.set(x, UNIT_ICON_REST_Y + hop, z);
+    });
+  }
+
+  /**
+   * `tile.unit`の有無と盤上アイコン（`tile.unitMesh`）の有無を突き合わせて
+   * 作成/削除する。_notifyStateから毎回呼ぶことで、召喚・侵略・死亡・
+   * 売却・融合等tile.unitを書き換えるあらゆる箇所を個別に触らずに済む
+   * （移動時のホップ演出だけは_humanMoveFlow/_spellForceRelocateOneStepが
+   * 事前にtile.unitMeshを付け替えてから呼ぶので、ここでは何もしない）。
+   */
+  _syncUnitIcons() {
+    for (const tile of this.tiles) {
+      if (tile.unit) {
+        if (!tile.unitMesh || tile.unitMesh.userData.unit !== tile.unit) {
+          if (tile.unitMesh) this.scene.removeUnitIcon?.(tile.unitMesh);
+          const colorHex = parseInt(CARD_COLOR[tile.unit.def.element].slice(1), 16);
+          tile.unitMesh = this.scene.createUnitIcon?.(colorHex, tile.position) ?? null;
+          if (tile.unitMesh) tile.unitMesh.userData.unit = tile.unit;
+        }
+      } else if (tile.unitMesh) {
+        this.scene.removeUnitIcon?.(tile.unitMesh);
+        tile.unitMesh = null;
+      }
+    }
   }
 
   /**
@@ -1681,17 +1726,21 @@ export class Game {
 
     const attackerUnit = tile.unit;
     const attackerName = attackerUnit.def.name;
+    attackerUnit.curses = []; // モンスターの呪いは一瞬でも移動すれば消滅する（防衛されて元の土地に戻った場合も含む）
 
     if (targetTile.owner == null) {
-      attackerUnit.curses = []; // モンスターの呪いは移動すると消滅する
+      const mesh = tile.unitMesh;
+      tile.unitMesh = null;
       targetTile.unit = attackerUnit;
       targetTile.owner = player.id;
+      targetTile.unitMesh = mesh;
       this._paintTile(targetTile, player.color);
       tile.unit = null;
       tile.owner = null;
       tile.transparentCursed = false;
       this._repaintTileToElement(tile);
       this.onLog(`${player.name}は${attackerName}を移動させた`);
+      await this._hopUnitIcon(mesh, tile.position, targetTile.position);
     } else {
       const defenderPlayer = this.players.find((p) => p.id === targetTile.owner);
       const defenderUnit = targetTile.unit;
@@ -1700,9 +1749,12 @@ export class Game {
       await this._maybeRedirectDeathToLightningRod(defenderPlayer, targetTile, result);
 
       if (result.attackerSurvived && !result.defenderSurvived) {
-        attackerUnit.curses = []; // モンスターの呪いは移動（侵略成功）すると消滅する
+        const mesh = tile.unitMesh;
+        tile.unitMesh = null;
+        this.scene.removeUnitIcon?.(targetTile.unitMesh);
         targetTile.unit = attackerUnit;
         targetTile.owner = player.id;
+        targetTile.unitMesh = mesh;
         this._paintTile(targetTile, player.color);
         tile.unit = null;
         tile.owner = null;
@@ -1710,8 +1762,11 @@ export class Game {
         this._repaintTileToElement(tile);
         this.onLog(`${player.name}が土地を奪取した！`);
         await this._handleUnitDeath(defenderUnit, defenderPlayer);
+        await this._hopUnitIcon(mesh, tile.position, targetTile.position);
       } else if (result.attackerSurvived && result.defenderSurvived) {
         this.onLog(`${defenderPlayer.name}の${defenderUnit.def.name}が防衛に成功し、${attackerName}は元の土地に戻った`);
+        await this._hopUnitIcon(tile.unitMesh, tile.position, targetTile.position);
+        await this._hopUnitIcon(tile.unitMesh, targetTile.position, tile.position);
       } else {
         tile.unit = null;
         tile.owner = null;
@@ -2818,6 +2873,7 @@ export class Game {
   }
 
   _notifyState() {
+    this._syncUnitIcons();
     const human = this.players.find((p) => !p.isCPU);
     const showCenter = this.awaitingRoll && !this.isBusy;
     const playersPayload = this.players.map((p) => ({

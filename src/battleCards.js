@@ -379,11 +379,12 @@ function duplicateForDeck(def, count) {
 }
 
 /**
- * The two character-creation starter books. Each leans on 2 of the 4
- * elements - the generic monster fill (see buildCardPool's `elements`
- * option) is restricted to just those two, plus whichever named catalog
- * monster/item matches, so the two books actually play differently instead
- * of just swapping which named card is mixed in.
+ * The two character-creation starter books. `composition` is the fully
+ * curated 40-card list from chinu-quest2-starter-decks-v3.md (20 monsters +
+ * 7 items + 13 spells, exact per-card counts) - unlike buildThemedDeckList's
+ * NPC decks, starter books carry NO generic/random filler at all; see
+ * buildStarterCardList below. `elements` is kept only for display/theming
+ * purposes (e.g. tile-preview UI), not for any generic pool fill anymore.
  */
 export const STARTER_DECKS = {
   fireForest: {
@@ -392,6 +393,31 @@ export const STARTER_DECKS = {
     elements: [Element.FIRE, Element.FOREST],
     featuredMonster: MONSTER_CATALOG.salarymander,
     featuredItem: ITEM_CATALOG.knife,
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.salarymander, count: 4 },
+        { def: MONSTER_CATALOG.magman, count: 4 },
+        { def: MONSTER_CATALOG.takenokoha, count: 4 },
+        { def: MONSTER_CATALOG.kinokoha, count: 4 },
+        { def: MONSTER_CATALOG.sanzokuFukurou, count: 3 },
+        { def: MONSTER_CATALOG.kaentake, count: 1 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.knife, count: 1 },
+        { def: ITEM_CATALOG.potLid, count: 1 },
+        { def: ITEM_CATALOG.kombo, count: 4 },
+        { def: ITEM_CATALOG.boudanChokki, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.diceOne, count: 1 },
+        { def: SPELL_CATALOG.diceThree, count: 1 },
+        { def: SPELL_CATALOG.diceSix, count: 1 },
+        { def: SPELL_CATALOG.iCanFly, count: 1 },
+        { def: SPELL_CATALOG.fireball, count: 4 },
+        { def: SPELL_CATALOG.heal, count: 4 },
+        { def: SPELL_CATALOG.poisonMist, count: 1 },
+      ],
+    },
   },
   waterThunder: {
     id: 'waterThunder',
@@ -399,6 +425,31 @@ export const STARTER_DECKS = {
     elements: [Element.WATER, Element.THUNDER],
     featuredMonster: MONSTER_CATALOG.minatoJoshi,
     featuredItem: ITEM_CATALOG.potLid,
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.minatoJoshi, count: 4 },
+        { def: MONSTER_CATALOG.hangyojin, count: 4 },
+        { def: MONSTER_CATALOG.hatsudenNezumi, count: 4 },
+        { def: MONSTER_CATALOG.tetsuo, count: 4 },
+        { def: MONSTER_CATALOG.seidenkiYarou, count: 3 },
+        { def: MONSTER_CATALOG.fireman, count: 1 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.knife, count: 1 },
+        { def: ITEM_CATALOG.potLid, count: 1 },
+        { def: ITEM_CATALOG.kombo, count: 4 },
+        { def: ITEM_CATALOG.boudanChokki, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.diceOne, count: 1 },
+        { def: SPELL_CATALOG.diceThree, count: 1 },
+        { def: SPELL_CATALOG.diceSix, count: 1 },
+        { def: SPELL_CATALOG.iCanFly, count: 1 },
+        { def: SPELL_CATALOG.fireball, count: 4 },
+        { def: SPELL_CATALOG.heal, count: 4 },
+        { def: SPELL_CATALOG.specialAudit, count: 1 },
+      ],
+    },
   },
 };
 
@@ -424,21 +475,22 @@ function buildRandomSpellSelection(count) {
   return picks.flatMap((def) => duplicateForDeck(def, 1));
 }
 
-/** The named cards to mix into a starter book, 4 copies of the monster/item and DEFAULT_SPELL_COUNT random real spells. `bookId` picks which of STARTER_DECKS; defaults to the fire/forest book. */
-export function buildStarterExtraCards(bookId = 'fireForest') {
+/**
+ * The exact, fully curated 40-card list for a starter book
+ * (chinu-quest2-starter-decks-v3.md: 20 monsters + 7 items + 13 spells,
+ * precise per-card counts) - no generic placeholder or random-spell filler
+ * at all, unlike buildThemedDeckList's NPC decks. `bookId` picks which of
+ * STARTER_DECKS; defaults to the fire/forest book.
+ */
+export function buildStarterCardList(bookId = 'fireForest') {
   const book = STARTER_DECKS[bookId] || STARTER_DECKS.fireForest;
-  return [
-    ...duplicateForDeck(book.featuredMonster, 4),
-    ...duplicateForDeck(book.featuredItem, 4),
-    ...buildRandomSpellSelection(DEFAULT_SPELL_COUNT),
-  ];
+  const { monsters, items, spells } = book.composition;
+  return [...monsters, ...items, ...spells].flatMap(({ def, count }) => duplicateForDeck(def, count));
 }
 
 /** The full 40-card starter book as a plain, persistable card-definition list (not a live Deck) - what character creation saves as the player's initial deckList. */
 export function buildStarterDeckList(bookId = 'fireForest') {
-  const book = STARTER_DECKS[bookId] || STARTER_DECKS.fireForest;
-  const extra = buildStarterExtraCards(bookId);
-  return new Deck(extra, { elements: book.elements }).drawPile;
+  return Deck.fromCardList(buildStarterCardList(bookId)).drawPile;
 }
 
 /**
