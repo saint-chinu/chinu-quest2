@@ -176,7 +176,19 @@
         </div>
         <p id="deck-count" class="pg-label">0 / 40</p>
         <div id="deck-composition" class="deck-composition" aria-live="polite"></div>
-        <div id="deck-catalog-list"></div>
+        <div id="deck-editor-workspace">
+          <section id="deck-add-pane">
+            <div id="deck-category-tabs"></div>
+            <div id="deck-add-browser">
+              <div id="deck-rarity-filters" aria-label="レアリティ表示切替"></div>
+              <div id="deck-catalog-list"></div>
+            </div>
+          </section>
+          <aside id="deck-current-pane">
+            <h3>現在のデッキ</h3>
+            <div id="deck-current-list"></div>
+          </aside>
+        </div>
         <div class="pg-actions-row">
           <button id="deck-save" class="pg-button" disabled>保存</button>
           <button id="deck-back" class="pg-button pg-button-secondary">戻る</button>

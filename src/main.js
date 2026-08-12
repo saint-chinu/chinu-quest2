@@ -1764,6 +1764,9 @@ const deckNameInput = document.getElementById('deck-name-input');
 const deckCount = document.getElementById('deck-count');
 const deckComposition = document.getElementById('deck-composition');
 const deckCatalogList = document.getElementById('deck-catalog-list');
+const deckCategoryTabs = document.getElementById('deck-category-tabs');
+const deckRarityFilters = document.getElementById('deck-rarity-filters');
+const deckCurrentList = document.getElementById('deck-current-list');
 const deckSave = document.getElementById('deck-save');
 const deckBack = document.getElementById('deck-back');
 const deckSelectScreen = document.getElementById('deck-select-screen');
@@ -2753,6 +2756,18 @@ function effectiveCatalog() {
 
 let deckWorkingCounts = null;
 let editingDeckIndex = 0;
+let deckActiveCategory = 'fire';
+const deckHiddenRarities = new Set();
+
+const DECK_CATEGORY_TABS = [
+  { id: 'fire', label: '火モン', test: (card) => card.type === CardType.MONSTER && card.element === Element.FIRE },
+  { id: 'water', label: '水モン', test: (card) => card.type === CardType.MONSTER && card.element === Element.WATER },
+  { id: 'forest', label: '森モン', test: (card) => card.type === CardType.MONSTER && card.element === Element.FOREST },
+  { id: 'thunder', label: '雷モン', test: (card) => card.type === CardType.MONSTER && card.element === Element.THUNDER },
+  { id: 'neutral', label: '無モン', test: (card) => card.type === CardType.MONSTER && card.element === Element.NEUTRAL },
+  { id: 'gear', label: 'アイテム', test: (card) => card.type === CardType.GEAR },
+  { id: 'spell', label: 'スペル', test: (card) => card.type === CardType.SPELL },
+];
 
 function deckTotal() {
   let total = 0;
@@ -2824,75 +2839,94 @@ function showDeckScreen() {
     deckWorkingCounts.set(key, (deckWorkingCounts.get(key) || 0) + 1);
   }
 
-  // The DECK_SIZE-reached cap on every "＋" button is a global constraint
-  // (depends on the grand total, not just that row's own count), so
-  // changing any one row must refresh every row's button state, not just
-  // the one that was clicked.
-  const rowRefreshers = [];
-  function refreshAll() {
-    rowRefreshers.forEach((fn) => fn());
-    updateDeckTotalDisplay();
-  }
-
-  deckCatalogList.replaceChildren();
-  for (const def of catalog) {
-    const key = cardKey(def);
-    const owned = ownedCountOf(key);
-    const copyCap = Math.min(MAX_COPIES_PER_CARD, owned);
-    const row = document.createElement('div');
-    row.className = 'deck-row';
-
-    const swatch = document.createElement('div');
-    swatch.className = 'deck-row-swatch';
-    swatch.style.background = cardColor(def);
-
+  const makeInfo = (def, suffix = '') => {
     const info = document.createElement('div');
     info.className = 'deck-row-info';
-    const nameEl = document.createElement('div');
-    nameEl.className = 'deck-row-name';
+    const nameEl = document.createElement('button');
+    nameEl.className = 'deck-row-name deck-card-detail-link';
     nameEl.textContent = def.name;
     nameEl.addEventListener('click', () => showCardDetail(def));
-    const costText = def.cost != null ? ` / コスト${def.cost}` : '';
     const meta = document.createElement('div');
     meta.className = 'deck-row-meta';
-    meta.textContent = `${describeCard(def)}${costText} / 所持${owned}`;
+    meta.textContent = `${def.rarity} / ${describeCard(def)}${def.cost != null ? ` / コスト${def.cost}` : ''}${suffix}`;
     info.append(nameEl, meta);
+    return info;
+  };
 
-    const minusBtn = document.createElement('button');
-    minusBtn.textContent = '−';
-    const countEl = document.createElement('span');
-    const plusBtn = document.createElement('button');
-    plusBtn.textContent = '＋';
-
-    function refreshRow() {
-      const count = deckWorkingCounts.get(key) || 0;
-      countEl.textContent = String(count);
-      minusBtn.disabled = count <= 0;
-      plusBtn.disabled = count >= copyCap || deckTotal() >= DECK_SIZE;
+  function renderEditor() {
+    updateDeckTotalDisplay();
+    deckCategoryTabs.replaceChildren();
+    for (const category of DECK_CATEGORY_TABS) {
+      const button = document.createElement('button');
+      button.className = `deck-category-tab${category.id === deckActiveCategory ? ' selected' : ''}`;
+      button.textContent = category.label;
+      button.addEventListener('click', () => {
+        deckActiveCategory = category.id;
+        renderEditor();
+      });
+      deckCategoryTabs.appendChild(button);
     }
-    rowRefreshers.push(refreshRow);
 
-    minusBtn.addEventListener('click', () => {
-      const count = deckWorkingCounts.get(key) || 0;
-      if (count <= 0) return;
-      deckWorkingCounts.set(key, count - 1);
-      refreshAll();
-    });
-    plusBtn.addEventListener('click', () => {
-      const count = deckWorkingCounts.get(key) || 0;
-      if (count >= copyCap || deckTotal() >= DECK_SIZE) return;
-      deckWorkingCounts.set(key, count + 1);
-      refreshAll();
-    });
+    deckRarityFilters.replaceChildren();
+    for (const rarity of [Rarity.N, Rarity.S, Rarity.R, Rarity.EX]) {
+      const button = document.createElement('button');
+      button.className = `deck-rarity-filter${deckHiddenRarities.has(rarity) ? ' disabled' : ''}`;
+      button.textContent = rarity;
+      button.addEventListener('click', () => {
+        if (deckHiddenRarities.has(rarity)) deckHiddenRarities.delete(rarity);
+        else deckHiddenRarities.add(rarity);
+        renderEditor();
+      });
+      deckRarityFilters.appendChild(button);
+    }
 
-    const stepper = document.createElement('div');
-    stepper.className = 'deck-row-stepper';
-    stepper.append(minusBtn, countEl, plusBtn);
-    row.append(swatch, info, stepper);
-    deckCatalogList.appendChild(row);
+    const category = DECK_CATEGORY_TABS.find((item) => item.id === deckActiveCategory) || DECK_CATEGORY_TABS[0];
+    deckCatalogList.replaceChildren();
+    for (const def of catalog.filter((card) => category.test(card) && !deckHiddenRarities.has(card.rarity))) {
+      const key = cardKey(def);
+      const owned = ownedCountOf(key);
+      const count = deckWorkingCounts.get(key) || 0;
+      const copyCap = Math.min(MAX_COPIES_PER_CARD, owned);
+      const row = document.createElement('div');
+      row.className = 'deck-row deck-add-row';
+      const rarity = document.createElement('span');
+      rarity.className = 'deck-add-rarity';
+      rarity.textContent = def.rarity;
+      rarity.style.color = RARITY_COLOR[def.rarity];
+      const plusBtn = document.createElement('button');
+      plusBtn.className = 'deck-add-button';
+      plusBtn.textContent = '＋';
+      plusBtn.disabled = count >= copyCap || deckTotal() >= DECK_SIZE;
+      plusBtn.addEventListener('click', () => {
+        deckWorkingCounts.set(key, count + 1);
+        renderEditor();
+      });
+      row.append(rarity, makeInfo(def, ` / 所持${owned} / デッキ${count}`), plusBtn);
+      deckCatalogList.appendChild(row);
+    }
+
+    deckCurrentList.replaceChildren();
+    for (const [key, count] of deckWorkingCounts.entries()) {
+      if (count <= 0) continue;
+      const def = catalogByKey.get(key);
+      if (!def) continue;
+      const row = document.createElement('div');
+      row.className = 'deck-current-row';
+      const info = makeInfo(def);
+      const countEl = document.createElement('strong');
+      countEl.textContent = `×${count}`;
+      const minusBtn = document.createElement('button');
+      minusBtn.textContent = '−';
+      minusBtn.addEventListener('click', () => {
+        deckWorkingCounts.set(key, count - 1);
+        renderEditor();
+      });
+      row.append(info, countEl, minusBtn);
+      deckCurrentList.appendChild(row);
+    }
   }
 
-  refreshAll();
+  renderEditor();
   showScreen(deckScreen);
 }
 
