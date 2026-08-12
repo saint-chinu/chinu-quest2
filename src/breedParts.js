@@ -17,6 +17,7 @@ export const BREED_DEFAULT_IMAGE_URL = assetUrl('/images/card-art/burimon.png');
 // パーツ装着の上限（それぞれ独立に判定 - どれか1つが上限に達しても、他の
 // ステータスがまだ上限未満なら、そちらを動かすパーツは引き続き装着できる）。
 export const BREED_CAPS = { atk: 70, hp: 70, cost: 200 };
+export const BREED_MAX_EQUIPPED_PARTS = 8;
 
 export const CHANGEABLE_BREED_ELEMENTS = [Element.FIRE, Element.WATER, Element.THUNDER, Element.FOREST];
 
@@ -107,6 +108,10 @@ export function computeBreedStats(breedMonster) {
  * to 0 or below (無効なステータス), or cost below 0.
  */
 export function canEquipPart(breedMonster, part) {
+  const equippedPartIds = breedMonster.equippedPartIds || [];
+  if (equippedPartIds.length >= BREED_MAX_EQUIPPED_PARTS) {
+    return { ok: false, error: `パーツは合計${BREED_MAX_EQUIPPED_PARTS}個まで装着できます` };
+  }
   const current = computeBreedStats(breedMonster);
   const nextAtk = current.atk + (part.atkDelta || 0);
   const nextHp = current.hp + (part.hpDelta || 0);

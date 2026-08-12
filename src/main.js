@@ -13,6 +13,7 @@ import { loadCharacterIconPresets, fileToCharacterIcon, resolveCharacterIcon } f
 import {
   BREED_BASE,
   BREED_DEFAULT_IMAGE_URL,
+  BREED_MAX_EQUIPPED_PARTS,
   BREED_PARTS,
   CHANGEABLE_BREED_ELEMENTS,
   computeBreedStats,
@@ -2398,6 +2399,8 @@ function showHubScreen() {
 /** Existing characters saved before ブリードモンスター existed won't have these fields yet - fill them in with the default build (no owned parts) rather than crashing on undefined. */
 function ensureBreedFields(character) {
   if (!character.breedMonster) character.breedMonster = { name: BREED_BASE.defaultName, equippedPartIds: [] };
+  if (!Array.isArray(character.breedMonster.equippedPartIds)) character.breedMonster.equippedPartIds = [];
+  character.breedMonster.equippedPartIds = character.breedMonster.equippedPartIds.slice(0, BREED_MAX_EQUIPPED_PARTS);
   if (!character.ownedPartIds) character.ownedPartIds = [];
   if (character.storyProgress == null) character.storyProgress = 0;
   // 複数デッキ対応前のセーブデータ移行: 単一のdeckListを
@@ -3816,7 +3819,8 @@ function showBreedScreen() {
 
 function renderBreedScreen() {
   const stats = computeBreedStats(currentCharacter.breedMonster);
-  breedStats.textContent = `属性: ${ELEMENT_LABEL[stats.element]} / ATK ${stats.atk} / HP ${stats.hp} / 召喚コスト ${stats.cost}G`;
+  const equippedTotal = currentCharacter.breedMonster.equippedPartIds.length;
+  breedStats.textContent = `属性: ${ELEMENT_LABEL[stats.element]} / ATK ${stats.atk} / HP ${stats.hp} / 召喚コスト ${stats.cost}G / パーツ ${equippedTotal}/${BREED_MAX_EQUIPPED_PARTS}個`;
 
   breedPartsList.replaceChildren();
   const ownedPartCounts = new Map();
