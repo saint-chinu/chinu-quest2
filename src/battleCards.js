@@ -687,9 +687,9 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.raijin, count: 1 },
       ],
       items: [
-        { def: ITEM_CATALOG.morohaNoTsurugi, count: 2 }, { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 },
+        { def: ITEM_CATALOG.morohaNoTsurugi, count: 1 }, { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 },
         { def: ITEM_CATALOG.stegoro, count: 1 }, { def: ITEM_CATALOG.twinHammer, count: 1 },
-        { def: ITEM_CATALOG.kaenHoushakiki, count: 1 }, { def: ITEM_CATALOG.raijinKen, count: 1 },
+        { def: ITEM_CATALOG.fushichoNoKen, count: 1 }, { def: ITEM_CATALOG.heikeNoYoroi, count: 1 },
         { def: ITEM_CATALOG.zangokuKen, count: 1 }, { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
         { def: ITEM_CATALOG.peeStaff, count: 1 },
       ],

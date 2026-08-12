@@ -1234,6 +1234,16 @@ export class Game {
         const owner = this.players.find((p) => p.id === tile.owner);
         const isAlly = owner?.allianceId != null && owner.allianceId === player.allianceId;
         if (!isAlly) score -= profile.highValueAvoidance * 6;
+        // 高レベルの敵地は、手札の召喚候補で勝率80%以上を見込める場合
+        // にだけ選ぶ。勝てる候補が無い分岐では、未回収チェックポイント／
+        // ゴールを優先しつつ、敵Lv3以上を実質的に迂回する。
+        const candidates = player.hand.filter((c) => c.type === CardType.MONSTER && (c.hp ?? 0) > 0);
+        const bestRate = candidates.reduce((best, card) => Math.max(
+          best,
+          this._estimateWinProbability(card, player.id, player.hand, tile, false),
+          this._estimateWinProbability(card, player.id, player.hand, tile, true),
+        ), 0);
+        if (bestRate < 0.8) score -= 1000;
       }
       return Math.exp(score);
     });
@@ -2966,9 +2976,25 @@ export class Game {
     await this._cpuMaybeUseDisruptionSpell(this.currentPlayer);
     await this._cpuMaybeUseDamageSpell(this.currentPlayer);
     await this._cpuMaybeUseSplitEvenlySpell(this.currentPlayer);
+    await this._cpuMaybeUseImmediateSpell(this.currentPlayer);
     await this._cpuMaybeUseDiceSpell(this.currentPlayer);
     const steps = await this.onCpuRoll();
     this.rollDice(steps);
+  }
+
+  /** 配られたら即時使うスペル。アイキャンフライを副業収入より優先する。 */
+  async _cpuMaybeUseImmediateSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const fly = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'doubleNextDice');
+    if (fly && player.currency >= (fly.cost || 0)) {
+      const target = this._cpuPickDiceSpellTarget(player);
+      if (target) {
+        await this._cpuCastSpell(player, fly, { targetPlayerId: target.id });
+        return;
+      }
+    }
+    const income = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'lapCountGold');
+    if (income && player.currency >= (income.cost || 0)) await this._cpuCastSpell(player, income, {});
   }
 
   /**
