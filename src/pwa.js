@@ -26,8 +26,8 @@ installButton.addEventListener('click', async () => {
     return;
   }
   installMessage.textContent = isIos()
-    ? 'Safariの共有ボタンを押し、「ホーム画面に追加」を選んでください。'
-    : 'ブラウザのメニューから「アプリをインストール」または「ホーム画面に追加」を選んでください。';
+    ? 'Safariでは自動追加できません。「共有」→「表示を増やす」→「ホーム画面に追加」を選択し、横画面で操作してください。'
+    : 'ブラウザのメニューから「アプリをインストール」または「ホーム画面に追加」を選び、横画面で操作してください。';
 });
 
 window.addEventListener('appinstalled', showInstalledState);
