@@ -3126,7 +3126,7 @@ function inDeckCountOf(key) {
 
 // ---- デッキ選択（対戦・ストーリー共通）: 盤面に入る直前に毎回どのデッキを使うか選ばせる ----
 
-/** 3冊まで並べて選ばせ、選んだ1冊を「このデッキにしますか？」で内訳付き確認してから確定する。resolveされるのは確定した{id,name,deckList}。 */
+/** 最大3件を並べ、選んだデッキを内訳付きで確認してから確定する。resolveされるのは確定した{id,name,deckList}。 */
 function promptDeckSelection() {
   return new Promise((resolve) => {
     let pendingDeck = null;
@@ -3167,14 +3167,24 @@ function promptDeckSelection() {
       deckSelectBreakdown.replaceChildren();
       for (const { def, count } of counts.values()) {
         const row = document.createElement('div');
-        row.className = 'deck-row';
+        row.className = 'deck-row deck-select-detail-row';
+        row.role = 'button';
+        row.tabIndex = 0;
+        row.setAttribute('aria-label', `${def.name}の詳細を表示`);
+        const openDetail = () => showCardDetail(def);
+        row.addEventListener('click', openDetail);
+        row.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          openDetail();
+        });
         const swatch = document.createElement('div');
         swatch.className = 'deck-row-swatch';
         swatch.style.background = cardColor(def);
         const info = document.createElement('div');
         info.className = 'deck-row-info';
         const nameEl = document.createElement('div');
-        nameEl.className = 'deck-row-name';
+        nameEl.className = 'deck-row-name deck-card-detail-link';
         nameEl.textContent = def.name;
         const meta = document.createElement('div');
         meta.className = 'deck-row-meta';

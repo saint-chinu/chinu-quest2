@@ -875,6 +875,16 @@ html, body {
   background: #1c1c2c;
 }
 
+.deck-select-detail-row {
+  cursor: pointer;
+}
+
+.deck-select-detail-row:hover,
+.deck-select-detail-row:focus-visible {
+  outline: 1px solid #66d7d1;
+  background: #25253b;
+}
+
 .deck-row-swatch {
   width: 20px;
   height: 20px;
