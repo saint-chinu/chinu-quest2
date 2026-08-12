@@ -56,8 +56,8 @@ const LEVEL_CAP = 5;
 // カルドセプト ビギンズ系
 const CHAIN_MULTIPLIER = { 1: 1.0, 2: 1.5, 3: 2.0, 4: 2.5, 5: 3.0 };
 const TOLL_RATE = { 1: 0.3, 2: 0.3, 3: 0.4, 4: 0.6, 5: 0.8 };
-// Flat cost to level up FROM the given level (not a formula) - keyed by current level.
-const LEVEL_UP_COST = { 1: 50, 2: 200, 3: 400, 4: 600 };
+// ビギンズのLv1からの累計投資額（Lv2=50、Lv3=250、Lv4=650、Lv5=1250）。
+const LEVEL_INVESTMENT = { 1: 0, 2: 50, 3: 250, 4: 650, 5: 1250 };
 // 属性変更コスト = 現レベル×100（無色マスからの変更は半額）
 const ELEMENT_CHANGE_COST_PER_LEVEL = 100;
 const NEUTRAL_ELEMENT_CHANGE_DISCOUNT = 0.5;
@@ -86,11 +86,13 @@ export class Game {
     onTollPayment,
     onMoveDestination,
     onLandLoss,
+    onGoalAchieved,
     onCpuRoll,
     onMoveComplete,
     onLandCommand,
     onPickMonsterCard,
     onConfirmAction,
+    onPickLevelUp,
     onConfirmMove,
     onConfirmSellLand,
     onPickBrowseTile,
@@ -104,6 +106,7 @@ export class Game {
     onShopPurchase,
     onBattleSceneEnter,
     onPickBattleItem,
+    onBattleEquip,
     onBattleAttack,
     onBattleRetreat,
     onBattleOutcome,
@@ -113,6 +116,7 @@ export class Game {
     playerConfigs,
     humanPlayer,
     storyMode = false,
+    goalCurrency = null,
   }) {
     this.tiles = tiles;
     this.requireAllCheckpoints = mapRequiresAllCheckpoints(mapId);
@@ -137,11 +141,13 @@ export class Game {
     this.onTollPayment = onTollPayment || (() => Promise.resolve());
     this.onMoveDestination = onMoveDestination || (() => {});
     this.onLandLoss = onLandLoss || (() => Promise.resolve());
+    this.onGoalAchieved = onGoalAchieved || (() => Promise.resolve());
     this.onCpuRoll = onCpuRoll;
     this.onMoveComplete = onMoveComplete;
     this.onLandCommand = onLandCommand;
     this.onPickMonsterCard = onPickMonsterCard;
     this.onConfirmAction = onConfirmAction;
+    this.onPickLevelUp = onPickLevelUp;
     this.onConfirmMove = onConfirmMove;
     this.onConfirmSellLand = onConfirmSellLand;
     this.onPickBrowseTile = onPickBrowseTile;
@@ -156,6 +162,7 @@ export class Game {
     this.onBattleSceneEnter = onBattleSceneEnter;
     this.onPickBattleItem = onPickBattleItem;
     this.onBattleAttack = onBattleAttack;
+    this.onBattleEquip = onBattleEquip || (() => Promise.resolve());
     this.onBattleRetreat = onBattleRetreat;
     this.onBattleOutcome = onBattleOutcome;
     // 直接ダメージ系の土地コマンド（damage/damageAndSelfDestruct）専用の
@@ -171,6 +178,7 @@ export class Game {
     // つながる（_checkBankruptcy/_checkStoryWinCondition参照）。通常の対戦
     // モードでは今まで通り500Gを渡されゴール地点から再スタートするだけ。
     this.storyMode = storyMode;
+    this.goalCurrency = Number.isFinite(Number(goalCurrency)) ? Number(goalCurrency) : null;
     this.storyEnded = false;
 
     // 2人対戦（通常の対戦モード）呼び出し元との後方互換: playerConfigsが
@@ -953,8 +961,10 @@ export class Game {
     } else {
       await this._movePlayer(player, steps);
     }
+    if (this.storyEnded) return;
     this.onMoveComplete?.();
     await this._resolveSpecialTile(player);
+    if (this.storyEnded) return;
     await this._runLandCommand(player);
     await delay(400);
 
@@ -1106,6 +1116,7 @@ export class Game {
 
       if (toTile.type === TileType.START && i < path.length - 1) {
         await this._grantGoalBonus(player);
+        if (this.storyEnded) break;
       }
 
       // 強制停止の呪い（ほこら効果「右の頬をシバかれたら～」）: 自分の土地・
@@ -1218,7 +1229,35 @@ export class Game {
       this.onLog(`${player.name}は宝くじで${lotteryAmount}Gを獲得した！`);
     }
     this._notifyState();
+    if (await this._checkGoalAchievement(player)) return;
     await delay(900);
+  }
+
+  async _checkGoalAchievement(player) {
+    if (this.storyEnded || this.goalCurrency == null || this._totalAssetsOf(player) < this.goalCurrency) return false;
+    this.storyEnded = true;
+    this.awaitingRoll = false;
+    this.isBusy = true;
+    this._notifyState();
+    await this.onGoalAchieved({
+      playerId: player.id,
+      playerName: player.name,
+      totalAssets: this._totalAssetsOf(player),
+      goalCurrency: this.goalCurrency,
+      position: this.tiles[player.tileId]?.position ?? null,
+    });
+    this.onLog(`${player.name}は目標総資産${this.goalCurrency}Gを達成した！`);
+    if (this.storyMode) {
+      const winnerSideHasHuman = this.players.some((candidate) =>
+        !candidate.isCPU && (candidate.id === player.id || (player.allianceId != null && candidate.allianceId === player.allianceId)),
+      );
+      this.onStoryBattleEnd?.({
+        won: winnerSideHasHuman,
+        winnerPlayerId: player.id,
+        alivePlayerIds: this.players.filter((candidate) => !candidate.defeated).map((candidate) => candidate.id),
+      });
+    }
+    return true;
   }
 
   /** 初めて通過したCPだけ100Gを付与し、残り番号を案内して一瞬停止する。 */
@@ -1802,9 +1841,9 @@ export class Game {
     return CHAIN_MULTIPLIER[Math.min(Math.max(count, 1), LEVEL_CAP)];
   }
 
-  /** 地価 = 基本地価 × レベル倍率 × 連鎖倍率 */
+  /** 地価 = (基本地価 + 累計レベルアップ投資額) × 連鎖倍率。 */
   _landValueOfTile(tile) {
-    return Math.round(tile.price * tile.level * this._chainMultiplier(tile.owner, tile.element));
+    return Math.round((tile.price + (LEVEL_INVESTMENT[tile.level] || 0)) * this._chainMultiplier(tile.owner, tile.element));
   }
 
   /** 通行料 = 地価 × 通行料倍率。透過の呪い（深海魚X）がかかった土地は通行料ゼロ。 */
@@ -1877,16 +1916,21 @@ export class Game {
       return false;
     }
 
-    const cost = LEVEL_UP_COST[tile.level];
-    const confirmed = await this.onConfirmAction({ actionType: 'levelup', cost, tile: this.getTileSummary(tile) }, player.id);
-    if (!confirmed) return false;
-    if (player.currency < cost) {
+    const options = [];
+    for (let targetLevel = tile.level + 1; targetLevel <= LEVEL_CAP; targetLevel += 1) {
+      const cost = LEVEL_INVESTMENT[targetLevel] - LEVEL_INVESTMENT[tile.level];
+      if (cost <= player.currency) options.push({ targetLevel, cost, label: `Lv${tile.level}→Lv${targetLevel}：${cost}G` });
+    }
+    if (options.length === 0) {
       this.onLog('ゴールドが足りません');
       return false;
     }
+    const targetLevel = await this.onPickLevelUp({ currentLevel: tile.level, options }, player.id);
+    if (targetLevel == null) return false;
+    const cost = LEVEL_INVESTMENT[targetLevel] - LEVEL_INVESTMENT[tile.level];
 
     player.currency -= cost;
-    tile.level += 1;
+    tile.level = targetLevel;
     this.scene.updateTileLevelBorder(tile);
     this.onLog(`${player.name}は土地をLv${tile.level}にアップグレードした (-${cost}G)`);
     this._notifyState();
@@ -2402,11 +2446,16 @@ export class Game {
     if (tile.type !== TileType.LAND || tile.level >= LEVEL_CAP) return;
     const matches = !profile.preferredElements || profile.preferredElements.includes(tile.element);
     if (!matches) return;
-    const cost = LEVEL_UP_COST[tile.level];
-    if (player.currency - cost < profile.levelUpReserve) return;
+    const affordableTargets = [];
+    for (let targetLevel = tile.level + 1; targetLevel <= LEVEL_CAP; targetLevel += 1) {
+      const cost = LEVEL_INVESTMENT[targetLevel] - LEVEL_INVESTMENT[tile.level];
+      if (player.currency - cost >= profile.levelUpReserve) affordableTargets.push({ targetLevel, cost });
+    }
+    if (affordableTargets.length === 0) return;
+    const { targetLevel, cost } = affordableTargets.at(-1);
 
     player.currency -= cost;
-    tile.level += 1;
+    tile.level = targetLevel;
     this.scene.updateTileLevelBorder(tile);
     this.onLog(`${player.name}は${tile.id}番地をLv${tile.level}にアップグレードした (-${cost}G)`);
     this._notifyState();
@@ -2704,10 +2753,11 @@ export class Game {
 
   /** Equips + permanently consumes the chosen item (removed from hand, discarded) - a no-op if the side skipped. */
   _consumeBattleItem(player, unit, item) {
-    if (!item) return;
-    equipItem(unit, item);
+    if (!item) return null;
+    const equipped = equipItem(unit, item);
     player.hand = player.hand.filter((c) => c.id !== item.id);
     player.deck.discard(item);
+    return equipped;
   }
 
   /**
@@ -2770,7 +2820,14 @@ export class Game {
           },
           attackerPlayer.id,
         );
-    this._consumeBattleItem(attackerPlayer, attackerUnit, attackerItem);
+    const equippedAttackerItem = this._consumeBattleItem(attackerPlayer, attackerUnit, attackerItem);
+    if (equippedAttackerItem) {
+      await this.onBattleEquip({
+        side: 'attacker', item: equippedAttackerItem, unitName: attackerUnit.def.name,
+        baseAtk: attackerBase.atk, baseHp: attackerBase.hp,
+        existingAtkBonus: attackerBonus.atk, existingHpBonus: attackerBonus.hp,
+      });
+    }
 
     const defenderItem = defenderPlayer.isCPU
       ? this._cpuPickBattleItem(defenderPlayer)
@@ -2783,7 +2840,14 @@ export class Game {
           },
           defenderPlayer.id,
         );
-    this._consumeBattleItem(defenderPlayer, defenderUnit, defenderItem);
+    const equippedDefenderItem = this._consumeBattleItem(defenderPlayer, defenderUnit, defenderItem);
+    if (equippedDefenderItem) {
+      await this.onBattleEquip({
+        side: 'defender', item: equippedDefenderItem, unitName: defenderUnit.def.name,
+        baseAtk: defenderBase.atk, baseHp: defenderBase.hp,
+        existingAtkBonus: defenderBonus.atk, existingHpBonus: defenderBonus.hp,
+      });
+    }
 
     // 貫通: nullifies the defender's 同属性ボーナス (land-added HP) for this
     // battle's math specifically - the stat panel above already showed the

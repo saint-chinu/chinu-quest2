@@ -23,10 +23,13 @@ export function equipItem(unit, itemDef) {
   if (itemDef.atkBonusRange) {
     const [min, max] = itemDef.atkBonusRange;
     const rolled = min + Math.floor(Math.random() * (max - min + 1));
-    unit.items.push({ ...itemDef, atkBonus: rolled });
-    return;
+    const equipped = { ...itemDef, atkBonus: rolled };
+    unit.items.push(equipped);
+    return equipped;
   }
-  unit.items.push({ ...itemDef });
+  const equipped = { ...itemDef };
+  unit.items.push(equipped);
+  return equipped;
 }
 
 // 呪い状態は常に1つしか保持されない: 新しい呪いをかけると、モンスターに

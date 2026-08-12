@@ -834,6 +834,41 @@ export class GameScene {
     });
   }
 
+  /** 目標達成時、金色の祝福光を上空からプレイヤーへ降らせる。 */
+  playBlessingLight(position) {
+    const group = new THREE.Group();
+    group.position.set(position.x, 0, position.z);
+    group.renderOrder = 24;
+    const material = new THREE.MeshBasicMaterial({
+      color: 0xffe27a,
+      transparent: true,
+      opacity: 0,
+      side: THREE.DoubleSide,
+      depthTest: false,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+    });
+    for (let i = 0; i < 10; i += 1) {
+      const ray = new THREE.Mesh(new THREE.PlaneGeometry(0.12 + (i % 3) * 0.05, 4.8), material);
+      const angle = (Math.PI * 2 * i) / 10;
+      const radius = 0.25 + (i % 4) * 0.16;
+      ray.position.set(Math.cos(angle) * radius, 7 + (i % 3) * 0.8, Math.sin(angle) * radius);
+      ray.rotation.y = angle;
+      group.add(ray);
+    }
+    this.scene.add(group);
+    return tween(2400, (t) => {
+      const pulse = Math.sin(Math.PI * Math.min(t * 1.35, 1));
+      material.opacity = 0.82 * pulse;
+      group.position.y = -4.5 * t;
+      group.rotation.y = t * Math.PI * 0.7;
+    }).finally(() => {
+      this.scene.remove(group);
+      group.traverse((object) => object.geometry?.dispose?.());
+      material.dispose();
+    });
+  }
+
   /** Manual free-look pan for the land-info camera mode: one screen-relative step per call, clamped so the focus can't wander indefinitely far from the board. */
   panByDirection(direction) {
     const axis = { up: FORWARD, down: FORWARD, left: RIGHT, right: RIGHT }[direction];

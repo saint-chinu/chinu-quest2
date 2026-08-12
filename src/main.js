@@ -103,6 +103,10 @@ const confirmCardFace = document.getElementById('confirm-card-face');
 const confirmCardDetail = document.getElementById('confirm-card-detail');
 const confirmYes = document.getElementById('confirm-yes');
 const confirmNo = document.getElementById('confirm-no');
+const levelUpModal = document.getElementById('level-up-modal');
+const levelUpTitle = document.getElementById('level-up-title');
+const levelUpChoices = document.getElementById('level-up-choices');
+const levelUpCancel = document.getElementById('level-up-cancel');
 const cameraWorkOverlay = document.getElementById('camera-work-overlay');
 const camArrowUp = document.getElementById('cam-arrow-up');
 const camArrowDown = document.getElementById('cam-arrow-down');
@@ -1021,6 +1025,27 @@ function setSpellPresentationActive(active) {
   syncCenterVisibility();
 }
 
+function promptPickLevelUp({ currentLevel, options }) {
+  return new Promise((resolve) => {
+    levelUpTitle.textContent = `現在Lv${currentLevel}　上げるレベルを選んでください`;
+    levelUpChoices.replaceChildren();
+    function cleanup(result) {
+      levelUpModal.classList.add('hidden');
+      levelUpCancel.removeEventListener('click', onCancel);
+      resolve(result);
+    }
+    const onCancel = () => cleanup(null);
+    for (const option of options) {
+      const button = document.createElement('button');
+      button.textContent = option.label;
+      button.addEventListener('click', () => cleanup(option.targetLevel));
+      levelUpChoices.appendChild(button);
+    }
+    levelUpModal.classList.remove('hidden');
+    levelUpCancel.addEventListener('click', onCancel);
+  });
+}
+
 /** Placeholder for spell resolution - actual effects land with battle design in phase 2. */
 function promptSpellUse(card) {
   return new Promise((resolve) => {
@@ -1160,6 +1185,23 @@ async function promptLandLoss({ position, landLabel, chainBefore, chainAfter, as
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
 }
 
+async function promptGoalAchieved({ position, playerName }) {
+  if (!scene || !position) return;
+  const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+  await scene.focusAndZoom(position.x, position.z, 1.45, 420);
+  const message = document.createElement('div');
+  message.className = 'fx-goal-achieved';
+  const heading = document.createElement('strong');
+  heading.textContent = 'CONGRATULATIONS!';
+  const detail = document.createElement('span');
+  detail.textContent = `${playerName}は目標を達成しました。`;
+  message.append(heading, detail);
+  fxLayer.appendChild(message);
+  await Promise.all([scene.playBlessingLight(position), new Promise((resolve) => setTimeout(resolve, 2600))]);
+  message.remove();
+  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
+}
+
 function finishSpellPresentation() {
   spellEffectModal.classList.add('hidden');
   setSpellPresentationActive(false);
@@ -1196,6 +1238,7 @@ function renderBattleStat(sideEls, data) {
   renderCardEl(sideEls.card, data.card);
   sideEls.card.classList.remove('battle-crumble');
   sideEls.item.classList.add('hidden');
+  sideEls.item.classList.remove('equip-show');
   sideEls.item.replaceChildren();
   const matchupText = MATCHUP_LABEL[data.matchup];
   sideEls.matchup.classList.toggle('hidden', !matchupText);
@@ -1317,6 +1360,40 @@ async function promptBattleAttack({ side, item, message, damage = 0, element, ta
     battleMessageText.classList.add('hidden');
     battleMessageText.classList.remove('special');
     await new Promise((resolve) => setTimeout(resolve, BATTLE_ACTION_GAP_MS));
+}
+
+async function promptBattleEquip({ side, item, unitName, baseAtk, baseHp, existingAtkBonus = 0, existingHpBonus = 0 }) {
+  const sideEls = battleSide[side];
+  const card = document.createElement('div');
+  card.className = 'card';
+  renderCardEl(card, item);
+  sideEls.item.replaceChildren(card);
+  sideEls.item.classList.remove('hidden');
+  sideEls.item.classList.add('equip-show');
+
+  const itemAtk = Number(item.atkBonus || 0);
+  const itemHp = Number(item.hpBonus || 0);
+  const atkBonus = existingAtkBonus + itemAtk;
+  const hpBonus = existingHpBonus + itemHp;
+  battleMessageText.textContent = `${unitName}は${item.name}を装備した`;
+  battleMessageText.classList.remove('hidden');
+  sideEls.atkBonus.textContent = atkBonus > 0 ? `+${atkBonus}` : '';
+  sideEls.atkBonus.classList.toggle('hidden', atkBonus <= 0);
+  sideEls.hpBonus.textContent = hpBonus > 0 ? `+${hpBonus}` : '';
+  sideEls.hpBonus.classList.toggle('hidden', hpBonus <= 0);
+  sideEls.atk.textContent = String(baseAtk);
+  sideEls.hp.textContent = String(baseHp);
+
+  const previousMax = Number(sideEls.hp.dataset.max) || baseHp;
+  const nextMax = baseHp + hpBonus;
+  sideEls.hp.dataset.current = String(nextMax);
+  sideEls.hp.dataset.max = String(nextMax);
+  sideEls.hpFill.style.width = `${Math.min(100, (previousMax / Math.max(nextMax, 1)) * 100)}%`;
+  requestAnimationFrame(() => { sideEls.hpFill.style.width = '100%'; });
+  sideEls.el.classList.add('battle-equip-boost');
+  await new Promise((resolve) => setTimeout(resolve, 1800));
+  sideEls.el.classList.remove('battle-equip-boost');
+  battleMessageText.classList.add('hidden');
 }
 
 function playBattleElementBeam(sourceCard, targetCard, color) {
@@ -1819,11 +1896,13 @@ function startBattle(character, storyOptions = {}) {
     onTollPayment: relayable('tollPayment', promptTollPayment, { broadcast: true }),
     onMoveDestination: relayable('moveDestination', promptMoveDestination, { broadcast: true }),
     onLandLoss: relayable('landLoss', promptLandLoss, { broadcast: true }),
+    onGoalAchieved: relayable('goalAchieved', promptGoalAchieved, { broadcast: true }),
     onCpuRoll: cpuRollDice,
     onMoveComplete,
     onLandCommand: relayable('landCommand', promptLandCommand),
     onPickMonsterCard: relayable('pickMonsterCard', promptPickMonsterCard),
     onConfirmAction: relayable('confirmAction', promptConfirmAction),
+    onPickLevelUp: relayable('pickLevelUp', promptPickLevelUp),
     onConfirmMove: relayable('confirmMove', promptConfirmMove),
     onConfirmSellLand: relayable('confirmSellLand', promptConfirmSellLand),
     onPickBrowseTile: relayable('pickBrowseTile', promptPickBrowseTile),
@@ -1837,6 +1916,7 @@ function startBattle(character, storyOptions = {}) {
     onShopPurchase: relayable('shopPurchase', promptShopPurchase),
     onBattleSceneEnter: relayable('battleSceneEnter', promptBattleSceneEnter, { broadcast: true }),
     onPickBattleItem: relayable('pickBattleItem', promptPickBattleItem),
+    onBattleEquip: relayable('battleEquip', promptBattleEquip, { broadcast: true }),
     onBattleAttack: relayable('battleAttack', promptBattleAttack, { broadcast: true }),
     onBattleRetreat: relayable('battleRetreat', promptBattleRetreat, { broadcast: true }),
     onBattleOutcome: relayable('battleOutcome', promptBattleOutcome, { broadcast: true }),
@@ -1844,6 +1924,7 @@ function startBattle(character, storyOptions = {}) {
     onStoryBattleEnd: storyOptions.onStoryBattleEnd,
     onPvpSync: handlePvpSync,
     storyMode: storyOptions.storyMode ?? false,
+    goalCurrency: storyOptions.goalCurrency ?? null,
     playerConfigs: storyOptions.playerConfigs,
     humanPlayer: storyOptions.playerConfigs
       ? undefined
@@ -1921,7 +2002,7 @@ gameMenuClose.addEventListener('click', () => {
 });
 
 const HELP_TEXT = `【勝敗の目標】
-盤面右下の「目標G」が、そのステージで所持Gの目安になります（表示のみで自動判定はされません）。
+盤面右下の「目標G」が勝利に必要な総資産です。目標総資産に到達した状態でゴールを通過すると勝利します。
 
 【ゲーム開始前】
 ストーリーと対戦では、盤面開始前に使用する40枚のデッキを選びます。複数のデッキはデッキ編集画面で作成・編集できます。
@@ -1987,7 +2068,7 @@ STARTマスを通過・着地すると「基本ボーナス＋領地ボーナス
 4人同盟戦は紅組・白組に分かれ、ホスト指定またはランダム同盟を選べます。ホストは盤面メニューのBANから参加者を退出させ、AI操作へ切り替えられます。通信が一定時間切断された参加者もAIへ切り替わります。
 
 【対戦報酬】
-勝敗にかかわらず、終了時の総資産（所持G＋土地資産）の20%をMとして獲得します（最低50M）。4人同盟戦の対戦報酬は通常の2.5倍です。
+勝敗にかかわらず終了時の総資産からMを獲得します（最低50M）。1vs1は7%、相手が1人増えるごとに+3%、同盟戦は15%固定です。
 
 【ログイン・クラウドセーブ】
 IDとパスワードでログインします。キャラクター、所持M、所持カード、デッキ、ブリード、ストーリー進行、作成カードは端末内に保存され、ログイン中はFirebaseにも同期されます。通信できない場合は端末内のデータで遊べます。`;
@@ -2226,9 +2307,8 @@ function showScreen(el) {
 const ICON_COLORS = [0x2ec4b6, 0xe63946, 0xffd166, 0x8e5ce6, 0x4caf6e, 0x3a86e6];
 // M is the persistent menu-side currency (character.m) - entirely separate
 // from the in-battle G (player.currency, resets to 500 every match). Earned
-// by cashing out a battle's ending G at 20% (see settleBattleEnd), min 50.
+// by cashing out a battle's ending total assets at the mode-specific rate, min 50.
 const STARTING_M = 300;
-const M_CONVERSION_RATE = 0.2;
 const M_CONVERSION_MIN = 50;
 const CARD_EDITOR_HASH = '#card-editor';
 
@@ -4223,6 +4303,7 @@ const pvpGuestHandlers = {
   landCommand: ({ a0: tile, a1: options }) => promptLandCommand(tile, options),
   pickMonsterCard: promptPickMonsterCard,
   confirmAction: promptConfirmAction,
+  pickLevelUp: promptPickLevelUp,
   confirmMove: promptConfirmMove,
   confirmSellLand: promptConfirmSellLand,
   pickBrowseTile: promptPickBrowseTile,
@@ -4236,6 +4317,7 @@ const pvpGuestHandlers = {
   shopPurchase: ({ a0: options }) => promptShopPurchase(options),
   battleSceneEnter: promptBattleSceneEnter,
   pickBattleItem: promptPickBattleItem,
+  battleEquip: promptBattleEquip,
   battleAttack: promptBattleAttack,
   battleRetreat: promptBattleRetreat,
   battleOutcome: promptBattleOutcome,
@@ -4243,6 +4325,7 @@ const pvpGuestHandlers = {
   tollPayment: promptTollPayment,
   moveDestination: promptMoveDestination,
   landLoss: promptLandLoss,
+  goalAchieved: promptGoalAchieved,
 };
 
 const pvpPieces = new Map(); // playerId -> billboard sprite (ゲスト側のローカル駒キャッシュ)
@@ -4466,7 +4549,7 @@ pvpRoomStart.addEventListener('click', async () => {
   pvpRoomStart.disabled = false;
 });
 
-// ---- Leaving a battle: cash out the ending in-battle G into persistent M (20%, 50 minimum) ----
+// ---- Leaving a battle: cash out ending total assets into persistent M (7%/10%/13%, alliance 15%; minimum 50) ----
 //
 // 同盟(2vs2)ではtotalAssetsがチーム合算値のため、そのまま使うとチーム全員が
 // 満額を個別に受け取れてしまう（実質的な二重取り）。呼び出し側は必ず
@@ -4487,11 +4570,15 @@ pvpRoomStart.addEventListener('click', async () => {
  * （Cloud Functions等）が別途必要。
  */
 function computeExitRewardM(endingAssetsShare) {
-  const pvpAllianceMultiplier = pvpLastRoom?.allianceMode === true && pvpLastRoom?.playerCount === 4 ? 2.5 : 1;
-  const assetCap = Math.max((pvpLastRoom?.goalCurrency || 5000) * 3, 5000);
+  const playerCount = Number(game?.players?.length || pvpLastRoom?.playerCount || 2);
+  const allianceMode = game
+    ? Boolean(game.players.some((player) => player.allianceId != null))
+    : pvpLastRoom?.allianceMode === true;
+  const rewardRate = allianceMode ? 0.15 : 0.07 + Math.max(0, playerCount - 2) * 0.03;
+  const assetCap = Math.max((game?.goalCurrency || pvpLastRoom?.goalCurrency || 5000) * 3, 5000);
   const cappedAssets = Math.min(Math.max(endingAssetsShare, 0), assetCap);
-  const earnedM = Math.max(Math.round(cappedAssets * M_CONVERSION_RATE * pvpAllianceMultiplier), M_CONVERSION_MIN);
-  return { earnedM, pvpAllianceMultiplier };
+  const earnedM = Math.max(Math.round(cappedAssets * rewardRate), M_CONVERSION_MIN);
+  return { earnedM, rewardRate };
 }
 
 /** 実際にcurrentCharacter.mへ加算・保存する。呼び出しごとに一度だけ加算されるよう、必ずここを経由すること。 */
@@ -4518,10 +4605,10 @@ gameMenuExit.addEventListener('click', async () => {
     ? (pvpMatch.lastAssets ?? pvpMatch.lastCurrency ?? 0) / (pvpMatch.lastAllianceSize || 1)
     : game._totalAssetsOf(hostPlayer) / hostAllianceSize;
   const isPvp = Boolean(pvpMatch);
-  const { earnedM: previewM, pvpAllianceMultiplier } = computeExitRewardM(endingAssetsShare);
+  const { earnedM: previewM, rewardRate } = computeExitRewardM(endingAssetsShare);
   const rewardMessage = isPvp
-    ? `対戦終了報酬：総資産(自分の取り分)${Math.round(endingAssetsShare)}Gの20%（${previewM}M、下限50M）${pvpAllianceMultiplier > 1 ? '／4人同盟戦2.5倍' : ''}を獲得します。`
-    : `総資産${Math.round(endingAssetsShare)}Gの20%（${previewM}M、下限50M）を獲得します。`;
+    ? `対戦終了報酬：総資産(自分の取り分)${Math.round(endingAssetsShare)}Gの${Math.round(rewardRate * 100)}%（${previewM}M、下限50M）を獲得します。`
+    : `総資産${Math.round(endingAssetsShare)}Gの${Math.round(rewardRate * 100)}%（${previewM}M、下限50M）を獲得します。`;
   const confirmed = await confirmYesNo(`対戦をやめますか？\n${rewardMessage}`);
   if (!confirmed) return;
 
