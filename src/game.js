@@ -2896,9 +2896,52 @@ export class Game {
   async _runCPUTurn() {
     await delay(CPU_PRE_ROLL_MS);
     if (!this.currentPlayer.isCPU) return;
+    await this._cpuMaybeFixLandElementSpell(this.currentPlayer);
     await this._cpuMaybeUseDiceSpell(this.currentPlayer);
     const steps = await this.onCpuRoll();
     this.rollDice(steps);
+  }
+
+  /**
+   * 土地属性変更系スペル（放火/放水/放電/放牧/ツイッ〇ランド＝
+   * forceTileElement、最適化＝autoMatchAllTileElements）のCPU使用判断
+   * （ロール前・ダイス系スペルより優先）。自分の土地にS以上のレアリティの
+   * モンスターを配置しているのに、その土地の属性がモンスターの属性と
+   * 合っていない（＝同属性ボーナスを取り逃している）場合、最優先でこの
+   * 系統のスペルを使って属性を揃える。最適化があれば全ての不一致を
+   * まとめて直せるので優先し、無ければ該当する属性のforceTileElementを
+   * 1件だけ使う（1ターン1枚のため）。
+   */
+  async _cpuMaybeFixLandElementSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const landFixCards = player.hand.filter(
+      (c) => c.type === CardType.SPELL && (c.effect?.type === 'forceTileElement' || c.effect?.type === 'autoMatchAllTileElements'),
+    );
+    if (landFixCards.length === 0) return;
+    const affordable = landFixCards.filter((c) => player.currency >= (c.cost || 0));
+    if (affordable.length === 0) return;
+
+    const rarityRank = { [Rarity.N]: 0, [Rarity.S]: 1, [Rarity.R]: 2, [Rarity.EX]: 3 };
+    const mismatchedTiles = this.tiles.filter(
+      (t) => t.owner === player.id && t.unit?.ownerId === player.id
+        && rarityRank[t.unit.def.rarity] >= rarityRank[Rarity.S]
+        && t.element !== t.unit.def.element,
+    );
+    if (mismatchedTiles.length === 0) return;
+
+    const optimizeCard = affordable.find((c) => c.effect.type === 'autoMatchAllTileElements');
+    if (optimizeCard) {
+      await this._cpuCastSpell(player, optimizeCard, {});
+      return;
+    }
+
+    for (const tile of mismatchedTiles) {
+      const fixCard = affordable.find((c) => c.effect.type === 'forceTileElement' && c.effect.element === tile.unit.def.element);
+      if (fixCard) {
+        await this._cpuCastSpell(player, fixCard, { targetTileId: tile.id });
+        return;
+      }
+    }
   }
 
   /**
@@ -2931,14 +2974,14 @@ export class Game {
       const distance = this._tileDistance(target.tileId, tile.id);
       const trapCard = affordable.find((c) => c.effect.type === 'setNextDice' && c.effect.value === distance);
       if (trapCard) {
-        await this._cpuCastSpellOnPlayer(player, trapCard, target);
+        await this._cpuCastSpell(player, trapCard, { targetPlayerId: target.id });
         return;
       }
     }
 
     const nuisanceCard = affordable.find((c) => c.effect.type === 'setNextDice' && (c.effect.value === 1 || c.effect.value === 3));
     if (nuisanceCard) {
-      await this._cpuCastSpellOnPlayer(player, nuisanceCard, target);
+      await this._cpuCastSpell(player, nuisanceCard, { targetPlayerId: target.id });
     }
   }
 
@@ -2955,11 +2998,13 @@ export class Game {
 
   /**
    * useSpellの人間向けフローと同じ後始末（手札除去・discard・G消費・
-   * spellUsedThisTurn確定・ログ・演出・効果適用）をCPU向けに行う。
-   * 対象選択のUIプロンプト（_resolveSpellCastのonPickAbilityTarget）は
-   * 挟まず、決め打ちしたtargetを直接_applySpellEffectへ渡す。
+   * spellUsedThisTurn確定・ログ・演出・効果適用）をCPU向けに行う汎用
+   * ヘルパー。対象選択のUIプロンプト（_resolveSpellCastのonPickAbility
+   * Target）は挟まず、既に決め打ちした`cast`（{targetPlayerId}/
+   * {targetTileId}/{}等、_applySpellEffectがそのまま受け取れる形）を
+   * 直接渡す。
    */
-  async _cpuCastSpellOnPlayer(player, card, target) {
+  async _cpuCastSpell(player, card, cast) {
     player.hand = player.hand.filter((c) => c.id !== card.id);
     player.deck.discard(card);
     player.currency -= card.cost || 0;
@@ -2967,7 +3012,7 @@ export class Game {
     this.onLog(`${player.name}は「${card.name}」を使用した (-${card.cost || 0}G)`);
     this._notifyState();
     await this.onSpellUse(card);
-    await this._applySpellEffect(player, card, { targetPlayerId: target.id });
+    await this._applySpellEffect(player, card, cast);
     this._notifyState();
   }
 
