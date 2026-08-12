@@ -94,7 +94,8 @@ export class Game {
     onConfirmAction,
     onPickLevelUp,
     onConfirmMove,
-    onConfirmSellLand,
+    onPickSellLandForDebt,
+    onBankruptcy,
     onPickBrowseTile,
     onLandSubmenu,
     onPickAbilityTarget,
@@ -149,7 +150,12 @@ export class Game {
     this.onConfirmAction = onConfirmAction;
     this.onPickLevelUp = onPickLevelUp;
     this.onConfirmMove = onConfirmMove;
-    this.onConfirmSellLand = onConfirmSellLand;
+    // 手持ちGがマイナスになった時の強制土地売却リスト、および破産演出
+    // （カメラクローズアップ+ゆれ+「破産」の2文字）用フック - どちらも
+    // 未指定ならテスト等で素通りできるようデフォルトを与えておく
+    // （_resolveNegativeCurrency/_triggerBankruptcy参照）。
+    this.onPickSellLandForDebt = onPickSellLandForDebt || (() => Promise.resolve(null));
+    this.onBankruptcy = onBankruptcy || (() => Promise.resolve());
     this.onPickBrowseTile = onPickBrowseTile;
     this.onLandSubmenu = onLandSubmenu;
     this.onPickAbilityTarget = onPickAbilityTarget;
@@ -175,8 +181,8 @@ export class Game {
     // ストーリーでは未設定のままなので何も起きない。
     this.onPvpSync = onPvpSync;
     // ストーリーモードでは破産＝敗北（脱落）としてそのままバトル終了判定に
-    // つながる（_checkBankruptcy/_checkStoryWinCondition参照）。通常の対戦
-    // モードでは今まで通り500Gを渡されゴール地点から再スタートするだけ。
+    // つながる（_triggerBankruptcy/_checkStoryWinCondition参照）。通常の
+    // 対戦モードでは今まで通り500Gを渡されゴール地点から再スタートするだけ。
     this.storyMode = storyMode;
     this.goalCurrency = Number.isFinite(Number(goalCurrency)) ? Number(goalCurrency) : null;
     this.storyEnded = false;
@@ -405,7 +411,7 @@ export class Game {
     if (endedTurn) {
       // 帰巣本能専用: 効果自体がターンを終わらせるので、通常のrollDice相当の
       // 後始末（破産チェック→次のプレイヤーへ）をここで肩代わりする。
-      for (const p of this.players) this._checkBankruptcy(p);
+      for (const p of this.players) await this._resolveNegativeCurrency(p);
       if (!this.storyEnded) {
         this._nextTurn();
         await this._beginTurn();
@@ -723,7 +729,7 @@ export class Game {
 
     await this._runLandCommand(player);
     await delay(400);
-    for (const p of this.players) this._checkBankruptcy(p);
+    for (const p of this.players) await this._resolveNegativeCurrency(p);
     if (this.storyEnded) return;
     this._nextTurn();
     await this._beginTurn();
@@ -982,46 +988,11 @@ export class Game {
 
     // 相手側が戦闘中の略奪特性等でマイナスになっている可能性もあるので、
     // 今操作したプレイヤーだけでなく全員をチェックする。
-    for (const p of this.players) this._checkBankruptcy(p);
+    for (const p of this.players) await this._resolveNegativeCurrency(p);
     if (this.storyEnded) return; // ストーリーモードで決着がついたらターン進行を止める
 
     this._nextTurn();
     await this._beginTurn();
-  }
-
-  /**
-   * 破産処理。通常の対戦モードでは所持Gがマイナスになったプレイヤーは
-   * 500Gを渡され、ゴール地点（スタートマス）から再スタートする（デッキ・
-   * 手札は変化しない。土地の所有権もこれだけでは失われない）。
-   * ストーリーモードでは破産＝脱落（敗北）として扱い、盤上から取り除いた
-   * 上で_checkStoryWinConditionに勝敗判定を委ねる。
-   */
-  _checkBankruptcy(player) {
-    if (player.currency >= 0 || player.defeated) return;
-    if (this.storyMode) {
-      player.defeated = true;
-      player.currency = 0;
-      if (player.mesh) player.mesh.visible = false;
-      for (const tile of this.tiles) {
-        if (tile.owner === player.id) {
-          tile.unit = null;
-          tile.owner = null;
-          tile.transparentCursed = false;
-          this._repaintTileToElement(tile);
-        }
-      }
-      this.onLog(`${player.name}は脱落した！`);
-      this._notifyState();
-      this._checkStoryWinCondition();
-      return;
-    }
-    const startTile = this.tiles.find((t) => t.type === TileType.START);
-    player.currency = 500;
-    player.tileId = startTile.id;
-    player.previousTileId = null;
-    if (player.mesh) player.mesh.position.set(startTile.position.x, PIECE_REST_Y, startTile.position.z);
-    this.onLog(`${player.name}は破産した！500Gを渡されゴール地点から再スタート`);
-    this._notifyState();
   }
 
   /**
@@ -1745,7 +1716,6 @@ export class Game {
         if (action === 'levelup' && (await this._humanLevelUpFlowForTile(player, tile))) return true;
         if (action === 'element' && (await this._humanChangeElementFlowForTile(player, tile))) return true;
         if (action === 'move' && (await this._humanMoveFlow(player, tile))) return true;
-        if (action === 'sell' && (await this._humanSellLandFlow(player, tile))) return true;
         if (action === 'ability' && (await this._humanAbilityFlow(player, tile))) return true;
         // cancelled sub-action - loop back to the submenu for this same tile
       }
@@ -2072,19 +2042,25 @@ export class Game {
     return true;
   }
 
-  /**
-   * 土地コマンドの「土地を売る」: 唯一レベルをリセットする操作（それ以外は
-   * 所有権を失ってもレベルは保持されるのが確定仕様 - 売却だけが例外）。
-   * 売却額は地価の半額。配置されていたモンスターのカードは入れ替え同様
-   * 手札に戻る。実行したら自動でターン終了。同盟戦でもパートナーの土地は
-   * ここに来る前提として個人所有の土地しか_runLandBrowseの候補に出ない
-   * ので、他人の土地を誤って売る経路は無い。
-   */
-  async _humanSellLandFlow(player, tile) {
-    const salePrice = Math.round(this._landValueOfTile(tile) / 2);
-    const confirmed = await this.onConfirmSellLand({ tile: this.getTileSummary(tile), salePrice }, player.id);
-    if (!confirmed) return false;
+  /** 強制売却リスト1件分のサマリー（売却額・配置モンスターのレアリティ込み）。 */
+  _sellLandSummary(tile) {
+    return {
+      ...this.getTileSummary(tile),
+      salePrice: Math.round(this._landValueOfTile(tile) / 2),
+      unitRarity: tile.unit ? tile.unit.def.rarity : null,
+    };
+  }
 
+  /**
+   * 実際に土地を売却する（旧「土地を売る」コマンドの中身そのまま）。唯一
+   * レベルをリセットする操作（それ以外は所有権を失ってもレベルは保持
+   * されるのが確定仕様 - 売却だけが例外）。売却額は地価の半額。配置され
+   * ていたモンスターのカードは入れ替え同様手札に戻る。呼び出し元
+   * （_resolveNegativeCurrency）だけが使う内部処理で、確認ダイアログは
+   * 挟まない（マイナスGの解消は任意ではなく必須のため）。
+   */
+  _sellLandTile(player, tile) {
+    const salePrice = Math.round(this._landValueOfTile(tile) / 2);
     if (tile.unit) {
       player.hand.push({
         ...tile.unit.def,
@@ -2098,9 +2074,76 @@ export class Game {
     this._repaintTileToElement(tile);
     this.scene.updateTileLevelBorder(tile);
     player.currency += salePrice;
-    this.onLog(`${player.name}は土地を売却した (+${salePrice}G)`);
+    this.onLog(`${player.name}は${tile.id}番地を売却した (+${salePrice}G)`);
     this._notifyState();
-    return true;
+  }
+
+  /**
+   * 通行料・スペル等でGがマイナスになった直後に呼ぶ: マイナスが解消される
+   * まで、所有地を1つずつ強制的に売却させる（土地コマンドから能動的に
+   * 売る手段は無くなった - このマイナス解消時だけの特別処理）。CPUは
+   * 一番安い土地から機械的に売る。売れる土地が尽きてもまだマイナスなら
+   * 破産（_triggerBankruptcy）。
+   */
+  async _resolveNegativeCurrency(player) {
+    if (player.currency >= 0 || player.defeated) return;
+    while (player.currency < 0) {
+      const candidates = this._ownedTiles(player);
+      if (candidates.length === 0) {
+        await this._triggerBankruptcy(player);
+        return;
+      }
+      if (player.isCPU) {
+        const cheapest = candidates.reduce((min, t) => (this._landValueOfTile(t) < this._landValueOfTile(min) ? t : min));
+        this._sellLandTile(player, cheapest);
+        continue;
+      }
+      const pickedId = await this.onPickSellLandForDebt(
+        { tiles: candidates.map((t) => this._sellLandSummary(t)), deficit: -player.currency },
+        player.id,
+      );
+      const pickedTile = candidates.find((t) => t.id === pickedId);
+      if (!pickedTile) continue; // 念のため: 不正な選択は無視して再提示する
+      this._sellLandTile(player, pickedTile);
+    }
+  }
+
+  /**
+   * 土地を売り尽くしてもまだGがマイナスな時の破産処理。まず演出
+   * （カメラクローズアップ+ゆれ+「破産」の2文字、main.js側）を再生し、
+   * その後は元の_checkBankruptcyと同じ後始末（ストーリー=脱落、
+   * 通常=500Gでゴールから再スタート）を行う。
+   */
+  async _triggerBankruptcy(player) {
+    await this.onBankruptcy({
+      playerId: player.id,
+      playerName: player.name,
+      position: this.tiles[player.tileId]?.position ?? null,
+    });
+    if (this.storyMode) {
+      player.defeated = true;
+      player.currency = 0;
+      if (player.mesh) player.mesh.visible = false;
+      for (const tile of this.tiles) {
+        if (tile.owner === player.id) {
+          tile.unit = null;
+          tile.owner = null;
+          tile.transparentCursed = false;
+          this._repaintTileToElement(tile);
+        }
+      }
+      this.onLog(`${player.name}は脱落した！`);
+      this._notifyState();
+      this._checkStoryWinCondition();
+      return;
+    }
+    const startTile = this.tiles.find((t) => t.type === TileType.START);
+    player.currency = 500;
+    player.tileId = startTile.id;
+    player.previousTileId = null;
+    if (player.mesh) player.mesh.position.set(startTile.position.x, PIECE_REST_Y, startTile.position.z);
+    this.onLog(`${player.name}は破産した！500Gを渡されゴール地点から再スタート`);
+    this._notifyState();
   }
 
   /** BFS hop-count between two tiles over the same adjacency graph movement uses - this is what "3マス以内" means on this board (graph distance, not world-space distance). */

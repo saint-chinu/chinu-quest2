@@ -79,7 +79,6 @@ const landSubmenuSwap = document.getElementById('land-submenu-swap');
 const landSubmenuLevelup = document.getElementById('land-submenu-levelup');
 const landSubmenuElement = document.getElementById('land-submenu-element');
 const landSubmenuMove = document.getElementById('land-submenu-move');
-const landSubmenuSell = document.getElementById('land-submenu-sell');
 const landSubmenuAbility = document.getElementById('land-submenu-ability');
 const landSubmenuBack = document.getElementById('land-submenu-back');
 const abilityTargetModal = document.getElementById('ability-target-modal');
@@ -114,6 +113,9 @@ const camArrowDown = document.getElementById('cam-arrow-down');
 const camArrowLeft = document.getElementById('cam-arrow-left');
 const camArrowRight = document.getElementById('cam-arrow-right');
 const camWorkBack = document.getElementById('cam-work-back');
+const debtSaleModal = document.getElementById('debt-sale-modal');
+const debtSaleTitle = document.getElementById('debt-sale-title');
+const debtSaleChoices = document.getElementById('debt-sale-choices');
 const tileInfoModal = document.getElementById('tile-info-modal');
 const tileInfoText = document.getElementById('tile-info-text');
 const tileInfoClose = document.getElementById('tile-info-close');
@@ -326,7 +328,6 @@ function promptLandSubmenu(tile) {
       landSubmenuLevelup.removeEventListener('click', onLevelup);
       landSubmenuElement.removeEventListener('click', onElement);
       landSubmenuMove.removeEventListener('click', onMove);
-      landSubmenuSell.removeEventListener('click', onSell);
       landSubmenuAbility.removeEventListener('click', onAbility);
       landSubmenuBack.removeEventListener('click', onBack);
       resolve(result);
@@ -343,9 +344,6 @@ function promptLandSubmenu(tile) {
     function onMove() {
       cleanup('move');
     }
-    function onSell() {
-      cleanup('sell');
-    }
     function onAbility() {
       cleanup('ability');
     }
@@ -356,7 +354,6 @@ function promptLandSubmenu(tile) {
     landSubmenuLevelup.addEventListener('click', onLevelup);
     landSubmenuElement.addEventListener('click', onElement);
     landSubmenuMove.addEventListener('click', onMove);
-    landSubmenuSell.addEventListener('click', onSell);
     landSubmenuAbility.addEventListener('click', onAbility);
     landSubmenuBack.addEventListener('click', onBack);
   });
@@ -445,9 +442,30 @@ function promptConfirmMove() {
   return confirmYesNo('移動しますか？');
 }
 
-/** "この土地を売りますか？ 売却額+◯◯G" はい/いいえ - unlike every other confirm here this is a GAIN, not a cost, so it gets its own wording rather than reusing promptConfirmAction's "コスト" framing. */
-function promptConfirmSellLand({ salePrice }) {
-  return confirmYesNo(`この土地を売りますか？ 売却額+${salePrice}G`);
+/**
+ * 手持ちGがマイナスになった直後にだけ出る強制売却リスト（土地コマンドから
+ * 能動的に売る手段は無い - game.js _resolveNegativeCurrency参照）。
+ * マイナスが解消するまで1件売るたびにまた同じ形で呼ばれる。
+ */
+function promptPickSellLandForDebt({ tiles, deficit }) {
+  return new Promise((resolve) => {
+    debtSaleTitle.textContent = `Gがマイナスです（不足額 ${deficit}G）。売却する土地を選んでください`;
+    debtSaleChoices.replaceChildren();
+    for (const tile of tiles) {
+      const el = document.createElement('button');
+      el.className = 'debt-sale-choice';
+      const unitLine = tile.unitName
+        ? `${tile.unitName}（${tile.unitRarity}） ATK${tile.unitAtk} / HP${tile.unitHp}`
+        : '（配置モンスターなし）';
+      el.innerHTML = `<span class="debt-sale-price">+${tile.salePrice}G</span><span class="debt-sale-unit">${unitLine}</span>`;
+      el.addEventListener('click', () => {
+        debtSaleModal.classList.add('hidden');
+        resolve(tile.id);
+      });
+      debtSaleChoices.appendChild(el);
+    }
+    debtSaleModal.classList.remove('hidden');
+  });
 }
 
 /** Shows the hand's monster cards; clicking one blinks it twice before resolving. */
@@ -1161,6 +1179,44 @@ async function promptTargetEffect({ tileId = null, playerId = null, position = n
 async function promptTurnFocus({ position }) {
   if (!scene || !position) return;
   await scene.focusAndZoom(position.x, position.z, 1, 420);
+}
+
+/** 「破産」の2文字をキャラの頭上に1.5秒表示する（showTargetEffectMessageと同じscreen座標変換だが、専用スタイル・専用の表示時間を持つので分けている）。 */
+async function showBankruptcyText(position) {
+  const screen = scene.worldToScreen(position.x, PIECE_REST_Y + 2.0, position.z);
+  const el = document.createElement('div');
+  el.className = 'fx-bankrupt-message';
+  el.textContent = '破産';
+  el.style.left = `${screen.x}px`;
+  el.style.top = `${screen.y}px`;
+  fxLayer.appendChild(el);
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  el.remove();
+}
+
+/**
+ * 破産演出: 対象プレイヤーへカメラをクローズアップし、金色のバースト
+ * （お金を放出するイメージ、playSummonBurst流用）+ 駒の振動 + 頭上に
+ * 「破産」の2文字を1.5秒、同時に再生する。この後はgame.js側
+ * （_triggerBankruptcy）が通常の破産処理（500Gで再スタート/ストーリー
+ * 脱落）を続ける。
+ */
+async function promptBankruptcy({ playerId, playerName, position }) {
+  if (!scene) return;
+  const isPvpGuest = pvpMatch && !pvpMatch.isHost;
+  const mesh = isPvpGuest ? findPvpGuestPieceSprite(playerId) : game?.players?.find((p) => p.id === playerId)?.mesh;
+  const pos = position ?? (mesh ? { x: mesh.position.x, z: mesh.position.z } : null);
+  if (!pos) return;
+
+  playSfx('block');
+  const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+  await scene.focusAndZoom(pos.x, pos.z, 1.6, 400);
+  await Promise.all([
+    scene.playSummonBurst(pos),
+    mesh ? scene.shakeSprite(mesh, 900) : Promise.resolve(),
+    showBankruptcyText(pos),
+  ]);
+  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 400);
 }
 
 let stopMoveDestinationHighlight = null;
@@ -1924,7 +1980,8 @@ function startBattle(character, storyOptions = {}) {
     onConfirmAction: relayable('confirmAction', promptConfirmAction),
     onPickLevelUp: relayable('pickLevelUp', promptPickLevelUp),
     onConfirmMove: relayable('confirmMove', promptConfirmMove),
-    onConfirmSellLand: relayable('confirmSellLand', promptConfirmSellLand),
+    onPickSellLandForDebt: relayable('pickSellLandForDebt', promptPickSellLandForDebt),
+    onBankruptcy: relayable('bankruptcy', promptBankruptcy, { broadcast: true }),
     onPickBrowseTile: relayable('pickBrowseTile', promptPickBrowseTile),
     onLandSubmenu: relayable('landSubmenu', promptLandSubmenu),
     onPickAbilityTarget: relayable('pickAbilityTarget', promptPickAbilityTarget),
@@ -2033,7 +2090,7 @@ const HELP_TEXT = `【勝敗の目標】
 
 【止まったマスでできること】
 ・召喚／侵略: 手札のモンスターを空き地に召喚、または敵の土地に攻め込みます
-・土地: 自分がこれまでに通った土地（START/イベントマスなら所有地全部）を選んで、入れ替え・土地Lvアップ・属性変更・移動・土地を売る・特殊能力を行えます
+・土地: 自分がこれまでに通った土地（START/イベントマスなら所有地全部）を選んで、入れ替え・土地Lvアップ・属性変更・移動・特殊能力を行えます
 ・終了: 何もせずターンを終えます
 
 【通行料】
@@ -2063,8 +2120,8 @@ STARTマスを通過・着地すると「基本ボーナス＋領地ボーナス
 ・土地Lvアップ: Gを払って土地レベルを1段階上げます
 ・属性変更: Gを払って土地の属性を変更します
 ・移動: 配置モンスターを隣接する土地へ移動させます（空き地ならそのまま移動、敵地なら戦闘になります）
-・土地を売る: 土地を手放してGを得ます（レベルはリセットされます）
 ・特殊能力: モンスター固有の効果をGを払って発動します（使えるモンスターのみ）
+※土地を自分から売ることはできません。通行料やスペル等で所持Gがマイナスになった時だけ、マイナスが解消するまで自動的に売却リストが表示されます（それでも足りなければ破産します）
 
 【呪い】
 ・プレイヤー呪い: スペル等でかかる呪いで、コマを動かしても効果は本人についてきます（サイコロ操作、通行料減免など）
@@ -4338,7 +4395,8 @@ const pvpGuestHandlers = {
   confirmAction: promptConfirmAction,
   pickLevelUp: promptPickLevelUp,
   confirmMove: promptConfirmMove,
-  confirmSellLand: promptConfirmSellLand,
+  pickSellLandForDebt: promptPickSellLandForDebt,
+  bankruptcy: promptBankruptcy,
   pickBrowseTile: promptPickBrowseTile,
   landSubmenu: promptLandSubmenu,
   pickAbilityTarget: promptPickAbilityTarget,

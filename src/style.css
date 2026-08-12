@@ -163,6 +163,35 @@ html, body {
   pointer-events: none;
 }
 
+/* 破産演出（promptBankruptcy参照）: キャラの頭上に大きく「破産」の2文字をポップインさせ、1.5秒表示する。 */
+.fx-bankrupt-message {
+  position: fixed;
+  z-index: 71;
+  transform: translate(-50%, -100%) scale(0.4);
+  opacity: 0;
+  padding: 10px 26px;
+  border-radius: 12px;
+  color: #ffe0b8;
+  background: rgba(60, 6, 10, 0.92);
+  border: 3px solid #ff4d4d;
+  font-size: clamp(30px, 5vw, 52px);
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  white-space: nowrap;
+  text-shadow: 0 3px 0 #3a0000, 0 8px 18px rgba(0, 0, 0, 0.7);
+  box-shadow: 0 0 30px rgba(255, 77, 77, 0.6);
+  pointer-events: none;
+  animation: bankrupt-pop 1500ms cubic-bezier(0.2, 1.7, 0.4, 1) forwards;
+}
+
+@keyframes bankrupt-pop {
+  0% { transform: translate(-50%, -100%) scale(0.4); opacity: 0; }
+  18% { transform: translate(-50%, -100%) scale(1.15); opacity: 1; }
+  30% { transform: translate(-50%, -100%) scale(1); opacity: 1; }
+  85% { transform: translate(-50%, -100%) scale(1); opacity: 1; }
+  100% { transform: translate(-50%, -100%) scale(0.9); opacity: 0; }
+}
+
 .fx-land-loss {
   position: absolute;
   z-index: 58;
@@ -2067,7 +2096,8 @@ html, body {
 #ability-target-modal,
 #confirm-modal,
 #level-up-modal,
-#tile-info-modal {
+#tile-info-modal,
+#debt-sale-modal {
   position: absolute;
   inset: 0;
   z-index: 20;
@@ -2075,6 +2105,12 @@ html, body {
   align-items: center;
   justify-content: center;
   background: rgba(0, 0, 0, 0.5);
+}
+
+/* マイナスGの強制売却は他のどの操作よりも優先される（土地コマンド等の
+   モーダルの上に必ず出したい）。 */
+#debt-sale-modal {
+  z-index: 46;
 }
 
 /* 手札破棄の確認ダイアログは破棄カード一覧より必ず前面に出す。 */
@@ -2115,7 +2151,8 @@ html, body {
 #ability-target-modal.hidden,
 #confirm-modal.hidden,
 #level-up-modal.hidden,
-#tile-info-modal.hidden {
+#tile-info-modal.hidden,
+#debt-sale-modal.hidden {
   display: none;
 }
 
@@ -2132,7 +2169,8 @@ html, body {
 #ability-target-box,
 #confirm-box,
 #level-up-box,
-#tile-info-box {
+#tile-info-box,
+#debt-sale-box {
   background: #22223b;
   border-radius: 12px;
   padding: 20px 24px;
@@ -2165,6 +2203,49 @@ html, body {
   margin-bottom: 16px;
   font-size: 14px;
   white-space: pre-line;
+}
+
+#debt-sale-title {
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: #ffb4b4;
+  font-weight: 800;
+  white-space: pre-line;
+}
+
+#debt-sale-choices {
+  display: grid;
+  gap: 10px;
+  max-height: 55vh;
+  overflow-y: auto;
+}
+
+.debt-sale-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 260px;
+  padding: 10px 16px;
+  border-radius: 8px;
+  background: #33335a;
+  color: #fff;
+  text-align: left;
+}
+
+.debt-sale-choice:hover {
+  background: #3f3f70;
+}
+
+.debt-sale-price {
+  font-size: 17px;
+  font-weight: 900;
+  color: #ffd166;
+}
+
+.debt-sale-unit {
+  font-size: 13px;
+  color: #d8d8ea;
 }
 
 #element-picker-box p,
