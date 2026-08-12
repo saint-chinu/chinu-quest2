@@ -41,7 +41,7 @@ function privateHandRef(roomCode, uid) {
 }
 
 /** Creates a new waiting room and returns its code + this browser's Firebase uid (host). `mapId` is the board layout the host picked (see board.js MAPS) - stored on the room so the guest builds the identical board. */
-export async function createPvpRoom({ name, color, mapId, goalCurrency = 5000, playerCount = 2, allianceMode = false, cpuNames = [] }) {
+export async function createPvpRoom({ name, color, mapId, goalCurrency = 5000, playerCount = 2, allianceMode = false, randomAlliance = false, cpuNames = [] }) {
   const uid = await ensurePvpUser();
   const roomCode = randomRoomCode();
   await setDoc(roomRef(roomCode), {
@@ -52,6 +52,7 @@ export async function createPvpRoom({ name, color, mapId, goalCurrency = 5000, p
     goalCurrency,
     playerCount,
     allianceMode,
+    randomAlliance,
     cpuNames: Array.isArray(cpuNames) ? cpuNames.slice(0, 3) : [],
     guestUid: null,
     guestName: null,

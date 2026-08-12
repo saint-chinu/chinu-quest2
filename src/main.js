@@ -1638,6 +1638,7 @@ const pvpCreateButton = document.getElementById('pvp-create-button');
 const pvpGoalCurrency = document.getElementById('pvp-goal-currency');
 const pvpPlayerCount = document.getElementById('pvp-player-count');
 const pvpAllianceMode = document.getElementById('pvp-alliance-mode');
+const pvpRandomAlliance = document.getElementById('pvp-random-alliance');
 const pvpCpuSelects = [1, 2, 3].map((n) => document.getElementById(`pvp-cpu-${n}`));
 const pvpJoinCode = document.getElementById('pvp-join-code');
 const pvpJoinButton = document.getElementById('pvp-join-button');
@@ -3239,7 +3240,11 @@ function enterPvpRoomScreen(session) {
     pvpRoomSettings.textContent = `ステージ: ${MAPS.find((map) => map.id === room.mapId)?.name || room.mapId} / 目標G: ${Number(room.goalCurrency || 5000).toLocaleString('ja-JP')}G`;
     if (room.allianceMode) {
       const names = [room.hostName, room.guestName, ...(room.cpuNames || [])].filter(Boolean);
-      pvpRoomTeams.textContent = `🔴 紅組: ${names.filter((_, i) => i % 2 === 0).join('・') || '待機中'}　⚪ 白組: ${names.filter((_, i) => i % 2 === 1).join('・') || '待機中'}`;
+      if (room.randomAlliance) {
+        pvpRoomTeams.textContent = `🔀 ランダム同盟（開始時に決定）　参加者: ${names.join('・') || '待機中'}`;
+      } else {
+        pvpRoomTeams.textContent = `🔴 紅組: ${names.filter((_, i) => i % 2 === 0).join('・') || '待機中'}　⚪ 白組: ${names.filter((_, i) => i % 2 === 1).join('・') || '待機中'}`;
+      }
     } else {
       pvpRoomTeams.textContent = '同盟なし（個人戦）';
     }
@@ -3296,9 +3301,10 @@ function showPvpMapConfirm(map) {
     try {
       const goalCurrency = Number(pvpGoalCurrency.value);
       const allianceMode = pvpAllianceMode.checked;
+      const randomAlliance = allianceMode && pvpRandomAlliance.checked;
       const playerCount = allianceMode ? 4 : Number(pvpPlayerCount.value);
       const cpuNames = pvpCpuSelects.map((select) => select.value).filter(Boolean).slice(0, playerCount - 1);
-      const session = await createPvpRoom({ name: currentCharacter.name, color: currentCharacter.color, mapId: map.id, goalCurrency, playerCount, allianceMode, cpuNames });
+      const session = await createPvpRoom({ name: currentCharacter.name, color: currentCharacter.color, mapId: map.id, goalCurrency, playerCount, allianceMode, randomAlliance, cpuNames });
       enterPvpRoomScreen(session);
     } catch {
       pvpMenuError.textContent = '部屋を作成できませんでした';
@@ -3601,7 +3607,10 @@ pvpRoomStart.addEventListener('click', async () => {
       iconImage: await loadNpcTokenImage(cpuName),
     });
   }
-  if (pvpLastRoom.allianceMode && playerConfigs.length === 4) playerConfigs.forEach((config, index) => { config.allianceId = index % 2; });
+  if (pvpLastRoom.allianceMode && playerConfigs.length === 4) {
+    const teams = pvpLastRoom.randomAlliance ? [0, 1, 0, 1].sort(() => Math.random() - 0.5) : [0, 1, 0, 1];
+    playerConfigs.forEach((config, index) => { config.allianceId = teams[index]; });
+  }
   startBattle(currentCharacter, {
     mapId: pvpLastRoom.mapId,
     goalCurrency: pvpLastRoom.goalCurrency || 5000,
