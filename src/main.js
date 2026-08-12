@@ -1636,6 +1636,9 @@ const battleBackButton = document.getElementById('battle-back');
 const pvpMenuScreen = document.getElementById('pvp-menu-screen');
 const pvpCreateButton = document.getElementById('pvp-create-button');
 const pvpGoalCurrency = document.getElementById('pvp-goal-currency');
+const pvpPlayerCount = document.getElementById('pvp-player-count');
+const pvpAllianceMode = document.getElementById('pvp-alliance-mode');
+const pvpCpuSelects = [1, 2, 3].map((n) => document.getElementById(`pvp-cpu-${n}`));
 const pvpJoinCode = document.getElementById('pvp-join-code');
 const pvpJoinButton = document.getElementById('pvp-join-button');
 const pvpMenuError = document.getElementById('pvp-menu-error');
@@ -3235,8 +3238,12 @@ function enterPvpRoomScreen(session) {
     pvpRoomSettings.textContent = `ステージ: ${MAPS.find((map) => map.id === room.mapId)?.name || room.mapId} / 目標G: ${Number(room.goalCurrency || 5000).toLocaleString('ja-JP')}G`;
     if (room.guestUid) {
       const opponentName = session.isHost ? room.guestName : room.hostName;
-      pvpRoomStatus.textContent = session.isHost ? `対戦相手: ${opponentName}（準備完了）` : `対戦相手: ${opponentName}`;
-      pvpRoomStart.classList.toggle('hidden', !session.isHost);
+      const participantCount = Array.isArray(room.participants) ? room.participants.length : (room.guestUid ? 2 : 1);
+      const requiredCount = Math.max(2, Math.min(4, Number(room.playerCount) || 2));
+      pvpRoomStatus.textContent = session.isHost
+        ? `参加者 ${participantCount}/${requiredCount}人（${opponentName}）`
+        : `ホスト: ${opponentName} / 参加者 ${participantCount}/${requiredCount}人`;
+      pvpRoomStart.classList.toggle('hidden', !session.isHost || participantCount < requiredCount);
     } else {
       pvpRoomStatus.textContent = session.isHost ? '対戦相手を待っています…' : 'ホストの開始を待っています…';
       pvpRoomStart.classList.add('hidden');
@@ -3281,7 +3288,10 @@ function showPvpMapConfirm(map) {
     pvpMenuError.classList.add('hidden');
     try {
       const goalCurrency = Number(pvpGoalCurrency.value);
-      const session = await createPvpRoom({ name: currentCharacter.name, color: currentCharacter.color, mapId: map.id, goalCurrency });
+      const allianceMode = pvpAllianceMode.checked;
+      const playerCount = allianceMode ? 4 : Number(pvpPlayerCount.value);
+      const cpuNames = pvpCpuSelects.map((select) => select.value).filter(Boolean).slice(0, playerCount - 1);
+      const session = await createPvpRoom({ name: currentCharacter.name, color: currentCharacter.color, mapId: map.id, goalCurrency, playerCount, allianceMode, cpuNames });
       enterPvpRoomScreen(session);
     } catch {
       pvpMenuError.textContent = '部屋を作成できませんでした';

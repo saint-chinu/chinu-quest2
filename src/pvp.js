@@ -41,7 +41,7 @@ function privateHandRef(roomCode, uid) {
 }
 
 /** Creates a new waiting room and returns its code + this browser's Firebase uid (host). `mapId` is the board layout the host picked (see board.js MAPS) - stored on the room so the guest builds the identical board. */
-export async function createPvpRoom({ name, color, mapId, goalCurrency = 5000, playerCount = 2, allianceMode = false }) {
+export async function createPvpRoom({ name, color, mapId, goalCurrency = 5000, playerCount = 2, allianceMode = false, cpuNames = [] }) {
   const uid = await ensurePvpUser();
   const roomCode = randomRoomCode();
   await setDoc(roomRef(roomCode), {
@@ -52,6 +52,7 @@ export async function createPvpRoom({ name, color, mapId, goalCurrency = 5000, p
     goalCurrency,
     playerCount,
     allianceMode,
+    cpuNames: Array.isArray(cpuNames) ? cpuNames.slice(0, 3) : [],
     guestUid: null,
     guestName: null,
     guestColor: null,
@@ -78,7 +79,6 @@ export async function joinPvpRoom(roomCodeInput, { name, color, deckList }) {
   if (!snap.exists()) throw new Error('その部屋コードは見つかりませんでした');
   const room = snap.data();
   if (room.status !== 'waiting' || room.guestUid) throw new Error('その部屋にはもう入れません（満員または対戦中）');
-
   await updateDoc(ref, {
     guestUid: uid,
     guestName: name,
