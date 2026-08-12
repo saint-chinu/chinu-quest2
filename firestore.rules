@@ -23,7 +23,7 @@ service cloud.firestore {
 
       function isParticipant() {
         return signedIn() &&
-          (resource.data.hostUid == request.auth.uid || resource.data.guestUid == request.auth.uid);
+          (resource.data.hostUid == request.auth.uid || resource.data.guestUid == request.auth.uid || (resource.data.participantUids is list && request.auth.uid in resource.data.participantUids));
       }
 
       function isWaitingRoom() {
@@ -46,6 +46,21 @@ service cloud.firestore {
             .hasOnly(['guestUid', 'guestName', 'guestColor', 'guestDeckList', 'participants', 'status']) &&
           request.resource.data.participants is list &&
           request.resource.data.participants.size() == resource.data.participants.size() + 1;
+      }
+
+      function isValidRosterJoin() {
+        return signedIn() && resource.data.status == 'waiting' &&
+          request.resource.data.hostUid == resource.data.hostUid &&
+          request.resource.data.participants is list && resource.data.participants is list &&
+          request.resource.data.participants.size() == resource.data.participants.size() + 1 &&
+          request.resource.data.participants.size() <= request.resource.data.playerCount &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'participantUids', 'guestUid', 'guestName', 'guestColor', 'guestDeckList']) &&
+          request.resource.data.participants[resource.data.participants.size()].uid == request.auth.uid &&
+          request.resource.data.participants[resource.data.participants.size()].name is string &&
+          request.resource.data.participants[resource.data.participants.size()].name.size() > 0 &&
+          request.resource.data.participants[resource.data.participants.size()].name.size() <= 10 &&
+          request.resource.data.participants[resource.data.participants.size()].deckList is list &&
+          request.resource.data.participants[resource.data.participants.size()].deckList.size() == 40;
       }
 
       function isValidGuestResponse() {
@@ -95,7 +110,7 @@ service cloud.firestore {
           request.resource.data.hostUid == resource.data.hostUid &&
           request.resource.data.guestUid == resource.data.guestUid
         ) ||
-        isValidJoin() ||
+        isValidJoin() || isValidRosterJoin() ||
         isValidGuestResponse() ||
         isValidGuestAction()
       );

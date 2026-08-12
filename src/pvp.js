@@ -12,6 +12,7 @@ import { db, ensurePvpUser } from './firebase.js';
 import {
   doc,
   getDoc,
+  runTransaction,
   setDoc,
   updateDoc,
   deleteDoc,
@@ -63,6 +64,7 @@ export async function createPvpRoom({ name, color, mapId, goalCurrency = 5000, p
     randomAlliance,
     cpuNames: Array.isArray(cpuNames) ? cpuNames.slice(0, 3) : [],
     participants: [{ uid, name, color, deckList: null, ready: true }],
+    participantUids: [uid],
     guestUid: null,
     guestName: null,
     guestColor: null,
@@ -86,17 +88,17 @@ export async function joinPvpRoom(roomCodeInput, { name, color, deckList }) {
   if (!Array.isArray(deckList) || deckList.length !== 40) throw new Error('参加には40枚のデッキ確定が必要です');
   const uid = await ensurePvpUser();
   const ref = roomRef(roomCode);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) throw new Error('その部屋コードは見つかりませんでした');
-  const room = snap.data();
-  if (room.status !== 'waiting' || room.guestUid) throw new Error('その部屋にはもう入れません（満員または対戦中）');
-  await updateDoc(ref, {
-    guestUid: uid,
-    guestName: name,
-    guestColor: color,
-    guestDeckList: deckList,
-    participants: [...(Array.isArray(room.participants) ? room.participants : []), { uid, name, color, deckList, ready: true }],
-    status: 'active',
+  await runTransaction(db, async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists()) throw new Error('その部屋コードは見つかりませんでした');
+    const room = snap.data();
+    if (room.status !== 'waiting') throw new Error('その部屋にはもう入れません（満員または対戦中）');
+    const participants = Array.isArray(room.participants) ? room.participants.filter((p) => p?.uid) : [];
+    const limit = Math.max(2, Math.min(4, Number(room.playerCount) || 2));
+    if (participants.some((p) => p.uid === uid) || participants.length >= limit) throw new Error('その部屋にはもう入れません（満員または対戦中）');
+    const update = { participants: [...participants, { uid, name, color, deckList, ready: true }], participantUids: [...participants.map((p) => p.uid), uid] };
+    if (!room.guestUid) Object.assign(update, { guestUid: uid, guestName: name, guestColor: color, guestDeckList: deckList });
+    tx.update(ref, update);
   });
   return { roomCode, uid, isHost: false };
 }
