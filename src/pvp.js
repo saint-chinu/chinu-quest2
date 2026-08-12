@@ -159,12 +159,13 @@ export class HostGuestRelay {
   constructor(roomCode) {
     this.roomCode = roomCode;
     this.nextRequestId = 1;
-    this.pending = null; // { requestId, resolve }
+    this.pending = null; // { requestId, resolve, reject, timer }
     this.unsubscribe = listenToRoom(roomCode, (room) => {
       if (!room || !this.pending) return;
       if (room.guestResponseId === this.pending.requestId) {
-        const { resolve } = this.pending;
+        const { resolve, timer } = this.pending;
         this.pending = null;
+        clearTimeout(timer);
         resolve(room.guestResponse);
       }
     });
@@ -173,13 +174,23 @@ export class HostGuestRelay {
   ask(type, payload) {
     const requestId = this.nextRequestId;
     this.nextRequestId += 1;
-    return new Promise((resolve) => {
-      this.pending = { requestId, resolve };
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        if (!this.pending || this.pending.requestId !== requestId) return;
+        this.pending = null;
+        reject(new Error('対戦相手からの応答がタイムアウトしました'));
+      }, 45000);
+      this.pending = { requestId, resolve, reject, timer };
       publishHostRequest(this.roomCode, requestId, { type, payload });
     });
   }
 
   destroy() {
+    if (this.pending) {
+      clearTimeout(this.pending.timer);
+      this.pending.reject(new Error('対戦リレーが終了しました'));
+      this.pending = null;
+    }
     this.unsubscribe();
   }
 }
@@ -205,9 +216,13 @@ export class GuestHostListener {
   }
 
   async _handle(requestId, { type, payload }) {
-    const handler = this.handlers[type];
-    const response = handler ? await handler(payload) : null;
-    await sendGuestResponse(this.roomCode, requestId, response);
+    try {
+      const handler = this.handlers[type];
+      const response = handler ? await handler(payload) : null;
+      await sendGuestResponse(this.roomCode, requestId, response);
+    } catch (error) {
+      await sendGuestResponse(this.roomCode, requestId, null);
+    }
   }
 
   destroy() {
