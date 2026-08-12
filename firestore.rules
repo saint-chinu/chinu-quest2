@@ -123,7 +123,8 @@ service cloud.firestore {
         }
 
         function uidIsParticipant() {
-          return parentRoom().data.hostUid == uid || parentRoom().data.guestUid == uid;
+          return parentRoom().data.hostUid == uid || parentRoom().data.guestUid == uid ||
+            (parentRoom().data.participantUids is list && uid in parentRoom().data.participantUids);
         }
 
         allow read: if request.auth != null && request.auth.uid == uid && uidIsParticipant();
