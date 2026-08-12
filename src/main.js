@@ -3430,9 +3430,9 @@ function relayable(type, localPrompt, { broadcast = false } = {}) {
     // question for player 2+ through player 1's lane; until a dedicated
     // prompt channel is available, resolve it locally instead of mixing turns.
     const remoteUid = pvpMatch.uidByPlayerId?.[forPlayerId];
+    if (!remoteUid) return localPrompt(...localArgs);
     const legacyGuestOnly = Number(forPlayerId) === Number(pvpMatch.guestPlayerId);
-    if (!remoteUid || !legacyGuestOnly) return localPrompt(...localArgs);
-    return pvpMatch.relay.ask(type, payload);
+    return legacyGuestOnly ? pvpMatch.relay.ask(type, payload) : pvpMatch.relay.askParticipant(remoteUid, type, payload);
   };
 }
 

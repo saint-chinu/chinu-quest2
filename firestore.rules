@@ -149,6 +149,18 @@ service cloud.firestore {
           request.resource.data.uid == uid && request.resource.data.actionId is int &&
           request.resource.data.action is map;
       }
+      match /prompts/{uid} {
+        function parentRoom() { return get(/databases/$(database)/documents/pvpRooms/$(roomCode)); }
+        function participant() { return parentRoom().data.hostUid == uid || (parentRoom().data.participantUids is list && uid in parentRoom().data.participantUids); }
+        allow read: if signedIn() && request.auth.uid == uid && participant();
+        allow write: if signedIn() && parentRoom().data.hostUid == request.auth.uid && participant() && request.resource.data.keys().hasOnly(['requestId','type','payload']);
+      }
+      match /promptResponses/{uid} {
+        function parentRoom() { return get(/databases/$(database)/documents/pvpRooms/$(roomCode)); }
+        function participant() { return parentRoom().data.hostUid == uid || (parentRoom().data.participantUids is list && uid in parentRoom().data.participantUids); }
+        allow read: if signedIn() && parentRoom().data.hostUid == request.auth.uid && participant();
+        allow write: if signedIn() && request.auth.uid == uid && participant() && request.resource.data.keys().hasOnly(['requestId','value']);
+      }
     }
   }
 }

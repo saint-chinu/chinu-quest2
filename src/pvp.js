@@ -48,6 +48,12 @@ function roomRef(roomCode) {
 function privateHandRef(roomCode, uid) {
   return doc(db, 'pvpRooms', roomCode.toUpperCase(), 'private', uid);
 }
+function promptRef(roomCode, uid) {
+  return doc(db, 'pvpRooms', roomCode.toUpperCase(), 'prompts', uid);
+}
+function promptResponseRef(roomCode, uid) {
+  return doc(db, 'pvpRooms', roomCode.toUpperCase(), 'promptResponses', uid);
+}
 
 /** Creates a new waiting room and returns its code + this browser's Firebase uid (host). `mapId` is the board layout the host picked (see board.js MAPS) - stored on the room so the guest builds the identical board. */
 export async function createPvpRoom({ name, color, mapId, goalCurrency = 5000, playerCount = 2, allianceMode = false, randomAlliance = false, cpuNames = [] }) {
@@ -185,6 +191,20 @@ export class HostGuestRelay {
     });
   }
 
+  askParticipant(uid, type, payload) {
+    const requestId = this.nextRequestId++;
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => { if (this.pending?.requestId === requestId) { this.pending = null; reject(new Error('参加者の応答がタイムアウトしました')); } }, 45000);
+      this.pending = { requestId, resolve, reject, timer };
+      const stop = onSnapshot(promptResponseRef(this.roomCode, uid), (snap) => {
+        const data = snap.data();
+        if (!data || data.requestId !== requestId || !this.pending) return;
+        clearTimeout(timer); this.pending = null; stop(); resolve(data.value);
+      });
+      setDoc(promptRef(this.roomCode, uid), { requestId, type, payload });
+    });
+  }
+
   destroy() {
     if (this.pending) {
       clearTimeout(this.pending.timer);
@@ -213,6 +233,12 @@ export class GuestHostListener {
       this.lastHandledRequestId = room.hostRequestId;
       this._handle(room.hostRequestId, room.hostRequest);
     });
+    this.promptUnsubscribe = onSnapshot(promptRef(roomCode, uid), (snap) => {
+      const prompt = snap.data();
+      if (!prompt || prompt.requestId <= this.lastHandledRequestId) return;
+      this.lastHandledRequestId = prompt.requestId;
+      this._handleParticipant(prompt.requestId, prompt);
+    });
   }
 
   async _handle(requestId, { type, payload }) {
@@ -225,8 +251,16 @@ export class GuestHostListener {
     }
   }
 
+  async _handleParticipant(requestId, { type, payload }) {
+    try {
+      const response = this.handlers[type] ? await this.handlers[type](payload) : null;
+      await setDoc(promptResponseRef(this.roomCode, this.uid), { requestId, value: response ?? null });
+    } catch { await setDoc(promptResponseRef(this.roomCode, this.uid), { requestId, value: null }); }
+  }
+
   destroy() {
     this.unsubscribe();
+    this.promptUnsubscribe?.();
   }
 }
 
