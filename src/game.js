@@ -86,6 +86,7 @@ export class Game {
     onBattleAttack,
     onBattleRetreat,
     onBattleOutcome,
+    onDamageEffect,
     onStoryBattleEnd,
     onPvpSync,
     playerConfigs,
@@ -128,6 +129,10 @@ export class Game {
     this.onBattleAttack = onBattleAttack;
     this.onBattleRetreat = onBattleRetreat;
     this.onBattleOutcome = onBattleOutcome;
+    // 直接ダメージ系の土地コマンド（damage/damageAndSelfDestruct）専用の
+    // 演出フック。任意（未指定なら何も起きず即resolveする）ので、テスト等で
+    // わざわざ渡す必要はない。
+    this.onDamageEffect = onDamageEffect;
     this.onStoryBattleEnd = onStoryBattleEnd;
     // 対人戦(PvP)ホスト側のみ使う: _notifyStateのたびに盤面全体のスナップ
     // ショットを渡す（main.js側がFirestoreへpublishする）。通常対戦/
@@ -1179,6 +1184,7 @@ export class Game {
       targetUnit.currentHp -= ability.power;
       this.onLog(`${player.name}の${unitDef.name}が特殊能力で${targetUnit.def.name}に${ability.power}ダメージ！`);
       this._notifyState();
+      await this.onDamageEffect?.({ tileId: targetTile.id, damage: ability.power });
 
       if (targetUnit.currentHp <= 0) {
         const targetOwner = this.players.find((p) => p.id === targetTile.owner);
@@ -1322,6 +1328,7 @@ export class Game {
       const targetUnit = targetTile.unit;
       targetUnit.currentHp -= ability.power;
       this.onLog(`${player.name}の${unitDef.name}が特殊能力で${targetUnit.def.name}に${ability.power}ダメージを与え、自身は消滅した！`);
+      await this.onDamageEffect?.({ tileId: targetTile.id, damage: ability.power });
 
       const casterUnit = tile.unit;
       tile.unit = null;

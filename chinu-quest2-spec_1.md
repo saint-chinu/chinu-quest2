@@ -541,6 +541,14 @@
 ### 検証
 Node単体テスト18件（プロファイル解決、属性一致優先/offElementSummonChanceの両極端、レベルアップの属性・reserve判定、勝率シミュレーションが極端なケースで0/1になること、シミュレーションが実際のプレイヤーGを一切変更しないこと、侵略判断の決断/見送り、分岐選択が目標への近さ・高額マス回避それぞれで統計的に有意な偏りを示すこと、アイテムスコアリング）を実施、全てパス。実機でも新規アカウント作成→CPU戦を実際に4ターン分自動進行させ、CPUが召喚判断を繰り返し行い、エラーなく進行することを確認（このセッションはBrowserペインが終始`document.hidden=true`の状態だったため、`window.requestAnimationFrame`をコンソールから一時的にポリフィルしてアニメーション主体のUIフローを動かした）。
 
+## 直接ダメージ系の演出: 火の玉+ダメージ数値ポップ（2026-08-12実装）
+土地コマンドの直接ダメージ系アビリティ（`ability.type`が`damage`＝火炎瓶男等、`damageAndSelfDestruct`＝センチネル）が発動した時、対象マスへ火の玉が降ってきて、着弾後にダメージ数値がぴょんと跳ねて約1秒静止してから消える演出を追加した。
+
+- **`scene.js`**: `playFireballImpact(tilePosition)`（新規）が、なべのふた等と同じ「canvasに手描きしたテクスチャ」方式（放射状グラデーションの炎プレースホルダー、実素材無し）で火の玉スプライトを生成し、対象マスの真上（y=8）から着地位置まで`tween`でease-in（`t*t`、自由落下っぽい加速）落下させ、着弾の瞬間に一度膨らませてフェードアウトさせて消す（`scene.remove`+`material.dispose()`）。`worldToScreen(x,y,z)`（新規）は3Dワールド座標を`camera.project()`＋キャンバスの`getBoundingClientRect()`で画面ピクセル座標に変換するヘルパーで、ダメージ数値をキャンバスの上にDOMで重ねて表示するために使う
+- **`game.js`**: 新設のオプショナルコールバック`onDamageEffect({tileId, damage})`を、`_humanAbilityFlow`の`damage`/`damageAndSelfDestruct`両分岐でHP減算・ログ出力の直後に`await`する（未指定でもクラッシュしない）。ペイロードは`tileId`のみ（本物の`tile`オブジェクトは`mesh`等のTHREE.Meshを持っておりFirestore中継に乗せられないため）
+- **`index.html`/`style.css`/`main.js`**: `#game-canvas`の上に透明な`#fx-layer`オーバーレイを新設。`promptDamageEffect({tileId, damage})`が`tileId`からローカルの`tiles`配列で実物のtileを引き直し、`scene.playFireballImpact`→ダメージ数値のDOM要素生成（`.fx-damage-number`、`scene.worldToScreen`で位置決め）の順で演出する。CSSの`fx-damage-pop`キーフレーム（1.8秒）が「跳ねる（0〜28%）→静止（28〜83%、約1秒）→フェードアウト（83〜100%）」を担当し、`animationend`でDOM要素を削除してPromiseをresolveする。対人戦（PvP）でも両者に見えるよう`relayable('damageEffect', promptDamageEffect, {broadcast:true})`で中継し、ゲスト側ハンドラ一覧にも登録した
+- 検証: Node単体テスト5件（`damage`/`damageAndSelfDestruct`双方で`onDamageEffect`が正しいtileId/damageで呼ばれること、コールバック未指定でもクラッシュしないこと）は全てパス。実機では、このセッション特有の`document.hidden=true`環境下だとJSの`requestAnimationFrame`だけでなくCSSの`animation`もブラウザ側で一時停止される（実際のユーザー環境では起きない、タブが可視である限り無関係の制約）ため、コンソールから`requestAnimationFrame`を一時ポリフィルした上で実際に`_humanAbilityFlow`を発火させ、火の玉の落下（`playFireballImpact`のPromiseが正しく解決）とダメージ数値のDOM要素（テキスト・位置・`fx-damage-pop`アニメーションの適用）が意図通り生成されること、対象のHPが正しく減ること（30→20）を確認。CSSアニメーションの静止フェーズで止まっていたため`animationend`を手動発火して後続処理（コールバックのresolve・要素の削除）が正しく完了することも確認した
+
 ## フェーズ5: 対戦モード
 - Firebaseを使ったリアルタイムマルチプレイ
 - 盤面状態・ターン進行・プレイヤー状態の同期

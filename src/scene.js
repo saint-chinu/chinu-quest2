@@ -134,6 +134,38 @@ function toScreenLocal(dx, dz) {
   };
 }
 
+// 直接ダメージ系の土地コマンド（火炎瓶男/センチネル等）が発動した時に、
+// 対象マスへ火の玉を落とす演出用。実素材が無いので、なべのふた等と同じ
+// 「canvasに描いてCanvasTextureにする」プレースホルダー方式（放射状の
+// グラデーションで炎っぽさを出す）。1回だけ生成してキャッシュする。
+let fireballTextureCache = null;
+function getFireballTexture() {
+  if (fireballTextureCache) return fireballTextureCache;
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const cx = size / 2;
+  const cy = size / 2;
+  const gradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, size / 2);
+  gradient.addColorStop(0, '#fff6d0');
+  gradient.addColorStop(0.35, '#ffcf4d');
+  gradient.addColorStop(0.7, '#ff7a1a');
+  gradient.addColorStop(1, 'rgba(255,60,0,0)');
+  ctx.fillStyle = gradient;
+  ctx.beginPath();
+  ctx.arc(cx, cy, size / 2, 0, Math.PI * 2);
+  ctx.fill();
+  fireballTextureCache = new THREE.CanvasTexture(canvas);
+  return fireballTextureCache;
+}
+
+const FIREBALL_FALL_MS = 500;
+const FIREBALL_IMPACT_MS = 220;
+const FIREBALL_START_Y = 8;
+const FIREBALL_SIZE = 1.3;
+
 function createTokenTexture(color) {
   const size = 128;
   const canvas = document.createElement('canvas');
@@ -335,6 +367,45 @@ export class GameScene {
     sprite.position.set(tilePosition.x, PIECE_REST_Y, tilePosition.z);
     this.scene.add(sprite);
     return sprite;
+  }
+
+  /**
+   * 直接ダメージ系の土地コマンド（火炎瓶男/センチネル等）用の演出:
+   * 対象マスの真上から火の玉を落とし、着地の瞬間に一度膨らませてから
+   * 消す。ダメージ数値のポップアップ（DOMオーバーレイ）は呼び出し元
+   * （main.jsのworldToScreen経由）が別途担当する - こちらは3D演出のみ。
+   */
+  async playFireballImpact(tilePosition) {
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: getFireballTexture(), transparent: true }));
+    sprite.scale.set(FIREBALL_SIZE, FIREBALL_SIZE, 1);
+    const landY = PIECE_REST_Y + 0.4;
+    sprite.position.set(tilePosition.x, FIREBALL_START_Y, tilePosition.z);
+    this.scene.add(sprite);
+
+    // 自由落下っぽく見えるよう加速度的なease-inで落とす（等速だと軽く見える）。
+    await tween(FIREBALL_FALL_MS, (t) => {
+      const eased = t * t;
+      sprite.position.y = FIREBALL_START_Y + (landY - FIREBALL_START_Y) * eased;
+    });
+
+    await tween(FIREBALL_IMPACT_MS, (t) => {
+      const scale = FIREBALL_SIZE * (1 + Math.sin(t * Math.PI) * 0.7);
+      sprite.scale.set(scale, scale, 1);
+      sprite.material.opacity = 1 - t;
+    });
+
+    this.scene.remove(sprite);
+    sprite.material.dispose();
+  }
+
+  /** 3Dワールド座標を画面のピクセル座標に変換する（ダメージ数値等、キャンバスの上にDOM要素を重ねて表示するためのヘルパー）。 */
+  worldToScreen(x, y, z) {
+    const vec = new THREE.Vector3(x, y, z).project(this.camera);
+    const rect = this.canvas.getBoundingClientRect();
+    return {
+      x: rect.left + (vec.x * 0.5 + 0.5) * rect.width,
+      y: rect.top + (-vec.y * 0.5 + 0.5) * rect.height,
+    };
   }
 
   setFocusImmediate(x, z) {

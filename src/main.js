@@ -43,6 +43,7 @@ import {
 import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted } from './audio.js';
 
 const canvas = document.getElementById('game-canvas');
+const fxLayer = document.getElementById('fx-layer');
 const turnIndicator = document.getElementById('turn-indicator');
 const playerPanelEls = [
   document.getElementById('player-panel-0'),
@@ -999,6 +1000,39 @@ function promptBattleAttack({ side, item, message, targetHp, targetDied }) {
   });
 }
 
+/** 直接ダメージ系の土地コマンド（火炎瓶男/センチネル等）用の演出: 対象マスへ火の玉を落としてから、ダメージ数値をぴょんと跳ねさせて約1秒表示する。tileIdはFirestore中継できるようgame.js側で本物のtileオブジェクトの代わりに渡されるので、ここでローカルのtiles配列から引き直す。 */
+function promptDamageEffect({ tileId, damage }) {
+  const tile = tiles.find((t) => t.id === tileId);
+  if (!tile) return Promise.resolve();
+  return playDamageEffect(tile, damage);
+}
+
+async function playDamageEffect(tile, damage) {
+  await scene.playFireballImpact(tile.position);
+  await showDamageNumber(tile, damage);
+}
+
+/** ダメージ数値のポップアップ（DOM）。3D座標をscene.worldToScreenで画面座標に変換し、CSSのfx-damage-popアニメーション（跳ねる→約1秒静止→フェードアウト）が終わったらresolveする。 */
+function showDamageNumber(tile, damage) {
+  return new Promise((resolve) => {
+    const pos = scene.worldToScreen(tile.position.x, PIECE_REST_Y + 1.2, tile.position.z);
+    const el = document.createElement('div');
+    el.className = 'fx-damage-number';
+    el.textContent = `-${damage}`;
+    el.style.left = `${pos.x}px`;
+    el.style.top = `${pos.y}px`;
+    fxLayer.appendChild(el);
+    el.addEventListener(
+      'animationend',
+      () => {
+        el.remove();
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
+
 /** 引き分け（両者生存）専用の演出: 決着メッセージの前に、両陣営のカードをそれぞれ自分の側の画面外へ退避させる。 */
 function promptBattleRetreat() {
   return new Promise((resolve) => {
@@ -1323,6 +1357,7 @@ function startBattle(character, storyOptions = {}) {
     onBattleAttack: relayable('battleAttack', promptBattleAttack, { broadcast: true }),
     onBattleRetreat: relayable('battleRetreat', promptBattleRetreat, { broadcast: true }),
     onBattleOutcome: relayable('battleOutcome', promptBattleOutcome, { broadcast: true }),
+    onDamageEffect: relayable('damageEffect', promptDamageEffect, { broadcast: true }),
     onStoryBattleEnd: storyOptions.onStoryBattleEnd,
     onPvpSync: handlePvpSync,
     storyMode: storyOptions.storyMode ?? false,
@@ -3281,6 +3316,7 @@ const pvpGuestHandlers = {
   battleAttack: promptBattleAttack,
   battleRetreat: promptBattleRetreat,
   battleOutcome: promptBattleOutcome,
+  damageEffect: promptDamageEffect,
 };
 
 const pvpPieces = new Map(); // playerId -> billboard sprite (ゲスト側のローカル駒キャッシュ)
