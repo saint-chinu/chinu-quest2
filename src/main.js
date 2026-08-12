@@ -2819,6 +2819,21 @@ const DECK_CATEGORY_TABS = [
   { id: 'spell', label: 'スペル', test: (card) => card.type === CardType.SPELL },
 ];
 
+function currentDeckCategoryRank(card) {
+  if (card.type === CardType.MONSTER) {
+    return {
+      [Element.NEUTRAL]: 0,
+      [Element.FIRE]: 1,
+      [Element.WATER]: 2,
+      [Element.FOREST]: 3,
+      [Element.THUNDER]: 4,
+    }[card.element] ?? 4;
+  }
+  if (card.type === CardType.SPELL) return 5;
+  if (card.type === CardType.GEAR) return 6;
+  return 7;
+}
+
 function deckTotal() {
   let total = 0;
   for (const count of deckWorkingCounts.values()) total += count;
@@ -2960,10 +2975,12 @@ function showDeckScreen() {
     }
 
     deckCurrentList.replaceChildren();
-    for (const [key, count] of deckWorkingCounts.entries()) {
-      if (count <= 0) continue;
-      const def = catalogByKey.get(key);
-      if (!def) continue;
+    const currentEntries = [...deckWorkingCounts.entries()]
+      .map(([key, count]) => ({ key, count, def: catalogByKey.get(key) }))
+      .filter(({ count, def }) => count > 0 && def)
+      .sort((a, b) => currentDeckCategoryRank(a.def) - currentDeckCategoryRank(b.def)
+        || a.def.name.localeCompare(b.def.name, 'ja'));
+    for (const { key, count, def } of currentEntries) {
       const row = document.createElement('div');
       row.className = 'deck-current-row';
       const info = makeInfo(def);
