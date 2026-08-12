@@ -448,7 +448,7 @@ export class Game {
 
   /** ゴール(START)着地/通過どちらからも呼ぶ: このマップにrequireAllCheckpointsが立っていれば全チェックポイント通過済みの時だけボーナスを渡し、渡したらこのラップ分の通過記録をクリアする。立っていなければ無条件で渡す（従来通り）。 */
   _grantGoalBonus(player) {
-    this._healMechanicMasoAllies(player);
+    this._healOwnedUnitsOnLap(player);
     if (this.requireAllCheckpoints && !this._hasPassedAllCheckpoints(player)) {
       this.onLog(`${player.name}はゴールを通過（チェックポイント未通過のためボーナスなし）`);
       return;
@@ -463,16 +463,23 @@ export class Game {
     if (this.requireAllCheckpoints) player.passedCheckpoints.clear();
   }
 
-  /** メカニックマソ: 自分の盤面のどこかに配置されていれば、自分が所有する雷属性モンスター全員が周回ごとに最大HPの10%回復する（チェックポイント未達成でボーナス無しの周回でも、ゴールを通過したこと自体は変わらないので回復は適用する）。 */
-  _healMechanicMasoAllies(player) {
-    if (!this._hasAllyOnBoard(player.id, 'mechanicMaso')) return;
+  /**
+   * 配置されたモンスターは、所有者・属性を問わず周回ごとに最大基礎HPの
+   * 10%回復する（全プレイヤー共通のルール）。チェックポイント未達成で
+   * ボーナス無しの周回でも、ゴールを通過したこと自体は変わらないので
+   * 回復は適用する。「最大基礎HP」は素のdef.hp＋永続呪いの加算に加え、
+   * 同属性ボーナス（土地レベル×10）も含む＝土地情報等アイドル時のHP
+   * 上限と同じ基準（メカニックマソが以前担っていた雷属性限定の周回回復を、
+   * この汎用ルールへ統合した）。
+   */
+  _healOwnedUnitsOnLap(player) {
     for (const t of this._ownedTiles(player)) {
-      if (!t.unit || t.unit.def.element !== Element.THUNDER) continue;
+      if (!t.unit) continue;
       const maxHp = this._baseStats(t.unit).hp + this._elementHpBonus(t.unit, t);
       const healed = Math.min(t.unit.currentHp + Math.round(maxHp * 0.1), maxHp);
       if (healed > t.unit.currentHp) {
         t.unit.currentHp = healed;
-        this.onLog(`${t.unit.def.name}はメカニックマソの効果でHP回復`);
+        this.onLog(`${t.unit.def.name}は周回の恩恵でHP回復`);
       }
     }
   }

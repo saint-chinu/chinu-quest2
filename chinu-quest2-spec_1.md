@@ -549,6 +549,15 @@ Node単体テスト18件（プロファイル解決、属性一致優先/offElem
 - **`index.html`/`style.css`/`main.js`**: `#game-canvas`の上に透明な`#fx-layer`オーバーレイを新設。`promptDamageEffect({tileId, damage})`が`tileId`からローカルの`tiles`配列で実物のtileを引き直し、`scene.playFireballImpact`→ダメージ数値のDOM要素生成（`.fx-damage-number`、`scene.worldToScreen`で位置決め）の順で演出する。CSSの`fx-damage-pop`キーフレーム（1.8秒）が「跳ねる（0〜28%）→静止（28〜83%、約1秒）→フェードアウト（83〜100%）」を担当し、`animationend`でDOM要素を削除してPromiseをresolveする。対人戦（PvP）でも両者に見えるよう`relayable('damageEffect', promptDamageEffect, {broadcast:true})`で中継し、ゲスト側ハンドラ一覧にも登録した
 - 検証: Node単体テスト5件（`damage`/`damageAndSelfDestruct`双方で`onDamageEffect`が正しいtileId/damageで呼ばれること、コールバック未指定でもクラッシュしないこと）は全てパス。実機では、このセッション特有の`document.hidden=true`環境下だとJSの`requestAnimationFrame`だけでなくCSSの`animation`もブラウザ側で一時停止される（実際のユーザー環境では起きない、タブが可視である限り無関係の制約）ため、コンソールから`requestAnimationFrame`を一時ポリフィルした上で実際に`_humanAbilityFlow`を発火させ、火の玉の落下（`playFireballImpact`のPromiseが正しく解決）とダメージ数値のDOM要素（テキスト・位置・`fx-damage-pop`アニメーションの適用）が意図通り生成されること、対象のHPが正しく減ること（30→20）を確認。CSSアニメーションの静止フェーズで止まっていたため`animationend`を手動発火して後続処理（コールバックのresolve・要素の削除）が正しく完了することも確認した
 
+## 配置モンスターの周回HP回復を全属性・全プレイヤー共通ルールに（2026-08-12実装）
+ユーザー指示: 「配置されたモンスターのHPは周回で最大基礎HPの10%回復するようにして」。
+
+以前はメカニックマソ（雷属性モンスター）が盤面にいる時だけ、そのプレイヤーが所有する**雷属性モンスターに限り**周回ごとに10%回復する専用効果だった（`_healMechanicMasoAllies`）。これを汎用ルールへ一般化: `_healOwnedUnitsOnLap(player)`が、そのプレイヤーが所有する配置済みモンスター**全員**（属性・メカニックマソの有無を問わない）を対象に、周回ごと（ゴール通過時、チェックポイント未達成でボーナス無しの周回でも回復自体は適用）に最大基礎HPの10%（端数四捨五入、上限クランプ）回復するようにした。「最大基礎HP」は素のdef.hp＋永続呪いの加算に加え、同属性ボーナス（土地レベル×10、既存の`_elementHpBonus`）も含む＝土地情報のアイドル時HP上限と同じ基準。`_grantGoalBonus`からの呼び出し名を`_healMechanicMasoAllies`→`_healOwnedUnitsOnLap`に変更した。
+
+**メカニックマソへの影響（ユーザー確認待ち）**: この汎用化により、メカニックマソ自身の固有能力（雷属性限定の周回10%回復）は実質的に意味を失った（全員が既に同じ回復を受けるため）。カード自体のデータ・効果テキストは変更していないが、今後メカニックマソに何か新しい固有能力を持たせ直すか、このままにするかはユーザー判断が必要。
+
+検証: Node単体テスト5件（同属性ボーナスを含めた回復量の正しさ、属性不一致でも回復すること、上限クランプ、他プレイヤーの所有ユニットは対象外であること、`_grantGoalBonus`から正しく呼ばれること）で全パス。
+
 ## フェーズ5: 対戦モード
 - Firebaseを使ったリアルタイムマルチプレイ
 - 盤面状態・ターン進行・プレイヤー状態の同期
