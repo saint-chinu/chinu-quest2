@@ -530,6 +530,70 @@ export const CHARACTER_DECKS = {
       ],
     },
   },
+  madai: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.minatoJoshi, count: 3 },
+        { def: MONSTER_CATALOG.hangyojin, count: 3 },
+        { def: MONSTER_CATALOG.tsurara, count: 3 },
+        { def: MONSTER_CATALOG.aoriika, count: 2 },
+        { def: MONSTER_CATALOG.suijin, count: 1 },
+        { def: MONSTER_CATALOG.penpen, count: 1 },
+        { def: MONSTER_CATALOG.hatsudenNezumi, count: 2 },
+        { def: MONSTER_CATALOG.tetsuo, count: 2 },
+        { def: MONSTER_CATALOG.hatsudenOni, count: 2 },
+        { def: MONSTER_CATALOG.raiun, count: 1 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.kombo, count: 2 },
+        { def: ITEM_CATALOG.tetsuPipe, count: 2 },
+        { def: ITEM_CATALOG.morohaNoTsurugi, count: 2 },
+        { def: ITEM_CATALOG.pegasusSword, count: 1 },
+        { def: ITEM_CATALOG.zangokuKen, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.diceSix, count: 3 },
+        { def: SPELL_CATALOG.diceOne, count: 3 },
+        { def: SPELL_CATALOG.iCanFly, count: 3 },
+        { def: SPELL_CATALOG.sideIncome, count: 1 },
+        { def: SPELL_CATALOG.splitEvenly, count: 1 },
+        { def: SPELL_CATALOG.poisonMist, count: 1 },
+      ],
+    },
+  },
+  oniku: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.takenokoha, count: 3 },
+        { def: MONSTER_CATALOG.kinokoha, count: 3 },
+        { def: MONSTER_CATALOG.moriNoYousei, count: 2 },
+        { def: MONSTER_CATALOG.matagiNoKoshirou, count: 2 },
+        { def: MONSTER_CATALOG.yamamba, count: 1 },
+        { def: MONSTER_CATALOG.sekaiju, count: 1 },
+        { def: MONSTER_CATALOG.salarymander, count: 2 },
+        { def: MONSTER_CATALOG.magman, count: 2 },
+        { def: MONSTER_CATALOG.kaentake, count: 2 },
+        { def: MONSTER_CATALOG.hitodama, count: 1 },
+        { def: MONSTER_CATALOG.classicDragon, count: 1 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.tetsuNoYoroi, count: 2 },
+        { def: ITEM_CATALOG.boudanChokki, count: 3 },
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
+        { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 },
+        { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.diceOne, count: 3 },
+        { def: SPELL_CATALOG.diceThree, count: 3 },
+        { def: SPELL_CATALOG.sideIncome, count: 2 },
+        { def: SPELL_CATALOG.splitEvenly, count: 1 },
+        { def: SPELL_CATALOG.poisonMist, count: 1 },
+        { def: SPELL_CATALOG.specialAudit, count: 1 },
+        { def: SPELL_CATALOG.senbonZakura, count: 1 },
+      ],
+    },
+  },
 };
 
 /** The exact 40-card list for a story-mode character's fixed deck (see CHARACTER_DECKS). */

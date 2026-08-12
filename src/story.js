@@ -131,12 +131,14 @@ export const STORY_STAGES = [
       {
         name: '暴君マダイ',
         color: 0xffd166,
-        theme: { elements: [Element.FIRE, Element.THUNDER], featuredMonster: MONSTER_CATALOG.salarymander, featuredItem: ITEM_CATALOG.knife },
+        deckKey: 'madai',
+        theme: { elements: [Element.WATER, Element.THUNDER] },
       },
       {
         name: 'ニュウドウカジカ（お肉）',
         color: 0x8e5ce6,
-        theme: { elements: [Element.THUNDER, Element.FOREST] },
+        deckKey: 'oniku',
+        theme: { elements: [Element.FOREST, Element.FIRE] },
       },
     ],
     reward: null,
@@ -153,12 +155,14 @@ export const STORY_STAGES = [
         {
           name: '暴君マダイ',
           color: 0xffd166,
-          theme: { elements: [Element.FIRE, Element.THUNDER], featuredMonster: MONSTER_CATALOG.salarymander, featuredItem: ITEM_CATALOG.knife },
+          deckKey: 'madai',
+          theme: { elements: [Element.WATER, Element.THUNDER] },
         },
         {
           name: 'ニュウドウカジカ（お肉）',
           color: 0x8e5ce6,
-          theme: { elements: [Element.THUNDER, Element.FOREST] },
+          deckKey: 'oniku',
+          theme: { elements: [Element.FOREST, Element.FIRE] },
         },
         {
           name: '少女A',
