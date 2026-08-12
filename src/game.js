@@ -3290,6 +3290,7 @@ export class Game {
       handCount: p.hand.length,
       deckBreakdown: p.deckBreakdown,
       defeated: !!p.defeated,
+      banned: !!p.banned,
       // このラップで通過済みのチェックポイント番号（未達成ならボーナス
       // 無しでゴールを通過しても消えない - _grantGoalBonus参照）。
       passedCheckpointNumbers: [...p.passedCheckpoints].map((id) => this.tiles[id].checkpointNumber),
