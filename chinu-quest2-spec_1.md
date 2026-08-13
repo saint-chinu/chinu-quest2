@@ -45,6 +45,12 @@
 
 ---
 
+## 聖域スペル: CPUが聖域を無視して侵略できるバグの修正（2026-08-13修正）
+- **症状**: スペル「聖域」（`curseSanctuary`、`tile.transparentCursed`を立てる）を自分のモンスターにかけても、CPU相手には効果が発動していないように見えるという報告。
+- **原因**: `transparentCursed`（聖域／深海魚Xの透過の呪いで共用のフラグ）による「侵略不能・通行料ゼロ」のうち、**通行料ゼロは`_tollOfTile`が全プレイヤー共通で効いていた**が、**侵略不能の判定が人間側の`_humanSummonFlow`（着地侵略）／`_humanMoveFlow`（移動コマンド侵略）にしか無かった**。CPUの着地侵略経路`_cpuLandCommand`は敵地に対して`transparentCursed`をチェックせずに`_cpuDecideInvasion`→`_runInvasion`へ進んでいたため、CPUだけが聖域で守られたモンスターに侵略できてしまっていた。
+- **修正**: `_cpuLandCommand`の敵地分岐（同盟チェックの直後・召喚カード探索の前）に、人間側`_humanSummonFlow`と同じ`tile.owner != null && tile.owner !== player.id && tile.transparentCursed`ガードを追加。該当時はログを出して侵略を見送る。CPUのモンスター移動系（`_cpuMaybeMoveToHighValueLand`／`_cpuMaybeAcquireHighValueLandByAbility`）は移動先が空き地限定（空き地は`transparentCursed`にならない）なので取りこぼしは無いことを確認済み。
+- **検証**: `node --check src/game.js`で構文確認。本開発環境は`three`未インストール・Firebase認証ブロックのため`Game`のNode実機ロード／E2Eは不可（プロジェクト既知の制約）。修正は人間側の実績あるガードと完全対称の追加のみ。
+
 ## 火・水属性モンスターの微調整＋後攻(lastStrike)特性の新設（2026-08-12実装）
 ユーザーがカタログ一覧を見て指示した6件の修正。
 - **後攻(lastStrike)特性を新設**（`battle.js`）: 先制(firstStrike)の対になる特性。`strikeOrderScore(unit)`ヘルパーで先制=+1／後攻=-1／どちらも無し=0のスコアを算出し、スコアが高い側が先に攻撃する形へ`resolveBattle`の順序判定を一般化（旧実装は`hasTrait(defender,'firstStrike') && !hasTrait(attacker,'firstStrike')`という先制専用の分岐だった）。同スコア同士（無特性同士・先制同士・後攻同士）は従来通り攻撃側が先。後攻側が防御側になった場合は元々防御側は2番手なので見た目上の変化はなく、後攻側が攻撃側になった場合だけ防御側に先を譲る。先制と後攻が同じ戦闘に同時に出ても矛盾なく解決できる

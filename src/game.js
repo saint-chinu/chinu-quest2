@@ -2714,6 +2714,14 @@ export class Game {
     const owner = tile.owner != null ? this.players.find((candidate) => candidate.id === tile.owner) : null;
     if (owner?.allianceId != null && owner.allianceId === player.allianceId) return;
 
+    // 聖域/透過の呪い（transparentCursed）がかかった敵地には侵略できない。
+    // 人間側の_humanSummonFlowと同じ保護をCPUにも適用する（これが無いと
+    // CPUだけが聖域を無視して侵略できてしまい、効果が発動しないように見える）。
+    if (tile.owner != null && tile.owner !== player.id && tile.transparentCursed) {
+      this.onLog(`${player.name}は透過の呪いがかかった土地に侵略できず見送った`);
+      return;
+    }
+
     const options = this._affordableMonsterCards(player);
     if (options.length === 0) return;
 
