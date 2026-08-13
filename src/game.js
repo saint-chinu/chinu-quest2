@@ -1089,12 +1089,25 @@ export class Game {
    */
   async _movePlayer(player, steps) {
     this._turnPathIds = [];
-    const path = await this._planForwardPath(player, steps);
-    const destinationId = path.at(-1);
-    if (destinationId != null) this.onMoveDestination({ tileId: destinationId, active: true });
-    for (let i = 0; i < path.length; i++) {
+    const destinationIds = this._forwardDestinationIds(player, steps);
+    if (destinationIds.length) this.onMoveDestination({ tileIds: destinationIds, active: true });
+    for (let i = 0; i < steps; i++) {
       const fromTile = this.tiles[player.tileId];
-      const nextId = path[i];
+      const forward = fromTile.neighbors.filter((id) => id !== player.previousTileId);
+      const options = forward.length > 0 ? forward : fromTile.neighbors;
+      if (options.length === 0) break;
+      // 分岐選択は経路計画時ではなく、駒が実際に分岐マスへ到着してから行う。
+      const nextId = options.length === 1 ? options[0] : await this._chooseNextTile(player, fromTile, options);
+      if (this._isCancelled || nextId == null) break;
+      if (options.length > 1) {
+        const remainingSteps = steps - i - 1;
+        const narrowedIds = remainingSteps > 0
+          ? this._forwardDestinationIdsFrom(player, nextId, fromTile.id, remainingSteps)
+          : [nextId];
+        this.onMoveDestination({ tileIds: destinationIds, active: false });
+        this.onMoveDestination({ tileIds: narrowedIds, active: true });
+        destinationIds.splice(0, destinationIds.length, ...narrowedIds);
+      }
       const toTile = this.tiles[nextId];
       player.previousTileId = player.tileId;
       player.tileId = nextId;
@@ -1106,7 +1119,7 @@ export class Game {
 
       if (toTile.type === TileType.EVENT) await this._visitCheckpoint(player, toTile);
 
-      if (toTile.type === TileType.START && i < path.length - 1) {
+      if (toTile.type === TileType.START && i < steps - 1) {
         await this._grantGoalBonus(player);
         if (this.storyEnded) break;
       }
@@ -1119,25 +1132,36 @@ export class Game {
         break;
       }
     }
-    if (destinationId != null) this.onMoveDestination({ tileId: destinationId, active: false });
+    if (destinationIds.length) this.onMoveDestination({ tileIds: destinationIds, active: false });
   }
 
-  /** 分岐を移動前に確定し、今回の到達地点を先に表示できる経路を作る。 */
-  async _planForwardPath(player, steps) {
-    const path = [];
-    let currentId = player.tileId;
-    let previousId = player.previousTileId;
-    for (let i = 0; i < steps; i++) {
-      const fromTile = this.tiles[currentId];
-      const forward = fromTile.neighbors.filter((id) => id !== previousId);
-      const options = forward.length > 0 ? forward : fromTile.neighbors;
-      const nextId = options.length === 1 ? options[0] : await this._chooseNextTile(player, fromTile, options);
-      path.push(nextId);
-      previousId = currentId;
-      currentId = nextId;
-      if (this._isForcedStopFor(player, this.tiles[nextId])) break;
+  /** 分岐をまだ選ばない状態で、残り歩数から到達し得る全タイルを列挙する。 */
+  _forwardDestinationIds(player, steps) {
+    return this._forwardDestinationIdsFrom(player, player.tileId, player.previousTileId, steps);
+  }
+
+  _forwardDestinationIdsFrom(player, currentId, previousId, steps) {
+    let states = [{ currentId, previousId }];
+    const destinations = new Set();
+    for (let step = 0; step < steps; step++) {
+      const nextStates = [];
+      for (const state of states) {
+        const tile = this.tiles[state.currentId];
+        const forward = tile.neighbors.filter((id) => id !== state.previousId);
+        const options = forward.length > 0 ? forward : tile.neighbors;
+        for (const nextId of options) {
+          const nextTile = this.tiles[nextId];
+          if (this._isForcedStopFor(player, nextTile) || step === steps - 1) {
+            destinations.add(nextId);
+          } else {
+            nextStates.push({ currentId: nextId, previousId: state.currentId });
+          }
+        }
+      }
+      states = nextStates;
+      if (states.length === 0) break;
     }
-    return path;
+    return [...destinations];
   }
 
   /**
@@ -3642,7 +3666,7 @@ export class Game {
     const count = this.players.length;
     for (let offset = 0; offset < count; offset++) {
       const player = this.players[(this.currentPlayerIndex + offset) % count];
-      this.scene.setPieceRenderOrder?.(player.mesh, 100 + count - offset);
+      this.scene.setPieceRenderOrder?.(player.mesh, 100 + count - offset, offset === 0 ? 1 : 0.45);
     }
   }
 

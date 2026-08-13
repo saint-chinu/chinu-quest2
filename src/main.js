@@ -1231,10 +1231,12 @@ async function promptBankruptcy({ playerId, playerName, position }) {
 }
 
 let stopMoveDestinationHighlight = null;
-function promptMoveDestination({ tileId, active }) {
+function promptMoveDestination({ tileId = null, tileIds = null, active }) {
   stopMoveDestinationHighlight?.();
   stopMoveDestinationHighlight = null;
-  if (active && tiles[tileId]) stopMoveDestinationHighlight = startTileHighlight([tileId], 0xffffff);
+  const ids = tileIds || (tileId != null ? [tileId] : []);
+  const validIds = ids.filter((id) => tiles[id]);
+  if (active && validIds.length) stopMoveDestinationHighlight = startTileHighlight(validIds, 0xffffff);
 }
 
 /** 通行料支払い: 支払者へ寄り、金額を飛び出させて2秒読ませる。 */
@@ -4556,7 +4558,11 @@ function applyPvpPublicState(publicState) {
   if (activeIndex >= 0) {
     for (let offset = 0; offset < publicState.players.length; offset++) {
       const player = publicState.players[(activeIndex + offset) % publicState.players.length];
-      scene?.setPieceRenderOrder?.(pvpPieces.get(player.id), 100 + publicState.players.length - offset);
+      scene?.setPieceRenderOrder?.(
+        pvpPieces.get(player.id),
+        100 + publicState.players.length - offset,
+        offset === 0 ? 1 : 0.45,
+      );
     }
   }
 

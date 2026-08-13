@@ -622,10 +622,12 @@ export class GameScene {
   }
 
   /** プレイヤー駒の前後関係をターン順に更新する。 */
-  setPieceRenderOrder(sprite, order) {
+  setPieceRenderOrder(sprite, order, opacity = 1) {
     if (!sprite) return;
     sprite.renderOrder = order;
     if (sprite.material) {
+      sprite.material.transparent = opacity < 1 || sprite.material.transparent;
+      sprite.material.opacity = opacity;
       sprite.material.depthTest = false;
       sprite.material.depthWrite = false;
       sprite.material.needsUpdate = true;
