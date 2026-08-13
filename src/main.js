@@ -3994,6 +3994,16 @@ function promptDeckSelection({ onCancel = null } = {}) {
 
 let shopActiveMode = null;
 
+const SHOP_PACK_ICONS = Object.freeze({
+  fire: '🔥',
+  forest: '🌿',
+  water: '💧',
+  thunder: '⚡',
+  neutral: '⚪',
+  item: '⚔️',
+  spell: '📖',
+});
+
 function setShopMode(mode) {
   shopActiveMode = mode;
   shopMainMenu.classList.toggle('hidden', mode != null);
@@ -4015,24 +4025,30 @@ function showShopScreen(mode = null) {
   setShopMode(mode);
 
   for (const pack of PACKS) {
-    const row = document.createElement('div');
-    row.className = 'shop-pack-row';
-    const info = document.createElement('div');
-    info.className = 'deck-row-info';
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'shop-pack-icon-button';
+    row.dataset.price = String(pack.cost);
+    row.setAttribute('aria-label', `${pack.name}を${pack.cost}Mで購入`);
+
+    const icon = document.createElement('span');
+    icon.className = 'shop-pack-icon';
+    icon.textContent = SHOP_PACK_ICONS[pack.id] || '🎴';
     const name = document.createElement('div');
     name.className = 'shop-pack-name';
     name.textContent = pack.name;
     const meta = document.createElement('div');
-    meta.className = 'deck-row-meta';
-    meta.textContent = `${pack.description} / 最低1枚S以上 / ${pack.cost}M`;
-    info.append(name, meta);
-
-    const buyButton = document.createElement('button');
-    buyButton.className = 'deck-row-sell';
-    buyButton.textContent = `${pack.cost}Mで引く`;
-    buyButton.disabled = currentCharacter.m < pack.cost;
-    buyButton.addEventListener('click', () => {
+    meta.className = 'shop-pack-icon-meta';
+    meta.textContent = `${pack.description}\n最低1枚S以上`;
+    const price = document.createElement('strong');
+    price.className = 'shop-pack-price';
+    price.textContent = `${pack.cost}M`;
+    row.append(icon, name, meta, price);
+    row.disabled = currentCharacter.m < pack.cost;
+    row.addEventListener('click', async () => {
       if (currentCharacter.m < pack.cost) return;
+      const confirmed = await confirmYesNo(`「${pack.name}」を買いますか？\n${pack.cost}Mを使用します。`);
+      if (!confirmed || currentCharacter.m < pack.cost) return;
       const cards = drawPack(pack, catalog);
       const newFlags = cards.map((card) => (currentCharacter.ownedCards[cardKey(card)] || 0) === 0);
       currentCharacter.m -= pack.cost;
@@ -4045,7 +4061,6 @@ function showShopScreen(mode = null) {
       shopCurrency.textContent = `所持M: ${currentCharacter.m}`;
       renderPackButtons();
     });
-    row.append(info, buyButton);
     shopPackList.appendChild(row);
   }
 
@@ -4131,7 +4146,7 @@ function showShopScreen(mode = null) {
 
 function renderPackButtons() {
   for (const button of shopPackList.querySelectorAll('button')) {
-    const price = Number.parseInt(button.textContent, 10);
+    const price = Number(button.dataset.price);
     button.disabled = currentCharacter.m < price;
   }
 }
