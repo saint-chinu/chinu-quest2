@@ -1831,11 +1831,25 @@ function promptBattleOutcome({ won, mutualDestruction, ownerName, unitName }) {
 /** Generic はい/いいえ confirm, reusing the same confirm-modal DOM as land-command actions (never active at the same time as those). */
 function confirmYesNo(text) {
   return new Promise((resolve) => {
+    // ショップなどpre-game画面から呼ぶ時、confirm-modalの本来の親#appは
+    // hiddenなので、そのままでは確認画面も一緒に消える。確認中だけbody直下へ
+    // 移し、閉じたら元のDOM位置へ戻す。
+    const originalParent = confirmModal.parentNode;
+    const originalNextSibling = confirmModal.nextSibling;
+    const moveToFront = appEl.classList.contains('hidden') && originalParent === appEl;
+    if (moveToFront) {
+      document.body.appendChild(confirmModal);
+      confirmModal.classList.add('global-confirm');
+    }
     confirmText.textContent = text;
     confirmModal.classList.remove('hidden');
 
     function cleanup(result) {
       confirmModal.classList.add('hidden');
+      if (moveToFront) {
+        confirmModal.classList.remove('global-confirm');
+        originalParent.insertBefore(confirmModal, originalNextSibling);
+      }
       confirmYes.removeEventListener('click', onYes);
       confirmNo.removeEventListener('click', onNo);
       resolve(result);
@@ -2364,7 +2378,7 @@ STARTマスを通過・着地すると「基本ボーナス＋領地ボーナス
 4人同盟戦は紅組・白組に分かれ、ホスト指定またはランダム同盟を選べます。ホストは盤面メニューのBANから参加者を退出させ、AI操作へ切り替えられます。通信が一定時間切断された参加者もAIへ切り替わります。
 
 【対戦報酬】
-勝敗にかかわらず終了時の総資産からMを獲得します（最低50M）。1vs1は7%、相手が1人増えるごとに+3%、同盟戦は15%固定です。
+勝敗にかかわらず終了時の総資産からMを獲得します（最低50M）。ストーリー本編・再戦は「7%＋相手プレイヤー1人につき3%」、対戦モードは1vs1が7%、相手が1人増えるごとに+3%、同盟戦は15%固定です。
 
 【ログイン・クラウドセーブ】
 IDとパスワードでログインします。キャラクター、所持M、所持カード、デッキ、ブリード、ストーリー進行、作成カードは端末内に保存され、ログイン中はFirebaseにも同期されます。通信できない場合は端末内のデータで遊べます。`;
@@ -3005,7 +3019,7 @@ async function playStoryStage(index) {
   await startStoryBattle(index, chosenDeck.deckList, false);
 }
 
-/** クリア済みステージをもう一度選んだ時のおまけ戦闘。stage.replayの専用intro→デッキ選択→拡張された対戦カードで始まる。勝敗はstoryProgress/rewardに一切影響しない（handleStoryReplayEnd参照）。 */
+/** クリア済みステージの再戦。進行度・固有カード報酬は変えないが、勝敗を問わず終了時総資産に応じたMを獲得する。 */
 async function playStoryReplay(index) {
   const stage = STORY_STAGES[index];
   if (!stage.replay) return;
@@ -3123,9 +3137,10 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
   }
 }
 
-/** playStoryReplay()の決着後: 勝っても負けてもstoryProgress/rewardには一切触れない（何度でも遊べるおまけ戦闘のため）。短い一言だけ挟んでステージ一覧に戻る。 */
+/** playStoryReplay()の決着後: 進行度・固有カード報酬は変えず、勝敗を問わず総資産報酬Mだけ付与する。 */
 async function handleStoryReplayEnd(index, { won }, replayVariant) {
   const stage = STORY_STAGES[index];
+  const mReward = grantStoryBattleReward();
   clearStoryResume();
   game = undefined;
   stopMusic();
@@ -3141,22 +3156,14 @@ async function handleStoryReplayEnd(index, { won }, replayVariant) {
     await playDialogueLines([{ speaker: '???', text: '力及ばず、敗れてしまった……もう一度挑もう。' }]);
   }
   showStoryScreen();
+  showToast(`再戦報酬として${mReward.earnedM}M獲得しました`, 2400);
 }
 
 async function handleStoryBattleEnd(index, { won }) {
   const stage = STORY_STAGES[index];
   clearStoryResume();
-  // ストーリーも対戦と同じ終了報酬率を使う。従来は進行度とカード報酬しか
-  // 保存しておらず、ステージ2を含む全ステージでMが一切付与されていなかった。
-  // 同盟時のtotalAssetsはチーム合算なので、自分の取り分へ割ってから計算する。
-  const humanPlayer = game?.players?.find((player) => !player.isCPU);
-  const humanAllianceSize = humanPlayer?.allianceId != null
-    ? game.players.filter((player) => player.allianceId === humanPlayer.allianceId).length
-    : 1;
-  const endingAssetsShare = humanPlayer
-    ? game._totalAssetsOf(humanPlayer) / Math.max(humanAllianceSize, 1)
-    : 0;
-  const mReward = grantExitReward(endingAssetsShare);
+  // ストーリー本編・再戦共通の「7%＋相手人数×3%」報酬を勝敗にかかわらず付与。
+  const mReward = grantStoryBattleReward();
   // overlayNpc持ちのステージ（①②）の勝利時だけ、盤面をまだ隠さずに決着
   // 直後の会話をオーバーレイで見せる（startStoryBattleのintro演出と対に
   // なる終幕演出）。それ以外（敗北時・他ステージ）は今まで通り即座に
@@ -5091,12 +5098,12 @@ pvpRoomStart.addEventListener('click', async () => {
  * 掛けて被害を抑える簡易対策のみ行っている。根本対策にはサーバー側の検証
  * （Cloud Functions等）が別途必要。
  */
-function computeExitRewardM(endingAssetsShare) {
+function computeExitRewardM(endingAssetsShare, rewardRateOverride = null) {
   const playerCount = Number(game?.players?.length || pvpLastRoom?.playerCount || 2);
   const allianceMode = game
     ? Boolean(game.players.some((player) => player.allianceId != null))
     : pvpLastRoom?.allianceMode === true;
-  const rewardRate = allianceMode ? 0.15 : 0.07 + Math.max(0, playerCount - 2) * 0.03;
+  const rewardRate = rewardRateOverride ?? (allianceMode ? 0.15 : 0.07 + Math.max(0, playerCount - 2) * 0.03);
   const assetCap = Math.max((game?.goalCurrency || pvpLastRoom?.goalCurrency || 5000) * 3, 5000);
   const cappedAssets = Math.min(Math.max(endingAssetsShare, 0), assetCap);
   const earnedM = Math.max(Math.round(cappedAssets * rewardRate), M_CONVERSION_MIN);
@@ -5104,11 +5111,28 @@ function computeExitRewardM(endingAssetsShare) {
 }
 
 /** 実際にcurrentCharacter.mへ加算・保存する。呼び出しごとに一度だけ加算されるよう、必ずここを経由すること。 */
-function grantExitReward(endingAssetsShare) {
-  const result = computeExitRewardM(endingAssetsShare);
+function grantExitReward(endingAssetsShare, rewardRateOverride = null) {
+  const result = computeExitRewardM(endingAssetsShare, rewardRateOverride);
   currentCharacter.m += result.earnedM;
   saveCharacter(currentUserId, currentCharacter);
   return result;
+}
+
+/**
+ * ストーリー本編・再戦共通報酬。終了時総資産の本人取り分に対し、
+ * 「7% + 相手プレイヤー数×3%」を勝敗にかかわらず付与する。
+ */
+function grantStoryBattleReward() {
+  const humanPlayer = game?.players?.find((player) => !player.isCPU);
+  if (!humanPlayer) return grantExitReward(0, 0.07);
+  const allies = humanPlayer.allianceId != null
+    ? game.players.filter((player) => player.allianceId === humanPlayer.allianceId)
+    : [humanPlayer];
+  const opponentCount = game.players.filter((player) =>
+    player.id !== humanPlayer.id
+      && (humanPlayer.allianceId == null || player.allianceId !== humanPlayer.allianceId)).length;
+  const endingAssetsShare = game._totalAssetsOf(humanPlayer) / Math.max(allies.length, 1);
+  return grantExitReward(endingAssetsShare, 0.07 + opponentCount * 0.03);
 }
 
 /** 画面のどこでも使える簡易トースト（#app配下ではなくdocument.bodyに直接足すので、盤面を閉じた後のメニュー画面上でも問題なく出せる）。durationミリ秒後に自動で消える。 */

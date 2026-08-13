@@ -1159,7 +1159,7 @@ html, body {
 }
 
 .shop-pack-icon-button:disabled { opacity: 0.42; }
-.shop-pack-icon { font-size: 42px; line-height: 1.1; }
+.shop-pack-icon { font-size: 38px; line-height: 1.1; }
 .shop-pack-icon-button .shop-pack-name { font-size: 15px; }
 .shop-pack-icon-meta { min-height: 30px; color: #b9c7da; font-size: 10px; line-height: 1.45; white-space: pre-line; }
 .shop-pack-price { margin-top: 2px; color: #ffd866; font-size: 15px; }
@@ -1227,7 +1227,7 @@ html, body {
   .shop-main-choice { min-height: 68px; }
   #shop-pack-list { grid-template-columns: repeat(4, minmax(92px, 1fr)); gap: 7px; }
   .shop-pack-icon-button { min-height: 126px; padding: 8px 5px; }
-  .shop-pack-icon { font-size: 34px; }
+  .shop-pack-icon { font-size: 31px; }
   .shop-pack-icon-button .shop-pack-name { font-size: 12px; }
   #shop-pack-cards { grid-template-columns: repeat(4, minmax(70px, 1fr)); width: 94vw; }
 }
@@ -2413,6 +2413,11 @@ html, body {
 /* 手札破棄の確認ダイアログは破棄カード一覧より必ず前面に出す。 */
 #confirm-modal {
   z-index: 45;
+}
+
+#confirm-modal.global-confirm {
+  position: fixed;
+  z-index: 10001;
 }
 
 #confirm-card-preview {
