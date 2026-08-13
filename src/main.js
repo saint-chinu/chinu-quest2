@@ -28,7 +28,7 @@ import { STORY_STAGES, isStageUnlocked, isStageCleared } from './story.js';
 import { NPC_PORTRAIT_URL, loadNpcTokenImage } from './npcArt.js';
 import { defaultCardArtUrl } from './cardArt.js';
 import { firebaseReady, db, auth } from './firebase.js';
-import { collection, doc as fsDoc, getDoc as fsGetDoc, getDocs as fsGetDocs } from 'firebase/firestore';
+import { collection, doc as fsDoc, getDoc as fsGetDoc, getDocs as fsGetDocs, getCountFromServer as fsGetCount } from 'firebase/firestore';
 import {
   createPvpRoom,
   joinPvpRoom,
@@ -2969,23 +2969,58 @@ function buildAdminDashboardHtml(players) {
   `;
 }
 
-async function showAdminDashboard() {
+// 直近の集計結果をキャッシュ（再度開いた時は即表示。再読み込みボタンで更新）。
+let adminPlayersCache = null;
+
+function adminErrorHtml(error) {
+  if (error?.code === 'permission-denied') {
+    return `<p class="admin-error">閲覧権限がありません。この機能は管理者専用です。<br>あなたのUID: <code>${escapeHtml(auth?.currentUser?.uid || '不明')}</code></p>`;
+  }
+  return '<p class="admin-error">集計の読み込みに失敗しました。時間をおいて再度お試しください。</p>';
+}
+
+async function showAdminDashboard(forceReload = false) {
   showScreen(adminScreen);
-  adminContent.innerHTML = '<p class="admin-loading">読み込み中…</p>';
   if (!firebaseReady || !db) {
     adminContent.innerHTML = '<p class="admin-error">Firebaseに接続できないため集計できません。</p>';
     return;
   }
+  // キャッシュがあれば即描画（明示的な再読み込み時のみ取り直す）。
+  if (adminPlayersCache && !forceReload) {
+    adminContent.innerHTML = buildAdminDashboardHtml(adminPlayersCache);
+    return;
+  }
+
+  // ① まず登録者数だけをサーバー集計で一瞬で表示（ドキュメント本体は落とさない）。
+  adminContent.innerHTML = '<p class="admin-loading">登録者数を確認中…</p>';
+  let total = null;
+  try {
+    const countSnap = await fsGetCount(collection(db, 'players'));
+    total = countSnap.data().count;
+    adminContent.innerHTML = `
+      <div class="admin-kpi-grid">
+        <div class="admin-kpi"><span>登録者数</span><strong>${fmtInt(total)}</strong></div>
+      </div>
+      <p class="admin-loading">全プレイヤーの詳細を集計中…<br><small>各セーブにアイコン画像等が含まれるため、人数が多いと少し時間がかかります。</small></p>`;
+  } catch (error) {
+    console.error('登録者数の取得に失敗', error);
+    adminContent.innerHTML = adminErrorHtml(error);
+    return;
+  }
+
+  // ② 続いて全ドキュメントを取得して詳細集計（進捗分布・所持M・最近のプレイヤー）。
   try {
     const snapshot = await fsGetDocs(collection(db, 'players'));
-    const players = snapshot.docs.map((d) => d.data());
-    adminContent.innerHTML = buildAdminDashboardHtml(players);
+    adminPlayersCache = snapshot.docs.map((d) => d.data());
+    adminContent.innerHTML = buildAdminDashboardHtml(adminPlayersCache);
   } catch (error) {
-    console.error('管理ダッシュボードの集計に失敗', error);
-    const denied = error?.code === 'permission-denied';
-    adminContent.innerHTML = denied
-      ? `<p class="admin-error">閲覧権限がありません。この機能は管理者専用です。<br>あなたのUID: <code>${escapeHtml(auth?.currentUser?.uid || '不明')}</code></p>`
-      : '<p class="admin-error">集計の読み込みに失敗しました。時間をおいて再度お試しください。</p>';
+    console.error('管理ダッシュボードの詳細集計に失敗', error);
+    // 詳細が取れなくても登録者数だけは残す。
+    adminContent.innerHTML = `
+      <div class="admin-kpi-grid">
+        <div class="admin-kpi"><span>登録者数</span><strong>${fmtInt(total ?? 0)}</strong></div>
+      </div>
+      ${adminErrorHtml(error)}`;
   }
 }
 
@@ -3570,7 +3605,7 @@ document.querySelectorAll('.hub-tile').forEach((tile) => {
 battleBackButton.addEventListener('click', showHubScreen);
 stubBackButton.addEventListener('click', showHubScreen);
 if (adminBack) adminBack.addEventListener('click', showHubScreen);
-if (adminRefresh) adminRefresh.addEventListener('click', showAdminDashboard);
+if (adminRefresh) adminRefresh.addEventListener('click', () => showAdminDashboard(true));
 
 // ---- Card catalog: unowned entries stay blank; owned entries reveal name/count/detail. ----
 
