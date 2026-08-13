@@ -522,11 +522,14 @@ export const CHARACTER_DECKS = {
     composition: {
       monsters: [
         { def: MONSTER_CATALOG.minatoJoshi, count: 4 },
-        { def: MONSTER_CATALOG.hangyojin, count: 4 },
+        { def: MONSTER_CATALOG.hangyojin, count: 1 },
+        { def: MONSTER_CATALOG.amoeba, count: 1 },
+        { def: MONSTER_CATALOG.suikenKurage, count: 1 },
+        { def: MONSTER_CATALOG.redEi, count: 1 },
         { def: MONSTER_CATALOG.penpen, count: 4 },
         { def: MONSTER_CATALOG.shinkaigyoX, count: 4 },
         { def: MONSTER_CATALOG.fireman, count: 1 },
-        { def: MONSTER_CATALOG.sekizou, count: 2 },
+        { def: MONSTER_CATALOG.sekizou, count: 3 },
         { def: MONSTER_CATALOG.kunekune, count: 1 },
       ],
       items: [
@@ -535,9 +538,9 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 },
       ],
       spells: [
-        { def: SPELL_CATALOG.diceOne, count: 3 },
+        { def: SPELL_CATALOG.diceOne, count: 1 },
         { def: SPELL_CATALOG.diceThree, count: 3 },
-        { def: SPELL_CATALOG.diceSix, count: 2 },
+        { def: SPELL_CATALOG.diceSix, count: 3 },
         { def: SPELL_CATALOG.iCanFly, count: 2 },
         { def: SPELL_CATALOG.waterRelease, count: 2 },
       ],
