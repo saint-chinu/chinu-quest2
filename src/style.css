@@ -1718,6 +1718,40 @@ html, body {
   color: #101018;
 }
 
+/* スマホでは横幅・縦幅のどちらかが足りないため、パーツ情報の下へ操作欄を
+   折り返す。装着／取り外し／属性ボタンが画面外へ押し出されない配置。 */
+@media (max-width: 600px), (max-height: 500px) {
+  #breed-screen {
+    justify-content: flex-start;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  #breed-parts-list {
+    width: min(680px, 96vw);
+    max-height: none;
+    flex: 0 0 auto;
+    overflow: visible;
+  }
+
+  #breed-parts-list .deck-row {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
+
+  #breed-parts-list .deck-row > .breed-element-choices {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+  }
+
+  #breed-parts-list .deck-row-sell,
+  #breed-parts-list .breed-element-choice {
+    min-height: 36px;
+    padding: 8px 12px;
+  }
+}
+
 /*
  * メニューボタン（2026-08-12実装、旧#exit-battle-button/#mute-button置換）:
  * 旧配置（画面上部中央）は#logと重なって見づらかったため、盤面右下の

@@ -566,7 +566,7 @@ function promptShopPurchase(options) {
   });
 }
 
-const ACTION_LABEL = { summon: '召喚', invade: '侵略', swap: '入れ替え', levelup: 'レベルアップ', element: '属性変更' };
+const ACTION_LABEL = { summon: '召喚', invade: '侵略', swap: '入れ替え', levelup: 'レベルアップ', element: '属性変更', equip: '装備' };
 
 function promptConfirmAction({ actionType, card, cost, tile, targetElement, abilityLabel }) {
   return new Promise((resolve) => {
@@ -575,6 +575,8 @@ function promptConfirmAction({ actionType, card, cost, tile, targetElement, abil
       text = `属性を${ELEMENT_LABEL[targetElement]}に変更しますか？ コスト${cost}G`;
     } else if (actionType === 'ability') {
       text = `「${abilityLabel}」を使いますか？ コスト${cost}G`;
+    } else if (actionType === 'equip') {
+      text = `「${card.name}」を装備しますか？`;
     } else {
       const subject = card ? `「${card.name}」で` : '';
       const extra = actionType === 'levelup' && tile ? `（Lv${tile.level}→Lv${tile.level + 1}）` : '';
@@ -583,7 +585,7 @@ function promptConfirmAction({ actionType, card, cost, tile, targetElement, abil
     confirmText.textContent = text;
     // 召喚だけでなく侵略でも、選んだモンスターの立ち絵・能力・ステータスを
     // 最終確認してから「はい／いいえ」を選べるようにする。
-    const showCardPreview = (actionType === 'summon' || actionType === 'invade') && card;
+    const showCardPreview = (actionType === 'summon' || actionType === 'invade' || actionType === 'equip') && card;
     confirmCardPreview.classList.toggle('hidden', !showCardPreview);
     if (showCardPreview) {
       renderCardEl(confirmCardFace, card);
@@ -1447,6 +1449,7 @@ let cancelActiveBattleItemPicker = null;
 function promptPickBattleItem({ hand, side, ownerName, unitName }) {
   return new Promise((resolve) => {
     let settled = false;
+    let confirming = false;
     battleItemPickerTitle.textContent =
       hand.length > 0 ? `${ownerName}の${unitName}: 使うアイテムを選んでください` : `${ownerName}の${unitName}: アイテムがありません`;
     battleItemPickerChoices.replaceChildren();
@@ -1455,8 +1458,15 @@ function promptPickBattleItem({ hand, side, ownerName, unitName }) {
       el.className = 'card';
       renderCardEl(el, card);
       el.addEventListener('click', () => {
+        if (confirming) return;
+        confirming = true;
         el.classList.add('blinking');
-        setTimeout(() => cleanup(card), BLINK_MS);
+        setTimeout(async () => {
+          el.classList.remove('blinking');
+          const confirmed = await promptConfirmAction({ actionType: 'equip', card });
+          confirming = false;
+          if (confirmed) cleanup(card);
+        }, BLINK_MS);
       });
       battleItemPickerChoices.appendChild(el);
     }
