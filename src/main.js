@@ -1354,6 +1354,47 @@ async function promptTollPayment({ position, amount }) {
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
 }
 
+/** 土地レベルアップ: 対象土地へ寄り、強化光と通行料のカウントアップを見せる。 */
+async function promptLandLevelUp({ position, playerName, element, previousLevel, newLevel, tollBefore, tollAfter }) {
+  if (!scene || !position) return;
+  const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+  await scene.focusAndZoom(position.x, position.z, 1.48, 360);
+  const screen = scene.worldToScreen(position.x, PIECE_REST_Y + 1.5, position.z);
+  const panel = document.createElement('div');
+  panel.className = 'fx-land-level-up';
+  panel.style.left = `${screen.x}px`;
+  panel.style.top = `${screen.y}px`;
+  const heading = document.createElement('strong');
+  heading.textContent = 'LEVEL UP!';
+  const detail = document.createElement('span');
+  detail.textContent = `${playerName}の${ELEMENT_LABEL[element]}属性の土地　Lv${previousLevel} → Lv${newLevel}`;
+  const toll = document.createElement('b');
+  toll.textContent = `通行料 ${Math.round(tollBefore)}G`;
+  panel.append(heading, detail, toll);
+  fxLayer.appendChild(panel);
+  requestAnimationFrame(() => panel.classList.add('show'));
+
+  const duration = 1200;
+  const startedAt = performance.now();
+  const countUp = new Promise((resolve) => {
+    const frame = (now) => {
+      const progress = Math.min(1, (now - startedAt) / duration);
+      const eased = 1 - ((1 - progress) ** 3);
+      const value = Math.round(tollBefore + (tollAfter - tollBefore) * eased);
+      toll.textContent = `通行料 ${value}G`;
+      if (progress < 1) requestAnimationFrame(frame);
+      else resolve();
+    };
+    requestAnimationFrame(frame);
+  });
+  await Promise.all([scene.playSpellAura(position), scene.playSummonBurst(position), countUp]);
+  await new Promise((resolve) => setTimeout(resolve, 650));
+  panel.classList.add('fade-out');
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  panel.remove();
+  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
+}
+
 async function promptLandLoss({ position, landLabel, chainBefore, chainAfter, assetsBefore, assetsAfter }) {
   if (!scene || !position) return;
   const savedFocus = { x: scene.focus.x, z: scene.focus.z };
@@ -2149,6 +2190,7 @@ function startBattle(character, storyOptions = {}) {
     onTollPayment: relayable('tollPayment', promptTollPayment, { broadcast: true }),
     onMoveDestination: relayable('moveDestination', promptMoveDestination, { broadcast: true }),
     onLandLoss: relayable('landLoss', promptLandLoss, { broadcast: true }),
+    onLandLevelUp: relayable('landLevelUp', promptLandLevelUp, { broadcast: true }),
     onGoalAchieved: relayable('goalAchieved', promptGoalAchieved, { broadcast: true }),
     onCpuRoll: cpuRollDice,
     onMoveComplete,
@@ -4787,6 +4829,7 @@ const pvpGuestHandlers = {
   tollPayment: promptTollPayment,
   moveDestination: promptMoveDestination,
   landLoss: promptLandLoss,
+  landLevelUp: promptLandLevelUp,
   goalAchieved: promptGoalAchieved,
 };
 

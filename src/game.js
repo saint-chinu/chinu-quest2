@@ -88,6 +88,7 @@ export class Game {
     onTollPayment,
     onMoveDestination,
     onLandLoss,
+    onLandLevelUp,
     onGoalAchieved,
     onCpuRoll,
     onMoveComplete,
@@ -146,6 +147,7 @@ export class Game {
     this.onTollPayment = onTollPayment || (() => Promise.resolve());
     this.onMoveDestination = onMoveDestination || (() => {});
     this.onLandLoss = onLandLoss || (() => Promise.resolve());
+    this.onLandLevelUp = onLandLevelUp || (() => Promise.resolve());
     this.onGoalAchieved = onGoalAchieved || (() => Promise.resolve());
     this.onCpuRoll = onCpuRoll;
     this.onMoveComplete = onMoveComplete;
@@ -538,7 +540,7 @@ export class Game {
       const targetId = await this.onPickAbilityTarget(
         tiles.map((t) => ({
           ...this._browseTileSummary(t, player),
-          label: `${t.id}番地（${ELEMENT_LABEL[t.element]}）`,
+          label: `${ELEMENT_LABEL[t.element]}属性の土地（Lv${t.level}）`,
           effectAreaIds: card.effect?.type === 'poisonArea' ? [t.id, ...t.neighbors] : null,
         })),
         player.id,
@@ -638,7 +640,7 @@ export class Game {
       case 'tollReductionCurse':
         if (!targetTile) return false;
         targetTile.tollReductionRatio = effect.ratio;
-        this.onLog(`${targetTile.id}番地に通行料減少の呪いをかけた`);
+        this.onLog(`${ELEMENT_LABEL[targetTile.element]}属性の土地に通行料減少の呪いをかけた`);
         return false;
 
       case 'redistributeGoldEvenly': {
@@ -653,7 +655,7 @@ export class Game {
       case 'tollBonusOnceCurse':
         if (!targetTile) return false;
         targetTile.tollBonusOnceMultiplier = effect.multiplier;
-        this.onLog(`${targetTile.id}番地に追徴課税の呪いをかけた`);
+        this.onLog(`${ELEMENT_LABEL[targetTile.element]}属性の土地に追徴課税の呪いをかけた`);
         return false;
 
       case 'tollWaiverCurse':
@@ -761,7 +763,7 @@ export class Game {
         if (!targetTile) return false;
         targetTile.element = effect.element;
         this._repaintTileToElement(targetTile);
-        this.onLog(`${targetTile.id}番地を${ELEMENT_LABEL[effect.element]}属性に変えた`);
+        this.onLog(`対象の土地を${ELEMENT_LABEL[effect.element]}属性に変えた`);
         return false;
 
       case 'swapTwoMonsters':
@@ -775,7 +777,7 @@ export class Game {
       case 'curseSanctuary':
         if (!targetTile) return false;
         targetTile.transparentCursed = true;
-        this.onLog(`${targetTile.id}番地に聖域の呪いをかけた（侵略不能・通行料ゼロ）`);
+        this.onLog(`${ELEMENT_LABEL[targetTile.element]}属性の土地に聖域の呪いをかけた（侵略不能・通行料ゼロ）`);
         return false;
 
       default:
@@ -805,7 +807,7 @@ export class Game {
     player.previousTileId = null;
     player.tileId = target.id;
     if (player.mesh) player.mesh.position.set(target.position.x, PIECE_REST_Y, target.position.z);
-    this.onLog(`${player.name}は「ブルーオーシャン」で${target.id}番地に飛んだ！`);
+    this.onLog(`${player.name}は「ブルーオーシャン」で空き地に飛んだ！`);
     this._notifyState();
 
     await this._runLandCommand(player);
@@ -954,7 +956,7 @@ export class Game {
       return;
     }
     const destId = await this.onPickAbilityTarget(
-      candidates.map((t) => ({ ...this._browseTileSummary(t, player), label: `${t.id}番地へ強制移動` })),
+        candidates.map((t) => ({ ...this._browseTileSummary(t, player), label: `${ELEMENT_LABEL[t.element]}属性の土地へ強制移動` })),
       player.id,
     );
     if (destId == null) return;
@@ -972,7 +974,7 @@ export class Game {
       targetTile.owner = null;
       targetTile.transparentCursed = false;
       this._repaintTileToElement(targetTile);
-      this.onLog(`${unit.def.name}が${destTile.id}番地へ強制移動させられた`);
+      this.onLog(`${unit.def.name}が${ELEMENT_LABEL[destTile.element]}属性の土地へ強制移動させられた`);
       await this._hopUnitIcon(mesh, targetTile.position, destTile.position);
     } else {
       const defenderPlayer = this.players.find((p) => p.id === destTile.owner);
@@ -994,7 +996,7 @@ export class Game {
         targetTile.owner = null;
         targetTile.transparentCursed = false;
         this._repaintTileToElement(targetTile);
-        this.onLog(`${unit.def.name}が強制移動の戦闘で${destTile.id}番地を奪取した！`);
+        this.onLog(`${unit.def.name}が強制移動の戦闘で土地を奪取した！`);
         await this._handleUnitDeath(defenderUnit, defenderPlayer);
         await this._hopUnitIcon(mesh, targetTile.position, destTile.position);
       } else if (result.attackerSurvived && result.defenderSurvived) {
@@ -1808,7 +1810,7 @@ export class Game {
         }
         if (!usedAcquisitionAbility) {
           const target = this._cpuChooseLevelUpTile(player, candidates);
-          if (target) this._cpuMaybeLevelUp(player, target);
+          if (target) await this._cpuMaybeLevelUp(player, target);
         }
       }
       await this._settleLandingToll(player, tile, owesTollUnlessConquered);
@@ -2101,6 +2103,8 @@ export class Game {
     }
     const targetLevel = await this.onPickLevelUp({ currentLevel: tile.level, options }, player.id);
     if (targetLevel == null) return false;
+    const previousLevel = tile.level;
+    const tollBefore = this._tollOfTile(tile);
     const cost = LEVEL_INVESTMENT[targetLevel] - LEVEL_INVESTMENT[tile.level];
 
     player.currency -= cost;
@@ -2108,6 +2112,17 @@ export class Game {
     this.scene.updateTileLevelBorder(tile);
     this.onLog(`${player.name}は土地をLv${tile.level}にアップグレードした (-${cost}G)`);
     this._notifyState();
+    await this.onLandLevelUp({
+      playerId: player.id,
+      playerName: player.name,
+      tileId: tile.id,
+      position: tile.position,
+      element: tile.element,
+      previousLevel,
+      newLevel: tile.level,
+      tollBefore,
+      tollAfter: this._tollOfTile(tile),
+    });
     return true;
   }
 
@@ -2262,7 +2277,7 @@ export class Game {
     this._repaintTileToElement(tile);
     this.scene.updateTileLevelBorder(tile);
     player.currency += salePrice;
-    this.onLog(`${player.name}は${tile.id}番地を売却した (+${salePrice}G)`);
+    this.onLog(`${player.name}は${ELEMENT_LABEL[tile.element]}属性の土地を売却した (+${salePrice}G)`);
     this._notifyState();
   }
 
@@ -2474,7 +2489,7 @@ export class Game {
       tile.owner = null;
       tile.transparentCursed = false;
       this._repaintTileToElement(tile);
-      this.onLog(`${player.name}の${unitDef.name}が${targetTile.id}番地へワープした`);
+      this.onLog(`${player.name}の${unitDef.name}が空き地へワープした`);
       this._notifyState();
       await this.onTargetEffect?.({ tileId: targetTile.id, position: targetTile.position, message: `${unitDef.name}がワープした！` });
       return true;
@@ -2535,7 +2550,7 @@ export class Game {
           ? { ...DENCHU_FIELD_MONSTER, id: `denchu-${Date.now()}-${Math.random().toString(36).slice(2)}` }
           : { ...MONSTER_CATALOG[ability.catalogId], id: `summon-${Date.now()}-${Math.random().toString(36).slice(2)}` };
       this._placeUnit(targetTile, player, summonedDef);
-      this.onLog(`${player.name}の${unitDef.name}が${targetTile.id}番地に${summonedDef.name}を召喚した`);
+      this.onLog(`${player.name}の${unitDef.name}が空き地に${summonedDef.name}を召喚した`);
       this._notifyState();
       await this.onSummonEffect?.({ tileId: targetTile.id, unitName: summonedDef.name });
       return true;
@@ -2548,7 +2563,7 @@ export class Game {
         return false;
       }
       const targetId = await this.onPickAbilityTarget(
-        ownedLands.map((t) => ({ ...this._browseTileSummary(t, player), label: `${t.id}番地（${ELEMENT_LABEL[t.element]}）` })),
+        ownedLands.map((t) => ({ ...this._browseTileSummary(t, player), label: `${ELEMENT_LABEL[t.element]}属性の土地（Lv${t.level}）` })),
         player.id,
       );
       if (targetId == null) return false;
@@ -2559,7 +2574,7 @@ export class Game {
 
       targetTile.element = newElement;
       this._repaintTileToElement(targetTile);
-      this.onLog(`${player.name}の${unitDef.name}が${targetTile.id}番地の属性を${ELEMENT_LABEL[newElement]}に変更した`);
+      this.onLog(`${player.name}の${unitDef.name}が土地を${ELEMENT_LABEL[newElement]}属性に変更した`);
       this._notifyState();
       await this.onTargetEffect?.({ tileId: targetTile.id, position: targetTile.position, message: `${ELEMENT_LABEL[newElement]}属性に変化！` });
       return true;
@@ -2682,7 +2697,7 @@ export class Game {
       const usedAcquisitionAbility = await this._cpuMaybeAcquireHighValueLandByAbility(player, tile);
       if (usedAcquisitionAbility) return;
       const usedDamageAbility = await this._cpuMaybeUseDamageAbility(player, tile);
-      if (!usedDamageAbility) this._cpuMaybeLevelUp(player, tile, profile);
+      if (!usedDamageAbility) await this._cpuMaybeLevelUp(player, tile, profile);
       return;
     }
 
@@ -2706,7 +2721,7 @@ export class Game {
 
     const decision = this._cpuDecideInvasion(player, tile, options, profile);
     if (!decision) {
-      this.onLog(`${player.name}は${tile.id}番地への侵略を見送った`);
+      this.onLog(`${player.name}はこの土地への侵略を見送った`);
       return;
     }
     const { card } = decision;
@@ -2775,7 +2790,7 @@ export class Game {
     tile.owner = null;
     tile.transparentCursed = false;
     this._repaintTileToElement(tile);
-    this.onLog(`${player.name}は${unit.def.name}を高額空き地${target.id}番地へ移動させた`);
+    this.onLog(`${player.name}は${unit.def.name}を高額な空き地へ移動させた`);
     await this._hopUnitIcon(mesh, tile.position, target.position);
     this._notifyState();
     return true;
@@ -2803,7 +2818,7 @@ export class Game {
       tile.owner = null;
       tile.transparentCursed = false;
       this._repaintTileToElement(tile);
-      this.onLog(`${player.name}の${unitDef.name}が高額空き地${target.id}番地へワープした (-${cost}G)`);
+      this.onLog(`${player.name}の${unitDef.name}が高額な空き地へワープした (-${cost}G)`);
       this._notifyState();
       await this.onTargetEffect?.({ tileId: target.id, position: target.position, message: `${unitDef.name}が高額空き地を確保！` });
       return true;
@@ -2817,7 +2832,7 @@ export class Game {
         ? { ...DENCHU_FIELD_MONSTER, id: `denchu-${Date.now()}-${Math.random().toString(36).slice(2)}` }
         : { ...MONSTER_CATALOG[ability.catalogId], id: `summon-${Date.now()}-${Math.random().toString(36).slice(2)}` };
       this._placeUnit(target, player, summonedDef);
-      this.onLog(`${player.name}の${unitDef.name}が高額空き地${target.id}番地に${summonedDef.name}を召喚した (-${cost}G)`);
+      this.onLog(`${player.name}の${unitDef.name}が高額な空き地に${summonedDef.name}を召喚した (-${cost}G)`);
       this._notifyState();
       await this.onSummonEffect?.({ tileId: target.id, unitName: summonedDef.name });
       return true;
@@ -2830,7 +2845,7 @@ export class Game {
    * （Lv5上限・支払可能範囲内）上げる。残金を固定額残す旧profile設定は
    * 使わず、行動開始時の300Gを判断基準にする。
    */
-  _cpuMaybeLevelUp(player, tile) {
+  async _cpuMaybeLevelUp(player, tile) {
     if (player.currency < 300 || tile.type !== TileType.LAND || tile.level >= LEVEL_CAP || tile.element === Element.NEUTRAL) return false;
     const affordableTargets = [];
     const maxTargetLevel = Math.min(LEVEL_CAP, tile.level + 3);
@@ -2841,11 +2856,24 @@ export class Game {
     if (affordableTargets.length === 0) return false;
     const { targetLevel, cost } = affordableTargets[Math.floor(Math.random() * affordableTargets.length)];
 
+    const previousLevel = tile.level;
+    const tollBefore = this._tollOfTile(tile);
     player.currency -= cost;
     tile.level = targetLevel;
     this.scene.updateTileLevelBorder(tile);
-    this.onLog(`${player.name}は${tile.id}番地をLv${tile.level}にアップグレードした (-${cost}G)`);
+    this.onLog(`${player.name}は土地をLv${tile.level}にアップグレードした (-${cost}G)`);
     this._notifyState();
+    await this.onLandLevelUp({
+      playerId: player.id,
+      playerName: player.name,
+      tileId: tile.id,
+      position: tile.position,
+      element: tile.element,
+      previousLevel,
+      newLevel: tile.level,
+      tollBefore,
+      tollAfter: this._tollOfTile(tile),
+    });
     return true;
   }
 
@@ -3449,7 +3477,7 @@ export class Game {
           catalogId: catalogIdOf(unit.def),
         };
         this._placeUnit(targetTile, ownerPlayer, respawnCard);
-        this.onLog(`${unit.def.name}が${targetTile.id}番地に再出現した！`);
+        this.onLog(`${unit.def.name}が別の空き地に再出現した！`);
         this._notifyState();
       }
     }
