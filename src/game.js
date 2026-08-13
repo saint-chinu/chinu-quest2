@@ -1826,7 +1826,16 @@ export class Game {
     for (;;) {
       const choice = await this.onLandCommand(
         this.getTileSummary(tile),
-        { canSummon: tile.type === TileType.LAND && !isAlliedLand && this._affordableMonsterCards(player).length > 0 },
+        {
+          // 聖域/透過の呪いがかかった敵地には侵略できない（_humanSummonFlowと
+          // 同条件）ので、そもそも「侵略/召喚」項目自体を出さない。空き地召喚や
+          // 自分の土地の入れ替えには影響しない。
+          canSummon:
+            tile.type === TileType.LAND &&
+            !isAlliedLand &&
+            !(tile.owner != null && tile.owner !== player.id && tile.transparentCursed) &&
+            this._affordableMonsterCards(player).length > 0,
+        },
         player.id,
       );
       if (this._isCancelled) return;

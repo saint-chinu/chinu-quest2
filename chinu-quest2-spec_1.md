@@ -49,6 +49,7 @@
 - **症状**: スペル「聖域」（`curseSanctuary`、`tile.transparentCursed`を立てる）を自分のモンスターにかけても、CPU相手には効果が発動していないように見えるという報告。
 - **原因**: `transparentCursed`（聖域／深海魚Xの透過の呪いで共用のフラグ）による「侵略不能・通行料ゼロ」のうち、**通行料ゼロは`_tollOfTile`が全プレイヤー共通で効いていた**が、**侵略不能の判定が人間側の`_humanSummonFlow`（着地侵略）／`_humanMoveFlow`（移動コマンド侵略）にしか無かった**。CPUの着地侵略経路`_cpuLandCommand`は敵地に対して`transparentCursed`をチェックせずに`_cpuDecideInvasion`→`_runInvasion`へ進んでいたため、CPUだけが聖域で守られたモンスターに侵略できてしまっていた。
 - **修正**: `_cpuLandCommand`の敵地分岐（同盟チェックの直後・召喚カード探索の前）に、人間側`_humanSummonFlow`と同じ`tile.owner != null && tile.owner !== player.id && tile.transparentCursed`ガードを追加。該当時はログを出して侵略を見送る。CPUのモンスター移動系（`_cpuMaybeMoveToHighValueLand`／`_cpuMaybeAcquireHighValueLandByAbility`）は移動先が空き地限定（空き地は`transparentCursed`にならない）なので取りこぼしは無いことを確認済み。
+- **人間側UXの追随修正**: 人間が敵の聖域土地に着地したとき、土地コマンドの`canSummon`が真のままで「侵略/召喚」項目が一旦出てから`_humanSummonFlow`で拒否される挙動だったため、`_runLandCommand`の`canSummon`条件に同じ`transparentCursed`ガードを追加し、**メニューに侵略項目自体を出さない**ようにした（空き地召喚・自分の土地の入れ替えには影響しない。`_humanSummonFlow`側の拒否ガードは多重防御として残置）。
 - **検証**: `node --check src/game.js`で構文確認。本開発環境は`three`未インストール・Firebase認証ブロックのため`Game`のNode実機ロード／E2Eは不可（プロジェクト既知の制約）。修正は人間側の実績あるガードと完全対称の追加のみ。
 
 ## 火・水属性モンスターの微調整＋後攻(lastStrike)特性の新設（2026-08-12実装）
