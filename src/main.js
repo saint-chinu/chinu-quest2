@@ -2689,6 +2689,8 @@ function playOverlayDialogueLines(lines, {
   rightPortraitUrl,
   rightNpcOnSpeaker = null,
   rightNpcPortraitUrl = null,
+  speakerSides = null,
+  speakerPortraitUrls = null,
 }) {
   storyOverlayImgLeft.src = leftPortraitUrl || '';
   storyOverlayNameLeft.textContent = leftName;
@@ -2709,6 +2711,17 @@ function playOverlayDialogueLines(lines, {
     }
     function showLine() {
       const line = lines[i];
+      if (speakerSides?.[line.speaker]) {
+        const dynamicSide = speakerSides[line.speaker];
+        const portraitUrl = speakerPortraitUrls?.[line.speaker] || '';
+        if (dynamicSide === 'left') {
+          storyOverlayImgLeft.src = portraitUrl;
+          storyOverlayNameLeft.textContent = line.speaker;
+        } else {
+          storyOverlayImgRight.src = portraitUrl;
+          storyOverlayNameRight.textContent = line.speaker;
+        }
+      }
       // ステージ2は右側の立ち絵枠を主人公とお肉で共有する。話者が変わる
       // たびに必ず対応する画像へ戻す（一度お肉へ切り替えたまま固定すると、
       // 後続の主人公／お肉の吹き出し判定と立ち絵が食い違ってしまう）。
@@ -2721,7 +2734,8 @@ function playOverlayDialogueLines(lines, {
       storyOverlaySpeaker.textContent = line.speaker;
       storyOverlayText.textContent = line.text;
       const isRightSpeaker = line.speaker === rightName || line.speaker === rightNpcOnSpeaker;
-      const side = line.speaker === leftName ? 'left' : isRightSpeaker ? 'right' : null;
+      const side = speakerSides?.[line.speaker]
+        || (line.speaker === leftName ? 'left' : isRightSpeaker ? 'right' : null);
       storyOverlayPortraitLeft.classList.toggle('active', side === 'left');
       storyOverlayPortraitRight.classList.toggle('active', side === 'right');
       storyOverlayBubble.classList.toggle('side-left', side === 'left');
@@ -2751,7 +2765,7 @@ async function playStoryStage(index) {
   // overlayNpc持ちのステージ（①②、2026-08-12実装/2026-08-13②へ拡張）だけ
   // 盤面を隠さない会話演出: 先にデッキだけ選び、盤面表示後にstartStoryBattle
   // 側でオーバーレイ会話を挟む。
-  if (stage.overlayNpc) {
+  if (stage.overlayNpc || stage.boardDialogue) {
     const chosenDeck = await promptDeckSelection();
     await startStoryBattle(index, chosenDeck.deckList, false);
     return;
@@ -2845,13 +2859,19 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
     goalCurrency: stage.goalCurrency,
     playerConfigs,
     onStoryBattleEnd: (result) => (isReplay ? handleStoryReplayEnd(index, result, variant) : handleStoryBattleEnd(index, result)),
-    deferInit: !isReplay && !!stage.overlayNpc,
+    deferInit: !isReplay && !!(stage.overlayNpc || stage.boardDialogue),
   });
 
   // overlayNpc持ちのステージ（①②）だけ: 盤面が表示された直後、その上に
   // 会話をオーバーレイする（盤面は隠さない）。サイコロ等の操作はオーバー
   // レイの全面クリック領域が塞ぐので、会話が終わるまで実質進行できない。
-  if (!isReplay && stage.overlayNpc) {
+  if (!isReplay && (stage.overlayNpc || stage.boardDialogue)) {
+    const speakerPortraitUrls = stage.overlaySpeakerSides
+      ? Object.fromEntries(Object.keys(stage.overlaySpeakerSides).map((speaker) => [
+          speaker,
+          speaker === '主人公' ? iconDataUrl : NPC_PORTRAIT_URL[speaker],
+        ]))
+      : null;
     await playOverlayDialogueLines(stage.intro, {
       leftName: stage.overlayNpc,
       leftPortraitUrl: NPC_PORTRAIT_URL[stage.overlayNpc],
@@ -2859,6 +2879,8 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
       rightPortraitUrl: iconDataUrl,
       rightNpcOnSpeaker: stage.overlayRightNpcOnSpeaker,
       rightNpcPortraitUrl: NPC_PORTRAIT_URL[stage.overlayRightNpcOnSpeaker],
+      speakerSides: stage.overlaySpeakerSides,
+      speakerPortraitUrls,
     });
     // Only now deal the opening hand and start the first turn. This prevents
     // draw/reveal UI and CPU activity from running under the intro dialogue.
@@ -2890,7 +2912,7 @@ async function handleStoryBattleEnd(index, { won }) {
   // 直後の会話をオーバーレイで見せる（startStoryBattleのintro演出と対に
   // なる終幕演出）。それ以外（敗北時・他ステージ）は今まで通り即座に
   // 盤面を閉じてからの全画面会話。
-  const useBoardOverlay = !!stage.overlayNpc && won;
+  const useBoardOverlay = !!(stage.overlayNpc || stage.boardDialogue) && won;
 
   if (!useBoardOverlay) {
     game = undefined;
@@ -2921,6 +2943,12 @@ async function handleStoryBattleEnd(index, { won }) {
 
   if (useBoardOverlay) {
     const characterIcon = await resolveCharacterIcon(currentCharacter);
+    const speakerPortraitUrls = stage.overlaySpeakerSides
+      ? Object.fromEntries(Object.keys(stage.overlaySpeakerSides).map((speaker) => [
+          speaker,
+          speaker === '主人公' ? characterIcon?.dataUrl ?? null : NPC_PORTRAIT_URL[speaker],
+        ]))
+      : null;
     await playOverlayDialogueLines(stage.outro, {
       leftName: stage.overlayNpc,
       leftPortraitUrl: NPC_PORTRAIT_URL[stage.overlayNpc],
@@ -2928,6 +2956,8 @@ async function handleStoryBattleEnd(index, { won }) {
       rightPortraitUrl: characterIcon?.dataUrl ?? null,
       rightNpcOnSpeaker: stage.overlayRightNpcOnSpeaker,
       rightNpcPortraitUrl: NPC_PORTRAIT_URL[stage.overlayRightNpcOnSpeaker],
+      speakerSides: stage.overlaySpeakerSides,
+      speakerPortraitUrls,
     });
     game = undefined;
     stopMusic();

@@ -1246,16 +1246,15 @@ html, body {
 .story-skip-button {
   position: fixed;
   top: max(14px, env(safe-area-inset-top));
-  left: 50%;
+  right: max(14px, env(safe-area-inset-right));
   z-index: 100;
-  transform: translateX(-50%);
-  min-width: 210px;
-  padding: 13px 28px;
+  min-width: 112px;
+  padding: 10px 20px;
   border: 2px solid #fff;
   border-radius: 12px;
   background: rgba(20, 24, 40, 0.94);
   color: #fff;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 900;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.55);
 }

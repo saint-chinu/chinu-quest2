@@ -208,6 +208,13 @@ export const STORY_STAGES = [
     title: '③ 修羅の国のA',
     format: '2vs2',
     goalCurrency: 7000,
+    boardDialogue: true,
+    overlaySpeakerSides: {
+      主人公: 'right',
+      '紫の魔女ホフク': 'right',
+      ウサギン: 'left',
+      少女A: 'left',
+    },
     intro: [
       { speaker: '???', text: '北の海をあとにした主人公は、ついに陸へとたどり着いた。' },
       { speaker: '主人公', text: 'ここが陸か……。ぱっと見は、ずいぶんのどかな場所だな。' },
