@@ -22,7 +22,7 @@ const waterMonster = (id, name, rarity, hp, atk, options = {}) => ({
 
 /**
  * 水属性モンスター20種。画像未指定時はcardArt.jsの水属性共通画像を使う。
- * `minatoJoshi`（港区女子）は元々ここではなくbattleCards.jsに直書きされた
+ * `minatoJoshi`（港〇女子）は元々ここではなくbattleCards.jsに直書きされた
  * 仮ステータス（R/ATK15/HP30、battle.js側にハードコードされた耐性+ダメージ
  * 分ゴールドを奪う特性）だったが、正式な水属性モンスター表が届いたので
  * こちらのfireMonster同様のデータ駆動な形に差し替えた（idは
@@ -30,9 +30,10 @@ const waterMonster = (id, name, rarity, hp, atk, options = {}) => ({
  * テーマから参照されているので維持）。
  */
 export const WATER_MONSTER_CATALOG = {
-  minatoJoshi: waterMonster('minatoJoshi', '港区女子', Rarity.N, 30, 30, {
+  minatoJoshi: waterMonster('minatoJoshi', '港〇女子', Rarity.N, 30, 30, {
     effect: { type: 'stealGoldOnHit', amount: 30 },
     effectDescription: '攻撃成功時、相手の手持ちGから30G消費させる',
+    imageDataUrl: assetUrl('/images/card-art/minatojoshi.png'),
   }),
   amoeba: waterMonster('amoeba', 'アメーバ', Rarity.N, 20, 30),
   ohijineRakko: waterMonster('ohijineRakko', 'おひ〇ねラッコ', Rarity.N, 40, 10, {

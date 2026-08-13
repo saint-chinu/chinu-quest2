@@ -3079,7 +3079,7 @@ export class Game {
    * opponent would hit mySide for 1.2x), 'neutral' otherwise (includes any
    * 無属性 side, and "opposite corner" pairs that aren't adjacent in the
    * cycle either way). Purely the elemental relationship - doesn't account
-   * for monster-specific traits like 港区女子's resistance.
+   * for monster-specific traits like 港〇女子's resistance.
    */
   _elementMatchup(mySideElement, opponentElement) {
     if (mySideElement === Element.NEUTRAL || opponentElement === Element.NEUTRAL) return 'neutral';
