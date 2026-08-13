@@ -314,7 +314,25 @@ export class Game {
     this._isCancelled = true;
   }
 
-  init() {
+  init(resumeState = null) {
+    if (resumeState) {
+      this._restoreState(resumeState);
+      for (const player of this.players) {
+        const pos = this.tiles[player.tileId].position;
+        player.mesh = player.iconImage
+          ? this.scene.createPieceFromImage(player.iconImage, pos)
+          : this.scene.createPiece(player.color, pos);
+      }
+      this._syncUnitIcons();
+      this._syncPieceRenderOrder();
+      this.isBusy = false;
+      this.awaitingRoll = true;
+      this.scene.setFocusImmediate(this.tiles[this.currentPlayer.tileId].position.x, this.tiles[this.currentPlayer.tileId].position.z);
+      this._notifyState();
+      this.onTurnFocus?.({ playerId: this.currentPlayer.id, position: this.tiles[this.currentPlayer.tileId].position });
+      if (this.currentPlayer.isCPU) this._runCPUTurn();
+      return;
+    }
     for (const player of this.players) {
       const pos = this.tiles[player.tileId].position;
       player.mesh = player.iconImage
@@ -328,6 +346,56 @@ export class Game {
     const startPos = this.tiles[this.currentPlayer.tileId].position;
     this.scene.setFocusImmediate(startPos.x, startPos.z);
     this._beginTurn();
+  }
+
+  /** ストーリー途中再開用。Three.jsの参照を除き、ゲーム進行に必要な純データだけを書き出す。 */
+  exportState() {
+    const clone = (value) => JSON.parse(JSON.stringify(value));
+    const tileVisualKeys = new Set(['mesh', 'unitMesh', 'markerSprite', 'ownerLabelMesh', 'position', 'neighbors']);
+    return {
+      version: 1,
+      currentPlayerIndex: this.currentPlayerIndex,
+      forcedDiceRemaining: this.forcedDiceRemaining,
+      players: this.players.map((player) => {
+        const { mesh, iconImage, aiProfile, deck, passedCheckpoints, ...plain } = player;
+        return {
+          ...clone(plain),
+          passedCheckpoints: [...passedCheckpoints],
+          drawPile: clone(deck.drawPile),
+          discardPile: clone(deck.discardPile),
+        };
+      }),
+      tiles: this.tiles.map((tile) => Object.fromEntries(
+        Object.entries(tile)
+          .filter(([key, value]) => !tileVisualKeys.has(key) && value !== undefined && typeof value !== 'function')
+          .map(([key, value]) => [key, clone(value)]),
+      )),
+    };
+  }
+
+  _restoreState(snapshot) {
+    if (!snapshot || snapshot.version !== 1 || snapshot.players?.length !== this.players.length) {
+      throw new Error('保存データの形式が一致しません');
+    }
+    this.currentPlayerIndex = Math.max(0, Math.min(snapshot.currentPlayerIndex || 0, this.players.length - 1));
+    this.forcedDiceRemaining = snapshot.forcedDiceRemaining || 0;
+    snapshot.players.forEach((saved, index) => {
+      const player = this.players[index];
+      const { passedCheckpoints, drawPile, discardPile, ...plain } = saved;
+      Object.assign(player, plain);
+      player.passedCheckpoints = new Set(passedCheckpoints || []);
+      player.deck.drawPile = drawPile || [];
+      player.deck.discardPile = discardPile || [];
+      player.aiProfile = resolveAiProfile(player.name, player.aiProfile?.preferredElements ?? null);
+    });
+    snapshot.tiles?.forEach((saved, index) => {
+      const tile = this.tiles[index];
+      if (!tile || saved.id !== tile.id) return;
+      for (const [key, value] of Object.entries(saved)) {
+        if (['id', 'type', 'gridX', 'gridZ', 'position', 'neighbors', 'checkpointNumber', 'warpKind'].includes(key)) continue;
+        tile[key] = value;
+      }
+    });
   }
 
   /** Runs automatically whenever a turn starts: draw, then hand control to the player (or CPU). */
@@ -1383,14 +1451,16 @@ export class Game {
     const valuableEmpty = this._cpuHighValueEmptyLands();
     const target = valuableEmpty.length > 0
       ? valuableEmpty.reduce((best, tile) => {
-          const d = this._tileDistance(player.tileId, tile.id);
-          const bestD = this._tileDistance(player.tileId, best.id);
+          const d = this._forwardTileDistance(player.tileId, player.previousTileId, tile.id);
+          const bestD = this._forwardTileDistance(player.tileId, player.previousTileId, best.id);
           return d < bestD || (d === bestD && this._landValueOfTile(tile) > this._landValueOfTile(best)) ? tile : best;
         }).id
       : this._nearestGoalTileId(player);
-    const weights = optionIds.map((id) => {
+    const scores = optionIds.map((id) => {
       const tile = this.tiles[id];
-      const distance = target == null ? 0 : this._tileDistance(id, target);
+      // 分岐へ来た方向へ即座に引き返す経路を「最短」と誤認しないよう、
+      // 選択後の進行方向を含む状態で距離を測る。
+      const distance = target == null ? 0 : this._forwardTileDistance(id, player.tileId, target);
       let score = -distance;
       if (tile.owner == null && tile.level >= 2) score += 12 + tile.level * 3;
       if (tile.type === TileType.LAND && tile.level >= 3 && tile.owner != null && tile.owner !== player.id) {
@@ -1408,9 +1478,13 @@ export class Game {
         ), 0);
         if (bestRate < 0.8) score -= 1000;
       }
-      return Math.exp(score);
+      return score;
     });
-    return this._weightedRandomPick(optionIds, weights);
+    // 目標への最短経路を必ず選ぶ。旧実装の重み付き抽選では、ステージ2等で
+    // CPから遠ざかる分岐を確率で選んでしまっていた。同点だけ抽選する。
+    const bestScore = Math.max(...scores);
+    const bestIds = optionIds.filter((_, index) => scores[index] === bestScore);
+    return bestIds[Math.floor(Math.random() * bestIds.length)];
   }
 
   /** 今向かうべき目標タイルid: 全チェックポイント制のマップでまだ未通過のものがあればその中で一番近いもの、そうでなければゴール（START）。目標が存在しないマップ構成ならnull。 */
@@ -1419,9 +1493,9 @@ export class Game {
       const unpassed = this.tiles.filter((t) => t.type === TileType.EVENT && !player.passedCheckpoints.has(t.id));
       if (unpassed.length > 0) {
         let best = unpassed[0];
-        let bestDist = this._tileDistance(player.tileId, best.id);
+        let bestDist = this._forwardTileDistance(player.tileId, player.previousTileId, best.id);
         for (const t of unpassed.slice(1)) {
-          const d = this._tileDistance(player.tileId, t.id);
+          const d = this._forwardTileDistance(player.tileId, player.previousTileId, t.id);
           if (d < bestDist) {
             best = t;
             bestDist = d;
@@ -2266,6 +2340,33 @@ export class Game {
           if (neighborId === toId) return distance;
           visited.add(neighborId);
           next.push(neighborId);
+        }
+      }
+      frontier = next;
+    }
+    return Infinity;
+  }
+
+  /** 直前マスへの即時逆走を禁止した移動状態(current, previous)のBFS距離。 */
+  _forwardTileDistance(currentId, previousId, targetId) {
+    if (currentId === targetId) return 0;
+    const keyOf = (current, previous) => `${current}:${previous ?? 'none'}`;
+    const visited = new Set([keyOf(currentId, previousId)]);
+    let frontier = [{ currentId, previousId }];
+    let distance = 0;
+    while (frontier.length > 0) {
+      distance += 1;
+      const next = [];
+      for (const state of frontier) {
+        const tile = this.tiles[state.currentId];
+        const forward = tile.neighbors.filter((id) => id !== state.previousId);
+        const options = forward.length > 0 ? forward : tile.neighbors;
+        for (const neighborId of options) {
+          if (neighborId === targetId) return distance;
+          const key = keyOf(neighborId, state.currentId);
+          if (visited.has(key)) continue;
+          visited.add(key);
+          next.push({ currentId: neighborId, previousId: state.currentId });
         }
       }
       frontier = next;

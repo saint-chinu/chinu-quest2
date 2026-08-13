@@ -2080,7 +2080,7 @@ function startBattle(character, storyOptions = {}) {
       : undefined,
   });
 
-  if (!storyOptions.deferInit) game.init();
+  if (!storyOptions.deferInit) game.init(storyOptions.resumeState || null);
   playMapTheme(currentMapId);
   requestAnimationFrame(animate);
 }
@@ -2626,6 +2626,49 @@ const STUB_MODE_LABEL = { story: 'ストーリー' };
 // 依存しない実装のため、ここは「誰を何人渡すか」を組み立てるだけでいい）。
 
 let activeStoryStageIndex = null;
+let activeStorySessionMeta = null;
+const STORY_RESUME_KEY_PREFIX = 'chinuquest2-story-resume:';
+
+function storyResumeKey() {
+  return `${STORY_RESUME_KEY_PREFIX}${currentUserId || 'guest'}`;
+}
+
+function loadStoryResume() {
+  try { return JSON.parse(localStorage.getItem(storyResumeKey()) || 'null'); } catch { return null; }
+}
+
+function clearStoryResume() {
+  try { localStorage.removeItem(storyResumeKey()); } catch {}
+}
+
+function saveStoryResume() {
+  if (!game || activeStoryStageIndex == null || !activeStorySessionMeta) return false;
+  try {
+    localStorage.setItem(storyResumeKey(), JSON.stringify({
+      savedAt: Date.now(),
+      stageIndex: activeStoryStageIndex,
+      ...activeStorySessionMeta,
+      gameState: game.exportState(),
+    }));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function selectStoryStage(index, cleared, stage) {
+  const saved = loadStoryResume();
+  if (saved?.stageIndex === index && saved.gameState) {
+    const resume = await confirmYesNo('途中保存した対戦があります。続きから再開しますか？');
+    if (resume) {
+      await startStoryBattle(index, saved.heroDeckList, !!saved.isReplay, saved.replayVariant || null, saved.gameState);
+      return;
+    }
+    clearStoryResume();
+  }
+  if (cleared && stage.replay) await playStoryReplay(index);
+  else await playStoryStage(index);
+}
 
 function showStoryScreen() {
   storyStageList.replaceChildren();
@@ -2641,7 +2684,7 @@ function showStoryScreen() {
     const name = document.createElement('div');
     name.className = 'deck-row-name';
     name.textContent = stage.title;
-    if (unlocked) name.addEventListener('click', () => (cleared && stage.replay ? playStoryReplay(index) : playStoryStage(index)));
+    if (unlocked) name.addEventListener('click', () => selectStoryStage(index, cleared, stage));
     const meta = document.createElement('div');
     meta.className = 'deck-row-meta';
     const battleInfo = `形式: ${stage.format}　目標: ${stage.goalCurrency.toLocaleString('ja-JP')}G`;
@@ -2871,10 +2914,11 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
   return configs;
 }
 
-async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = null) {
+async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = null, resumeState = null) {
   const stage = STORY_STAGES[index];
   const variant = isReplay ? (replayVariant || stage.replay) : stage;
   activeStoryStageIndex = index;
+  activeStorySessionMeta = { heroDeckList, isReplay, replayVariant };
 
   const characterIcon = await resolveCharacterIcon(currentCharacter);
   const iconImage = characterIcon?.canvas ?? null;
@@ -2893,13 +2937,14 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
     goalCurrency: stage.goalCurrency,
     playerConfigs,
     onStoryBattleEnd: (result) => (isReplay ? handleStoryReplayEnd(index, result, variant) : handleStoryBattleEnd(index, result)),
-    deferInit: !isReplay && !!(stage.overlayNpc || stage.boardDialogue),
+    deferInit: !resumeState && !isReplay && !!(stage.overlayNpc || stage.boardDialogue),
+    resumeState,
   });
 
   // overlayNpc持ちのステージ（①②）だけ: 盤面が表示された直後、その上に
   // 会話をオーバーレイする（盤面は隠さない）。サイコロ等の操作はオーバー
   // レイの全面クリック領域が塞ぐので、会話が終わるまで実質進行できない。
-  if (!isReplay && (stage.overlayNpc || stage.boardDialogue)) {
+  if (!resumeState && !isReplay && (stage.overlayNpc || stage.boardDialogue)) {
     const speakerPortraitUrls = stage.overlaySpeakerSides
       ? Object.fromEntries(Object.keys(stage.overlaySpeakerSides).map((speaker) => [
           speaker,
@@ -2926,11 +2971,13 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
 /** playStoryReplay()の決着後: 勝っても負けてもstoryProgress/rewardには一切触れない（何度でも遊べるおまけ戦闘のため）。短い一言だけ挟んでステージ一覧に戻る。 */
 async function handleStoryReplayEnd(index, { won }, replayVariant) {
   const stage = STORY_STAGES[index];
+  clearStoryResume();
   game = undefined;
   stopMusic();
   appEl.classList.add('hidden');
   preGame.classList.remove('hidden');
   activeStoryStageIndex = null;
+  activeStorySessionMeta = null;
 
   showScreen(storyDialogueScreen);
   if (won) {
@@ -2943,6 +2990,7 @@ async function handleStoryReplayEnd(index, { won }, replayVariant) {
 
 async function handleStoryBattleEnd(index, { won }) {
   const stage = STORY_STAGES[index];
+  clearStoryResume();
   // ストーリーも対戦と同じ終了報酬率を使う。従来は進行度とカード報酬しか
   // 保存しておらず、ステージ2を含む全ステージでMが一切付与されていなかった。
   // 同盟時のtotalAssetsはチーム合算なので、自分の取り分へ割ってから計算する。
@@ -4919,7 +4967,7 @@ gameMenuExit.addEventListener('click', async () => {
   let confirmed;
   let endingAssetsShare = 0;
   if (wasStoryBattle) {
-    confirmed = await confirmYesNo('対戦をやめますか？');
+    confirmed = await confirmYesNo('対戦をやめますか？\n進行状況を保存し、次回このステージを選ぶと続きから再開できます。');
   } else {
     // ゲスト側はGameを持たないので、直近のpublicStateから自分のGを読む
     // （publicStateがまだ届いていない対戦開始直後は0扱い）。同盟時は
@@ -4940,6 +4988,7 @@ gameMenuExit.addEventListener('click', async () => {
   }
   if (!confirmed) return;
 
+  if (wasStoryBattle) saveStoryResume();
   const rewardResult = wasStoryBattle ? null : grantExitReward(endingAssetsShare);
 
   // 退出時、もし戦闘シーン演出の途中（onBattleSceneEnter等のPromiseが
@@ -4985,6 +5034,9 @@ gameMenuExit.addEventListener('click', async () => {
  * し得るため、UI・購読・音声をまとめて破棄する。
  */
 function forceTerminateBoardSession() {
+  // ストーリーのみ端末へ保存してから破棄する。オンライン対戦は共有状態を
+  // ローカル単独で復元すると混線するため、従来どおり終了扱いにする。
+  if (activeStoryStageIndex != null) saveStoryResume();
   game?.cancel?.();
   cancelActiveBattleItemPicker?.();
   cancelActiveBattleItemPicker = null;
@@ -5008,6 +5060,9 @@ function forceTerminateBoardSession() {
   tiles = undefined;
   currentMapId = null;
   activeStoryStageIndex = null;
+  activeStorySessionMeta = null;
+  activeStorySessionMeta = null;
+  activeStorySessionMeta = null;
   stopMusic();
   appEl?.classList.add('hidden');
   preGame?.classList.remove('hidden');
