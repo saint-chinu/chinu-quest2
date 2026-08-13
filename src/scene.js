@@ -84,7 +84,7 @@ const DEADZONE_MARGIN = 0.65;
 
 // 全ステージ共通: 2026-08-13にプレイヤー駒をさらに1.2倍（2.88→3.456）。
 // 下端の沈み込み量を従来と同じ0.1に保つため、高さ/2-0.1でY位置を算出。
-const PIECE_HEIGHT = 3.456;
+const PIECE_HEIGHT = 4.1472;
 export const PIECE_REST_Y = PIECE_HEIGHT / 2 - 0.1;
 
 // 配置モンスターの盤上アイコン用。プレイヤー駒より低く小さくして、通行中の
@@ -95,7 +95,7 @@ export const PIECE_REST_Y = PIECE_HEIGHT / 2 - 0.1;
 // タイルに埋まって「張り付いて」見えていた - ユーザー指摘により修正）。
 // 同日、召喚済みモンスターアイコンをさらに1.2倍にとの指摘でUNIT_ICON_HEIGHT
 // を1.6→1.92に拡大したため、この値も高さ/2+0.05で再計算した。
-export const UNIT_ICON_REST_Y = 1.652;
+export const UNIT_ICON_REST_Y = 2.224;
 
 // 土地レベルの縁取り。tile.mesh(2.6四方)より少し内側(2.5)に、レベルが
 // 上がるほど太い黒枠を重ねる - Lv5だけ「太くする」路線から外れて二重の
@@ -254,12 +254,13 @@ function createTokenTexture(color) {
 // 配置モンスターの盤上アイコン用ミニカード。カード本体の画面上サイズを
 // 1.2倍、通行料・HP領域を2倍にする比率から全体高さを3.204に設定。
 // （旧: 高さ2.16、badge44/body120/hp22、canvas高186）
-export const UNIT_ICON_HEIGHT = 3.204;
+export const UNIT_ICON_HEIGHT = 4.348;
 const UNIT_CARD_CANVAS_WIDTH = 110;
 const TOLL_BADGE_HEIGHT = 73;
 const HP_GAUGE_HEIGHT = 37;
+const UNIT_OWNER_HEIGHT = 30;
 const CARD_BODY_HEIGHT = 120;
-const UNIT_CARD_CANVAS_HEIGHT = TOLL_BADGE_HEIGHT + CARD_BODY_HEIGHT + HP_GAUGE_HEIGHT;
+const UNIT_CARD_CANVAS_HEIGHT = TOLL_BADGE_HEIGHT + CARD_BODY_HEIGHT + HP_GAUGE_HEIGHT + UNIT_OWNER_HEIGHT;
 
 const unitCardArtCache = new Map();
 /** 同じURLの実イラストは1度だけロードして使い回す（複数体を盤面に出しても再ダウンロードしない）。 */
@@ -362,6 +363,13 @@ function drawUnitCard(state) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(`${Math.max(0, state.hp)}/${state.maxHp}`, w / 2, gaugeY + gaugeH / 2 + 1);
+
+  const ownerY = bodyY + bodyH + HP_GAUGE_HEIGHT;
+  ctx.fillStyle = 'rgba(0,0,0,0.78)';
+  ctx.fillRect(2, ownerY, w - 4, UNIT_OWNER_HEIGHT - 2);
+  ctx.fillStyle = '#ffffff';
+  ctx.font = `bold ${Math.round(UNIT_OWNER_HEIGHT * 0.62)}px sans-serif`;
+  ctx.fillText(state.ownerName || '', w / 2, ownerY + UNIT_OWNER_HEIGHT / 2 - 1);
 
   state.texture.needsUpdate = true;
 }
@@ -501,7 +509,7 @@ export class GameScene {
       mesh.position.set(tile.position.x, -0.2, tile.position.z);
       this.scene.add(mesh);
       tile.mesh = mesh;
-      this._createBoardMarker(tile);
+      tile.markerSprite = this._createBoardMarker(tile);
       this._createSpecialTileLabel(tile);
     }
     // No ground-plane mesh anymore - it used to fill the entire frustum
@@ -514,7 +522,7 @@ export class GameScene {
   /** ゴール/チェックポイント/ほこら/ワープマスにオブジェクトを立てる。 */
   _createBoardMarker(tile) {
     const def = tile.type === TileType.WARP ? WARP_MARKERS[tile.warpKind] : BOARD_MARKERS[tile.type];
-    if (!def) return;
+    if (!def) return null;
     const texture = loadBoardMarkerTexture(def.url);
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false }));
     sprite.renderOrder = 10;
@@ -524,6 +532,7 @@ export class GameScene {
     // 沈む見た目に合わせ、同じ沈み込み量（0.1）で底面をタイルに接地させる。
     sprite.position.set(tile.position.x, BOARD_MARKER_HEIGHT / 2 - 0.1, tile.position.z);
     this.scene.add(sprite);
+    return sprite;
   }
 
   /** 特殊マス名をオブジェクトの手前（画面上ではマスの下側）へ表示する。 */
@@ -643,6 +652,7 @@ export class GameScene {
       hp: unit.currentHp,
       maxHp: unit.def.hp,
       toll: 0,
+      ownerName: '',
       artImage: null,
     };
     sprite.userData.cardState = state;
@@ -670,14 +680,22 @@ export class GameScene {
     }
   }
 
+  setBoardObjectOpacity(sprite, opacity = 1) {
+    if (!sprite?.material) return;
+    sprite.material.transparent = true;
+    sprite.material.opacity = opacity;
+    sprite.material.needsUpdate = true;
+  }
+
   /** HP・通行料など頻繁に変わる部分だけを再描画する（値が変化していなければ何もしない）。 */
-  updateUnitIcon(sprite, { hp, maxHp, toll }) {
+  updateUnitIcon(sprite, { hp, maxHp, toll, ownerName = '' }) {
     const state = sprite?.userData?.cardState;
     if (!state) return;
-    if (state.hp === hp && state.maxHp === maxHp && state.toll === toll) return;
+    if (state.hp === hp && state.maxHp === maxHp && state.toll === toll && state.ownerName === ownerName) return;
     state.hp = hp;
     state.maxHp = maxHp;
     state.toll = toll;
+    state.ownerName = ownerName;
     drawUnitCard(state);
   }
 

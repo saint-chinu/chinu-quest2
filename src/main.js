@@ -2878,6 +2878,8 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
 
   const playerConfigs = await buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList);
 
+  await confirmLandscapeReady();
+
   preGame.classList.add('hidden');
   appEl.classList.remove('hidden');
   startBattle(currentCharacter, {
@@ -3014,6 +3016,26 @@ async function handleStoryBattleEnd(index, { won }) {
   await playDialogueLines(stage.outro);
   showStoryScreen();
   showToast(`ストーリー報酬として${mReward.earnedM}M獲得しました`, 2400);
+}
+
+/** スマートフォンでは盤面生成前に横持ちを促し、完了操作まで開始しない。 */
+function confirmLandscapeReady() {
+  const isPhone = window.matchMedia('(pointer: coarse)').matches && Math.min(screen.width, screen.height) <= 600;
+  if (!isPhone) return Promise.resolve();
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'landscape-ready-overlay';
+    const box = document.createElement('div');
+    box.className = 'landscape-ready-box';
+    const message = document.createElement('p');
+    message.textContent = 'スマートフォンを横持ちしてください、画像が乱れます';
+    const button = document.createElement('button');
+    button.textContent = '完了';
+    button.addEventListener('click', () => { overlay.remove(); resolve(); }, { once: true });
+    box.append(message, button);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  });
 }
 
 document.querySelectorAll('.hub-tile').forEach((tile) => {
@@ -4213,6 +4235,7 @@ breedHelpClose.addEventListener('click', () => {
 
 battleCpuButton.addEventListener('click', async () => {
   const chosenDeck = await promptDeckSelection();
+  await confirmLandscapeReady();
   preGame.classList.add('hidden');
   appEl.classList.remove('hidden');
   const iconImage = (await resolveCharacterIcon(currentCharacter))?.canvas ?? null;
@@ -4659,20 +4682,32 @@ function applyPvpPublicState(publicState) {
 
   const activeIndex = publicState.players.findIndex((player) => player.id === publicState.currentPlayerId);
   if (activeIndex >= 0) {
+    const playersByTile = new Map();
+    for (const player of publicState.players) {
+      if (!playersByTile.has(player.tileId)) playersByTile.set(player.tileId, []);
+      playersByTile.get(player.tileId).push(player);
+    }
     for (let offset = 0; offset < publicState.players.length; offset++) {
       const player = publicState.players[(activeIndex + offset) % publicState.players.length];
+      const overlapsAnotherPlayer = (playersByTile.get(player.tileId)?.length || 0) > 1;
       scene?.setPieceRenderOrder?.(
         pvpPieces.get(player.id),
         100 + publicState.players.length - offset,
-        offset === 0 ? 1 : 0.45,
+        offset === 0 || !overlapsAnotherPlayer ? 1 : 0.45,
       );
+    }
+    for (const tile of tiles) {
+      const coveredByPlayer = (playersByTile.get(tile.id)?.length || 0) > 0;
+      scene?.setBoardObjectOpacity?.(tile.unitMesh, coveredByPlayer ? 0.4 : 1);
+      scene?.setBoardObjectOpacity?.(tile.markerSprite, coveredByPlayer ? 0.4 : 1);
     }
   }
 
 }
 
 /** ゲスト側専用: room.statusが'battling'になった合図で呼ばれる（enterPvpRoomScreen参照）。ホストと同じcreateBoard(mapId)で作った盤面をローカルに構築し、以後はpublicState/自分の手札の購読だけで描画し続ける（Gameインスタンスは持たない）。 */
-function startPvpGuestBattle() {
+async function startPvpGuestBattle() {
+  await confirmLandscapeReady();
   preGame.classList.add('hidden');
   appEl.classList.remove('hidden');
 
@@ -4716,6 +4751,7 @@ pvpRoomStart.addEventListener('click', async () => {
   if (!pvpSession?.isHost || (!pvpLastRoom?.guestUid && !(pvpLastRoom?.cpuNames?.length))) return;
   pvpRoomStart.disabled = true;
   const hostDeck = await promptDeckSelection();
+  await confirmLandscapeReady();
 
   // ゲストのデッキは入室と同時にguestDeckListとしてもう届いている
   // （joinPvpRoom参照）ので、ここで改めて尋ねる必要はない。

@@ -1506,17 +1506,16 @@ export class Game {
           tile.unitMesh = this.scene.createUnitIcon?.(tile.unit, tile.position) ?? null;
           if (tile.unitMesh) tile.unitMesh.userData.unit = tile.unit;
         }
+        const ownerName = this.players.find((p) => p.id === tile.owner)?.name ?? '';
         this.scene.updateUnitIcon?.(tile.unitMesh, {
           hp: tile.unit.currentHp,
           maxHp: tile.unit.def.hp,
           toll: this._tollOfTile(tile),
+          ownerName,
         });
-
-        const ownerName = this.players.find((p) => p.id === tile.owner)?.name ?? '';
-        if (!tile.ownerLabelMesh || tile.ownerLabelMesh.userData.ownerName !== ownerName) {
-          if (tile.ownerLabelMesh) this.scene.removeOwnerLabel?.(tile.ownerLabelMesh);
-          tile.ownerLabelMesh = this.scene.createOwnerLabel?.(ownerName, tile.position) ?? null;
-          if (tile.ownerLabelMesh) tile.ownerLabelMesh.userData.ownerName = ownerName;
+        if (tile.ownerLabelMesh) {
+          this.scene.removeOwnerLabel?.(tile.ownerLabelMesh);
+          tile.ownerLabelMesh = null;
         }
       } else {
         if (tile.unitMesh) {
@@ -1696,7 +1695,9 @@ export class Game {
     // コマンドでアクセス可能）になる。
     const isAdmin =
       tile.type === TileType.START || tile.type === TileType.EVENT || player.allTilesAccessTurnsRemaining > 0;
-    const owesTollUnlessConquered = tile.type === TileType.LAND && tile.owner != null && tile.owner !== player.id;
+    const landingOwner = tile.owner != null ? this.players.find((candidate) => candidate.id === tile.owner) : null;
+    const isAlliedLand = landingOwner?.allianceId != null && landingOwner.allianceId === player.allianceId;
+    const owesTollUnlessConquered = tile.type === TileType.LAND && tile.owner != null && tile.owner !== player.id && !isAlliedLand;
     if (tile.type !== TileType.LAND && !isAdmin) return;
 
     if (player.isCPU) {
@@ -1734,7 +1735,7 @@ export class Game {
     for (;;) {
       const choice = await this.onLandCommand(
         this.getTileSummary(tile),
-        { canSummon: tile.type === TileType.LAND && this._affordableMonsterCards(player).length > 0 },
+        { canSummon: tile.type === TileType.LAND && !isAlliedLand && this._affordableMonsterCards(player).length > 0 },
         player.id,
       );
       if (choice === 'end') break;
@@ -1948,6 +1949,11 @@ export class Game {
    * instead of just vanishing.
    */
   async _humanSummonFlow(player, tile) {
+    const owner = tile.owner != null ? this.players.find((candidate) => candidate.id === tile.owner) : null;
+    if (owner?.allianceId != null && owner.allianceId === player.allianceId) {
+      this.onLog('同盟仲間の土地には侵略できません');
+      return false;
+    }
     if (tile.owner != null && tile.owner !== player.id && tile.transparentCursed) {
       this.onLog('透過の呪いがかかっており侵略できません');
       return false;
@@ -2569,6 +2575,9 @@ export class Game {
       if (!usedDamageAbility) this._cpuMaybeLevelUp(player, tile, profile);
       return;
     }
+
+    const owner = tile.owner != null ? this.players.find((candidate) => candidate.id === tile.owner) : null;
+    if (owner?.allianceId != null && owner.allianceId === player.allianceId) return;
 
     const options = this._affordableMonsterCards(player);
     if (options.length === 0) return;
@@ -3215,6 +3224,11 @@ export class Game {
   }
 
   async _runInvasion(player, tile, card) {
+    const currentOwner = tile.owner != null ? this.players.find((candidate) => candidate.id === tile.owner) : null;
+    if (currentOwner?.allianceId != null && currentOwner.allianceId === player.allianceId) {
+      this.onLog('同盟仲間の土地には侵略できません');
+      return;
+    }
     // 絶対攻撃: 次の侵略で召喚するモンスターが一時的に貫通を得る（カードの
     // インスタンスだけをコピーして特性を足すので、カタログの元defは汚さない）。
     if (player.pierceNextInvasion) {
@@ -3867,9 +3881,20 @@ export class Game {
   /** 行動者を最前面にし、以降の手番順にプレイヤー駒の描画優先度を下げる。 */
   _syncPieceRenderOrder() {
     const count = this.players.length;
+    const playersByTile = new Map();
+    for (const player of this.players) {
+      if (!playersByTile.has(player.tileId)) playersByTile.set(player.tileId, []);
+      playersByTile.get(player.tileId).push(player);
+    }
     for (let offset = 0; offset < count; offset++) {
       const player = this.players[(this.currentPlayerIndex + offset) % count];
-      this.scene.setPieceRenderOrder?.(player.mesh, 100 + count - offset, offset === 0 ? 1 : 0.45);
+      const overlapsAnotherPlayer = (playersByTile.get(player.tileId)?.length || 0) > 1;
+      this.scene.setPieceRenderOrder?.(player.mesh, 100 + count - offset, offset === 0 || !overlapsAnotherPlayer ? 1 : 0.45);
+    }
+    for (const tile of this.tiles) {
+      const coveredByPlayer = (playersByTile.get(tile.id)?.length || 0) > 0;
+      this.scene.setBoardObjectOpacity?.(tile.unitMesh, coveredByPlayer ? 0.4 : 1);
+      this.scene.setBoardObjectOpacity?.(tile.markerSprite, coveredByPlayer ? 0.4 : 1);
     }
   }
 
