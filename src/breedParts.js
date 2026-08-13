@@ -174,5 +174,6 @@ export function buildBreedCardDef(character) {
     traits: stats.traits,
     // アップロード画像がある場合のみそちらを優先する。
     imageDataUrl: character.breedMonster.imageDataUrl || BREED_DEFAULT_IMAGE_URL,
+    imageFit: character.breedMonster.imageDataUrl ? 'cover' : 'contain',
   };
 }

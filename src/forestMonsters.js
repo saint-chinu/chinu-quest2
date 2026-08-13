@@ -1,4 +1,5 @@
 import { CardType, Element, Rarity } from './cards.js';
+import { assetUrl } from './assetUrl.js';
 
 const NORMAL_COST = 50;
 const forestMonster = (id, name, rarity, hp, atk, options = {}) => ({
@@ -16,6 +17,7 @@ const forestMonster = (id, name, rarity, hp, atk, options = {}) => ({
   ...(options.traits ? { traits: options.traits } : {}),
   ...(options.effect ? { effect: options.effect } : {}),
   ...(options.effectDescription ? { effectDescription: options.effectDescription } : {}),
+  ...(options.imageDataUrl ? { imageDataUrl: options.imageDataUrl } : {}),
 });
 
 /** 森属性モンスター20種。画像未指定時はcardArt.jsの森属性共通画像を使う。 */
@@ -89,10 +91,11 @@ export const FOREST_MONSTER_CATALOG = {
     chainRequired: 1,
     effectDescription: '召喚条件: 1連鎖以上（純HP特化、ATK0）',
   }),
-  jukaiNoOnryou: forestMonster('jukaiNoOnryou', '樹海の怨霊', Rarity.R, 10, 40, {
+  jukaiNoOnryou: forestMonster('jukaiNoOnryou', '樹海の怨霊', Rarity.R, 20, 40, {
     traits: ['firstStrike'],
     effect: { type: 'instantKillOnHit', chance: 0.5 },
     effectDescription: '先制。攻撃成功時、1/2の確率で相手を即死させる',
+    imageDataUrl: assetUrl('/images/card-art/jukainoonryou.png'),
   }),
   mountGorilla: forestMonster('mountGorilla', 'マウントゴリラ', Rarity.R, 30, 30, {
     effect: { type: 'atkDoubleIfRicher' },

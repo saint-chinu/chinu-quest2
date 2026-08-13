@@ -927,9 +927,15 @@ deckRatioModal.addEventListener('click', (event) => {
 /** Rarity badge (top-left) + type icon (top-right) + name, over the element/type background color. */
 function renderCardEl(el, card, { showMonsterStats = false } = {}) {
   const artUrl = card.imageDataUrl || defaultCardArtUrl(card);
-  el.style.background = artUrl
-    ? `linear-gradient(rgba(0,0,0,.12), rgba(0,0,0,.72)), url("${artUrl}") center / cover`
-    : cardColor(card);
+  if (artUrl) {
+    el.style.backgroundColor = cardColor(card);
+    el.style.backgroundImage = `linear-gradient(rgba(0,0,0,.12), rgba(0,0,0,.72)), url("${artUrl}")`;
+    el.style.backgroundPosition = 'center, center';
+    el.style.backgroundSize = `cover, ${card.imageFit === 'contain' ? 'contain' : 'cover'}`;
+    el.style.backgroundRepeat = 'no-repeat, no-repeat';
+  } else {
+    el.style.background = cardColor(card);
+  }
   el.replaceChildren();
 
   const rarity = document.createElement('span');
