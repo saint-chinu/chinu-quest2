@@ -3259,11 +3259,36 @@ html, body {
 }
 
 #battle-item-picker-choices .card {
-  cursor: pointer;
   width: 60px;
   height: 84px;
   font-size: 10px;
 }
+
+.battle-item-choice {
+  width: 132px;
+  display: grid;
+  grid-template-columns: 60px 1fr;
+  grid-template-rows: auto auto;
+  align-items: center;
+  gap: 4px 6px;
+  padding: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: pointer;
+}
+
+.battle-item-choice:hover,
+.battle-item-choice:focus-visible {
+  border-color: #75e0e2;
+  outline: none;
+  background: rgba(117, 224, 226, 0.12);
+}
+
+.battle-item-choice .card { grid-row: 1 / 3; }
+.battle-item-bonus { color: #fff; font-size: 10px; font-weight: 800; line-height: 1.45; }
+.battle-item-traits { display: flex; flex-direction: column; gap: 1px; color: #73778a; font-size: 9px; text-align: left; }
+.battle-item-traits .active { color: #ffd866; font-weight: 900; }
 
 #battle-item-picker-skip {
   border: none;

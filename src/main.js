@@ -966,6 +966,24 @@ function describeCard(card) {
     : TYPE_LABEL[card.type];
 }
 
+const BATTLE_ITEM_TRAITS = [
+  ['firstStrike', '先制'],
+  ['lastStrike', '後攻'],
+  ['pierce', '貫通'],
+];
+
+function signedItemBonus(value) {
+  const amount = Number(value) || 0;
+  return amount >= 0 ? `+${amount}` : String(amount);
+}
+
+function battleItemBonusText(card) {
+  const atk = card.atkBonusRange
+    ? `+${card.atkBonusRange[0]}〜${card.atkBonusRange[1]}`
+    : signedItemBonus(card.atkBonus);
+  return `ATK ${atk}　HP ${signedItemBonus(card.hpBonus)}`;
+}
+
 /** Richer, multi-line version for the card detail popup (image + description) - stats, not just the type/element blurb. */
 function describeCardDetail(card) {
   const rarityText = `レア度: ${card.rarity || Rarity.N}`;
@@ -974,13 +992,18 @@ function describeCardDetail(card) {
     lines.push(`属性: ${card.element ? ELEMENT_LABEL[card.element] : '無属性'}`);
     lines.push(`ATK ${card.atk} / HP ${card.hp} / コスト ${card.cost}`);
   } else if (card.type === CardType.GEAR) {
-    const atkText = card.atkBonusRange ? `${card.atkBonusRange[0]}〜${card.atkBonusRange[1]}(ランダム)` : card.atkBonus;
-    lines.push(`ATK+${atkText} / HP+${card.hpBonus} / コスト ${card.cost}`);
+    const atkText = card.atkBonusRange
+      ? `+${card.atkBonusRange[0]}〜${card.atkBonusRange[1]}（ランダム）`
+      : signedItemBonus(card.atkBonus);
+    lines.push(`ATK ${atkText} / HP ${signedItemBonus(card.hpBonus)} / コスト ${card.cost}`);
   } else if (card.type === CardType.SPELL) {
     if (card.cost != null) lines.push(`コスト ${card.cost}`);
     if (card.addedAtk != null) lines.push(`ATK+${card.addedAtk} / HP+${card.addedHp}（永続）`);
   }
-  const effectLabels = (card.traits || []).map((id) => CARD_EFFECTS.find((effect) => effect.id === id)?.label || id);
+  const effectLabels = (card.traits || []).map((id) =>
+    CARD_EFFECTS.find((effect) => effect.id === id)?.label
+      || BATTLE_ITEM_TRAITS.find(([traitId]) => traitId === id)?.[1]
+      || id);
   if (effectLabels.length) lines.push(`特殊効果: ${effectLabels.join('・')}`);
   if (card.effectDescription) lines.push(card.effectDescription);
   return lines.join('\n');
@@ -1454,21 +1477,45 @@ function promptPickBattleItem({ hand, side, ownerName, unitName }) {
       hand.length > 0 ? `${ownerName}の${unitName}: 使うアイテムを選んでください` : `${ownerName}の${unitName}: アイテムがありません`;
     battleItemPickerChoices.replaceChildren();
     for (const card of hand) {
+      const choice = document.createElement('div');
+      choice.className = 'battle-item-choice';
+      choice.tabIndex = 0;
+      choice.setAttribute('role', 'button');
+      choice.setAttribute('aria-label', `${card.name}の詳細を確認して装備する`);
       const el = document.createElement('div');
       el.className = 'card';
       renderCardEl(el, card);
-      el.addEventListener('click', () => {
+      const bonus = document.createElement('div');
+      bonus.className = 'battle-item-bonus';
+      bonus.textContent = battleItemBonusText(card);
+      const traits = document.createElement('div');
+      traits.className = 'battle-item-traits';
+      for (const [traitId, label] of BATTLE_ITEM_TRAITS) {
+        const trait = document.createElement('span');
+        const active = card.traits?.includes(traitId);
+        trait.className = active ? 'active' : '';
+        trait.textContent = `${label}${active ? '●' : '－'}`;
+        traits.appendChild(trait);
+      }
+      const chooseItem = () => {
         if (confirming) return;
         confirming = true;
-        el.classList.add('blinking');
+        choice.classList.add('blinking');
         setTimeout(async () => {
-          el.classList.remove('blinking');
+          choice.classList.remove('blinking');
           const confirmed = await promptConfirmAction({ actionType: 'equip', card });
           confirming = false;
           if (confirmed) cleanup(card);
         }, BLINK_MS);
+      };
+      choice.addEventListener('click', chooseItem);
+      choice.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        chooseItem();
       });
-      battleItemPickerChoices.appendChild(el);
+      choice.append(el, bonus, traits);
+      battleItemPickerChoices.appendChild(choice);
     }
     battleItemPickerBox.classList.remove('hidden');
 
