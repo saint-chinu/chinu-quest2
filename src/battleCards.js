@@ -138,6 +138,7 @@ export const ITEM_CATALOG = {
   fushichoNoKen: item('fushichoNoKen', '不死鳥の剣', Rarity.R, ItemType.WEAPON, 80, 20, 10, {
     returnsToHandIfUsed: true,
     effectDescription: '使用して効果を発動した場合のみ手札に戻る',
+    imageDataUrl: assetUrl('/images/card-art/fenixsword.png'),
   }),
   shinkenShirahadori: item('shinkenShirahadori', '真剣白刃取り', Rarity.R, ItemType.WEAPON, 110, 0, 0, {
     effect: { type: 'stealItemBeforeAttack' },
