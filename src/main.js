@@ -27,7 +27,8 @@ import {
 import { STORY_STAGES, isStageUnlocked, isStageCleared } from './story.js';
 import { NPC_PORTRAIT_URL, loadNpcTokenImage } from './npcArt.js';
 import { defaultCardArtUrl } from './cardArt.js';
-import { firebaseReady } from './firebase.js';
+import { firebaseReady, db, auth } from './firebase.js';
+import { collection, doc as fsDoc, getDoc as fsGetDoc, getDocs as fsGetDocs } from 'firebase/firestore';
 import {
   createPvpRoom,
   joinPvpRoom,
@@ -2593,6 +2594,11 @@ const charmakeDecks = document.getElementById('charmake-decks');
 const charmakeSubmit = document.getElementById('charmake-submit');
 const hubScreen = document.getElementById('hub-screen');
 const hubWelcome = document.getElementById('hub-welcome');
+const hubAdminTile = document.getElementById('hub-admin-tile');
+const adminScreen = document.getElementById('admin-screen');
+const adminContent = document.getElementById('admin-content');
+const adminBack = document.getElementById('admin-back');
+const adminRefresh = document.getElementById('admin-refresh');
 const catalogScreen = document.getElementById('catalog-screen');
 const catalogList = document.getElementById('catalog-list');
 const catalogCategoryTabs = document.getElementById('catalog-category-tabs');
@@ -2727,7 +2733,7 @@ const storyOverlaySpeaker = document.getElementById('story-overlay-speaker');
 const storyOverlayText = document.getElementById('story-overlay-text');
 const storyOverlaySkip = document.getElementById('story-overlay-skip');
 
-const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, catalogScreen, cardEditorScreen, deckScreen, deckSelectScreen, shopScreen, battleMenuScreen, breedScreen, stubScreen, storyScreen, storyDialogueScreen, pvpMenuScreen, pvpRoomScreen, pvpMapSelectScreen];
+const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, adminScreen, catalogScreen, cardEditorScreen, deckScreen, deckSelectScreen, shopScreen, battleMenuScreen, breedScreen, stubScreen, storyScreen, storyDialogueScreen, pvpMenuScreen, pvpRoomScreen, pvpMapSelectScreen];
 function showScreen(el) {
   ALL_PG_SCREENS.forEach((s) => s.classList.toggle('hidden', s !== el));
 }
@@ -2825,6 +2831,155 @@ function showHubScreen() {
   showScreen(hubScreen);
 }
 
+// ===== 管理ダッシュボード（管理者のみ） =====
+// Firestoreの admins/{uid} ドキュメントが存在するuidだけが管理者。
+// firestore.rulesで「管理者は全playersを閲覧のみ可」に設定してあるので、
+// 非管理者がこのクエリを叩いても permission-denied で弾かれる（データは常に保護）。
+let isAdminUser = false;
+
+/** ログイン後に管理者かどうかを判定し、管理者ならハブに「管理」タイルを出す。 */
+async function refreshAdminAccess(uid) {
+  isAdminUser = false;
+  if (hubAdminTile) hubAdminTile.hidden = true;
+  if (!firebaseReady || !db || !uid) return;
+  // 管理者マーカーの登録に使えるよう、自分のuidをコンソールに出す（初回設定用）。
+  console.info('[chinuquest] ログイン中のUID:', uid);
+  try {
+    const snap = await fsGetDoc(fsDoc(db, 'admins', uid));
+    isAdminUser = snap.exists();
+  } catch (error) {
+    isAdminUser = false;
+  }
+  if (hubAdminTile) hubAdminTile.hidden = !isAdminUser;
+}
+
+function escapeHtml(value) {
+  return String(value == null ? '' : value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function fmtInt(n) {
+  return Number(n || 0).toLocaleString('ja-JP');
+}
+
+function fmtDate(ts) {
+  // FirestoreのTimestamp（toDate()を持つ）/ 文字列 / null に対応。
+  try {
+    if (ts && typeof ts.toDate === 'function') return ts.toDate().toLocaleString('ja-JP');
+    if (typeof ts === 'string' && ts) return new Date(ts).toLocaleString('ja-JP');
+  } catch (error) { /* noop */ }
+  return '—';
+}
+
+const STORY_STAGE_LABELS = ['未着手', '①クリア', '②クリア', '③クリア', '④クリア(全)'];
+
+/** players コレクション全件を集計してダッシュボードHTMLを組み立てる。 */
+function buildAdminDashboardHtml(players) {
+  const total = players.length;
+  const withCharacter = players.filter((p) => p.character && p.character.name).length;
+
+  // ストーリー進捗分布（storyProgress 0〜4）。
+  const progressCounts = [0, 0, 0, 0, 0];
+  let mSum = 0;
+  let mMax = 0;
+  let mMaxName = '—';
+  let customCardTotal = 0;
+  const recent = [];
+
+  for (const p of players) {
+    const c = p.character || {};
+    const prog = Math.max(0, Math.min(4, Number(c.storyProgress || 0)));
+    progressCounts[prog] += 1;
+    const m = Number(c.m || 0);
+    mSum += m;
+    if (m > mMax) { mMax = m; mMaxName = c.name || '(無名)'; }
+    customCardTotal += Array.isArray(p.customCards) ? p.customCards.length : 0;
+    recent.push({
+      name: c.name || '(キャラ未作成)',
+      progress: prog,
+      m,
+      ownedKinds: c.ownedCards ? Object.keys(c.ownedCards).length : 0,
+      updatedAt: p.updatedAt || null,
+      createdAt: p.createdAt || null,
+    });
+  }
+
+  const clearedAll = progressCounts[4];
+  const startedStory = total - progressCounts[0];
+  const avgM = withCharacter ? Math.round(mSum / withCharacter) : 0;
+
+  recent.sort((a, b) => {
+    const ta = a.updatedAt && a.updatedAt.toDate ? a.updatedAt.toDate().getTime() : 0;
+    const tb = b.updatedAt && b.updatedAt.toDate ? b.updatedAt.toDate().getTime() : 0;
+    return tb - ta;
+  });
+  const recentTop = recent.slice(0, 30);
+
+  const progressRows = progressCounts.map((count, i) => {
+    const pct = total ? Math.round((count / total) * 100) : 0;
+    return `<div class="admin-bar-row">
+        <span class="admin-bar-label">${STORY_STAGE_LABELS[i]}</span>
+        <span class="admin-bar-track"><span class="admin-bar-fill" style="width:${pct}%"></span></span>
+        <span class="admin-bar-value">${fmtInt(count)}人 (${pct}%)</span>
+      </div>`;
+  }).join('');
+
+  const tableRows = recentTop.map((r) => `<tr>
+      <td class="admin-td-name">${escapeHtml(r.name)}</td>
+      <td>${STORY_STAGE_LABELS[r.progress]}</td>
+      <td class="admin-td-num">${fmtInt(r.m)}</td>
+      <td class="admin-td-num">${fmtInt(r.ownedKinds)}</td>
+      <td class="admin-td-date">${fmtDate(r.updatedAt)}</td>
+    </tr>`).join('');
+
+  return `
+    <div class="admin-kpi-grid">
+      <div class="admin-kpi"><span>登録者数</span><strong>${fmtInt(total)}</strong></div>
+      <div class="admin-kpi"><span>キャラ作成済み</span><strong>${fmtInt(withCharacter)}</strong></div>
+      <div class="admin-kpi"><span>ストーリー開始</span><strong>${fmtInt(startedStory)}</strong></div>
+      <div class="admin-kpi"><span>全ステージ制覇</span><strong>${fmtInt(clearedAll)}</strong></div>
+      <div class="admin-kpi"><span>平均所持M</span><strong>${fmtInt(avgM)}</strong></div>
+      <div class="admin-kpi"><span>最大所持M</span><strong>${fmtInt(mMax)}</strong><small>${escapeHtml(mMaxName)}</small></div>
+      <div class="admin-kpi"><span>カスタムカード総数</span><strong>${fmtInt(customCardTotal)}</strong></div>
+    </div>
+
+    <h3 class="admin-subhead">ストーリー進捗の分布</h3>
+    <div class="admin-bars">${progressRows}</div>
+
+    <h3 class="admin-subhead">最近プレイしたプレイヤー（上位30名）</h3>
+    <div class="admin-table-wrap">
+      <table class="admin-table">
+        <thead><tr><th>名前</th><th>進捗</th><th>所持M</th><th>所持種類</th><th>最終更新</th></tr></thead>
+        <tbody>${tableRows || '<tr><td colspan="5">データがありません</td></tr>'}</tbody>
+      </table>
+    </div>
+  `;
+}
+
+async function showAdminDashboard() {
+  showScreen(adminScreen);
+  adminContent.innerHTML = '<p class="admin-loading">読み込み中…</p>';
+  if (!firebaseReady || !db) {
+    adminContent.innerHTML = '<p class="admin-error">Firebaseに接続できないため集計できません。</p>';
+    return;
+  }
+  try {
+    const snapshot = await fsGetDocs(collection(db, 'players'));
+    const players = snapshot.docs.map((d) => d.data());
+    adminContent.innerHTML = buildAdminDashboardHtml(players);
+  } catch (error) {
+    console.error('管理ダッシュボードの集計に失敗', error);
+    const denied = error?.code === 'permission-denied';
+    adminContent.innerHTML = denied
+      ? `<p class="admin-error">閲覧権限がありません。この機能は管理者専用です。<br>あなたのUID: <code>${escapeHtml(auth?.currentUser?.uid || '不明')}</code></p>`
+      : '<p class="admin-error">集計の読み込みに失敗しました。時間をおいて再度お試しください。</p>';
+  }
+}
+
 /** Existing characters saved before ブリードモンスター existed won't have these fields yet - fill them in with the default build (no owned parts) rather than crashing on undefined. */
 function ensureBreedFields(character) {
   if (!character.breedMonster) character.breedMonster = { name: BREED_BASE.defaultName, equippedPartIds: [] };
@@ -2865,6 +3020,7 @@ loginSubmit.addEventListener('click', async () => {
   loginError.classList.add('hidden');
   currentUserId = result.id;
   setCloudCustomCardUser(currentUserId, result.customCards || []);
+  refreshAdminAccess(currentUserId);
   if (result.isNew || !result.character) {
     showCharmakeScreen();
   } else {
@@ -3393,6 +3549,8 @@ document.querySelectorAll('.hub-tile').forEach((tile) => {
       showShopScreen();
     } else if (mode === 'breed') {
       showBreedScreen();
+    } else if (mode === 'admin') {
+      showAdminDashboard();
     } else {
       stubText.textContent = `${STUB_MODE_LABEL[mode]}は準備中です`;
       showScreen(stubScreen);
@@ -3402,6 +3560,8 @@ document.querySelectorAll('.hub-tile').forEach((tile) => {
 
 battleBackButton.addEventListener('click', showHubScreen);
 stubBackButton.addEventListener('click', showHubScreen);
+if (adminBack) adminBack.addEventListener('click', showHubScreen);
+if (adminRefresh) adminRefresh.addEventListener('click', showAdminDashboard);
 
 // ---- Card catalog: unowned entries stay blank; owned entries reveal name/count/detail. ----
 

@@ -112,7 +112,25 @@
               <span class="hub-tile-copy"><strong>ブリード</strong><small>新たな力を生み出す</small></span>
               <span class="hub-tile-arrow" aria-hidden="true">›</span>
             </button>
+            <button class="hub-tile" data-mode="admin" id="hub-admin-tile" hidden>
+              <span class="hub-tile-icon" aria-hidden="true">🛡</span>
+              <span class="hub-tile-copy"><strong>管理ダッシュボード</strong><small>登録者と進捗の集計</small></span>
+              <span class="hub-tile-arrow" aria-hidden="true">›</span>
+            </button>
           </div>
+        </div>
+      </div>
+
+      <div id="admin-screen" class="pg-screen hidden">
+        <div class="hub-shell">
+          <header class="hub-header">
+            <p class="hub-eyebrow">ADMIN</p>
+            <h2 class="pg-title">管理ダッシュボード</h2>
+            <p class="hub-guidance">登録プレイヤーと進捗の集計（管理者専用）</p>
+          </header>
+          <div id="admin-content" class="admin-content"></div>
+          <button id="admin-refresh" class="pg-button pg-button-secondary">再読み込み</button>
+          <button id="admin-back" class="pg-button pg-button-secondary">戻る</button>
         </div>
       </div>
 
