@@ -2929,6 +2929,17 @@ async function handleStoryReplayEnd(index, { won }, replayVariant) {
 
 async function handleStoryBattleEnd(index, { won }) {
   const stage = STORY_STAGES[index];
+  // ストーリーも対戦と同じ終了報酬率を使う。従来は進行度とカード報酬しか
+  // 保存しておらず、ステージ2を含む全ステージでMが一切付与されていなかった。
+  // 同盟時のtotalAssetsはチーム合算なので、自分の取り分へ割ってから計算する。
+  const humanPlayer = game?.players?.find((player) => !player.isCPU);
+  const humanAllianceSize = humanPlayer?.allianceId != null
+    ? game.players.filter((player) => player.allianceId === humanPlayer.allianceId).length
+    : 1;
+  const endingAssetsShare = humanPlayer
+    ? game._totalAssetsOf(humanPlayer) / Math.max(humanAllianceSize, 1)
+    : 0;
+  const mReward = grantExitReward(endingAssetsShare);
   // overlayNpc持ちのステージ（①②）の勝利時だけ、盤面をまだ隠さずに決着
   // 直後の会話をオーバーレイで見せる（startStoryBattleのintro演出と対に
   // なる終幕演出）。それ以外（敗北時・他ステージ）は今まで通り即座に
@@ -2947,6 +2958,7 @@ async function handleStoryBattleEnd(index, { won }) {
     showScreen(storyDialogueScreen);
     await playDialogueLines([{ speaker: '???', text: '力及ばず、敗れてしまった……もう一度挑もう。' }]);
     showStoryScreen();
+    showToast(`ストーリー報酬として${mReward.earnedM}M獲得しました`, 2400);
     return;
   }
 
@@ -2985,12 +2997,14 @@ async function handleStoryBattleEnd(index, { won }) {
     appEl.classList.add('hidden');
     preGame.classList.remove('hidden');
     showStoryScreen();
+    showToast(`ストーリー報酬として${mReward.earnedM}M獲得しました`, 2400);
     return;
   }
 
   showScreen(storyDialogueScreen);
   await playDialogueLines(stage.outro);
   showStoryScreen();
+  showToast(`ストーリー報酬として${mReward.earnedM}M獲得しました`, 2400);
 }
 
 document.querySelectorAll('.hub-tile').forEach((tile) => {
@@ -3021,6 +3035,36 @@ stubBackButton.addEventListener('click', showHubScreen);
 // ---- Card catalog: unowned entries stay blank; owned entries reveal name/count/detail. ----
 
 const RARITY_ORDER = { [Rarity.N]: 0, [Rarity.S]: 1, [Rarity.R]: 2, [Rarity.EX]: 3 };
+
+function hasCardAbility(def) {
+  return Boolean(
+    (def.traits && def.traits.length)
+    || def.effect
+    || def.ability
+    || def.effectDescription
+    || def.commandCost
+  );
+}
+
+/** デッキ編集・図鑑共通の2行概要。通常能力値は符号なし、アイテム補正だけ+/-を表示する。 */
+function cardListPresentation(def, owned) {
+  const category = def.type === CardType.MONSTER
+    ? (ELEMENT_LABEL[def.element] || '無')
+    : def.type === CardType.GEAR ? 'アイテム' : 'スペル';
+  const heading = `${def.name}　${def.rarity}${category}　${def.cost ?? 0}G　枚数${owned}`;
+  const stats = [];
+  if (def.type === CardType.MONSTER) {
+    stats.push(`HP${def.hp ?? 0}`, `ATK${def.atk ?? 0}`);
+  } else if (def.type === CardType.GEAR) {
+    const signed = (value) => `${Number(value) > 0 ? '+' : ''}${Number(value) || 0}`;
+    const atk = def.atkBonusRange
+      ? `${signed(def.atkBonusRange[0])}〜${signed(def.atkBonusRange[1])}`
+      : signed(def.atkBonus ?? 0);
+    stats.push(`HP${signed(def.hpBonus ?? 0)}`, `ATK${atk}`);
+  }
+  stats.push(`能力${hasCardAbility(def) ? '有' : '無'}`);
+  return { heading, stats: stats.join('　') };
+}
 
 let catalogActiveCategory = 'fire';
 const catalogHiddenRarities = new Set();
@@ -3063,18 +3107,20 @@ function showCatalogScreen() {
     const owned = ownedCountOf(cardKey(card));
     const row = document.createElement('div');
     row.className = `catalog-row${owned ? '' : ' catalog-row-unknown'}`;
-    const rarity = document.createElement('span');
-    rarity.className = 'catalog-rarity';
-    rarity.textContent = card.rarity;
-    rarity.style.color = RARITY_COLOR[card.rarity];
-    const name = document.createElement(owned ? 'button' : 'span');
-    name.className = 'catalog-card-name';
-    name.textContent = owned ? card.name : '';
-    const count = document.createElement('span');
-    count.className = 'catalog-count';
-    count.textContent = owned ? `${owned}枚` : '';
-    if (owned) name.addEventListener('click', () => showCardDetail(card));
-    row.append(rarity, name, count);
+    const info = document.createElement('div');
+    info.className = 'catalog-card-info';
+    if (owned) {
+      const presentation = cardListPresentation(card, owned);
+      const name = document.createElement('button');
+      name.className = 'catalog-card-name card-summary-heading';
+      name.textContent = presentation.heading;
+      name.addEventListener('click', () => showCardDetail(card));
+      const meta = document.createElement('div');
+      meta.className = 'deck-row-meta';
+      meta.textContent = presentation.stats;
+      info.append(name, meta);
+    }
+    row.append(info);
     catalogList.appendChild(row);
   }
   showScreen(catalogScreen);
@@ -3559,39 +3605,17 @@ function showDeckScreen() {
     deckWorkingCounts.set(key, (deckWorkingCounts.get(key) || 0) + 1);
   }
 
-  const hasAbility = (def) => Boolean(
-    (def.traits && def.traits.length)
-    || def.effect
-    || def.ability
-    || def.effectDescription
-    || def.commandCost
-  );
-
-  const deckCardMeta = (def) => {
-    const owned = ownedCountOf(cardKey(def));
-    const common = `${def.cost ?? 0}G　所持${owned}　能力${hasAbility(def) ? '有' : '無'}`;
-    if (def.type === CardType.MONSTER) {
-      return `${def.rarity}${ELEMENT_LABEL[def.element] || '無'}　HP${def.hp ?? 0}　ATK${def.atk ?? 0}　${common}`;
-    }
-    if (def.type === CardType.GEAR) {
-      const atk = def.atkBonusRange
-        ? `${def.atkBonusRange[0]}〜${def.atkBonusRange[1]}`
-        : (def.atkBonus ?? 0);
-      return `${def.rarity}アイテム　HP+${def.hpBonus ?? 0}　ATK+${atk}　${common}`;
-    }
-    return `${def.rarity}スペル　${common}`;
-  };
-
   const makeInfo = (def) => {
+    const presentation = cardListPresentation(def, ownedCountOf(cardKey(def)));
     const info = document.createElement('div');
     info.className = 'deck-row-info';
     const nameEl = document.createElement('button');
-    nameEl.className = 'deck-row-name deck-card-detail-link';
-    nameEl.textContent = def.name;
+    nameEl.className = 'deck-row-name deck-card-detail-link card-summary-heading';
+    nameEl.textContent = presentation.heading;
     nameEl.addEventListener('click', () => showCardDetail(def));
     const meta = document.createElement('div');
     meta.className = 'deck-row-meta';
-    meta.textContent = deckCardMeta(def);
+    meta.textContent = presentation.stats;
     info.append(nameEl, meta);
     return info;
   };
@@ -3636,10 +3660,6 @@ function showDeckScreen() {
       const copyCap = Math.min(MAX_COPIES_PER_CARD, owned);
       const row = document.createElement('div');
       row.className = 'deck-row deck-add-row';
-      const rarity = document.createElement('span');
-      rarity.className = 'deck-add-rarity';
-      rarity.textContent = def.rarity;
-      rarity.style.color = RARITY_COLOR[def.rarity];
       const plusBtn = document.createElement('button');
       plusBtn.className = 'deck-add-button';
       plusBtn.textContent = '＋';
@@ -3651,7 +3671,7 @@ function showDeckScreen() {
       const addedCount = document.createElement('strong');
       addedCount.className = 'deck-add-count';
       addedCount.textContent = `×${count}`;
-      row.append(rarity, makeInfo(def), addedCount, plusBtn);
+      row.append(makeInfo(def), addedCount, plusBtn);
       deckCatalogList.appendChild(row);
     }
 

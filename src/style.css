@@ -873,7 +873,7 @@ html, body {
 
 .deck-add-row {
   display: grid;
-  grid-template-columns: 28px minmax(0, 1fr) 32px 32px;
+  grid-template-columns: minmax(0, 1fr) 32px 32px;
   align-items: center;
 }
 
@@ -898,6 +898,7 @@ html, body {
 .deck-add-button:disabled { opacity: 0.3; }
 .deck-add-count { color: #ffd166; font-size: 12px; text-align: center; }
 .deck-card-detail-link { padding: 0; border: 0; background: none; color: #fff; text-align: left; }
+.card-summary-heading { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.35; }
 .breed-part-detail-link { cursor: pointer; border-radius: 8px; }
 .breed-part-detail-link:hover,
 .breed-part-detail-link:focus-visible { background: rgba(255, 255, 255, 0.08); outline: 2px solid rgba(255, 220, 100, 0.8); }
@@ -957,9 +958,8 @@ html, body {
 }
 
 .catalog-row {
-  min-height: 34px;
-  display: grid;
-  grid-template-columns: 42px 1fr 55px;
+  min-height: 48px;
+  display: block;
   align-items: center;
   gap: 8px;
   padding: 5px 10px;
@@ -968,9 +968,8 @@ html, body {
 }
 
 .catalog-row-unknown { opacity: 0.42; }
-.catalog-rarity { font-weight: bold; }
-.catalog-card-name { border: 0; padding: 0; background: none; color: #fff; text-align: left; text-decoration: underline; }
-.catalog-count { color: #bfc0d2; text-align: right; font-size: 12px; }
+.catalog-card-info { min-width: 0; }
+.catalog-card-name { width: 100%; border: 0; padding: 0; background: none; color: #fff; text-align: left; text-decoration: underline; font-weight: 800; }
 
 #card-editor-form {
   display: grid;
