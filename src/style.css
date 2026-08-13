@@ -2756,6 +2756,8 @@ html, body {
   display: none;
 }
 
+#card-detail-card.hidden { display: none; }
+
 #card-detail-text {
   color: #fff;
   font-size: 13px;

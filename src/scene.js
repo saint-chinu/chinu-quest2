@@ -344,7 +344,7 @@ function drawUnitCard(state) {
     ctx.font = `bold ${Math.round((TOLL_BADGE_HEIGHT - 3) * 0.76)}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText(`${state.toll}G`, w / 2, (TOLL_BADGE_HEIGHT - 3) / 2 + 1);
+    ctx.fillText(`${state.toll}`, w / 2, (TOLL_BADGE_HEIGHT - 3) / 2 + 1);
   }
 
   const gaugeY = bodyY + bodyH + 4;

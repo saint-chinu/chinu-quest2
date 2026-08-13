@@ -556,7 +556,9 @@ function promptConfirmAction({ actionType, card, cost, tile, targetElement, abil
       text = `${subject}${ACTION_LABEL[actionType]}${extra}しますか？ コスト${cost}G`;
     }
     confirmText.textContent = text;
-    const showCardPreview = actionType === 'summon' && card;
+    // 召喚だけでなく侵略でも、選んだモンスターの立ち絵・能力・ステータスを
+    // 最終確認してから「はい／いいえ」を選べるようにする。
+    const showCardPreview = (actionType === 'summon' || actionType === 'invade') && card;
     confirmCardPreview.classList.toggle('hidden', !showCardPreview);
     if (showCardPreview) {
       renderCardEl(confirmCardFace, card);
@@ -2345,6 +2347,7 @@ const deckCurrentList = document.getElementById('deck-current-list');
 const deckSave = document.getElementById('deck-save');
 const deckBack = document.getElementById('deck-back');
 const deckSelectScreen = document.getElementById('deck-select-screen');
+const deckSelectBack = document.getElementById('deck-select-back');
 const deckSelectPicker = document.getElementById('deck-select-picker');
 const deckSelectList = document.getElementById('deck-select-list');
 const deckSelectConfirm = document.getElementById('deck-select-confirm');
@@ -2792,13 +2795,15 @@ async function playStoryStage(index) {
   // 盤面を隠さない会話演出: 先にデッキだけ選び、盤面表示後にstartStoryBattle
   // 側でオーバーレイ会話を挟む。
   if (stage.overlayNpc || stage.boardDialogue) {
-    const chosenDeck = await promptDeckSelection();
+    const chosenDeck = await promptDeckSelection({ onCancel: showStoryScreen });
+    if (!chosenDeck) return;
     await startStoryBattle(index, chosenDeck.deckList, false);
     return;
   }
   showScreen(storyDialogueScreen);
   await playDialogueLines(stage.intro);
-  const chosenDeck = await promptDeckSelection();
+  const chosenDeck = await promptDeckSelection({ onCancel: showStoryScreen });
+  if (!chosenDeck) return;
   await startStoryBattle(index, chosenDeck.deckList, false);
 }
 
@@ -2811,7 +2816,8 @@ async function playStoryReplay(index) {
     : stage.replay;
   showScreen(storyDialogueScreen);
   await playDialogueLines(replay.intro);
-  const chosenDeck = await promptDeckSelection();
+  const chosenDeck = await promptDeckSelection({ onCancel: showStoryScreen });
+  if (!chosenDeck) return;
   await startStoryBattle(index, chosenDeck.deckList, true, replay);
 }
 
@@ -3774,7 +3780,7 @@ function inDeckCountOf(key) {
 // ---- デッキ選択（対戦・ストーリー共通）: 盤面に入る直前に毎回どのデッキを使うか選ばせる ----
 
 /** 最大3件を並べ、選んだデッキを内訳付きで確認してから確定する。resolveされるのは確定した{id,name,deckList}。 */
-function promptDeckSelection() {
+function promptDeckSelection({ onCancel = null } = {}) {
   return new Promise((resolve) => {
     let pendingDeck = null;
 
@@ -3852,13 +3858,21 @@ function promptDeckSelection() {
     function onNo() {
       showPicker();
     }
+    function onBack() {
+      cleanup();
+      onCancel?.();
+      resolve(null);
+    }
     function cleanup() {
       deckSelectYes.removeEventListener('click', onYes);
       deckSelectNo.removeEventListener('click', onNo);
+      deckSelectBack.removeEventListener('click', onBack);
     }
 
     deckSelectYes.addEventListener('click', onYes);
     deckSelectNo.addEventListener('click', onNo);
+    deckSelectBack.classList.toggle('hidden', !onCancel);
+    if (onCancel) deckSelectBack.addEventListener('click', onBack);
     showScreen(deckSelectScreen);
     showPicker();
   });
