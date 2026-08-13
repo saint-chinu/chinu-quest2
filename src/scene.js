@@ -78,9 +78,9 @@ const FREE_PAN_DURATION_MS = 350;
 // the edges of the screen.
 const DEADZONE_MARGIN = 0.65;
 
-// 全ステージ共通のプレイヤー駒を1.92→2.88（1.5倍）へ拡大。
+// 全ステージ共通: 2026-08-13にプレイヤー駒をさらに1.2倍（2.88→3.456）。
 // 下端の沈み込み量を従来と同じ0.1に保つため、高さ/2-0.1でY位置を算出。
-const PIECE_HEIGHT = 2.88;
+const PIECE_HEIGHT = 3.456;
 export const PIECE_REST_Y = PIECE_HEIGHT / 2 - 0.1;
 
 // 配置モンスターの盤上アイコン用。プレイヤー駒より低く小さくして、通行中の
@@ -91,7 +91,7 @@ export const PIECE_REST_Y = PIECE_HEIGHT / 2 - 0.1;
 // タイルに埋まって「張り付いて」見えていた - ユーザー指摘により修正）。
 // 同日、召喚済みモンスターアイコンをさらに1.2倍にとの指摘でUNIT_ICON_HEIGHT
 // を1.6→1.92に拡大したため、この値も高さ/2+0.05で再計算した。
-export const UNIT_ICON_REST_Y = 1.13;
+export const UNIT_ICON_REST_Y = 1.652;
 
 // 土地レベルの縁取り。tile.mesh(2.6四方)より少し内側(2.5)に、レベルが
 // 上がるほど太い黒枠を重ねる - Lv5だけ「太くする」路線から外れて二重の
@@ -247,14 +247,13 @@ function createTokenTexture(color) {
   return new THREE.CanvasTexture(canvas);
 }
 
-// 配置モンスターの盤上アイコン用ミニカード(通行料バッジ+カード本体+HPゲージ)。
-// 2026-08-12: タイルに埋もれて見づらいというユーザー指摘を受け1.3→1.6に拡大。
-// 同日さらに「1.2倍くらいに」との指摘で1.6→1.92に再拡大（UNIT_ICON_REST_Y
-// もこれに合わせて再計算済み）。
-export const UNIT_ICON_HEIGHT = 2.16;
+// 配置モンスターの盤上アイコン用ミニカード。カード本体の画面上サイズを
+// 1.2倍、通行料・HP領域を2倍にする比率から全体高さを3.204に設定。
+// （旧: 高さ2.16、badge44/body120/hp22、canvas高186）
+export const UNIT_ICON_HEIGHT = 3.204;
 const UNIT_CARD_CANVAS_WIDTH = 110;
-const TOLL_BADGE_HEIGHT = 44;
-const HP_GAUGE_HEIGHT = 22;
+const TOLL_BADGE_HEIGHT = 73;
+const HP_GAUGE_HEIGHT = 37;
 const CARD_BODY_HEIGHT = 120;
 const UNIT_CARD_CANVAS_HEIGHT = TOLL_BADGE_HEIGHT + CARD_BODY_HEIGHT + HP_GAUGE_HEIGHT;
 
@@ -369,11 +368,11 @@ function drawUnitCard(state) {
 // 来るようHEIGHT/2+0.05を目安にREST_Yを設定）。
 const OWNER_LABEL_CANVAS_WIDTH = 160;
 const OWNER_LABEL_CANVAS_HEIGHT = 40;
-export const OWNER_LABEL_HEIGHT = 0.62;
-export const OWNER_LABEL_REST_Y = 0.36;
+export const OWNER_LABEL_HEIGHT = 0.744;
+export const OWNER_LABEL_REST_Y = 0.422;
 // タイル半幅(2.6/2=1.3)より小さくして隣のタイルへはみ出さないようにする
 // （旧1.15は境界ギリギリでタイル間をまたいで見えていた）。
-export const OWNER_LABEL_Z_OFFSET = 0.98;
+export const OWNER_LABEL_Z_OFFSET = 1.23;
 
 function drawOwnerLabel(canvas, name) {
   const ctx = canvas.getContext('2d');
