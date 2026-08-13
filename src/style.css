@@ -1298,6 +1298,42 @@ html, body {
   filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.5));
 }
 
+/* ステージ3は4人の立ち絵を左右2枠へ話者ごとに差し替えるため、汎用の
+   サイズ・位置ではなくキャラクター別に配置する。mm指定は依頼値どおり。 */
+#story-overlay-dialogue[data-stage="budou"] .story-overlay-portrait[data-character="主人公"] {
+  left: 50%;
+  right: auto;
+  bottom: 5mm;
+  width: 44.2vw;
+  max-width: 390px;
+  transform: translateX(-50%);
+}
+
+#story-overlay-dialogue[data-stage="budou"] .story-overlay-portrait[data-character="主人公"].active {
+  transform: translate(-50%, -8px);
+}
+
+#story-overlay-dialogue[data-stage="budou"] .story-overlay-portrait[data-character="紫の魔女ホフク"] {
+  right: calc(2vw + 5mm);
+  bottom: 5mm;
+  width: 44.2vw;
+  max-width: 390px;
+}
+
+#story-overlay-dialogue[data-stage="budou"] .story-overlay-portrait[data-character="ウサギン"] {
+  left: 2vw;
+  bottom: calc(57px + 3mm);
+  width: 40.8vw;
+  max-width: 360px;
+}
+
+#story-overlay-dialogue[data-stage="budou"] .story-overlay-portrait[data-character="少女A"] {
+  left: calc(2vw + min(27vw, 238px));
+  bottom: 57px;
+  width: 44.2vw;
+  max-width: 390px;
+}
+
 .story-overlay-name {
   padding: 2px 14px;
   background: rgba(16, 16, 24, 0.75);

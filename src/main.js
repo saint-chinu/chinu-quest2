@@ -2712,7 +2712,9 @@ function playOverlayDialogueLines(lines, {
   rightNpcPortraitUrl = null,
   speakerSides = null,
   speakerPortraitUrls = null,
+  stageKey = null,
 }) {
+  storyOverlayDialogue.dataset.stage = stageKey || '';
   storyOverlayImgLeft.src = leftPortraitUrl || '';
   storyOverlayNameLeft.textContent = leftName;
   storyOverlayImgRight.src = rightPortraitUrl || '';
@@ -2728,6 +2730,9 @@ function playOverlayDialogueLines(lines, {
       storyOverlayDialogue.removeEventListener('click', onAdvance);
       storyOverlaySkip.removeEventListener('click', onSkip);
       storyOverlayDialogue.classList.add('hidden');
+      delete storyOverlayDialogue.dataset.stage;
+      delete storyOverlayPortraitLeft.dataset.character;
+      delete storyOverlayPortraitRight.dataset.character;
       resolve();
     }
     function showLine() {
@@ -2738,9 +2743,11 @@ function playOverlayDialogueLines(lines, {
         if (dynamicSide === 'left') {
           storyOverlayImgLeft.src = portraitUrl;
           storyOverlayNameLeft.textContent = line.speaker;
+          storyOverlayPortraitLeft.dataset.character = line.speaker;
         } else {
           storyOverlayImgRight.src = portraitUrl;
           storyOverlayNameRight.textContent = line.speaker;
+          storyOverlayPortraitRight.dataset.character = line.speaker;
         }
       }
       // ステージ2は右側の立ち絵枠を主人公とお肉で共有する。話者が変わる
@@ -2902,6 +2909,7 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
       rightNpcPortraitUrl: NPC_PORTRAIT_URL[stage.overlayRightNpcOnSpeaker],
       speakerSides: stage.overlaySpeakerSides,
       speakerPortraitUrls,
+      stageKey: stage.key,
     });
     // Only now deal the opening hand and start the first turn. This prevents
     // draw/reveal UI and CPU activity from running under the intro dialogue.
@@ -2991,6 +2999,7 @@ async function handleStoryBattleEnd(index, { won }) {
       rightNpcPortraitUrl: NPC_PORTRAIT_URL[stage.overlayRightNpcOnSpeaker],
       speakerSides: stage.overlaySpeakerSides,
       speakerPortraitUrls,
+      stageKey: stage.key,
     });
     game = undefined;
     stopMusic();
