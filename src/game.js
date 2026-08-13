@@ -82,6 +82,7 @@ export class Game {
     onSpellComplete,
     onSummonEffect,
     onTargetEffect,
+    onShrineEffect,
     onTurnFocus,
     onTollPayment,
     onMoveDestination,
@@ -138,6 +139,7 @@ export class Game {
     this.onSpellComplete = onSpellComplete || (() => {});
     this.onSummonEffect = onSummonEffect;
     this.onTargetEffect = onTargetEffect;
+    this.onShrineEffect = onShrineEffect || (() => Promise.resolve());
     this.onTurnFocus = onTurnFocus;
     this.onTollPayment = onTollPayment || (() => Promise.resolve());
     this.onMoveDestination = onMoveDestination || (() => {});
@@ -1575,13 +1577,21 @@ export class Game {
     this.onLog('マダイの福音書……');
     const effects = [this._shrineChaos, this._shrineDoubleAtk, this._shrineForcedDice, this._shrineForcedStop];
     const effect = effects[Math.floor(Math.random() * effects.length)];
-    await effect.call(this, player);
+    const result = effect.call(this, player);
     this._notifyState();
+    const shrineTile = this.tiles[player.tileId];
+    await this.onShrineEffect({
+      playerId: player.id,
+      position: result?.position || shrineTile?.position || null,
+      title: 'マダイの福音書',
+      message: result?.message || '不思議な力が発動した！',
+    });
   }
 
   /** 混沌を愛せ: 発動したプレイヤーの手札を全て捨て、デッキ（山札+捨札）を丸ごと再シャッフルしてから5枚引き直す。 */
   _shrineChaos(player) {
-    this.onLog('「混沌を愛せ」……手札が入れ替わる！');
+    const message = '「混沌を愛せ」\n手札をすべて捨て、5枚引き直した！';
+    this.onLog(message.replace('\n', '……'));
     for (const card of player.hand) player.deck.discard(card);
     player.hand = [];
     player.deck.resetShuffle();
@@ -1589,32 +1599,40 @@ export class Game {
       const card = player.deck.draw();
       if (card) player.hand.push(card);
     }
+    return { message };
   }
 
   /** 力こそパワー: 盤上に配置中の全モンスターから1体をランダムに選び、「倍化」という名の永続呪い（基礎ATKと同じ量を加算＝基礎ATKが実質2倍）をかける。盤上にモンスターが1体もいなければ不発。 */
   _shrineDoubleAtk() {
     const candidates = this.tiles.filter((t) => t.unit != null);
     if (candidates.length === 0) {
-      this.onLog('「力こそパワー」……だが誰もいなかった');
-      return;
+      const message = '「力こそパワー」\nしかし対象のモンスターがいなかった';
+      this.onLog(message.replace('\n', '……'));
+      return { message };
     }
     const tile = candidates[Math.floor(Math.random() * candidates.length)];
     const unit = tile.unit;
     applyCurse(unit, { name: '倍化', addedAtk: unit.def.atk, addedHp: 0 });
-    this.onLog(`「力こそパワー」……${unit.def.name}の基礎ATKが倍になった！`);
+    const message = `「力こそパワー」\n${unit.def.name}の基礎ATKが倍になった！`;
+    this.onLog(message.replace('\n', '……'));
+    return { message, position: tile.position };
   }
 
   /** 速度違反はご愛嬌: 次のプレイヤー人数分の手番、サイコロフェーズを飛ばして強制的にFORCED_DICE_STEPS進ませる（_beginTurn参照）。 */
   _shrineForcedDice() {
-    this.onLog('「速度違反はご愛嬌」……次の一巡、全員のサイコロが強制的に固定される！');
+    const message = `「速度違反はご愛嬌」\n次の一巡、全員のサイコロが${FORCED_DICE_STEPS}に固定！`;
+    this.onLog(message.replace('\n', '……'));
     this.forcedDiceRemaining = this.players.length;
+    return { message };
   }
 
   /** 右の頬をシバかれたら、左の頬をシバきなさい: 盤上に配置中の全モンスターの土地に強制停止の呪いをかける（自分の土地以外を素通りできなくなる。同盟仲間は対象外 - _isForcedStopFor参照）。この呪いは戦闘が起きると解ける（_runInvasion/_humanMoveFlow参照）。 */
   _shrineForcedStop() {
     const targets = this.tiles.filter((t) => t.unit != null);
     for (const tile of targets) tile.forcedStopCursed = true;
-    this.onLog(`「右の頬をシバかれたら、左の頬をシバきなさい」……配置中の全モンスターに強制停止の呪いがかかった！（${targets.length}箇所）`);
+    const message = `「右の頬をシバかれたら、左の頬をシバきなさい」\n全モンスターの土地に強制停止の呪い！（${targets.length}箇所）`;
+    this.onLog(message.replace('\n', '……'));
+    return { message };
   }
 
   /**

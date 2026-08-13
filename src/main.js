@@ -1123,16 +1123,17 @@ function findPvpGuestPieceSprite(playerId) {
  * 少し間を置くだけに留める。座標はgame.js側（`_buildSpellCastEffectPayload`）
  * が`{x,z}`まで解決済みなので、ホスト・ゲストどちらでも同じ処理で描画できる。
  */
-async function showTargetEffectMessage(position, message) {
+async function showTargetEffectMessage(position, message, holdMs = 1800, variant = '') {
   if (!position || !message) return;
   const screen = scene.worldToScreen(position.x, PIECE_REST_Y + 1.8, position.z);
   const el = document.createElement('div');
   el.className = 'fx-target-effect-message';
+  if (variant) el.classList.add(`fx-target-effect-${variant}`);
   el.textContent = message;
   el.style.left = `${screen.x}px`;
   el.style.top = `${screen.y}px`;
   fxLayer.appendChild(el);
-  await new Promise((resolve) => setTimeout(resolve, 1800));
+  await new Promise((resolve) => setTimeout(resolve, holdMs));
   el.classList.add('fade-out');
   await new Promise((resolve) => setTimeout(resolve, 300));
   el.remove();
@@ -1185,6 +1186,20 @@ async function promptTargetEffect({ tileId = null, playerId = null, position = n
   await scene.focusAndZoom(targetPosition.x, targetPosition.z, 1.35, 320);
   await showTargetEffectMessage(targetPosition, message);
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
+}
+
+/** ほこら停止時: 対象へ寄り、神秘的な光と効果名・結果を十分な時間表示する。 */
+async function promptShrineEffect({ position, title, message }) {
+  if (!scene || !position) return;
+  const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+  await scene.focusAndZoom(position.x, position.z, 1.45, 360);
+  const presentation = showTargetEffectMessage(position, `${title}\n${message}`, 2600, 'shrine');
+  await Promise.all([
+    scene.playSpellAura(position),
+    scene.playSummonBurst(position),
+    presentation,
+  ]);
+  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 360);
 }
 
 async function promptTurnFocus({ position }) {
@@ -1993,6 +2008,7 @@ function startBattle(character, storyOptions = {}) {
     onSpellComplete: relayable('spellComplete', finishSpellPresentation, { broadcast: true }),
     onSummonEffect: relayable('summonEffect', promptSummonEffect, { broadcast: true }),
     onTargetEffect: relayable('targetEffect', promptTargetEffect, { broadcast: true }),
+    onShrineEffect: relayable('shrineEffect', promptShrineEffect, { broadcast: true }),
     onTurnFocus: relayable('turnFocus', promptTurnFocus, { broadcast: true }),
     onTollPayment: relayable('tollPayment', promptTollPayment, { broadcast: true }),
     onMoveDestination: relayable('moveDestination', promptMoveDestination, { broadcast: true }),
@@ -4443,6 +4459,7 @@ const pvpGuestHandlers = {
   discardChoice: promptDiscardChoice,
   spellUse: promptSpellUse,
   spellCastEffect: promptSpellCastEffect,
+  shrineEffect: promptShrineEffect,
   spellComplete: finishSpellPresentation,
   // landCommand/shopPurchaseはgame.js側でpayloadとplayer.idの間に追加引数を
   // 挟む型なので、relayable()が[複数引数]の配列としてまとめて送ってくる -

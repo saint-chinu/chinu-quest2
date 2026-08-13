@@ -268,7 +268,10 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
 
   const result = dealDamage(attackerUnit, defenderUnit, log, bonus);
 
-  if (result.damage > 0) {
+  // 通常攻撃のダメージだけで相手が倒れた場合、毒・目くらまし・略奪・
+  // 即死判定などの「攻撃成功時」効果は発動しない。撃破時効果はこの下の
+  // 専用ブロックで別途処理する。
+  if (result.damage > 0 && defenderUnit.currentHp > 0) {
     if (attackerEffect?.type === 'stealGoldOnHit') {
       gold.transfer(defenderUnit.ownerId, attackerUnit.ownerId, attackerEffect.amount);
       log.push(`${attackerUnit.def.name}が${attackerEffect.amount}Gを奪った`);
