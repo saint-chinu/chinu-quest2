@@ -1702,6 +1702,13 @@ export class Game {
         const candidates = this._ownedTiles(player);
         let usedAcquisitionAbility = false;
         for (const ownedTile of candidates) {
+          if (await this._cpuMaybeMoveToHighValueLand(player, ownedTile)) {
+            usedAcquisitionAbility = true;
+            break;
+          }
+        }
+        for (const ownedTile of candidates) {
+          if (usedAcquisitionAbility) break;
           if (await this._cpuMaybeAcquireHighValueLandByAbility(player, ownedTile)) {
             usedAcquisitionAbility = true;
             break;
@@ -2546,6 +2553,8 @@ export class Game {
     const profile = player.aiProfile;
 
     if (tile.owner === player.id) {
+      const movedToHighValueLand = await this._cpuMaybeMoveToHighValueLand(player, tile);
+      if (movedToHighValueLand) return;
       const usedAcquisitionAbility = await this._cpuMaybeAcquireHighValueLandByAbility(player, tile);
       if (usedAcquisitionAbility) return;
       const usedDamageAbility = await this._cpuMaybeUseDamageAbility(player, tile);
@@ -2612,6 +2621,37 @@ export class Game {
     return candidates
       .filter((tile) => tile.type === TileType.LAND && tile.owner == null && tile.level >= 2)
       .sort((a, b) => this._landValueOfTile(b) - this._landValueOfTile(a) || b.level - a.level);
+  }
+
+  /**
+   * 土地コマンド「移動」のCPU判断。現在地に隣接する高額空き地のうち、
+   * 現在地より地価が高い土地があれば、配置モンスターを移して確保する。
+   * 人間の移動と同様、移動したモンスターの呪いは解除され、土地レベルは
+   * 移動元・移動先とも維持される。
+   */
+  async _cpuMaybeMoveToHighValueLand(player, tile) {
+    if (tile.owner !== player.id || !tile.unit) return false;
+    const adjacent = tile.neighbors.map((id) => this.tiles[id]);
+    const target = this._cpuHighValueEmptyLands(adjacent)
+      .find((land) => this._landValueOfTile(land) > this._landValueOfTile(tile));
+    if (!target) return false;
+
+    const unit = tile.unit;
+    const mesh = tile.unitMesh;
+    unit.curses = [];
+    tile.unitMesh = null;
+    target.unit = unit;
+    target.owner = player.id;
+    target.unitMesh = mesh;
+    this._paintTile(target, player.color);
+    tile.unit = null;
+    tile.owner = null;
+    tile.transparentCursed = false;
+    this._repaintTileToElement(tile);
+    this.onLog(`${player.name}は${unit.def.name}を高額空き地${target.id}番地へ移動させた`);
+    await this._hopUnitIcon(mesh, tile.position, target.position);
+    this._notifyState();
+    return true;
   }
 
   /**
