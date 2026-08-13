@@ -689,7 +689,7 @@ html, body {
 
 #hub-welcome {
   margin-bottom: 7px;
-  font-size: clamp(21px, 3vw, 29px);
+  font-size: clamp(17px, 2.4vw, 23px);
   letter-spacing: 0.02em;
   text-shadow: 0 2px 18px rgba(88, 217, 224, 0.18);
 }

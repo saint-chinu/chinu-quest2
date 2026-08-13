@@ -57,9 +57,9 @@ function unlockAudioElements() {
     el.volume = 0;
     el.play()
       .then(() => {
-        if (currentTrack !== track) {
+        if (muted || currentTrack !== track) {
           el.pause();
-          el.currentTime = 0;
+          if (currentTrack !== track) el.currentTime = 0;
         }
         el.volume = muted ? 0 : VOLUME;
       })
@@ -75,7 +75,12 @@ window.addEventListener('keydown', unlockAudioElements, { once: true, capture: t
 
 export function setMuted(value) {
   muted = value;
-  for (const el of Object.values(audioEls)) el.volume = muted ? 0 : VOLUME;
+  for (const el of Object.values(audioEls)) {
+    el.volume = muted ? 0 : VOLUME;
+    if (muted) el.pause();
+  }
+  // 解除時だけ、盤面／戦闘で選択中だった曲をその位置から再開する。
+  if (!muted && currentTrack && !pageExited) getAudioEl(currentTrack).play().catch(() => {});
 }
 export function isMuted() {
   return muted;
@@ -88,6 +93,11 @@ export function toggleMuted() {
 function playTrack(track) {
   // pagehide後に古い戦闘演出Promiseが完了してplayMapThemeを呼んでも再生しない。
   if (pageExited) return;
+  if (muted) {
+    if (currentTrack && currentTrack !== track) getAudioEl(currentTrack).pause();
+    currentTrack = track;
+    return;
+  }
   const el = getAudioEl(track);
   // 以前のplay()が自動再生制限などで失敗して停止中なら、同じテーマでも
   // 「切替済み」とみなして黙ってreturnせず再試行する。

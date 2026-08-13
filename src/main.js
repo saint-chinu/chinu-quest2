@@ -2304,7 +2304,6 @@ const charmakeDecks = document.getElementById('charmake-decks');
 const charmakeSubmit = document.getElementById('charmake-submit');
 const hubScreen = document.getElementById('hub-screen');
 const hubWelcome = document.getElementById('hub-welcome');
-const cardEditorHub = document.getElementById('card-editor-hub');
 const catalogScreen = document.getElementById('catalog-screen');
 const catalogList = document.getElementById('catalog-list');
 const catalogCategoryTabs = document.getElementById('catalog-category-tabs');
@@ -2529,7 +2528,6 @@ charmakeIconUpload.addEventListener('change', async () => {
 
 function showHubScreen() {
   hubWelcome.textContent = `ようこそ、${currentCharacter.name}（所持M: ${currentCharacter.m}）`;
-  cardEditorHub.classList.add('hidden');
   if (location.hash === CARD_EDITOR_HASH) {
     showCardEditor();
     return;
