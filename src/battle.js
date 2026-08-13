@@ -453,6 +453,8 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   let firstTargetSurvived = true;
   for (let i = 0; i < strikeCount(first.unit) && firstTargetSurvived && first.unit.currentHp > 0; i++) {
     const beforeLen = log.length;
+    const attackPower = statTotals(first.unit, first.bonus).atk;
+    const elementMultiplier = first.unit.def.element === WEAK_AGAINST[first.target.def.element] ? 1.2 : 1;
     const strike = performStrike(first.unit, first.target, first.bonus, log, gold);
     firstTargetSurvived = first.target.currentHp > 0;
     const special = log.slice(beforeLen).filter((line) => line !== strike.message);
@@ -464,6 +466,8 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
         : strike.message,
       damage: strike.damage,
       element: first.unit.def.element,
+      attackPower,
+      elementMultiplier,
       targetHp: first.target.currentHp,
       targetDied: !firstTargetSurvived,
       special,
@@ -486,6 +490,8 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     let secondTargetSurvived = true;
     for (let i = 0; i < strikeCount(second.unit) && secondTargetSurvived && second.unit.currentHp > 0; i++) {
       const beforeLen = log.length;
+      const attackPower = statTotals(second.unit, second.bonus).atk;
+      const elementMultiplier = second.unit.def.element === WEAK_AGAINST[second.target.def.element] ? 1.2 : 1;
       const strike = performStrike(second.unit, second.target, second.bonus, log, gold);
       secondTargetSurvived = second.target.currentHp > 0;
       const special = log.slice(beforeLen).filter((line) => line !== strike.message);
@@ -496,6 +502,8 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
           : strike.message,
         damage: strike.damage,
         element: second.unit.def.element,
+        attackPower,
+        elementMultiplier,
         targetHp: second.target.currentHp,
         targetDied: !secondTargetSurvived,
         special,

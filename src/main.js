@@ -153,6 +153,7 @@ const battleSide = {
     hpFill: document.getElementById('battle-attacker-hp-fill'),
     atk: document.getElementById('battle-attacker-atk'),
     atkBonus: document.getElementById('battle-attacker-atk-bonus'),
+    atkFill: document.getElementById('battle-attacker-atk-fill'),
     card: document.getElementById('battle-attacker-card'),
     item: document.getElementById('battle-attacker-item'),
     matchup: document.getElementById('battle-attacker-matchup'),
@@ -165,6 +166,7 @@ const battleSide = {
     hpFill: document.getElementById('battle-defender-hp-fill'),
     atk: document.getElementById('battle-defender-atk'),
     atkBonus: document.getElementById('battle-defender-atk-bonus'),
+    atkFill: document.getElementById('battle-defender-atk-fill'),
     card: document.getElementById('battle-defender-card'),
     item: document.getElementById('battle-defender-item'),
     matchup: document.getElementById('battle-defender-matchup'),
@@ -898,7 +900,7 @@ deckRatioModal.addEventListener('click', (event) => {
 });
 
 /** Rarity badge (top-left) + type icon (top-right) + name, over the element/type background color. */
-function renderCardEl(el, card) {
+function renderCardEl(el, card, { showMonsterStats = false } = {}) {
   const artUrl = card.imageDataUrl || defaultCardArtUrl(card);
   el.style.background = artUrl
     ? `linear-gradient(rgba(0,0,0,.12), rgba(0,0,0,.72)), url("${artUrl}") center / cover`
@@ -919,6 +921,12 @@ function renderCardEl(el, card) {
   name.textContent = card.name;
 
   el.append(rarity, typeIcon, name);
+  if (showMonsterStats && card.type === CardType.MONSTER) {
+    const stats = document.createElement('span');
+    stats.className = 'card-hand-monster-stats';
+    stats.innerHTML = `<span>❤️${card.hp ?? 0}</span><span>⚔️${card.atk ?? 0}</span>`;
+    el.appendChild(stats);
+  }
 }
 
 const TYPE_LABEL = {
@@ -1011,7 +1019,7 @@ function renderHand(hand, spellUsable = false) {
     const el = document.createElement('div');
     el.className = 'card';
     el.style.pointerEvents = 'auto';
-    renderCardEl(el, card);
+    renderCardEl(el, card, { showMonsterStats: true });
     const canUseThis = card.type === CardType.SPELL && spellUsable;
     el.addEventListener('click', () => showCardDetail(card, canUseThis ? () => {
       el.classList.add('blinking');
@@ -1033,7 +1041,7 @@ function renderCenterHand(hand) {
   for (const card of hand) {
     const el = document.createElement('div');
     el.className = 'card';
-    renderCardEl(el, card);
+    renderCardEl(el, card, { showMonsterStats: true });
 
     el.setAttribute('aria-disabled', 'true');
     centerHandEl.appendChild(el);
@@ -1357,6 +1365,8 @@ function renderBattleStat(sideEls, data) {
   sideEls.hp.dataset.max = String(data.hp + (data.elementHp || 0));
   sideEls.hpFill.style.width = '100%';
   sideEls.atk.textContent = data.atk;
+  sideEls.atk.dataset.built = 'false';
+  sideEls.atkFill.style.width = `${Math.min(100, ((data.atk + (data.cheerAtk || 0)) / 150) * 100)}%`;
   sideEls.hpBonus.classList.toggle('hidden', !(data.elementHp > 0));
   if (data.elementHp > 0) sideEls.hpBonus.textContent = `+${data.elementHp}`;
   sideEls.atkBonus.classList.toggle('hidden', !(data.cheerAtk > 0));
@@ -1367,7 +1377,7 @@ function renderBattleStat(sideEls, data) {
   sideEls.item.classList.remove('equip-show');
   sideEls.item.replaceChildren();
   const matchupText = MATCHUP_LABEL[data.matchup];
-  sideEls.matchup.classList.toggle('hidden', !matchupText);
+  sideEls.matchup.classList.add('hidden');
   sideEls.matchup.classList.remove('advantage', 'disadvantage');
   if (matchupText) {
     sideEls.matchup.textContent = matchupText;
@@ -1461,7 +1471,7 @@ function promptPickBattleItem({ hand, side, ownerName, unitName }) {
  * として目立たせる: メッセージを一回り大きく表示し、発動した側（この一撃
  * を放った側=attackerEls）のカードを一瞬拡大させて光らせる。
  */
-async function promptBattleAttack({ side, item, message, damage = 0, element, targetHp, targetDied, special, targetName }) {
+async function promptBattleAttack({ side, item, message, damage = 0, element, attackPower = 0, elementMultiplier = 1, targetHp, targetDied, special, targetName }) {
     const attackerEls = battleSide[side];
     const targetEls = battleSide[side === 'attacker' ? 'defender' : 'attacker'];
     const hasSpecial = Array.isArray(special) && special.length > 0;
@@ -1472,6 +1482,28 @@ async function promptBattleAttack({ side, item, message, damage = 0, element, ta
       renderCardEl(el, item);
       attackerEls.item.replaceChildren(el);
       attackerEls.item.classList.remove('hidden');
+    }
+
+    // 攻撃直前に現在値を確定し、得意属性なら120%分を段階的に加算してから
+    // 光線・ダメージへ進む。連続攻撃では同じ加算演出を繰り返さない。
+    if (attackerEls.atk.dataset.built !== 'true') {
+      attackerEls.atk.textContent = String(attackPower);
+      attackerEls.atkBonus.classList.add('hidden');
+      attackerEls.atkFill.style.width = `${Math.min(100, (attackPower / 150) * 100)}%`;
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      if (elementMultiplier > 1) {
+        const elementBonus = Math.round(attackPower * (elementMultiplier - 1));
+        attackerEls.atkBonus.textContent = `+${elementBonus}`;
+        attackerEls.atkBonus.classList.remove('hidden');
+        attackerEls.matchup.textContent = `得意属性120% +${elementBonus}`;
+        attackerEls.matchup.classList.remove('hidden');
+        attackerEls.atkFill.style.width = `${Math.min(100, ((attackPower + elementBonus) / 150) * 100)}%`;
+        battleMessageText.textContent = `得意属性120%　ATK ${attackPower} + ${elementBonus} = ${attackPower + elementBonus}`;
+        battleMessageText.classList.remove('hidden');
+        await new Promise((resolve) => setTimeout(resolve, 1300));
+        battleMessageText.classList.add('hidden');
+      }
+      attackerEls.atk.dataset.built = 'true';
     }
 
     attackerEls.el.classList.add('battle-attacking');
@@ -1519,6 +1551,7 @@ async function promptBattleEquip({ side, item, unitName, baseAtk, baseHp, existi
   sideEls.hpBonus.classList.toggle('hidden', hpBonus <= 0);
   sideEls.atk.textContent = String(baseAtk);
   sideEls.hp.textContent = String(baseHp);
+  sideEls.atkFill.style.width = `${Math.min(100, ((baseAtk + atkBonus) / 150) * 100)}%`;
 
   const previousMax = Number(sideEls.hp.dataset.max) || baseHp;
   const nextMax = baseHp + hpBonus;

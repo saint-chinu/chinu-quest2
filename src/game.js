@@ -3266,6 +3266,8 @@ export class Game {
         message: exchange.message,
         damage: exchange.damage,
         element: exchange.element,
+        attackPower: exchange.attackPower,
+        elementMultiplier: exchange.elementMultiplier,
         targetHp: Math.max(exchange.targetHp ?? targetUnit.currentHp, 0),
         targetDied: exchange.targetDied,
         special: exchange.special,
@@ -3831,6 +3833,15 @@ export class Game {
         await this._cpuCastSpell(player, acquisitionCard, { targetPlayerId: player.id });
         return;
       }
+    }
+
+    // 6のダイスは基本的に前進用の有利カード。CPU自身へ使えば、その後の
+    // 分岐AIが高額敵地を避けつつCP/ゴールへの最短路を選べるため、相手へ
+    // 無目的に速度を与えるより先に自分へ使う。
+    const sixDice = affordable.find((c) => c.effect.value === 6);
+    if (sixDice) {
+      await this._cpuCastSpell(player, sixDice, { targetPlayerId: player.id });
+      return;
     }
 
     const target = this._cpuPickDiceSpellTarget(player);
