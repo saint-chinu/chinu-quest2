@@ -1,4 +1,5 @@
 import { CardType, Element, Rarity } from './cards.js';
+import { assetUrl } from './assetUrl.js';
 
 const NORMAL_COST = 50;
 const neutralMonster = (id, name, rarity, hp, atk, options = {}) => ({
@@ -16,6 +17,7 @@ const neutralMonster = (id, name, rarity, hp, atk, options = {}) => ({
   ...(options.traits ? { traits: options.traits } : {}),
   ...(options.effect ? { effect: options.effect } : {}),
   ...(options.effectDescription ? { effectDescription: options.effectDescription } : {}),
+  ...(options.imageDataUrl ? { imageDataUrl: options.imageDataUrl } : {}),
 });
 
 /**
@@ -110,6 +112,7 @@ export const NEUTRAL_MONSTER_CATALOG = {
   kunekune: neutralMonster('kunekune', 'くねくね', Rarity.R, 10, 0, {
     effect: { type: 'reflectDamage' },
     effectDescription: '相手の攻撃を反射する（自身はノーダメージ、相手がそのままダメージを受ける）',
+    imageDataUrl: assetUrl('/images/card-art/kunekune.png'),
   }),
   kyousenshi: neutralMonster('kyousenshi', '狂戦士', Rarity.R, 40, 30, {
     effect: { type: 'atkMultiplier', multiplier: 1.5 },
