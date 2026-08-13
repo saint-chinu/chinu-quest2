@@ -30,6 +30,7 @@ const VOLUME = 0.5;
 let muted = false;
 let currentTrack = null; // TRACK_SRCのキー | null
 const audioEls = {}; // track -> HTMLAudioElement（遅延生成、以後使い回す）
+let unlockAttempted = false;
 
 function getAudioEl(track) {
   if (!audioEls[track]) {
@@ -40,6 +41,36 @@ function getAudioEl(track) {
   }
   return audioEls[track];
 }
+
+/**
+ * Safari/iOSでは、盤面BGMとは別のAudio要素をCPU戦開始時に初めてplayすると、
+ * 直前のユーザー操作から時間が空いているため自動再生として拒否されることが
+ * ある。最初のタップ時に全BGM要素を無音で一度だけ起動し、CPU同士の戦闘でも
+ * 後から戦闘曲へ切り替えられる状態にしておく。
+ */
+function unlockAudioElements() {
+  if (unlockAttempted) return;
+  unlockAttempted = true;
+  for (const track of Object.keys(TRACK_SRC)) {
+    const el = getAudioEl(track);
+    el.volume = 0;
+    el.play()
+      .then(() => {
+        if (currentTrack !== track) {
+          el.pause();
+          el.currentTime = 0;
+        }
+        el.volume = muted ? 0 : VOLUME;
+      })
+      .catch(() => {
+        el.volume = muted ? 0 : VOLUME;
+      });
+  }
+}
+
+window.addEventListener('pointerdown', unlockAudioElements, { once: true, capture: true, passive: true });
+window.addEventListener('touchstart', unlockAudioElements, { once: true, capture: true, passive: true });
+window.addEventListener('keydown', unlockAudioElements, { once: true, capture: true });
 
 export function setMuted(value) {
   muted = value;
@@ -54,9 +85,14 @@ export function toggleMuted() {
 }
 
 function playTrack(track) {
-  if (currentTrack === track) return;
-  if (currentTrack) getAudioEl(currentTrack).pause();
   const el = getAudioEl(track);
+  // 以前のplay()が自動再生制限などで失敗して停止中なら、同じテーマでも
+  // 「切替済み」とみなして黙ってreturnせず再試行する。
+  if (currentTrack === track) {
+    if (el.paused) el.play().catch(() => {});
+    return;
+  }
+  if (currentTrack) getAudioEl(currentTrack).pause();
   el.currentTime = 0;
   el.play().catch(() => {});
   currentTrack = track;
