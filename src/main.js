@@ -2838,17 +2838,26 @@ function showHubScreen() {
 let isAdminUser = false;
 
 /** ログイン後に管理者かどうかを判定し、管理者ならハブに「管理」タイルを出す。 */
+// 管理者UIDの許可リスト（Firebase Authのランダムな内部ID。ログイン情報を含まず、
+// これ単体ではログインもできないためコードに焼き込んで安全）。firestore.rules の
+// isAdmin() も同じUIDを許可している。
+const ADMIN_UIDS = ['KcKymLgEFmYbN1F4ZYcKvXvfUDo1'];
+
 async function refreshAdminAccess(uid) {
   isAdminUser = false;
   if (hubAdminTile) hubAdminTile.hidden = true;
   if (!firebaseReady || !db || !uid) return;
-  // 管理者マーカーの登録に使えるよう、自分のuidをコンソールに出す（初回設定用）。
+  // 管理者マーカーの登録に使えるよう、自分のuidをコンソールに出す（予備の設定用）。
   console.info('[chinuquest] ログイン中のUID:', uid);
-  try {
-    const snap = await fsGetDoc(fsDoc(db, 'admins', uid));
-    isAdminUser = snap.exists();
-  } catch (error) {
-    isAdminUser = false;
+  if (ADMIN_UIDS.includes(uid)) {
+    isAdminUser = true;
+  } else {
+    try {
+      const snap = await fsGetDoc(fsDoc(db, 'admins', uid));
+      isAdminUser = snap.exists();
+    } catch (error) {
+      isAdminUser = false;
+    }
   }
   if (hubAdminTile) hubAdminTile.hidden = !isAdminUser;
 }

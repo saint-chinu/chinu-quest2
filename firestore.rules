@@ -9,12 +9,14 @@ rules_version = '2';
 // - 各プレイヤーの手札（private/{uid}.hand）はそのuid本人しか読めない。
 service cloud.firestore {
   match /databases/{database}/documents {
-    // 管理者判定: admins/{uid} ドキュメントが存在するuidだけが管理者。
-    // このドキュメントはFirebaseコンソールから手動でのみ作成する（アプリからは
-    // 一切書き込めない）ため、管理者を増やせるのはプロジェクト所有者だけ。
+    // 管理者判定: 許可リストのUIDに一致するか、admins/{uid} ドキュメント
+    // （Firebaseコンソールから手動作成）が存在すれば管理者。UIDはランダムな
+    // 内部識別子でログイン情報を含まないため、許可リストとしてコードに焼き込んでも
+    // アカウントの安全性には影響しない。
     function isAdmin() {
       return request.auth != null
-        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+        && (request.auth.uid == 'KcKymLgEFmYbN1F4ZYcKvXvfUDo1'
+            || exists(/databases/$(database)/documents/admins/$(request.auth.uid)));
     }
 
     // ログイン済み本人だけが自分のセーブデータを読書きできる。
