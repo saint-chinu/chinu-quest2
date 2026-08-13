@@ -83,6 +83,7 @@ export class Game {
     onSummonEffect,
     onTargetEffect,
     onShrineEffect,
+    onWarpEffect,
     onTurnFocus,
     onTollPayment,
     onMoveDestination,
@@ -140,6 +141,7 @@ export class Game {
     this.onSummonEffect = onSummonEffect;
     this.onTargetEffect = onTargetEffect;
     this.onShrineEffect = onShrineEffect || (() => Promise.resolve());
+    this.onWarpEffect = onWarpEffect || (() => Promise.resolve());
     this.onTurnFocus = onTurnFocus;
     this.onTollPayment = onTollPayment || (() => Promise.resolve());
     this.onMoveDestination = onMoveDestination || (() => {});
@@ -1660,15 +1662,21 @@ export class Game {
    * 無くなるのでpreviousTileIdをリセットし、次の分岐では全方向が候補
    * になる。
    */
-  _resolveWarpTile(player) {
+  async _resolveWarpTile(player) {
     const tile = this.tiles[player.tileId];
     const targetTile = this.tiles.find((t) => t.id === tile.warpTargetId);
     if (!targetTile) return;
+    await this.onWarpEffect({
+      playerId: player.id,
+      playerName: player.name,
+      sourcePosition: tile.position,
+      targetPosition: targetTile.position,
+    });
     player.previousTileId = null;
     player.tileId = targetTile.id;
     if (player.mesh) player.mesh.position.set(targetTile.position.x, PIECE_REST_Y, targetTile.position.z);
-    this.scene.panTo(targetTile.position.x, targetTile.position.z);
     this.onLog(`${player.name}はワープした！`);
+    this._notifyState();
   }
 
   /**

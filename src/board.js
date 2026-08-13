@@ -224,6 +224,9 @@ export function createBoard(mapId) {
         price: isLand ? 150 : null,
         neighbors: [],
         checkpointNumber: type === TileType.EVENT ? nextCheckpointNumber++ : null,
+        // 同じWARP型でも盤上の画像とラベルを入口(V)・帰り道(P)で
+        // 出し分けるため、元のマップ記号を描画用情報として保持する。
+        warpKind: code === 'V' ? 'entrance' : code === 'P' ? 'return' : null,
       });
     }
   }

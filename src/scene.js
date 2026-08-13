@@ -25,6 +25,10 @@ const BOARD_MARKERS = {
   [TileType.EVENT]: { url: assetUrl('/images/board-markers/checkpoint.webp'), aspect: 665 / 1024 },
   [TileType.SHRINE]: { url: assetUrl('/images/board-markers/shrine.webp'), aspect: 1046 / 1181 },
 };
+const WARP_MARKERS = {
+  entrance: { url: assetUrl('/images/board-markers/wa-pu1.png'), aspect: 1 },
+  return: { url: assetUrl('/images/board-markers/wa-pu2.png'), aspect: 1024 / 1536 },
+};
 const boardMarkerTextureLoader = new THREE.TextureLoader();
 const boardMarkerTextureCache = new Map();
 
@@ -497,7 +501,8 @@ export class GameScene {
       mesh.position.set(tile.position.x, -0.2, tile.position.z);
       this.scene.add(mesh);
       tile.mesh = mesh;
-      this._createBoardMarker(tile.type, tile.position);
+      this._createBoardMarker(tile);
+      this._createSpecialTileLabel(tile);
     }
     // No ground-plane mesh anymore - it used to fill the entire frustum
     // from this camera angle (400x400 is far bigger than what's ever
@@ -506,9 +511,9 @@ export class GameScene {
     // directly over that backdrop instead of a separate 3D floor.
   }
 
-  /** ゴール/チェックポイント/ほこらマスに建物イラストを立てる（該当しないマスタイプなら何もしない）。プレイヤー駒と同じ、常にカメラを向くbillboardスプライト。 */
-  _createBoardMarker(tileType, tilePosition) {
-    const def = BOARD_MARKERS[tileType];
+  /** ゴール/チェックポイント/ほこら/ワープマスにオブジェクトを立てる。 */
+  _createBoardMarker(tile) {
+    const def = tile.type === TileType.WARP ? WARP_MARKERS[tile.warpKind] : BOARD_MARKERS[tile.type];
     if (!def) return;
     const texture = loadBoardMarkerTexture(def.url);
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false }));
@@ -517,7 +522,39 @@ export class GameScene {
     sprite.scale.set(width, BOARD_MARKER_HEIGHT, 1);
     // プレイヤー駒（PIECE_REST_Y=0.7、高さ1.6）がタイル表面(y=0)よりわずかに
     // 沈む見た目に合わせ、同じ沈み込み量（0.1）で底面をタイルに接地させる。
-    sprite.position.set(tilePosition.x, BOARD_MARKER_HEIGHT / 2 - 0.1, tilePosition.z);
+    sprite.position.set(tile.position.x, BOARD_MARKER_HEIGHT / 2 - 0.1, tile.position.z);
+    this.scene.add(sprite);
+  }
+
+  /** 特殊マス名をオブジェクトの手前（画面上ではマスの下側）へ表示する。 */
+  _createSpecialTileLabel(tile) {
+    let label = null;
+    if (tile.type === TileType.START) label = 'ゴール';
+    else if (tile.type === TileType.EVENT) label = `CP${tile.checkpointNumber}`;
+    else if (tile.type === TileType.SHRINE) label = 'ほこら';
+    else if (tile.type === TileType.WARP) label = 'ワープ';
+    else if (tile.type === TileType.SHOP) label = 'ショップ';
+    if (!label) return;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 320;
+    canvas.height = 96;
+    const ctx = canvas.getContext('2d');
+    ctx.font = '900 54px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineWidth = 12;
+    ctx.strokeStyle = 'rgba(0, 0, 0, 0.92)';
+    ctx.strokeText(label, 160, 48);
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(label, 160, 48);
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false }));
+    sprite.renderOrder = 20;
+    sprite.scale.set(2.25, 0.68, 1);
+    // カメラは+X/+Z側にあるため、同方向へ寄せると画面上でマスの下側になる。
+    sprite.position.set(tile.position.x + 0.72, 0.48, tile.position.z + 0.72);
     this.scene.add(sprite);
   }
 
@@ -805,6 +842,20 @@ export class GameScene {
       this.zoomScale = fromZoom + (toZoom - fromZoom) * eased;
       this._applyCamera();
     });
+  }
+
+  /** ワープ中の駒を放物線状に飛ばし、カメラの注視点も同じ軌道を追わせる。 */
+  flyPieceTo(sprite, targetPosition, duration = 1100) {
+    if (!sprite || !targetPosition) return Promise.resolve();
+    const from = sprite.position.clone();
+    const to = new THREE.Vector3(targetPosition.x, PIECE_REST_Y, targetPosition.z);
+    return tween(duration, (t) => {
+      const eased = easeInOutQuad(t);
+      sprite.position.lerpVectors(from, to, eased);
+      sprite.position.y = PIECE_REST_Y + Math.sin(Math.PI * t) * 3.2;
+      this.focus.set(sprite.position.x, 0, sprite.position.z);
+      this._applyCamera();
+    }).finally(() => sprite.position.copy(to));
   }
 
   /** 召喚マスの地面から放射状の光線を立ち上げ、1秒かけて回転・消失させる。 */

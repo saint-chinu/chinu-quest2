@@ -1202,6 +1202,26 @@ async function promptShrineEffect({ position, title, message }) {
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 360);
 }
 
+/** ワープ停止時: 発動地点へ寄り、駒を飛ばしながらカメラで追って結果を表示する。 */
+async function promptWarpEffect({ playerId, sourcePosition, targetPosition }) {
+  if (!scene || !sourcePosition || !targetPosition) return;
+  const isPvpGuest = pvpMatch && !pvpMatch.isHost;
+  const sprite = isPvpGuest
+    ? findPvpGuestPieceSprite(playerId)
+    : game?.players?.find((player) => player.id === playerId)?.mesh;
+  await scene.focusAndZoom(sourcePosition.x, sourcePosition.z, 1.5, 380);
+  await Promise.all([
+    scene.playSpellAura(sourcePosition),
+    scene.playSummonBurst(sourcePosition),
+  ]);
+  await scene.flyPieceTo(sprite, targetPosition);
+  await Promise.all([
+    scene.playSummonBurst(targetPosition),
+    showTargetEffectMessage(targetPosition, 'ワープした', 1400),
+  ]);
+  await scene.focusAndZoom(targetPosition.x, targetPosition.z, 1, 320);
+}
+
 async function promptTurnFocus({ position }) {
   if (!scene || !position) return;
   await scene.focusAndZoom(position.x, position.z, 1, 420);
@@ -2009,6 +2029,7 @@ function startBattle(character, storyOptions = {}) {
     onSummonEffect: relayable('summonEffect', promptSummonEffect, { broadcast: true }),
     onTargetEffect: relayable('targetEffect', promptTargetEffect, { broadcast: true }),
     onShrineEffect: relayable('shrineEffect', promptShrineEffect, { broadcast: true }),
+    onWarpEffect: relayable('warpEffect', promptWarpEffect, { broadcast: true }),
     onTurnFocus: relayable('turnFocus', promptTurnFocus, { broadcast: true }),
     onTollPayment: relayable('tollPayment', promptTollPayment, { broadcast: true }),
     onMoveDestination: relayable('moveDestination', promptMoveDestination, { broadcast: true }),
@@ -4495,6 +4516,7 @@ const pvpGuestHandlers = {
   spellUse: promptSpellUse,
   spellCastEffect: promptSpellCastEffect,
   shrineEffect: promptShrineEffect,
+  warpEffect: promptWarpEffect,
   spellComplete: finishSpellPresentation,
   // landCommand/shopPurchaseはgame.js側でpayloadとplayer.idの間に追加引数を
   // 挟む型なので、relayable()が[複数引数]の配列としてまとめて送ってくる -
