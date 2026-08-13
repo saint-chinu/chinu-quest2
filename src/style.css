@@ -2302,6 +2302,12 @@ html, body {
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
+/* 停止した土地で表示する「召喚／侵略・土地・終了」コマンドだけを、
+   盤面中央から右下へ各約1cmずらして盤面と重なりにくくする。 */
+#land-command-box {
+  transform: translate(1cm, 1cm);
+}
+
 #level-up-choices {
   display: grid;
   gap: 10px;
