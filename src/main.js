@@ -2709,14 +2709,19 @@ function playOverlayDialogueLines(lines, {
     }
     function showLine() {
       const line = lines[i];
-      if (rightNpcOnSpeaker && line.speaker === rightNpcOnSpeaker && displayedRightName !== rightNpcOnSpeaker) {
-        displayedRightName = rightNpcOnSpeaker;
-        storyOverlayImgRight.src = rightNpcPortraitUrl || '';
-        storyOverlayNameRight.textContent = rightNpcOnSpeaker;
+      // ステージ2は右側の立ち絵枠を主人公とお肉で共有する。話者が変わる
+      // たびに必ず対応する画像へ戻す（一度お肉へ切り替えたまま固定すると、
+      // 後続の主人公／お肉の吹き出し判定と立ち絵が食い違ってしまう）。
+      if (rightNpcOnSpeaker && (line.speaker === rightNpcOnSpeaker || line.speaker === rightName)) {
+        const showNpc = line.speaker === rightNpcOnSpeaker;
+        displayedRightName = showNpc ? rightNpcOnSpeaker : rightName;
+        storyOverlayImgRight.src = (showNpc ? rightNpcPortraitUrl : rightPortraitUrl) || '';
+        storyOverlayNameRight.textContent = displayedRightName;
       }
       storyOverlaySpeaker.textContent = line.speaker;
       storyOverlayText.textContent = line.text;
-      const side = line.speaker === leftName ? 'left' : line.speaker === displayedRightName ? 'right' : null;
+      const isRightSpeaker = line.speaker === rightName || line.speaker === rightNpcOnSpeaker;
+      const side = line.speaker === leftName ? 'left' : isRightSpeaker ? 'right' : null;
       storyOverlayPortraitLeft.classList.toggle('active', side === 'left');
       storyOverlayPortraitRight.classList.toggle('active', side === 'right');
       storyOverlayBubble.classList.toggle('side-left', side === 'left');
