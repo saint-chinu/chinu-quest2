@@ -123,6 +123,7 @@ export const STORY_STAGES = [
     format: '1vs1vs1',
     goalCurrency: 5000,
     overlayNpc: '暴君マダイ',
+    overlayRightNpcOnSpeaker: 'お肉',
     intro: [
       { speaker: '主人公', text: 'ヒトデを越えて、ずいぶん遠くまで泳いできたな。海はどこまでも続いている……！' },
       { speaker: '???', text: 'その時、穏やかだった海が突然うなりを上げた。' },

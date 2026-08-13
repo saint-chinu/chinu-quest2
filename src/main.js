@@ -2664,7 +2664,14 @@ function playDialogueLines(lines) {
  * ハイライトを切り替える。全面がクリック領域なので、表示中は盤面側の
  * 操作（サイコロ等）を実質ブロックする。
  */
-function playOverlayDialogueLines(lines, { leftName, leftPortraitUrl, rightName, rightPortraitUrl }) {
+function playOverlayDialogueLines(lines, {
+  leftName,
+  leftPortraitUrl,
+  rightName,
+  rightPortraitUrl,
+  rightNpcOnSpeaker = null,
+  rightNpcPortraitUrl = null,
+}) {
   storyOverlayImgLeft.src = leftPortraitUrl || '';
   storyOverlayNameLeft.textContent = leftName;
   storyOverlayImgRight.src = rightPortraitUrl || '';
@@ -2673,6 +2680,7 @@ function playOverlayDialogueLines(lines, { leftName, leftPortraitUrl, rightName,
   return new Promise((resolve) => {
     let i = 0;
     let settled = false;
+    let displayedRightName = rightName;
     function finish() {
       if (settled) return;
       settled = true;
@@ -2683,9 +2691,14 @@ function playOverlayDialogueLines(lines, { leftName, leftPortraitUrl, rightName,
     }
     function showLine() {
       const line = lines[i];
+      if (rightNpcOnSpeaker && line.speaker === rightNpcOnSpeaker && displayedRightName !== rightNpcOnSpeaker) {
+        displayedRightName = rightNpcOnSpeaker;
+        storyOverlayImgRight.src = rightNpcPortraitUrl || '';
+        storyOverlayNameRight.textContent = rightNpcOnSpeaker;
+      }
       storyOverlaySpeaker.textContent = line.speaker;
       storyOverlayText.textContent = line.text;
-      const side = line.speaker === leftName ? 'left' : line.speaker === rightName ? 'right' : null;
+      const side = line.speaker === leftName ? 'left' : line.speaker === displayedRightName ? 'right' : null;
       storyOverlayPortraitLeft.classList.toggle('active', side === 'left');
       storyOverlayPortraitRight.classList.toggle('active', side === 'right');
       storyOverlayBubble.classList.toggle('side-left', side === 'left');
@@ -2821,6 +2834,8 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
       leftPortraitUrl: NPC_PORTRAIT_URL[stage.overlayNpc],
       rightName: currentCharacter.name,
       rightPortraitUrl: iconDataUrl,
+      rightNpcOnSpeaker: stage.overlayRightNpcOnSpeaker,
+      rightNpcPortraitUrl: NPC_PORTRAIT_URL[stage.overlayRightNpcOnSpeaker],
     });
     // Only now deal the opening hand and start the first turn. This prevents
     // draw/reveal UI and CPU activity from running under the intro dialogue.
@@ -2888,6 +2903,8 @@ async function handleStoryBattleEnd(index, { won }) {
       leftPortraitUrl: NPC_PORTRAIT_URL[stage.overlayNpc],
       rightName: currentCharacter.name,
       rightPortraitUrl: characterIcon?.dataUrl ?? null,
+      rightNpcOnSpeaker: stage.overlayRightNpcOnSpeaker,
+      rightNpcPortraitUrl: NPC_PORTRAIT_URL[stage.overlayRightNpcOnSpeaker],
     });
     game = undefined;
     stopMusic();

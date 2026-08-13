@@ -78,10 +78,10 @@ const FREE_PAN_DURATION_MS = 350;
 // the edges of the screen.
 const DEADZONE_MARGIN = 0.65;
 
-// 2026-08-13: プレイヤー駒をもう少し大きく、との指摘でスケール1.6→1.92
-// (createPiece/createPieceFromImage参照)に合わせ、タイル面への沈み込み量
-// (0.1、建物マーカーもこれに揃えている)を保ったままY位置を再計算。
-export const PIECE_REST_Y = 0.86;
+// 全ステージ共通のプレイヤー駒を1.92→2.88（1.5倍）へ拡大。
+// 下端の沈み込み量を従来と同じ0.1に保つため、高さ/2-0.1でY位置を算出。
+const PIECE_HEIGHT = 2.88;
+export const PIECE_REST_Y = PIECE_HEIGHT / 2 - 0.1;
 
 // 配置モンスターの盤上アイコン用。プレイヤー駒より低く小さくして、通行中の
 // プレイヤー駒と土地に常駐するモンスターアイコンを見分けられるようにする。
@@ -561,7 +561,7 @@ export class GameScene {
   createPiece(color, tilePosition) {
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: createTokenTexture(color), depthTest: false, depthWrite: false }));
     sprite.renderOrder = 100;
-    sprite.scale.set(1.92, 1.92, 1);
+    sprite.scale.set(PIECE_HEIGHT, PIECE_HEIGHT, 1);
     sprite.position.set(tilePosition.x, PIECE_REST_Y, tilePosition.z);
     this.scene.add(sprite);
     return sprite;
@@ -573,7 +573,7 @@ export class GameScene {
     texture.colorSpace = THREE.SRGBColorSpace;
     const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true, depthTest: false, depthWrite: false }));
     sprite.renderOrder = 100;
-    sprite.scale.set(1.92, 1.92, 1);
+    sprite.scale.set(PIECE_HEIGHT, PIECE_HEIGHT, 1);
     sprite.position.set(tilePosition.x, PIECE_REST_Y, tilePosition.z);
     this.scene.add(sprite);
     return sprite;
