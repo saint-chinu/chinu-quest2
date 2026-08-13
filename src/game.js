@@ -1658,7 +1658,17 @@ export class Game {
     if (tile.type !== TileType.LAND && !isAdmin) return;
 
     if (player.isCPU) {
-      if (tile.type === TileType.LAND) await this._cpuLandCommand(player, tile);
+      if (tile.type === TileType.LAND && !isAdmin) {
+        await this._cpuLandCommand(player, tile);
+      } else if (isAdmin) {
+        // ゴール/CPにちょうど止まった時は全所有地から、通常の着地時は
+        // 現在地を含む操作可能地から、CPUが最も価値の高い投資先を選ぶ。
+        // 空き地への召喚や敵地への侵略が可能な通常LANDでは従来フローを
+        // 優先し、全土地アクセス権だけを理由に別の土地へ投資はしない。
+        const candidates = this._ownedTiles(player);
+        const target = this._cpuChooseLevelUpTile(player, candidates);
+        if (target) this._cpuMaybeLevelUp(player, target);
+      }
       await this._settleLandingToll(player, tile, owesTollUnlessConquered);
       return;
     }
@@ -2525,28 +2535,53 @@ export class Game {
   }
 
   /**
-   * 自分の土地のレベルアップ判断: 土地属性がキャラの得意属性
-   * （aiProfile.preferredElements、無ければどの属性でもマッチ扱い）に
-   * 合っていて、かつレベルアップ後もaiProfile.levelUpReserve以上のGが
-   * 手元に残る場合だけ実行する。人間向けの確認ダイアログは挟まない。
+   * CPUの投資先を優先順位順に選ぶ。無属性土地はレベルアップしない。
+   * ①2連鎖以上かつ土地と同属性のモンスター、②同属性モンスターがいる
+   * Lv1土地、③そのほかの同属性配置、④そのほかの有属性土地の順。
    */
-  _cpuMaybeLevelUp(player, tile, profile) {
-    if (tile.type !== TileType.LAND || tile.level >= LEVEL_CAP) return;
-    const matches = !profile.preferredElements || profile.preferredElements.includes(tile.element);
-    if (!matches) return;
+  _cpuChooseLevelUpTile(player, candidates) {
+    if (player.currency < 300) return null;
+    const eligible = candidates.filter((tile) =>
+      tile.type === TileType.LAND
+      && tile.owner === player.id
+      && tile.element !== Element.NEUTRAL
+      && tile.level < LEVEL_CAP,
+    );
+    if (eligible.length === 0) return null;
+
+    const score = (tile) => {
+      const sameElementUnit = tile.unit?.def?.element === tile.element;
+      const chainCount = this._chainCount(player.id, tile.element);
+      if (sameElementUnit && chainCount >= 2) return 400 + chainCount * 10 - tile.level;
+      if (sameElementUnit && tile.level === 1) return 300;
+      if (sameElementUnit) return 200 - tile.level;
+      return 100 + chainCount * 10 - tile.level;
+    };
+    return [...eligible].sort((a, b) => score(b) - score(a))[0];
+  }
+
+  /**
+   * 手持ちGが300以上なら、選ばれた土地を現在Lvからランダムに1〜3段階
+   * （Lv5上限・支払可能範囲内）上げる。残金を固定額残す旧profile設定は
+   * 使わず、行動開始時の300Gを判断基準にする。
+   */
+  _cpuMaybeLevelUp(player, tile) {
+    if (player.currency < 300 || tile.type !== TileType.LAND || tile.level >= LEVEL_CAP || tile.element === Element.NEUTRAL) return false;
     const affordableTargets = [];
-    for (let targetLevel = tile.level + 1; targetLevel <= LEVEL_CAP; targetLevel += 1) {
+    const maxTargetLevel = Math.min(LEVEL_CAP, tile.level + 3);
+    for (let targetLevel = tile.level + 1; targetLevel <= maxTargetLevel; targetLevel += 1) {
       const cost = LEVEL_INVESTMENT[targetLevel] - LEVEL_INVESTMENT[tile.level];
-      if (player.currency - cost >= profile.levelUpReserve) affordableTargets.push({ targetLevel, cost });
+      if (cost <= player.currency) affordableTargets.push({ targetLevel, cost });
     }
-    if (affordableTargets.length === 0) return;
-    const { targetLevel, cost } = affordableTargets.at(-1);
+    if (affordableTargets.length === 0) return false;
+    const { targetLevel, cost } = affordableTargets[Math.floor(Math.random() * affordableTargets.length)];
 
     player.currency -= cost;
     tile.level = targetLevel;
     this.scene.updateTileLevelBorder(tile);
     this.onLog(`${player.name}は${tile.id}番地をLv${tile.level}にアップグレードした (-${cost}G)`);
     this._notifyState();
+    return true;
   }
 
   /**
