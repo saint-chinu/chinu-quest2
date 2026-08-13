@@ -1416,6 +1416,7 @@ async function promptLandLoss({ position, landLabel, chainBefore, chainAfter, as
 
 async function promptGoalAchieved({ position, playerName }) {
   if (!scene || !position) return;
+  playSfx('fanfare');
   const savedFocus = { x: scene.focus.x, z: scene.focus.z };
   await scene.focusAndZoom(position.x, position.z, 1.45, 420);
   const message = document.createElement('div');
@@ -2211,6 +2212,8 @@ function startBattle(character, storyOptions = {}) {
     onMoveDestination: relayable('moveDestination', promptMoveDestination, { broadcast: true }),
     onLandLoss: relayable('landLoss', promptLandLoss, { broadcast: true }),
     onLandLevelUp: relayable('landLevelUp', promptLandLevelUp, { broadcast: true }),
+    onCheckpoint: relayable('checkpoint', promptCheckpointSound, { broadcast: true }),
+    onGoalBonus: relayable('goalBonus', promptGoalBonusSound, { broadcast: true }),
     onGoalAchieved: relayable('goalAchieved', promptGoalAchieved, { broadcast: true }),
     onCpuRoll: cpuRollDice,
     onMoveComplete,
@@ -2806,6 +2809,14 @@ const STORY_RESUME_KEY_PREFIX = 'chinuquest2-story-resume:';
 
 function storyResumeKey() {
   return `${STORY_RESUME_KEY_PREFIX}${currentUserId || 'guest'}`;
+}
+
+function promptCheckpointSound() {
+  playSfx('checkpoint');
+}
+
+function promptGoalBonusSound() {
+  playSfx('goal');
 }
 
 function loadStoryResume() {
@@ -4843,6 +4854,8 @@ const pvpGuestHandlers = {
   moveDestination: promptMoveDestination,
   landLoss: promptLandLoss,
   landLevelUp: promptLandLevelUp,
+  checkpoint: promptCheckpointSound,
+  goalBonus: promptGoalBonusSound,
   goalAchieved: promptGoalAchieved,
 };
 

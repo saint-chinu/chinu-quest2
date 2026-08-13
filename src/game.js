@@ -89,6 +89,8 @@ export class Game {
     onMoveDestination,
     onLandLoss,
     onLandLevelUp,
+    onCheckpoint,
+    onGoalBonus,
     onGoalAchieved,
     onCpuRoll,
     onMoveComplete,
@@ -148,6 +150,8 @@ export class Game {
     this.onMoveDestination = onMoveDestination || (() => {});
     this.onLandLoss = onLandLoss || (() => Promise.resolve());
     this.onLandLevelUp = onLandLevelUp || (() => Promise.resolve());
+    this.onCheckpoint = onCheckpoint || (() => Promise.resolve());
+    this.onGoalBonus = onGoalBonus || (() => Promise.resolve());
     this.onGoalAchieved = onGoalAchieved || (() => Promise.resolve());
     this.onCpuRoll = onCpuRoll;
     this.onMoveComplete = onMoveComplete;
@@ -1320,6 +1324,7 @@ export class Game {
     player.currency += total;
     player.lapsCompleted += 1;
     this.onLog(`${player.name}はゴールを通過！ +${total}G（基本${base}G＋領地${land}G）`);
+    await this.onGoalBonus({ playerId: player.id, playerName: player.name, amount: total });
     if (this.requireAllCheckpoints) player.passedCheckpoints.clear();
 
     // 宝くじ: 次のゴール通過で0〜500Gをランダム獲得する権利（100G刻み、500Gだけ確率10%）。
@@ -1374,6 +1379,7 @@ export class Game {
       ? `残りのCPは${remaining.map((number) => `${number}番`).join('、')}です`
       : 'すべてのCPを通過しました。ゴールしてください';
     this.onLog(`${player.name}はCP${tile.checkpointNumber}を通過！ +100G　${guidance}`);
+    await this.onCheckpoint({ playerId: player.id, playerName: player.name, checkpointNumber: tile.checkpointNumber });
     this._notifyState();
     await delay(900);
   }

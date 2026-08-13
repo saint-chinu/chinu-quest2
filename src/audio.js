@@ -140,6 +140,26 @@ export function playSfx(type = 'hit') {
     const ctx = sfxContext;
     if (ctx.state === 'suspended') ctx.resume();
     const now = ctx.currentTime;
+    if (type === 'checkpoint' || type === 'goal' || type === 'fanfare') {
+      const notes = type === 'checkpoint'
+        ? [[659.25, 0, 0.11], [783.99, 0.11, 0.11], [1046.5, 0.22, 0.22]]
+        : type === 'goal'
+          ? [[523.25, 0, 0.12], [659.25, 0.12, 0.12], [783.99, 0.24, 0.12], [1046.5, 0.36, 0.28]]
+          : [[392, 0, 0.16], [523.25, 0.16, 0.16], [659.25, 0.32, 0.16], [783.99, 0.48, 0.18], [1046.5, 0.66, 0.55]];
+      for (const [frequency, offset, duration] of notes) {
+        const tone = ctx.createOscillator();
+        const toneGain = ctx.createGain();
+        tone.type = type === 'fanfare' ? 'triangle' : 'sine';
+        tone.frequency.setValueAtTime(frequency, now + offset);
+        toneGain.gain.setValueAtTime(0.001, now + offset);
+        toneGain.gain.linearRampToValueAtTime(muted ? 0.001 : 0.14, now + offset + 0.02);
+        toneGain.gain.exponentialRampToValueAtTime(0.001, now + offset + duration);
+        tone.connect(toneGain).connect(ctx.destination);
+        tone.start(now + offset);
+        tone.stop(now + offset + duration + 0.02);
+      }
+      return;
+    }
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
     osc.type = type === 'block' ? 'square' : 'sawtooth';
