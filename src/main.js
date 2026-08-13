@@ -211,7 +211,7 @@ const BRANCH_ARROW_BY_DIR = {
  * `noBack` hides the camera-work "戻る" button (via the .no-back CSS class)
  * for choices that are mandatory rather than cancellable.
  */
-function promptDirectionArrows(options, { noBack = false } = {}) {
+function promptDirectionArrows(options, { noBack = false, confirmOnSecondTap = false } = {}) {
   return new Promise((resolve) => {
     const savedFocus = { x: scene.focus.x, z: scene.focus.z };
     if (noBack) cameraWorkOverlay.classList.add('no-back');
@@ -219,6 +219,8 @@ function promptDirectionArrows(options, { noBack = false } = {}) {
     directionArrowsOverlay.classList.remove('hidden');
 
     const listeners = [];
+    let selectedTileId = null;
+    let stopPreviewHighlight = null;
     function onPanUp() {
       scene.panByDirection('up');
     }
@@ -235,10 +237,12 @@ function promptDirectionArrows(options, { noBack = false } = {}) {
       cleanup(null);
     }
     function cleanup(tileId) {
+      stopPreviewHighlight?.();
       cameraWorkOverlay.classList.add('hidden');
       cameraWorkOverlay.classList.remove('no-back');
       directionArrowsOverlay.classList.add('hidden');
       Object.values(BRANCH_ARROW_BY_DIR).forEach((el) => el.classList.add('hidden'));
+      Object.values(BRANCH_ARROW_BY_DIR).forEach((el) => el.classList.remove('selected'));
       listeners.forEach(([el, fn]) => el.removeEventListener('click', fn));
       camArrowUp.removeEventListener('click', onPanUp);
       camArrowDown.removeEventListener('click', onPanDown);
@@ -252,7 +256,21 @@ function promptDirectionArrows(options, { noBack = false } = {}) {
     for (const option of options) {
       const arrow = BRANCH_ARROW_BY_DIR[option.screenDir];
       arrow.classList.remove('hidden');
-      const onClick = () => cleanup(option.tileId);
+      const onClick = () => {
+        if (!confirmOnSecondTap) {
+          cleanup(option.tileId);
+          return;
+        }
+        if (selectedTileId === option.tileId) {
+          cleanup(option.tileId);
+          return;
+        }
+        selectedTileId = option.tileId;
+        Object.values(BRANCH_ARROW_BY_DIR).forEach((el) => el.classList.remove('selected'));
+        arrow.classList.add('selected');
+        stopPreviewHighlight?.();
+        stopPreviewHighlight = startTileHighlight(option.previewTileIds?.length ? option.previewTileIds : [option.tileId], 0xffffff);
+      };
       listeners.push([arrow, onClick]);
       arrow.addEventListener('click', onClick);
     }
@@ -267,12 +285,12 @@ function promptDirectionArrows(options, { noBack = false } = {}) {
 /**
  * Every time movement reaches a tile with more than one way forward (the
  * board's 4 edge-midpoints and its center - see board.js), not just once at
- * game start. One tap picks - no arm/confirm step, since this now fires
- * often rather than being a single big one-time decision. The choice is
- * mandatory (no camera-work "戻る").
+ * game start. The first tap arms/highlights the route and its possible
+ * destination tiles; tapping the same arrow again confirms movement. The
+ * choice is mandatory (no camera-work "戻る").
  */
 function promptChooseBranch(options) {
-  return promptDirectionArrows(options, { noBack: true });
+  return promptDirectionArrows(options, { noBack: true, confirmOnSecondTap: true });
 }
 
 /** 土地コマンドの「移動」: same diagonal-arrow chooser, but cancellable (the player already has a monster placed - trying doesn't have to commit). */
@@ -361,9 +379,14 @@ function promptLandSubmenu(tile) {
   });
 }
 
-/** 「特殊能力」の対象選び: 射程内の敵モンスターを一覧表示、押すと即決定。「やめる」でnull（能力不使用のまま土地サブメニューへ戻る）。 */
+/** 対象選び。土地・配置モンスターは盤面カメラで選択し、プレイヤーだけ一覧を使う。 */
 function promptPickAbilityTarget(targets) {
-  if (targets.some((target) => Array.isArray(target.effectAreaIds))) return promptPickAreaTarget(targets);
+  if (targets.length > 0 && targets.every((target) => target.type != null)) {
+    return promptPickAreaTarget(targets.map((target) => ({
+      ...target,
+      effectAreaIds: Array.isArray(target.effectAreaIds) ? target.effectAreaIds : [target.id],
+    })));
+  }
   return new Promise((resolve) => {
     function cleanup(result) {
       abilityTargetModal.classList.add('hidden');

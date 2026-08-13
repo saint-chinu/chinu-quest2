@@ -1175,10 +1175,10 @@ export class Game {
       const options = forward.length > 0 ? forward : fromTile.neighbors;
       if (options.length === 0) break;
       // 分岐選択は経路計画時ではなく、駒が実際に分岐マスへ到着してから行う。
-      const nextId = options.length === 1 ? options[0] : await this._chooseNextTile(player, fromTile, options);
+      const remainingSteps = steps - i - 1;
+      const nextId = options.length === 1 ? options[0] : await this._chooseNextTile(player, fromTile, options, remainingSteps);
       if (this._isCancelled || nextId == null) break;
       if (options.length > 1) {
-        const remainingSteps = steps - i - 1;
         const narrowedIds = remainingSteps > 0
           ? this._forwardDestinationIdsFrom(player, nextId, fromTile.id, remainingSteps)
           : [nextId];
@@ -1422,7 +1422,7 @@ export class Game {
   }
 
   /** CPU just picks randomly; the human is prompted (camera-work + diagonal arrows toward whichever screen direction each option actually sits in). */
-  async _chooseNextTile(player, fromTile, optionIds) {
+  async _chooseNextTile(player, fromTile, optionIds, remainingSteps = 0) {
     if (player.isCPU) return this._cpuChooseNextTile(player, optionIds);
 
     const options = optionIds.map((id) => {
@@ -1430,7 +1430,10 @@ export class Game {
       const dgx = tile.gridX - fromTile.gridX;
       const dgz = tile.gridZ - fromTile.gridZ;
       const screenDir = dgx === 1 ? 'downright' : dgx === -1 ? 'upleft' : dgz === 1 ? 'downleft' : 'upright';
-      return { tileId: id, screenDir };
+      const previewTileIds = remainingSteps > 0
+        ? this._forwardDestinationIdsFrom(player, id, fromTile.id, remainingSteps)
+        : [id];
+      return { tileId: id, screenDir, previewTileIds };
     });
     return this.onChooseBranch(options, player.id);
   }

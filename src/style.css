@@ -2665,6 +2665,18 @@ html, body {
   display: none;
 }
 
+.dir-arrow.selected {
+  color: #fff;
+  background: #13d8ff;
+  box-shadow: 0 0 10px #fff, 0 0 26px #13d8ff, 0 0 44px rgba(19, 216, 255, 0.9);
+  animation: arrow-selected-pulse 0.55s ease-in-out infinite alternate;
+}
+
+@keyframes arrow-selected-pulse {
+  from { transform: scale(1.05); filter: brightness(1.1); }
+  to { transform: scale(1.24); filter: brightness(1.45); }
+}
+
 /* One arrow per screen-diagonal a branch option can actually sit in (see Game._chooseNextTile) - arranged like the 4 points of a diamond around the board's center. */
 .dir-arrow-upleft {
   top: 32%;
