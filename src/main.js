@@ -457,7 +457,13 @@ function promptPickSellLandForDebt({ tiles, deficit }) {
       const unitLine = tile.unitName
         ? `${tile.unitName}（${tile.unitRarity}） ATK${tile.unitAtk} / HP${tile.unitHp}`
         : '（配置モンスターなし）';
-      el.innerHTML = `<span class="debt-sale-price">+${tile.salePrice}G</span><span class="debt-sale-unit">${unitLine}</span>`;
+      const price = document.createElement('span');
+      price.className = 'debt-sale-price';
+      price.textContent = `+${tile.salePrice}G`;
+      const unit = document.createElement('span');
+      unit.className = 'debt-sale-unit';
+      unit.textContent = unitLine;
+      el.append(price, unit);
       el.addEventListener('click', () => {
         debtSaleModal.classList.add('hidden');
         resolve(tile.id);
