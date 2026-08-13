@@ -93,9 +93,8 @@ export const PIECE_REST_Y = PIECE_HEIGHT / 2 - 0.1;
 // よう、高さ(UNIT_ICON_HEIGHT)の半分を足して算出する（2026-08-12調整前は
 // 下端が-0.15とタイル面より下に沈み込み、急な俯瞰カメラ角度だとカードが
 // タイルに埋まって「張り付いて」見えていた - ユーザー指摘により修正）。
-// 同日、召喚済みモンスターアイコンをさらに1.2倍にとの指摘でUNIT_ICON_HEIGHT
-// を1.6→1.92に拡大したため、この値も高さ/2+0.05で再計算した。
-export const UNIT_ICON_REST_Y = 2.224;
+// 2026-08-13に盤上表示を8%縮小した後も、下端の高さ0.05を維持する。
+export const UNIT_ICON_REST_Y = 2.05008;
 
 // 土地レベルの縁取り。tile.mesh(2.6四方)より少し内側(2.5)に、レベルが
 // 上がるほど太い黒枠を重ねる - Lv5だけ「太くする」路線から外れて二重の
@@ -251,10 +250,9 @@ function createTokenTexture(color) {
   return new THREE.CanvasTexture(canvas);
 }
 
-// 配置モンスターの盤上アイコン用ミニカード。カード本体の画面上サイズを
-// 1.2倍、通行料・HP領域を2倍にする比率から全体高さを3.204に設定。
-// （旧: 高さ2.16、badge44/body120/hp22、canvas高186）
-export const UNIT_ICON_HEIGHT = 4.348;
+// 配置モンスターの盤上アイコン用ミニカード。通行料・HPなどの内部比率は
+// そのまま保ち、従来の高さ4.348から8%縮小する。
+export const UNIT_ICON_HEIGHT = 4.00016;
 const UNIT_CARD_CANVAS_WIDTH = 110;
 const TOLL_BADGE_HEIGHT = 73;
 const HP_GAUGE_HEIGHT = 37;
