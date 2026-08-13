@@ -31,6 +31,7 @@ let muted = false;
 let currentTrack = null; // TRACK_SRCのキー | null
 const audioEls = {}; // track -> HTMLAudioElement（遅延生成、以後使い回す）
 let unlockAttempted = false;
+let pageExited = false;
 
 function getAudioEl(track) {
   if (!audioEls[track]) {
@@ -85,6 +86,8 @@ export function toggleMuted() {
 }
 
 function playTrack(track) {
+  // pagehide後に古い戦闘演出Promiseが完了してplayMapThemeを呼んでも再生しない。
+  if (pageExited) return;
   const el = getAudioEl(track);
   // 以前のplay()が自動再生制限などで失敗して停止中なら、同じテーマでも
   // 「切替済み」とみなして黙ってreturnせず再試行する。
@@ -106,9 +109,19 @@ export function playBattleTheme() {
   playTrack('battle');
 }
 export function stopMusic() {
-  if (currentTrack) getAudioEl(currentTrack).pause();
+  // pagehide/bfcacheや演出Promiseの競合時にも古い戦闘曲を残さないよう、
+  // 現在曲だけでなく生成済みの全Audio要素を停止・巻き戻す。
+  for (const el of Object.values(audioEls)) {
+    el.pause();
+    el.currentTime = 0;
+  }
   currentTrack = null;
 }
+
+window.addEventListener('pagehide', () => {
+  pageExited = true;
+  stopMusic();
+});
 
 let sfxContext = null;
 export function playSfx(type = 'hit') {

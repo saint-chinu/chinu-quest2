@@ -4966,3 +4966,49 @@ gameMenuExit.addEventListener('click', async () => {
   }
   if (rewardResult) showToast(`報酬として${rewardResult.earnedM}M獲得しました`, 2000);
 });
+
+/**
+ * ブラウザを閉じる・再読込・iOSの履歴移動では対戦を継続保存せず、その場で
+ * 強制終了する。特にbfcache復帰では古いGameの非同期処理と戦闘BGMが再開
+ * し得るため、UI・購読・音声をまとめて破棄する。
+ */
+function forceTerminateBoardSession() {
+  game?.cancel?.();
+  cancelActiveBattleItemPicker?.();
+  cancelActiveBattleItemPicker = null;
+  battleSceneModal?.classList.add('hidden');
+  battleItemPickerBox?.classList.add('hidden');
+  battleMessageText?.classList.add('hidden');
+  if (pvpMatch?.isHost) {
+    pvpMatch.relay?.destroy?.();
+    pvpMatch.participantActionListener?.destroy?.();
+    pvpMatch.presenceMonitor?.destroy?.();
+    Promise.resolve(finishPvpRoom(pvpMatch.roomCode)).catch(() => {});
+  } else if (pvpMatch) {
+    pvpMatch.stopPublicListener?.();
+    pvpMatch.stopHandListener?.();
+    pvpMatch.listener?.destroy?.();
+    pvpMatch.actionSender?.destroy?.();
+  }
+  pvpMatch = null;
+  game = undefined;
+  scene = undefined;
+  tiles = undefined;
+  currentMapId = null;
+  activeStoryStageIndex = null;
+  stopMusic();
+  appEl?.classList.add('hidden');
+  preGame?.classList.remove('hidden');
+}
+
+window.addEventListener('pagehide', forceTerminateBoardSession);
+window.addEventListener('beforeunload', forceTerminateBoardSession);
+window.addEventListener('pageshow', (event) => {
+  // iOS Safariがページをbfcacheから復元した場合も、盤面を再開させない。
+  if (!event.persisted) return;
+  forceTerminateBoardSession();
+  showScreen(loginScreen);
+});
+
+// 初期表示時点で、前ページのAudio状態が残っていても必ず無音から始める。
+stopMusic();
