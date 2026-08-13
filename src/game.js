@@ -1305,6 +1305,12 @@ export class Game {
         .filter((tile) => tile.type === TileType.EVENT && !player.passedCheckpoints.has(tile.id))
         .map((tile) => tile.checkpointNumber);
       this.onLog(`${player.name}はゴールを通過（ボーナスなし）　残りのCPは${remaining.map((number) => `${number}番`).join('、')}です`);
+      this._notifyState();
+      // CP未通過なら周回ボーナスは付かないが、勝利条件は「目標総資産に
+      // 到達した状態でゴールへ戻る」こと。以前はここでreturnしていたため、
+      // 土地価値などで既に目標へ到達したプレイヤーがゴールを踏んでも
+      // 決着しなかった。ボーナス判定とは独立して必ず勝利判定を行う。
+      if (await this._checkGoalAchievement(player)) return;
       await delay(900);
       return;
     }
