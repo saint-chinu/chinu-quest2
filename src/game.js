@@ -721,10 +721,16 @@ export class Game {
       this.onLog('飛べる空き地がありません');
       return;
     }
-    let bestDist = Infinity;
-    for (const t of candidates) bestDist = Math.min(bestDist, this._tileDistance(currentTile.id, t.id));
-    const nearest = candidates.filter((t) => this._tileDistance(currentTile.id, t.id) === bestDist);
-    const target = nearest[Math.floor(Math.random() * nearest.length)];
+    const highValue = this._cpuHighValueEmptyLands(candidates);
+    let target;
+    if (player.isCPU && highValue.length > 0) {
+      target = highValue[0];
+    } else {
+      let bestDist = Infinity;
+      for (const t of candidates) bestDist = Math.min(bestDist, this._tileDistance(currentTile.id, t.id));
+      const nearest = candidates.filter((t) => this._tileDistance(currentTile.id, t.id) === bestDist);
+      target = nearest[Math.floor(Math.random() * nearest.length)];
+    }
 
     player.previousTileId = null;
     player.tileId = target.id;
@@ -1370,11 +1376,21 @@ export class Game {
    */
   _cpuChooseNextTile(player, optionIds) {
     const profile = player.aiProfile;
-    const target = this._nearestGoalTileId(player);
+    // 育った空き地は投資済み価値をそのまま獲得できるため、CP/ゴールより
+    // 一時的に優先して接近する。複数ある場合は現在地から近い最高額候補。
+    const valuableEmpty = this._cpuHighValueEmptyLands();
+    const target = valuableEmpty.length > 0
+      ? valuableEmpty.reduce((best, tile) => {
+          const d = this._tileDistance(player.tileId, tile.id);
+          const bestD = this._tileDistance(player.tileId, best.id);
+          return d < bestD || (d === bestD && this._landValueOfTile(tile) > this._landValueOfTile(best)) ? tile : best;
+        }).id
+      : this._nearestGoalTileId(player);
     const weights = optionIds.map((id) => {
       const tile = this.tiles[id];
       const distance = target == null ? 0 : this._tileDistance(id, target);
       let score = -distance;
+      if (tile.owner == null && tile.level >= 2) score += 12 + tile.level * 3;
       if (tile.type === TileType.LAND && tile.level >= 3 && tile.owner != null && tile.owner !== player.id) {
         const owner = this.players.find((p) => p.id === tile.owner);
         const isAlly = owner?.allianceId != null && owner.allianceId === player.allianceId;
@@ -1684,8 +1700,17 @@ export class Game {
         // 空き地への召喚や敵地への侵略が可能な通常LANDでは従来フローを
         // 優先し、全土地アクセス権だけを理由に別の土地へ投資はしない。
         const candidates = this._ownedTiles(player);
-        const target = this._cpuChooseLevelUpTile(player, candidates);
-        if (target) this._cpuMaybeLevelUp(player, target);
+        let usedAcquisitionAbility = false;
+        for (const ownedTile of candidates) {
+          if (await this._cpuMaybeAcquireHighValueLandByAbility(player, ownedTile)) {
+            usedAcquisitionAbility = true;
+            break;
+          }
+        }
+        if (!usedAcquisitionAbility) {
+          const target = this._cpuChooseLevelUpTile(player, candidates);
+          if (target) this._cpuMaybeLevelUp(player, target);
+        }
       }
       await this._settleLandingToll(player, tile, owesTollUnlessConquered);
       return;
@@ -2001,6 +2026,7 @@ export class Game {
 
     player.currency -= cost;
     tile.element = newElement;
+    this._repaintTileToElement(tile);
     this.onLog(`${player.name}は土地属性を${ELEMENT_LABEL[newElement]}に変更した (-${cost}G)`);
     this._notifyState();
     return true;
@@ -2401,6 +2427,7 @@ export class Game {
       if (!(await confirmAndSpend())) return false;
 
       targetTile.element = newElement;
+      this._repaintTileToElement(targetTile);
       this.onLog(`${player.name}の${unitDef.name}が${targetTile.id}番地の属性を${ELEMENT_LABEL[newElement]}に変更した`);
       this._notifyState();
       await this.onTargetEffect?.({ tileId: targetTile.id, position: targetTile.position, message: `${ELEMENT_LABEL[newElement]}属性に変化！` });
@@ -2519,6 +2546,8 @@ export class Game {
     const profile = player.aiProfile;
 
     if (tile.owner === player.id) {
+      const usedAcquisitionAbility = await this._cpuMaybeAcquireHighValueLandByAbility(player, tile);
+      if (usedAcquisitionAbility) return;
       const usedDamageAbility = await this._cpuMaybeUseDamageAbility(player, tile);
       if (!usedDamageAbility) this._cpuMaybeLevelUp(player, tile, profile);
       return;
@@ -2576,6 +2605,57 @@ export class Game {
       return 100 + chainCount * 10 - tile.level;
     };
     return [...eligible].sort((a, b) => score(b) - score(a))[0];
+  }
+
+  /** 空き地のうち、以前の所有者が育てたLv2以上を地価の高い順に返す。 */
+  _cpuHighValueEmptyLands(candidates = this.tiles) {
+    return candidates
+      .filter((tile) => tile.type === TileType.LAND && tile.owner == null && tile.level >= 2)
+      .sort((a, b) => this._landValueOfTile(b) - this._landValueOfTile(a) || b.level - a.level);
+  }
+
+  /**
+   * CPUが現在地のモンスター能力で高額空き地を確保する。属性ワープは
+   * 対応属性内の最高額へ移動し、空き地召喚能力は全候補中の最高額へ置く。
+   */
+  async _cpuMaybeAcquireHighValueLandByAbility(player, tile) {
+    const unitDef = tile.unit?.def;
+    const ability = unitDef?.ability;
+    const cost = unitDef?.commandCost ?? 0;
+    if (!ability || player.currency < cost) return false;
+
+    if (ability.type === 'warpToEmptyElementLand') {
+      const target = this._cpuHighValueEmptyLands().find((land) => land.element === ability.element && land.id !== tile.id);
+      if (!target) return false;
+      player.currency -= cost;
+      const unit = tile.unit;
+      target.unit = unit;
+      target.owner = player.id;
+      this._paintTile(target, player.color);
+      tile.unit = null;
+      tile.owner = null;
+      tile.transparentCursed = false;
+      this._repaintTileToElement(tile);
+      this.onLog(`${player.name}の${unitDef.name}が高額空き地${target.id}番地へワープした (-${cost}G)`);
+      this._notifyState();
+      await this.onTargetEffect?.({ tileId: target.id, position: target.position, message: `${unitDef.name}が高額空き地を確保！` });
+      return true;
+    }
+
+    if (ability.type === 'summonFieldMonster' || ability.type === 'summonMonsterOnEmptyLand') {
+      const target = this._cpuHighValueEmptyLands()[0];
+      if (!target) return false;
+      player.currency -= cost;
+      const summonedDef = ability.type === 'summonFieldMonster'
+        ? { ...DENCHU_FIELD_MONSTER, id: `denchu-${Date.now()}-${Math.random().toString(36).slice(2)}` }
+        : { ...MONSTER_CATALOG[ability.catalogId], id: `summon-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+      this._placeUnit(target, player, summonedDef);
+      this.onLog(`${player.name}の${unitDef.name}が高額空き地${target.id}番地に${summonedDef.name}を召喚した (-${cost}G)`);
+      this._notifyState();
+      await this.onSummonEffect?.({ tileId: target.id, unitName: summonedDef.name });
+      return true;
+    }
+    return false;
   }
 
   /**
@@ -3342,6 +3422,7 @@ export class Game {
   async _runCPUTurn() {
     await delay(CPU_PRE_ROLL_MS);
     if (!this.currentPlayer.isCPU) return;
+    if (await this._cpuMaybeWarpToHighValueLand(this.currentPlayer)) return;
     await this._cpuMaybeFixLandElementSpell(this.currentPlayer);
     await this._cpuMaybeUseDisruptionSpell(this.currentPlayer);
     await this._cpuMaybeUseDamageSpell(this.currentPlayer);
@@ -3363,6 +3444,15 @@ export class Game {
     }
     const income = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'lapCountGold');
     if (income && player.currency >= (income.cost || 0)) await this._cpuCastSpell(player, income, {});
+  }
+
+  /** 高額空き地があり、召喚可能な手札もある時はブルーオーシャンを優先使用。 */
+  async _cpuMaybeWarpToHighValueLand(player) {
+    if (player.spellUsedThisTurn || this._cpuHighValueEmptyLands().length === 0) return false;
+    if (this._affordableMonsterCards(player).length === 0) return false;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'warpToNearbyEmptyLand');
+    if (!card || player.currency < (card.cost || 0)) return false;
+    return this._cpuCastSpell(player, card, {});
   }
 
   /**
@@ -3569,6 +3659,17 @@ export class Game {
     const affordable = diceCards.filter((c) => player.currency >= (c.cost || 0));
     if (affordable.length === 0) return;
 
+    // 自分から高額空き地までの距離と一致する固定ダイスがあれば、自分へ
+    // 使用して確保を狙う。妨害目的で相手へ使う判断より優先する。
+    for (const tile of this._cpuHighValueEmptyLands()) {
+      const distance = this._tileDistance(player.tileId, tile.id);
+      const acquisitionCard = affordable.find((c) => c.effect.value === distance);
+      if (acquisitionCard) {
+        await this._cpuCastSpell(player, acquisitionCard, { targetPlayerId: player.id });
+        return;
+      }
+    }
+
     const target = this._cpuPickDiceSpellTarget(player);
     if (!target) return;
 
@@ -3644,9 +3745,10 @@ export class Game {
     this._notifyState();
     await this.onSpellUse(card);
     await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast, card));
-    await this._applySpellEffect(player, card, cast);
+    const endedTurn = await this._applySpellEffect(player, card, cast);
     await this.onSpellComplete();
     this._notifyState();
+    return !!endedTurn;
   }
 
   /** Total assets' land component: sum of 地価 (see _landValueOfTile) across owned tiles. */
