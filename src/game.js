@@ -1024,7 +1024,12 @@ export class Game {
     player.hand.push(card);
     this._notifyState();
 
-    if (player.hand.length > HAND_LIMIT) {
+    await this._enforceHandLimit(player);
+  }
+
+  /** 手札が上限以下になるまで、1枚ずつ捨て札選択を繰り返す。 */
+  async _enforceHandLimit(player) {
+    while (player.hand.length > HAND_LIMIT && !this._isCancelled) {
       let discarded;
       if (player.isCPU) {
         await delay(CPU_DECISION_MS);
@@ -1032,6 +1037,7 @@ export class Game {
       } else {
         discarded = await this.onDiscardChoice(player.hand, player.id);
       }
+      if (this._isCancelled || !discarded) return;
       player.hand = player.hand.filter((c) => c.id !== discarded.id);
       player.deck.discard(discarded);
       if (player.isCPU) this.onLog(`${player.name}は手札を1枚捨てた`);
@@ -1530,6 +1536,7 @@ export class Game {
     player.hand.push({ ...card, id: `shop-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}` });
     this.onLog(`${player.name}はショップで「${card.name}」を購入した (-${card.cost}G)`);
     this._notifyState();
+    await this._enforceHandLimit(player);
   }
 
   /**
@@ -1884,6 +1891,7 @@ export class Game {
       if (card.effect?.type === 'copyOnSummon') {
         await this._maybeCopyOnSummon(tile, player);
       }
+      await this._enforceHandLimit(player);
     } else {
       await this._runInvasion(player, tile, card);
     }
@@ -2055,18 +2063,13 @@ export class Game {
    * 実際に土地を売却する（旧「土地を売る」コマンドの中身そのまま）。唯一
    * レベルをリセットする操作（それ以外は所有権を失ってもレベルは保持
    * されるのが確定仕様 - 売却だけが例外）。売却額は地価の半額。配置され
-   * ていたモンスターのカードは入れ替え同様手札に戻る。呼び出し元
+   * ていたモンスターは手札へ戻らず消滅する。呼び出し元
    * （_resolveNegativeCurrency）だけが使う内部処理で、確認ダイアログは
    * 挟まない（マイナスGの解消は任意ではなく必須のため）。
    */
   _sellLandTile(player, tile) {
     const salePrice = Math.round(this._landValueOfTile(tile) / 2);
-    if (tile.unit) {
-      player.hand.push({
-        ...tile.unit.def,
-        id: `sell-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      });
-    }
+    // G不足による強制売却では、配置モンスターは手札へ戻らず消滅する。
     tile.unit = null;
     tile.owner = null;
     tile.transparentCursed = false;
@@ -2293,6 +2296,7 @@ export class Game {
       player.hand.push(drawn);
       this.onLog(`${player.name}の${unitDef.name}が「${drawn.name}」を引いた`);
       this._notifyState();
+      await this._enforceHandLimit(player);
       return true;
     }
 
@@ -2400,6 +2404,7 @@ export class Game {
       player.hand.push(card);
       this.onLog(`${player.name}の${unitDef.name}が「${card.name}」を入手した`);
       this._notifyState();
+      await this._enforceHandLimit(player);
       return true;
     }
 
@@ -2907,6 +2912,7 @@ export class Game {
         baseAtk: attackerBase.atk, baseHp: attackerBase.hp,
         existingAtkBonus: attackerBonus.atk, existingHpBonus: attackerBonus.hp,
       });
+      if (this._isCancelled) return null;
     }
     if (equippedDefenderItem) {
       await this.onBattleEquip({
@@ -2914,6 +2920,7 @@ export class Game {
         baseAtk: defenderBase.atk, baseHp: defenderBase.hp,
         existingAtkBonus: defenderBonus.atk, existingHpBonus: defenderBonus.hp,
       });
+      if (this._isCancelled) return null;
     }
 
     // 貫通: nullifies the defender's 同属性ボーナス (land-added HP) for this
@@ -2947,11 +2954,15 @@ export class Game {
         reflected: !!exchange.reflected,
         targetName: targetUnit.def.name,
       });
+      if (this._isCancelled) return null;
     }
     // Both sides got to strike and both survived - a genuine draw (見た目上
     // は防衛成功): retreat off-screen before the outcome message, rather
     // than either card crumbling.
-    if (result.attackerSurvived && result.defenderSurvived) await this.onBattleRetreat();
+    if (result.attackerSurvived && result.defenderSurvived) {
+      await this.onBattleRetreat();
+      if (this._isCancelled) return null;
+    }
 
     // ハリネズミの服(reflectHalfDamage)等で両者とも倒れた場合、旧仕様では
     // 「防衛成功」側の勝利メッセージになっていた（wonがfalseの場合を全て
@@ -2964,11 +2975,14 @@ export class Game {
       ownerName: won ? attackerPlayer.name : defenderPlayer.name,
       unitName: won ? attackerUnit.def.name : defenderUnit.def.name,
     });
+    if (this._isCancelled) return null;
 
     this._maybeGrantRandomSpell(attackerUnit, attackerPlayer);
     this._maybeGrantRandomSpell(defenderUnit, defenderPlayer);
     this._maybeReturnItemToHand(attackerItem, attackerPlayer);
     this._maybeReturnItemToHand(defenderItem, defenderPlayer);
+    await this._enforceHandLimit(attackerPlayer);
+    await this._enforceHandLimit(defenderPlayer);
 
     return result;
   }
@@ -3117,19 +3131,7 @@ export class Game {
     this.onLog(`${unit.def.name}は不死鳥の力で${ownerPlayer.name}の手札に戻った`);
     this._notifyState();
 
-    if (ownerPlayer.hand.length > HAND_LIMIT) {
-      let discarded;
-      if (ownerPlayer.isCPU) {
-        await delay(CPU_DECISION_MS);
-        discarded = this._cpuChooseDiscard(ownerPlayer);
-      } else {
-        discarded = await this.onDiscardChoice(ownerPlayer.hand, ownerPlayer.id);
-      }
-      ownerPlayer.hand = ownerPlayer.hand.filter((c) => c.id !== discarded.id);
-      ownerPlayer.deck.discard(discarded);
-      if (ownerPlayer.isCPU) this.onLog(`${ownerPlayer.name}は手札を1枚捨てた`);
-      this._notifyState();
-    }
+    await this._enforceHandLimit(ownerPlayer);
   }
 
   _placeUnit(tile, player, card) {

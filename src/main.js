@@ -1364,8 +1364,11 @@ function promptBattleSceneEnter({ attacker, defender }) {
  * the other side's choice (already made, or not yet made) is never shown
  * here, which is what keeps each side's pick hidden from the other.
  */
+let cancelActiveBattleItemPicker = null;
+
 function promptPickBattleItem({ hand, side, ownerName, unitName }) {
   return new Promise((resolve) => {
+    let settled = false;
     battleItemPickerTitle.textContent =
       hand.length > 0 ? `${ownerName}の${unitName}: 使うアイテムを選んでください` : `${ownerName}の${unitName}: アイテムがありません`;
     battleItemPickerChoices.replaceChildren();
@@ -1382,14 +1385,21 @@ function promptPickBattleItem({ hand, side, ownerName, unitName }) {
     battleItemPickerBox.classList.remove('hidden');
 
     function cleanup(result) {
+      if (settled) return;
+      settled = true;
       battleItemPickerBox.classList.add('hidden');
       battleItemPickerSkip.removeEventListener('click', onSkip);
+      if (cancelActiveBattleItemPicker === cancelPicker) cancelActiveBattleItemPicker = null;
       resolve(result);
+    }
+    function cancelPicker() {
+      cleanup(null);
     }
     function onSkip() {
       cleanup(null);
     }
     battleItemPickerSkip.addEventListener('click', onSkip);
+    cancelActiveBattleItemPicker = cancelPicker;
   });
 }
 
@@ -4758,6 +4768,8 @@ gameMenuExit.addEventListener('click', async () => {
   // battle-scene-modal自体もここで確実に閉じておく - 開いたままだと
   // 次に#appを表示した瞬間、古い対戦内容がそのまま一瞬見えてしまう。
   game?.cancel?.();
+  cancelActiveBattleItemPicker?.();
+  cancelActiveBattleItemPicker = null;
   battleSceneModal.classList.add('hidden');
   battleItemPickerBox.classList.add('hidden');
   battleMessageText.classList.add('hidden');
