@@ -211,6 +211,9 @@ export class Game {
       },
       { name: 'CPU', isCPU: true, color: 0xe63946, allianceId: null },
     ];
+    // 全マップ共通で、プレイヤーはゴール(START)マスから開始する。タイルID 0
+    // 固定では、中央にゴールがあるステージ2などで別の土地から始まってしまう。
+    const startingTileId = this.tiles.find((tile) => tile.type === TileType.START)?.id ?? 0;
 
     // tileId indexes into `tiles` (ids are assigned sequentially at parse
     // time, so id === array index). previousTileId excludes backtracking
@@ -223,7 +226,7 @@ export class Game {
       name: cfg.name,
       isCPU: !!cfg.isCPU,
       currency: 500,
-      tileId: 0,
+      tileId: startingTileId,
       previousTileId: null,
       color: cfg.color,
       // 盤面駒の見た目に使うcanvas - null なら色付き丸のプレースホルダー
