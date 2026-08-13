@@ -142,15 +142,19 @@ function incomingDamageMultiplier(defenderUnit, attackerUnit) {
 function damageReductionMultiplier(defenderUnit, attackerUnit) {
   let multiplier = 1;
   if (hasTrait(defenderUnit, 'halfDamage') && !hasTrait(attackerUnit, 'pierce')) multiplier *= 0.5;
+  let triggeredMessage = null;
   if (defenderUnit.def.effect?.type === 'chanceDamageReduction' && Math.random() < defenderUnit.def.effect.chance) {
     multiplier *= defenderUnit.def.effect.multiplier;
+    triggeredMessage = `${defenderUnit.def.name}のダメージ半減が発動！`;
   }
-  return multiplier;
+  return { multiplier, triggeredMessage };
 }
 
 function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
   const atkStats = statTotals(attackerUnit, attackerBonus);
-  const multiplier = incomingDamageMultiplier(defenderUnit, attackerUnit) * damageReductionMultiplier(defenderUnit, attackerUnit);
+  const reduction = damageReductionMultiplier(defenderUnit, attackerUnit);
+  const multiplier = incomingDamageMultiplier(defenderUnit, attackerUnit) * reduction.multiplier;
+  if (reduction.triggeredMessage) log.push(reduction.triggeredMessage);
   // ATKダウンの呪い（静電気野郎）が重なって0未満になっても、マイナスダメージ
   // （＝相手を回復させてしまう）にはならないようクランプする。
   const damage = Math.max(0, Math.round(atkStats.atk * multiplier));
