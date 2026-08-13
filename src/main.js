@@ -2980,6 +2980,12 @@ function adminErrorHtml(error) {
 }
 
 async function showAdminDashboard(forceReload = false) {
+  // 多重防御: 管理者以外はそもそもここへ来ないが（タイル非表示）、来ても弾く。
+  // 本質的なデータ保護は firestore.rules（管理者UIDのみ全playersを読める）。
+  if (!isAdminUser) {
+    showHubScreen();
+    return;
+  }
   showScreen(adminScreen);
   if (!firebaseReady || !db) {
     adminContent.innerHTML = '<p class="admin-error">Firebaseに接続できないため集計できません。</p>';

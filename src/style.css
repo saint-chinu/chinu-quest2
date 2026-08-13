@@ -3378,6 +3378,12 @@ html, body {
 }
 
 /* ===== 管理ダッシュボード ===== */
+/* .hub-tile は display:grid なので、素の [hidden] 属性（UAのdisplay:none）が
+ * 上書きされてしまう。管理タイルを管理者以外に絶対出さないため、より高い詳細度で
+ * display:none を明示する（refreshAdminAccess が hidden 属性を付け外しする）。 */
+.hub-tile[hidden] {
+  display: none !important;
+}
 .admin-content {
   display: block;
   margin: 0 0 16px;
