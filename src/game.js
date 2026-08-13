@@ -1829,6 +1829,7 @@ export class Game {
         { canSummon: tile.type === TileType.LAND && !isAlliedLand && this._affordableMonsterCards(player).length > 0 },
         player.id,
       );
+      if (this._isCancelled) return;
       if (choice === 'end') break;
 
       if (choice === 'summon') {
@@ -1899,11 +1900,13 @@ export class Game {
     for (;;) {
       const summaries = candidateIds.map((id) => this._browseTileSummary(this.tiles[id], player));
       const pickedId = await this.onPickBrowseTile(summaries, player.id);
+      if (this._isCancelled) return false;
       if (pickedId == null) return false;
 
       const tile = this.tiles[pickedId];
       for (;;) {
         const action = await this.onLandSubmenu(this._browseTileSummary(tile, player), player.id);
+        if (this._isCancelled) return false;
         if (action == null || action === 'back') break;
 
         if (action === 'swap' && (await this._humanSummonFlow(player, tile))) return true;
@@ -2311,6 +2314,7 @@ export class Game {
         { tiles: candidates.map((t) => this._sellLandSummary(t)), deficit: -player.currency },
         player.id,
       );
+      if (this._isCancelled) return;
       const pickedTile = candidates.find((t) => t.id === pickedId);
       if (!pickedTile) continue; // 念のため: 不正な選択は無視して再提示する
       this._sellLandTile(player, pickedTile);

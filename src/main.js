@@ -195,6 +195,28 @@ function tileSummaryText(tile) {
   return lines.join('\n');
 }
 
+/**
+ * 退出（gameMenuExit）やpagehide時、ユーザーのクリック待ちで永久に止まって
+ * いるモーダルPromiseを一括で強制決着させるための登録簿。各promptXxxは
+ * モーダルを開く直前にcancelSelf（=通常の「キャンセル」と同じcleanup）を
+ * 登録し、閉じる際に必ず自分で解除する。バトルアイテム選択専用の
+ * cancelActiveBattleItemPickerとは別枠（あちらは単一スロットのまま維持）。
+ */
+const activePromptCancellers = new Set();
+function registerPromptCanceller(fn) {
+  activePromptCancellers.add(fn);
+}
+function unregisterPromptCanceller(fn) {
+  activePromptCancellers.delete(fn);
+}
+function cancelAllActivePrompts() {
+  const fns = [...activePromptCancellers];
+  activePromptCancellers.clear();
+  for (const fn of fns) {
+    try { fn(); } catch { /* 破棄中なので握りつぶす */ }
+  }
+}
+
 const BRANCH_ARROW_BY_DIR = {
   upleft: dirArrowUpleft,
   upright: dirArrowUpright,
@@ -250,8 +272,13 @@ function promptDirectionArrows(options, { noBack = false, confirmOnSecondTap = f
       camArrowRight.removeEventListener('click', onPanRight);
       camWorkBack.removeEventListener('click', onBack);
       scene.setFocusImmediate(savedFocus.x, savedFocus.z);
+      unregisterPromptCanceller(cancelSelf);
       resolve(tileId);
     }
+    function cancelSelf() {
+      cleanup(null);
+    }
+    registerPromptCanceller(cancelSelf);
 
     for (const option of options) {
       const arrow = BRANCH_ARROW_BY_DIR[option.screenDir];
@@ -310,6 +337,7 @@ function promptLandCommand(tile, { canSummon }) {
       landCommandSummon.removeEventListener('click', onSummon);
       landCommandLand.removeEventListener('click', onLand);
       landCommandEnd.removeEventListener('click', onEnd);
+      unregisterPromptCanceller(cancelSelf);
       resolve(result);
     }
     function onSummon() {
@@ -321,9 +349,15 @@ function promptLandCommand(tile, { canSummon }) {
     function onEnd() {
       cleanup('end');
     }
+    // 'end'を返す: _runLandCommandのfor(;;)ループを1回で確実に抜けるため
+    // （null等だと分岐に当たらず同じモーダルを再度開いてしまう）。
+    function cancelSelf() {
+      cleanup('end');
+    }
     landCommandSummon.addEventListener('click', onSummon);
     landCommandLand.addEventListener('click', onLand);
     landCommandEnd.addEventListener('click', onEnd);
+    registerPromptCanceller(cancelSelf);
   });
 }
 
@@ -350,7 +384,11 @@ function promptLandSubmenu(tile) {
       landSubmenuMove.removeEventListener('click', onMove);
       landSubmenuAbility.removeEventListener('click', onAbility);
       landSubmenuBack.removeEventListener('click', onBack);
+      unregisterPromptCanceller(cancelSelf);
       resolve(result);
+    }
+    function cancelSelf() {
+      cleanup('back');
     }
     function onSwap() {
       cleanup('swap');
@@ -376,6 +414,7 @@ function promptLandSubmenu(tile) {
     landSubmenuMove.addEventListener('click', onMove);
     landSubmenuAbility.addEventListener('click', onAbility);
     landSubmenuBack.addEventListener('click', onBack);
+    registerPromptCanceller(cancelSelf);
   });
 }
 
@@ -391,9 +430,13 @@ function promptPickAbilityTarget(targets) {
     function cleanup(result) {
       abilityTargetModal.classList.add('hidden');
       abilityTargetCancel.removeEventListener('click', onCancel);
+      unregisterPromptCanceller(cancelSelf);
       resolve(result);
     }
     function onCancel() {
+      cleanup(null);
+    }
+    function cancelSelf() {
       cleanup(null);
     }
 
@@ -406,6 +449,7 @@ function promptPickAbilityTarget(targets) {
     }
     abilityTargetModal.classList.remove('hidden');
     abilityTargetCancel.addEventListener('click', onCancel);
+    registerPromptCanceller(cancelSelf);
   });
 }
 
@@ -450,7 +494,11 @@ function promptPickAreaTarget(targets) {
       camArrowLeft.removeEventListener('click', onLeft);
       camArrowRight.removeEventListener('click', onRight);
       camWorkBack.removeEventListener('click', onBack);
+      unregisterPromptCanceller(cancelSelf);
       scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 260).then(() => resolve(result));
+    }
+    function cancelSelf() {
+      finish(null);
     }
 
     canvas.addEventListener('click', onCanvasClick);
@@ -459,6 +507,7 @@ function promptPickAreaTarget(targets) {
     camArrowLeft.addEventListener('click', onLeft);
     camArrowRight.addEventListener('click', onRight);
     camWorkBack.addEventListener('click', onBack);
+    registerPromptCanceller(cancelSelf);
   });
 }
 
@@ -474,6 +523,17 @@ function promptConfirmMove() {
  */
 function promptPickSellLandForDebt({ tiles, deficit }) {
   return new Promise((resolve) => {
+    function cleanup(result) {
+      debtSaleModal.classList.add('hidden');
+      unregisterPromptCanceller(cancelSelf);
+      resolve(result);
+    }
+    // 強制売却なのでキャンセルボタンは無いが、退出時は_isCancelled側で
+    // 処理を打ち切るので、ここでは先頭の候補を返して待機を解くだけでよい。
+    function cancelSelf() {
+      cleanup(tiles[0]?.id ?? null);
+    }
+
     debtSaleTitle.textContent = `Gがマイナスです（不足額 ${deficit}G）。売却する土地を選んでください`;
     debtSaleChoices.replaceChildren();
     for (const tile of tiles) {
@@ -489,19 +549,30 @@ function promptPickSellLandForDebt({ tiles, deficit }) {
       unit.className = 'debt-sale-unit';
       unit.textContent = unitLine;
       el.append(price, unit);
-      el.addEventListener('click', () => {
-        debtSaleModal.classList.add('hidden');
-        resolve(tile.id);
-      });
+      el.addEventListener('click', () => cleanup(tile.id));
       debtSaleChoices.appendChild(el);
     }
     debtSaleModal.classList.remove('hidden');
+    registerPromptCanceller(cancelSelf);
   });
 }
 
 /** Shows the hand's monster cards; clicking one blinks it twice before resolving. */
 function promptPickMonsterCard(options) {
   return new Promise((resolve) => {
+    function cleanup(result) {
+      monsterPickerModal.classList.add('hidden');
+      monsterPickerCancel.removeEventListener('click', onCancel);
+      unregisterPromptCanceller(cancelSelf);
+      resolve(result);
+    }
+    function onCancel() {
+      cleanup(null);
+    }
+    function cancelSelf() {
+      cleanup(null);
+    }
+
     monsterPickerChoices.replaceChildren();
     for (const card of options) {
       const el = document.createElement('div');
@@ -509,21 +580,13 @@ function promptPickMonsterCard(options) {
       renderCardEl(el, card);
       el.addEventListener('click', () => {
         el.classList.add('blinking');
-        setTimeout(() => {
-          monsterPickerModal.classList.add('hidden');
-          resolve(card);
-        }, BLINK_MS);
+        setTimeout(() => cleanup(card), BLINK_MS);
       });
       monsterPickerChoices.appendChild(el);
     }
     monsterPickerModal.classList.remove('hidden');
-
-    function onCancel() {
-      monsterPickerModal.classList.add('hidden');
-      monsterPickerCancel.removeEventListener('click', onCancel);
-      resolve(null);
-    }
     monsterPickerCancel.addEventListener('click', onCancel);
+    registerPromptCanceller(cancelSelf);
   });
 }
 
@@ -539,9 +602,13 @@ function promptShopPurchase(options) {
     function cleanup(result) {
       shopTileModal.classList.add('hidden');
       shopTileCancel.removeEventListener('click', onCancel);
+      unregisterPromptCanceller(cancelSelf);
       resolve(result);
     }
     function onCancel() {
+      cleanup(null);
+    }
+    function cancelSelf() {
       cleanup(null);
     }
 
@@ -563,6 +630,7 @@ function promptShopPurchase(options) {
     }
     shopTileModal.classList.remove('hidden');
     shopTileCancel.addEventListener('click', onCancel);
+    registerPromptCanceller(cancelSelf);
   });
 }
 
@@ -601,6 +669,7 @@ function promptConfirmAction({ actionType, card, cost, tile, targetElement, abil
       confirmCardPreview.classList.add('hidden');
       confirmYes.removeEventListener('click', onYes);
       confirmNo.removeEventListener('click', onNo);
+      unregisterPromptCanceller(cancelSelf);
       resolve(result);
     }
     function onYes() {
@@ -609,75 +678,90 @@ function promptConfirmAction({ actionType, card, cost, tile, targetElement, abil
     function onNo() {
       cleanup(false);
     }
+    function cancelSelf() {
+      cleanup(false);
+    }
     confirmYes.addEventListener('click', onYes);
     confirmNo.addEventListener('click', onNo);
+    registerPromptCanceller(cancelSelf);
   });
 }
 
 /** Picks a target element from the given options (colored swatches); resolves the element, or null if cancelled. */
 function promptPickElement(options) {
   return new Promise((resolve) => {
+    function cleanup(result) {
+      elementPickerModal.classList.add('hidden');
+      elementPickerCancel.removeEventListener('click', onCancel);
+      unregisterPromptCanceller(cancelSelf);
+      resolve(result);
+    }
+    function onCancel() {
+      cleanup(null);
+    }
+    function cancelSelf() {
+      cleanup(null);
+    }
+
     elementPickerChoices.replaceChildren();
     for (const element of options) {
       const el = document.createElement('div');
       el.className = 'card';
       el.style.background = CARD_COLOR[element];
       el.textContent = ELEMENT_LABEL[element];
-      el.addEventListener('click', () => {
-        elementPickerModal.classList.add('hidden');
-        resolve(element);
-      });
+      el.addEventListener('click', () => cleanup(element));
       elementPickerChoices.appendChild(el);
     }
     elementPickerModal.classList.remove('hidden');
-
-    function onCancel() {
-      elementPickerModal.classList.add('hidden');
-      elementPickerCancel.removeEventListener('click', onCancel);
-      resolve(null);
-    }
     elementPickerCancel.addEventListener('click', onCancel);
+    registerPromptCanceller(cancelSelf);
   });
 }
 
 /** あざらしさんの「選んだ種類のカードをランダムに1枚引ける」用: モンスター/武器防具/スペルの3択。resolveはCardType文字列、キャンセルでnull。 */
 function promptPickCardType() {
   return new Promise((resolve) => {
+    function cleanup(result) {
+      cardTypePickerModal.classList.add('hidden');
+      cardTypePickerCancel.removeEventListener('click', onCancel);
+      unregisterPromptCanceller(cancelSelf);
+      resolve(result);
+    }
+    function onCancel() {
+      cleanup(null);
+    }
+    function cancelSelf() {
+      cleanup(null);
+    }
+
     cardTypePickerChoices.replaceChildren();
     for (const type of [CardType.MONSTER, CardType.GEAR, CardType.SPELL]) {
       const el = document.createElement('div');
       el.className = 'card';
       el.style.background = CARD_COLOR[type === CardType.MONSTER ? Element.NEUTRAL : type];
       el.textContent = TYPE_LABEL[type];
-      el.addEventListener('click', () => {
-        cardTypePickerModal.classList.add('hidden');
-        resolve(type);
-      });
+      el.addEventListener('click', () => cleanup(type));
       cardTypePickerChoices.appendChild(el);
     }
     cardTypePickerModal.classList.remove('hidden');
-
-    function onCancel() {
-      cardTypePickerModal.classList.add('hidden');
-      cardTypePickerCancel.removeEventListener('click', onCancel);
-      resolve(null);
-    }
     cardTypePickerCancel.addEventListener('click', onCancel);
+    registerPromptCanceller(cancelSelf);
   });
 }
 
 /** Simple info-only popup, no camera-work of its own - "閉じる" just resolves. */
 function promptShowTileInfo(tile) {
   return new Promise((resolve) => {
-    tileInfoText.textContent = tileSummaryText(tile);
-    tileInfoModal.classList.remove('hidden');
-
     function onClose() {
       tileInfoModal.classList.add('hidden');
       tileInfoClose.removeEventListener('click', onClose);
+      unregisterPromptCanceller(onClose);
       resolve();
     }
+    tileInfoText.textContent = tileSummaryText(tile);
+    tileInfoModal.classList.remove('hidden');
     tileInfoClose.addEventListener('click', onClose);
+    registerPromptCanceller(onClose);
   });
 }
 
@@ -768,7 +852,11 @@ function promptPickBrowseTile(candidates) {
       camWorkBack.removeEventListener('click', onWorkBack);
       tileInfoClose.removeEventListener('click', onInfoClose);
       scene.setFocusImmediate(savedFocus.x, savedFocus.z);
+      unregisterPromptCanceller(cancelSelf);
       resolve(result);
+    }
+    function cancelSelf() {
+      finish(null);
     }
 
     canvas.addEventListener('click', onCanvasClick);
@@ -778,6 +866,7 @@ function promptPickBrowseTile(candidates) {
     camArrowRight.addEventListener('click', onRight);
     camWorkBack.addEventListener('click', onWorkBack);
     tileInfoClose.addEventListener('click', onInfoClose);
+    registerPromptCanceller(cancelSelf);
   });
 }
 
@@ -1145,9 +1234,11 @@ function promptPickLevelUp({ currentLevel, options }) {
     function cleanup(result) {
       levelUpModal.classList.add('hidden');
       levelUpCancel.removeEventListener('click', onCancel);
+      unregisterPromptCanceller(cancelSelf);
       resolve(result);
     }
     const onCancel = () => cleanup(null);
+    const cancelSelf = () => cleanup(null);
     for (const option of options) {
       const button = document.createElement('button');
       button.textContent = option.label;
@@ -1156,6 +1247,7 @@ function promptPickLevelUp({ currentLevel, options }) {
     }
     levelUpModal.classList.remove('hidden');
     levelUpCancel.addEventListener('click', onCancel);
+    registerPromptCanceller(cancelSelf);
   });
 }
 
@@ -1859,6 +1951,7 @@ function confirmYesNo(text) {
       }
       confirmYes.removeEventListener('click', onYes);
       confirmNo.removeEventListener('click', onNo);
+      unregisterPromptCanceller(cancelSelf);
       resolve(result);
     }
     function onYes() {
@@ -1867,14 +1960,32 @@ function confirmYesNo(text) {
     function onNo() {
       cleanup(false);
     }
+    function cancelSelf() {
+      cleanup(false);
+    }
     confirmYes.addEventListener('click', onYes);
     confirmNo.addEventListener('click', onNo);
+    registerPromptCanceller(cancelSelf);
   });
 }
 
 /** カードを選ぶと画像・効果詳細と捨てる確認を同じモーダル内に表示する。 */
 function promptDiscardChoice(hand) {
   return new Promise((resolve) => {
+    // キャンセル操作は本来存在しない（手札上限は強制）が、退出時は
+    // _isCancelled側で処理を打ち切るので、ここでは先頭のカードを返して
+    // 待機を解くだけでよい。
+    function cancelSelf() {
+      finish(hand[0] ?? null);
+    }
+    function finish(card) {
+      discardConfirmYes.removeEventListener('click', onYes);
+      discardConfirmNo.removeEventListener('click', onNo);
+      discardModal.classList.add('hidden');
+      unregisterPromptCanceller(cancelSelf);
+      resolve(card);
+    }
+
     discardHint.textContent = '手札が7枚になりました。捨てるカードを選んでください';
     discardChoices.replaceChildren();
     discardChoices.classList.remove('hidden');
@@ -1887,6 +1998,8 @@ function promptDiscardChoice(hand) {
       discardHint.classList.remove('hidden');
     }
 
+    let onYes = () => {};
+    let onNo = () => {};
     function showConfirmation(card) {
       renderCardEl(discardConfirmCard, card);
       discardConfirmDetail.textContent = describeCardDetail(card);
@@ -1894,19 +2007,14 @@ function promptDiscardChoice(hand) {
       discardHint.classList.add('hidden');
       discardConfirm.classList.remove('hidden');
 
-      function cleanup() {
+      discardConfirmYes.removeEventListener('click', onYes);
+      discardConfirmNo.removeEventListener('click', onNo);
+      onYes = () => finish(card);
+      onNo = () => {
         discardConfirmYes.removeEventListener('click', onYes);
         discardConfirmNo.removeEventListener('click', onNo);
-      }
-      function onYes() {
-        cleanup();
-        discardModal.classList.add('hidden');
-        resolve(card);
-      }
-      function onNo() {
-        cleanup();
         showPicker();
-      }
+      };
       discardConfirmYes.addEventListener('click', onYes);
       discardConfirmNo.addEventListener('click', onNo);
     }
@@ -1919,6 +2027,7 @@ function promptDiscardChoice(hand) {
       discardChoices.appendChild(el);
     }
     discardModal.classList.remove('hidden');
+    registerPromptCanceller(cancelSelf);
   });
 }
 
@@ -5254,6 +5363,7 @@ function forceTerminateBoardSession() {
   game?.cancel?.();
   cancelActiveBattleItemPicker?.();
   cancelActiveBattleItemPicker = null;
+  cancelAllActivePrompts();
   battleSceneModal?.classList.add('hidden');
   battleItemPickerBox?.classList.add('hidden');
   battleMessageText?.classList.add('hidden');
@@ -5274,8 +5384,6 @@ function forceTerminateBoardSession() {
   tiles = undefined;
   currentMapId = null;
   activeStoryStageIndex = null;
-  activeStorySessionMeta = null;
-  activeStorySessionMeta = null;
   activeStorySessionMeta = null;
   stopMusic();
   appEl?.classList.add('hidden');
