@@ -1603,9 +1603,9 @@ export class Game {
    * 配置されたモンスターは、所有者・属性を問わず周回ごとに最大基礎HPの
    * 10%回復する（全プレイヤー共通のルール）。チェックポイント未達成で
    * ボーナス無しの周回でも、ゴールを通過したこと自体は変わらないので
-   * 回復は適用する。「最大基礎HP」は素のdef.hp＋永続呪いの加算に加え、
-   * 同属性ボーナス（土地レベル×10）も含む＝土地情報等アイドル時のHP
-   * 上限と同じ基準。
+   * 回復は適用する。回復の上限は「基礎HP」＝素のdef.hp＋永続呪いの加算まで
+   * とし、同属性ボーナス（土地レベル×10）は含めない＝基礎HPを超えて回復
+   * させない。
    * メカニックマソ: 自分の盤面のどこかに配置されていれば、自分が所有する
    * 雷属性モンスターだけこの汎用10%にさらに+10%上乗せされる（合計20%）。
    */
@@ -1615,7 +1615,8 @@ export class Game {
       if (!t.unit) continue;
       const mechanicMasoBonus = hasMechanicMaso && t.unit.def.element === Element.THUNDER;
       const healRatio = mechanicMasoBonus ? 0.2 : 0.1;
-      const maxHp = this._baseStats(t.unit).hp + this._elementHpBonus(t.unit, t);
+      // 上限は基礎HP（同属性ボーナスは含めない）。
+      const maxHp = this._baseStats(t.unit).hp;
       const healed = Math.min(t.unit.currentHp + Math.round(maxHp * healRatio), maxHp);
       if (healed > t.unit.currentHp) {
         t.unit.currentHp = healed;
