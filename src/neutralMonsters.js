@@ -41,6 +41,7 @@ export const GASHAAN_FIELD_MONSTER = {
   traits: ['pierce'],
   ability: { type: 'warpToAnyEmptyLand' },
   effectDescription: '貫通。土地コマンド: 任意の空き地へ移動する',
+  imageDataUrl: assetUrl('/images/card-art/gasya-n.png'),
 };
 
 /** 無属性モンスター20種。画像未指定時はcardArt.jsの無属性共通画像を使う。 */
@@ -59,18 +60,21 @@ export const NEUTRAL_MONSTER_CATALOG = {
     traits: ['reflectHalfDamage'],
     effect: { type: 'fusionSummon', partners: ['kodaiNoGearB', 'kodaiNoGearC'] },
     effectDescription: '受けたダメージの1/2を相手に反射。ほかのギアが2種類配置された状態で召喚すると…',
+    imageDataUrl: assetUrl('/images/card-art/gearA.png'),
   }),
   kodaiNoGearB: neutralMonster('kodaiNoGearB', '古代のギアB', Rarity.S, 25, 10, {
     cost: 10,
     traits: ['elementHpBonusIgnoreElement'],
     effect: { type: 'fusionSummon', partners: ['kodaiNoGearA', 'kodaiNoGearC'] },
     effectDescription: 'どの属性の土地でも土地レベル×10のHP加算を受ける。ほかのギアが2種類配置された状態で召喚すると…',
+    imageDataUrl: assetUrl('/images/card-art/gearB.png'),
   }),
   kodaiNoGearC: neutralMonster('kodaiNoGearC', '古代のギアC', Rarity.S, 25, 10, {
     cost: 10,
     traits: ['neutralHpAura'],
     effect: { type: 'fusionSummon', partners: ['kodaiNoGearA', 'kodaiNoGearB'] },
     effectDescription: '配置中、すべての無属性モンスターは戦闘中HP+10。ほかのギアが2種類配置された状態で召喚すると…',
+    imageDataUrl: assetUrl('/images/card-art/gearC.png'),
   }),
   toumeiNingen: neutralMonster('toumeiNingen', '透明人間', Rarity.N, 10, 20, {
     effect: { type: 'challengeOdds', attackFailureChance: 0, negateIncomingChance: 0.75 },
