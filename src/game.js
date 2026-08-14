@@ -3088,13 +3088,17 @@ export class Game {
     };
     const gears = options.filter(isGear);
 
-    // 全種類の古代ギアがデッキに入っているCPUは、無色地ではレインボーカメレオン等の
-    // 無属性より古代ギアを優先する（＝無色地では①をスキップして②のギア優先へ回し、
-    // ガシャーン合体を狙う）。属性地（火/水/雷/森）では従来どおり①を適用。
-    const preferGearsOnNeutral = tile.element === Element.NEUTRAL && this._deckHasAllGears(player);
+    // 全種類の古代ギアがデッキに入っているCPUは、無色地に限らずどのマスでも
+    // 合体ロボ・ガシャーンの召喚条件（全ギア種を自分の土地に配置）を満たすことを
+    // 最優先する。手札にある「まだ自分の土地に無い種類」のギア＝合体条件を前進させる
+    // ギアがあれば、属性マッチより先にそれを召喚する（④⑤⑥の狙いを全マスへ拡張）。
+    if (this._deckHasAllGears(player)) {
+      const advancingGears = gears.filter((g) => !placedGearIds.has(catalogIdOf(g)));
+      if (advancingGears.length > 0) return pickGear(advancingGears);
+    }
 
     // ① 止まった空き地の属性にマッチするモンスターをレアリティの高い順に。
-    if (!preferGearsOnNeutral) {
+    {
       const matching = options.filter((c) => c.element === tile.element);
       if (matching.length > 0) {
         const topRank = Math.max(...matching.map(rank));
@@ -3106,7 +3110,7 @@ export class Game {
       }
     }
 
-    // ②④⑤⑥ ギアを優先（マッチ無し、または全種ギア持ちCPUの無色地）。
+    // ②④⑤⑥ ギアを優先（属性マッチ無し）。
     if (gears.length > 0) return pickGear(gears);
 
     // フォールバック: 属性マッチ優先でレアリティの高い順（ギアが無い時のレインボー等）。
