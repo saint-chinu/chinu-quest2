@@ -189,6 +189,7 @@ export const SPELL_CATALOG = {
   // なっていた（1のダイスとの重複ミスと判断）。名前に合わせて6として実装。
   diceSix: spell('diceSix', '6のダイス', Rarity.N, 30, 'anyPlayer', { type: 'setNextDice', value: 6 }, '選んだプレイヤーの次のサイコロを6にする'),
   iCanFly: spell('iCanFly', 'アイキャンフライ', Rarity.N, 30, 'anyPlayer', { type: 'doubleNextDice' }, '選んだプレイヤーの次のサイコロの出目×2進む'),
+  cancelCulture: spell('cancelCulture', 'キャンセルカルチャー', Rarity.N, 40, 'enemyPlayerHandCard', { type: 'destroyHandCard' }, '指定した相手の手札を見て、スペルかアイテムを1枚選んで破壊する'),
   blueOcean: spell(
     'blueOcean',
     'ブルーオーシャン',

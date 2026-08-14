@@ -586,6 +586,37 @@ export class Game {
       return { targetPlayerId: targetId };
     }
 
+    // キャンセルカルチャー: 相手を選ぶ→その相手のスペル/アイテムを1枚選んで破壊。
+    if (target === 'enemyPlayerHandCard') {
+      const isDestroyable = (c) => c.type === CardType.SPELL || c.type === CardType.GEAR;
+      const opponents = this.players.filter(
+        (p) => !p.defeated && p.id !== player.id
+          && !(p.allianceId != null && p.allianceId === player.allianceId)
+          && p.hand.some(isDestroyable),
+      );
+      if (opponents.length === 0) {
+        this.onLog('破壊できる手札（スペル/アイテム）を持つ相手がいません');
+        return null;
+      }
+      const targetPlayerId = await this.onPickAbilityTarget(
+        opponents.map((p) => ({ id: p.id, label: `${p.name}の手札を見る（${p.hand.filter(isDestroyable).length}枚）` })),
+        player.id,
+      );
+      if (targetPlayerId == null) return null;
+      const targetPlayer = this.players.find((p) => p.id === targetPlayerId);
+      const cards = targetPlayer ? targetPlayer.hand.filter(isDestroyable) : [];
+      if (cards.length === 0) {
+        this.onLog('対象の相手に破壊できる手札がありません');
+        return null;
+      }
+      const targetCardId = await this.onPickAbilityTarget(
+        cards.map((c) => ({ id: c.id, label: `${c.name}（${c.type === CardType.SPELL ? 'スペル' : 'アイテム'}・${c.rarity}）を破壊` })),
+        player.id,
+      );
+      if (targetCardId == null) return null;
+      return { targetPlayerId, targetCardId };
+    }
+
     if (target === 'twoOwnMonsters') {
       const tiles = this._ownedTiles(player).filter((t) => t.unit);
       if (tiles.length < 2) {
@@ -616,6 +647,21 @@ export class Game {
       : (card.target === 'self' ? player : null);
 
     switch (effect.type) {
+      case 'destroyHandCard': {
+        // キャンセルカルチャー: 対象の手札からスペル/アイテム1枚を破壊（盤外へ）。
+        // 捨札には戻さない（デッキは捨札を再シャッフルするため）。
+        if (!targetPlayer || cast.targetCardId == null) return false;
+        const destroyed = targetPlayer.hand.find((c) => c.id === cast.targetCardId);
+        if (!destroyed) {
+          this.onLog('対象のカードは既に手札にありません');
+          return false;
+        }
+        targetPlayer.hand = targetPlayer.hand.filter((c) => c.id !== cast.targetCardId);
+        this.onLog(`${player.name}は「${card.name}」で${targetPlayer.name}の「${destroyed.name}」を破壊した`);
+        this._notifyState();
+        return false;
+      }
+
       case 'setNextDice':
         targetPlayer.diceCurse = { type: 'fixed', value: effect.value };
         this.onLog(`${targetPlayer.name}は次のサイコロが${effect.value}に固定される呪いをかけられた`);
@@ -3955,6 +4001,7 @@ export class Game {
     await this._cpuMaybeUseDisruptionSpell(this.currentPlayer);
     await this._cpuMaybeUseDamageSpell(this.currentPlayer);
     await this._cpuMaybeUsePoisonSpell(this.currentPlayer);
+    await this._cpuMaybeUseCancelCultureSpell(this.currentPlayer);
     await this._cpuMaybeUseSplitEvenlySpell(this.currentPlayer);
     await this._cpuMaybeUseImmediateSpell(this.currentPlayer);
     await this._cpuMaybeUseDiceSpell(this.currentPlayer);
@@ -4088,6 +4135,33 @@ export class Game {
     if (!best) return;
 
     await this._cpuCastSpell(player, card, { targetTileId: best.id });
+  }
+
+  /**
+   * キャンセルカルチャー（destroyHandCard）のCPU使用判断。妨害スペルなので
+   * 同盟以外の相手を狙う。破壊できる手札（スペル/アイテム）を持つ相手のうち
+   * 総資産が最上位のプレイヤーを対象にし、その中で最もコストの高い（＝価値の
+   * 高い）1枚を破壊する。破壊できる手札を持つ相手がいなければ使わない。
+   */
+  async _cpuMaybeUseCancelCultureSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'destroyHandCard');
+    if (!card || player.currency < (card.cost || 0)) return;
+
+    const isDestroyable = (c) => c.type === CardType.SPELL || c.type === CardType.GEAR;
+    const targetPlayer = this.players
+      .filter((p) => !p.defeated && p.id !== player.id
+        && !(p.allianceId != null && p.allianceId === player.allianceId)
+        && p.hand.some(isDestroyable))
+      .sort((a, b) => this._totalAssetsOf(b) - this._totalAssetsOf(a))[0];
+    if (!targetPlayer) return;
+
+    const targetCard = targetPlayer.hand
+      .filter(isDestroyable)
+      .sort((a, b) => (b.cost || 0) - (a.cost || 0))[0];
+    if (!targetCard) return;
+
+    await this._cpuCastSpell(player, card, { targetPlayerId: targetPlayer.id, targetCardId: targetCard.id });
   }
 
   /**
