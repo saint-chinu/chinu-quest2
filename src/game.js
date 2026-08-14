@@ -2859,7 +2859,9 @@ export class Game {
     if (options.length === 0) return;
 
     if (tile.owner == null) {
-      const card = this._cpuChooseSummonCard(options, tile, profile, player);
+      const card = this._isDanballBoss(player)
+        ? this._cpuChooseSummonCardForDanball(options, tile, player)
+        : this._cpuChooseSummonCard(options, tile, profile, player);
       player.hand = player.hand.filter((c) => c.id !== card.id);
       player.deck.discard(card);
       player.currency -= card.cost;
@@ -3056,6 +3058,54 @@ export class Game {
    * 揃っている（＝これを召喚すればガシャーンに合体する）ものを最優先で
    * 返す。無ければ手札にあるギアの中から適当な1枚を返す（無ければnull）。
    */
+  /** ダンボール男（ラスボス）判定。専用の召喚・スペルAIに切り替える。 */
+  _isDanballBoss(player) {
+    return !!player?.isCPU && player.name === 'ダンボール男';
+  }
+
+  /**
+   * ダンボール男専用の召喚カード選択（合体ロボ・ガシャーン＝3種のギアを揃えるのが狙い）。
+   * ①止まった空き地の属性にマッチするモンスターをレアリティの高い順に召喚
+   * ②マッチしない場合は古代のギアA/B/Cを優先召喚
+   * ④⑤⑥既に自分の土地にあるギアと別種のギアを優先（3種そろえて合体を狙う）
+   * （③の「未知との遭遇」優先使用はスペルフェーズの_cpuMaybeUseEncounterSpellで処理）
+   */
+  _cpuChooseSummonCardForDanball(options, tile, player) {
+    const GEAR_IDS = ['kodaiNoGearA', 'kodaiNoGearB', 'kodaiNoGearC'];
+    const RANK = { N: 0, S: 1, R: 2, EX: 3 };
+    const isGear = (c) => GEAR_IDS.includes(catalogIdOf(c));
+    const rank = (c) => RANK[c.rarity] ?? 0;
+    // ④⑤⑥: 自分の土地に既にあるギアの種類。
+    const placedGearIds = new Set(
+      this.tiles
+        .filter((t) => t.unit && t.unit.ownerId === player.id && isGear(t.unit.def))
+        .map((t) => catalogIdOf(t.unit.def)),
+    );
+    // 手札のギアから「まだ自分の土地に無い種類」を優先。無ければ手札の先頭ギア。
+    const pickGear = (gears) => {
+      const fresh = gears.filter((g) => !placedGearIds.has(catalogIdOf(g)));
+      return (fresh.length > 0 ? fresh : gears)[0];
+    };
+
+    // ① 止まった空き地の属性にマッチするモンスターをレアリティの高い順に。
+    const matching = options.filter((c) => c.element === tile.element);
+    if (matching.length > 0) {
+      const topRank = Math.max(...matching.map(rank));
+      const top = matching.filter((c) => rank(c) === topRank);
+      const gearsInTop = top.filter(isGear);
+      // 最高レア帯にギアが含まれるなら④⑤⑥で未配置のギアを優先。
+      if (gearsInTop.length > 0) return pickGear(gearsInTop);
+      return top[0];
+    }
+
+    // ② マッチしない場合はギアを優先（④⑤⑥）。
+    const gears = options.filter(isGear);
+    if (gears.length > 0) return pickGear(gears);
+
+    // フォールバック: 最も強いカード。
+    return this._strongestCard(options);
+  }
+
   _cpuPreferredGearCard(options, player) {
     const gearIds = ['kodaiNoGearA', 'kodaiNoGearB', 'kodaiNoGearC'];
     const gearOptions = options.filter((c) => gearIds.includes(catalogIdOf(c)));
@@ -3805,6 +3855,9 @@ export class Game {
   async _runCPUTurn() {
     await delay(CPU_PRE_ROLL_MS);
     if (!this.currentPlayer.isCPU) return;
+    // ダンボール男は③手札の「未知との遭遇」を最優先で使う（無属性モンスター＝ギアを
+    // 引き寄せてガシャーン合体を狙う）。1ターン1スペルなので他スペルより先に判定。
+    await this._cpuMaybeUseEncounterSpell(this.currentPlayer);
     if (await this._cpuMaybeWarpToHighValueLand(this.currentPlayer)) return;
     await this._cpuMaybeFixLandElementSpell(this.currentPlayer);
     await this._cpuMaybeUseDisruptionSpell(this.currentPlayer);
@@ -3815,6 +3868,14 @@ export class Game {
     const fixedDiceValue = this.currentPlayer.diceCurse?.type === 'fixed' ? this.currentPlayer.diceCurse.value : null;
     const steps = await this.onCpuRoll(fixedDiceValue);
     this.rollDice(steps);
+  }
+
+  /** ダンボール男専用: 手札に「未知との遭遇」があれば最優先で使用（コスト40G以上あれば）。 */
+  async _cpuMaybeUseEncounterSpell(player) {
+    if (!this._isDanballBoss(player) || player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'encounterUnknown');
+    if (!card || player.currency < (card.cost || 0)) return;
+    await this._cpuCastSpell(player, card, {});
   }
 
   /** 配られたら即時使うスペル。アイキャンフライを副業収入より優先する。 */
