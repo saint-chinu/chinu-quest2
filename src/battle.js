@@ -117,7 +117,7 @@ export function prepareForBattle(unit, bonus = {}) {
 }
 
 /** Traits may come from the monster itself, its one-use item, or a persistent spell curse. */
-function hasTrait(unit, trait) {
+export function hasTrait(unit, trait) {
   return !!unit.def.traits?.includes(trait)
     || unit.items.some((item) => item.traits?.includes(trait))
     || unit.curses.some((curse) => curse.traits?.includes(trait));
@@ -380,7 +380,7 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
 // 高い方が先に攻撃する（同スコア同士は下のresolveBattleが従来通り攻撃側を
 // 先にする）。先制と後攻が同じ戦闘に両方出てきても、単純に「先制側が先・
 // 後攻側が後」で矛盾なく解決できる設計。
-function strikeOrderScore(unit) {
+export function strikeOrderScore(unit) {
   if (hasTrait(unit, 'firstStrike')) return 1;
   if (hasTrait(unit, 'lastStrike')) return -1;
   return 0;

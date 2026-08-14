@@ -2,7 +2,7 @@ import { TileType, mapRequiresAllCheckpoints } from './board.js';
 import { PIECE_REST_Y, UNIT_ICON_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity } from './cards.js';
 import { buildStarterCardList, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf } from './battleCards.js';
-import { createFieldUnit, resolveBattle, equipItem, applyCurse, applyPoison, GoldLedger } from './battle.js';
+import { createFieldUnit, resolveBattle, equipItem, applyCurse, applyPoison, GoldLedger, hasTrait, strikeOrderScore } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay } from './utils.js';
 import { DENCHU_FIELD_MONSTER } from './thunderMonsters.js';
@@ -113,6 +113,7 @@ export class Game {
     onBattleSceneEnter,
     onPickBattleItem,
     onBattleEquip,
+    onBattleTraitReveal,
     onBattleAttack,
     onBattleRetreat,
     onBattleOutcome,
@@ -179,6 +180,7 @@ export class Game {
     this.onPickBattleItem = onPickBattleItem;
     this.onBattleAttack = onBattleAttack;
     this.onBattleEquip = onBattleEquip || (() => Promise.resolve());
+    this.onBattleTraitReveal = onBattleTraitReveal || (() => Promise.resolve());
     this.onBattleRetreat = onBattleRetreat;
     this.onBattleOutcome = onBattleOutcome;
     // 直接ダメージ系の土地コマンド（damage/damageAndSelfDestruct）専用の
@@ -3318,6 +3320,31 @@ export class Game {
 
     const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, battleDefenderBonus);
     result.log.forEach((line) => this.onLog(line));
+
+    // 先制/後攻/貫通が発動する場合、攻撃演出の前に該当カードを一時的に拡大して
+    // ラベルを見せる（先に攻撃する側から順に）。装備アイテム由来の特性
+    // （斬〇剣の後攻・貫通など）も含めて判定するため、equip後・resolveBattle後の
+    // ここで評価する。
+    const attackerScore = strikeOrderScore(attackerUnit);
+    const defenderScore = strikeOrderScore(defenderUnit);
+    const traitLabelsFor = (unit, myScore, theirScore) => {
+      const labels = [];
+      if (hasTrait(unit, 'firstStrike') && myScore > theirScore) labels.push('先制：先に攻撃');
+      if (hasTrait(unit, 'lastStrike') && myScore < theirScore) labels.push('後攻：あとに攻撃');
+      if (hasTrait(unit, 'pierce')) labels.push('貫通：基礎HPに直接ダメージ');
+      return labels;
+    };
+    const traitRevealSides = [
+      { side: 'attacker', labels: traitLabelsFor(attackerUnit, attackerScore, defenderScore) },
+      { side: 'defender', labels: traitLabelsFor(defenderUnit, defenderScore, attackerScore) },
+    ];
+    // 先に攻撃する側（スコアが高い側／同点なら攻撃側）を先に見せる。
+    if (defenderScore > attackerScore) traitRevealSides.reverse();
+    for (const reveal of traitRevealSides) {
+      if (reveal.labels.length === 0) continue;
+      await this.onBattleTraitReveal(reveal);
+      if (this._isCancelled) return null;
+    }
 
     // `exchanges` is already in the order strikes actually happened (先制
     // can flip it to defender-first) - just play them back in order.

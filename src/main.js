@@ -1791,6 +1791,20 @@ async function promptBattleEquip({ side, item, unitName, baseAtk, baseHp, existi
   battleMessageText.classList.add('hidden');
 }
 
+/** 先制/後攻/貫通の発動演出: 該当カードを一時的に10%拡大しラベルを1.5秒表示してから元に戻す。 */
+async function promptBattleTraitReveal({ side, labels }) {
+  const sideEls = battleSide[side];
+  if (!sideEls || !labels || labels.length === 0) return;
+  battleMessageText.textContent = labels.join('\n');
+  battleMessageText.classList.remove('hidden');
+  battleMessageText.classList.add('special');
+  sideEls.card.classList.add('trait-reveal');
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  sideEls.card.classList.remove('trait-reveal');
+  battleMessageText.classList.add('hidden');
+  battleMessageText.classList.remove('special');
+}
+
 function playBattleElementBeam(sourceCard, targetCard, color) {
   return new Promise((resolve) => {
     const layerRect = fxLayer.getBoundingClientRect();
@@ -2351,6 +2365,7 @@ function startBattle(character, storyOptions = {}) {
     onBattleSceneEnter: relayable('battleSceneEnter', promptBattleSceneEnter, { broadcast: true }),
     onPickBattleItem: relayable('pickBattleItem', promptPickBattleItem),
     onBattleEquip: relayable('battleEquip', promptBattleEquip, { broadcast: true }),
+    onBattleTraitReveal: relayable('battleTraitReveal', promptBattleTraitReveal, { broadcast: true }),
     onBattleAttack: relayable('battleAttack', promptBattleAttack, { broadcast: true }),
     onBattleRetreat: relayable('battleRetreat', promptBattleRetreat, { broadcast: true }),
     onBattleOutcome: relayable('battleOutcome', promptBattleOutcome, { broadcast: true }),
