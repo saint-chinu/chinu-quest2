@@ -235,6 +235,13 @@ export class Game {
     // game start, when every neighbor of the start tile is a fair option.
     this.players = resolvedConfigs.map((cfg, id) => {
       const deck = Deck.fromCardList(cfg.deckList ?? buildStarterCardList(cfg.deckVariant));
+      // 「未知との遭遇」用: このデッキにセットされている無属性モンスターの種類
+      // （catalogId）一覧。開始時は全40枚がdrawPileにあるのでここから拾える。
+      const deckNeutralMonsterIds = new Set(
+        deck.drawPile
+          .filter((c) => c.type === CardType.MONSTER && c.element === Element.NEUTRAL)
+          .map((c) => catalogIdOf(c)),
+      );
       return {
       id,
       name: cfg.name,
@@ -243,6 +250,9 @@ export class Game {
       tileId: startingTileId,
       previousTileId: null,
       color: cfg.color,
+      // 「未知との遭遇」判定用: この盤面でこれまでにドローしたカードのcatalogId。
+      deckNeutralMonsterIds,
+      drawnCatalogIds: new Set(),
       // 盤面駒の見た目に使うcanvas - null なら色付き丸のプレースホルダー
       // 駒になる（init()参照）。人間プレイヤーのアイコン選択（iconSheet.js）
       // だけでなく、ストーリーの名前付きNPC（npcArt.js経由）も同じ仕組み
@@ -350,7 +360,7 @@ export class Game {
         : this.scene.createPiece(player.color, pos);
       for (let i = 0; i < STARTING_HAND_SIZE; i++) {
         const card = player.deck.draw();
-        if (card) player.hand.push(card);
+        if (card) { player.hand.push(card); this._recordDraw(player, card); }
       }
     }
     const startPos = this.tiles[this.currentPlayer.tileId].position;
@@ -788,9 +798,66 @@ export class Game {
         this.onLog(`${ELEMENT_LABEL[targetTile.element]}属性の土地に聖域の呪いをかけた（侵略不能・通行料ゼロ）`);
         return false;
 
+      case 'encounterUnknown':
+        await this._spellEncounterUnknown(player, card);
+        return false;
+
       default:
         return false;
     }
+  }
+
+  /**
+   * 未知との遭遇: デッキにセットしているのにこの盤面でまだ一度もドローしていない
+   * 無属性モンスターを1体、手札に加える。使うと手札に戻る（捨札には残さない＝
+   * 再シャッフルで増殖しない。手札上限で捨てた時は_enforceHandLimitで消滅）。
+   * 全種遭遇済みなら復帰せず200G＋2ドローを得て終了。
+   * ※呼び出し元useSpellは既にこのカードをdiscardへ入れているので、復帰時はそれを
+   * 取り除いてから新しいidで手札へ戻す。全種遭遇時もdiscardから取り除いて消滅させる。
+   */
+  async _spellEncounterUnknown(player, card) {
+    const removeUsedFromDiscard = () => {
+      player.deck.discardPile = player.deck.discardPile.filter((c) => c.id !== card.id);
+    };
+    const deckNeutrals = player.deckNeutralMonsterIds || new Set();
+    const drawn = player.drawnCatalogIds || new Set();
+    const undrawn = [...deckNeutrals].filter((id) => !drawn.has(id));
+
+    if (undrawn.length === 0) {
+      // 全種遭遇済み: 復帰なし・200G＋2ドロー。
+      removeUsedFromDiscard();
+      player.currency += 200;
+      this.onLog('全ての怪異と遭遇済みで報酬を得ます');
+      for (let i = 0; i < 2; i++) {
+        const drawnCard = player.deck.draw();
+        if (drawnCard) { player.hand.push(drawnCard); this._recordDraw(player, drawnCard); }
+      }
+      this._notifyState();
+      await this._enforceHandLimit(player);
+      return;
+    }
+
+    const pickedId = undrawn[Math.floor(Math.random() * undrawn.length)];
+    const def = MONSTER_CATALOG[pickedId]
+      || Object.values(MONSTER_CATALOG).find((m) => catalogIdOf(m) === pickedId);
+    if (def) {
+      const monsterCard = {
+        ...def,
+        id: `encounter-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        catalogId: catalogIdOf(def),
+      };
+      player.hand.push(monsterCard);
+      player.drawnCatalogIds.add(pickedId); // 遭遇済みにする（次回は別の未遭遇から選ばれる）
+      this.onLog(`${player.name}は「未知との遭遇」で${def.name}と遭遇した`);
+    }
+    // 使うと手札に戻る: discardから取り除き、新しいidで手札へ。
+    removeUsedFromDiscard();
+    player.hand.push({
+      ...card,
+      id: `encounter-spell-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    });
+    this._notifyState();
+    await this._enforceHandLimit(player);
   }
 
   /** ブルーオーシャン: 現在地からグラフ距離が最も近い空き地へ瞬間移動する（同着なら抽選）。その場で土地コマンド（土地コマンド・召喚のみ、サイコロ無し）まで済ませてターンを終える。 */
@@ -1102,9 +1169,15 @@ export class Game {
     this.onStoryBattleEnd?.({ won, alivePlayerIds: alive.map((p) => p.id) });
   }
 
+  /** この盤面でドローしたカードのcatalogIdを記録する（「未知との遭遇」の未ドロー判定用）。 */
+  _recordDraw(player, card) {
+    if (card && player.drawnCatalogIds) player.drawnCatalogIds.add(catalogIdOf(card));
+  }
+
   async _drawForTurn(player) {
     const card = player.deck.draw();
     if (!card) return;
+    this._recordDraw(player, card);
 
     if (player.isCPU) {
       this.onLog(`${player.name}はカードを1枚引いた`);
@@ -1130,7 +1203,8 @@ export class Game {
       }
       if (this._isCancelled || !discarded) return;
       player.hand = player.hand.filter((c) => c.id !== discarded.id);
-      player.deck.discard(discarded);
+      // 「未知との遭遇」は捨てると消滅（捨札に残さない＝二度と引けない）。
+      if (catalogIdOf(discarded) !== 'encounterUnknown') player.deck.discard(discarded);
       if (player.isCPU) this.onLog(`${player.name}は手札を1枚捨てた`);
       this._notifyState();
     }
@@ -1709,7 +1783,7 @@ export class Game {
     player.deck.resetShuffle();
     for (let i = 0; i < 5; i++) {
       const card = player.deck.draw();
-      if (card) player.hand.push(card);
+      if (card) { player.hand.push(card); this._recordDraw(player, card); }
     }
     return { message };
   }

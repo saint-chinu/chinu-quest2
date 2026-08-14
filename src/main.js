@@ -4,7 +4,7 @@ import { GameScene, PIECE_REST_Y } from './scene.js';
 import { createBoard, MAPS, TileType, createMapThumbnailCanvas, getMapBackground } from './board.js';
 import { Game } from './game.js';
 import { CardType, CARD_COLOR, ELEMENT_LABEL, Element, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
-import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, buildCharacterDeckList, ITEM_CATALOG } from './battleCards.js';
+import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, buildCharacterDeckList, ITEM_CATALOG, SPELL_CATALOG } from './battleCards.js';
 import { loginOrRegister, saveCharacter } from './auth.js';
 import { getCardCatalog, isLegacyPlaceholderCardName } from './cardCatalog.js';
 import { PACKS, drawPack } from './shopPacks.js';
@@ -3675,6 +3675,11 @@ async function handleStoryBattleEnd(index, { won }) {
       currentCharacter.ownedCards[key] = (currentCharacter.ownedCards[key] || 0) + 1;
     }
   }
+  // 段ボール男（ステージ④）を初めて撃破したら、EXスペル「未知との遭遇」をクリア報酬に。
+  // 受領フラグで一度きり（再戦では付与しない）。
+  if (stage.key === 'danball' && !currentCharacter.receivedEncounterReward) {
+    grantEncounterReward();
+  }
   if (index + 1 > (currentCharacter.storyProgress || 0)) {
     currentCharacter.storyProgress = index + 1;
   }
@@ -4231,6 +4236,18 @@ function cardKey(card) {
   return card.catalogId === 'breedMonster' ? 'breedMonster' : card.name;
 }
 
+/** 段ボール男クリア報酬「未知との遭遇」を所持カードへ一度だけ付与する（受領フラグ付き）。 */
+function grantEncounterReward() {
+  if (!currentCharacter || currentCharacter.receivedEncounterReward) return;
+  const def = SPELL_CATALOG.encounterUnknown;
+  const key = cardKey(def);
+  currentCharacter.ownedCards = currentCharacter.ownedCards || {};
+  currentCharacter.ownedCards[key] = (currentCharacter.ownedCards[key] || 0) + 1;
+  currentCharacter.receivedEncounterReward = true;
+  saveCharacter(currentUserId, currentCharacter);
+  showToast('クリア報酬「未知との遭遇」を入手しました！', 2600);
+}
+
 /** getCardCatalog() plus this character's live breed-monster card (not cached globally - it's per-character and its stats change as parts are equipped). */
 function effectiveCatalog() {
   return [...getCardCatalog(currentUserId), buildBreedCardDef(currentCharacter)];
@@ -4320,6 +4337,11 @@ function renderDeckSlotTabs() {
 }
 
 function showDeckScreen() {
+  // 既に段ボール男をクリア済み（storyProgress>=4）で未受領なら、デッキ画面を開いた
+  // タイミングでクリア報酬「未知との遭遇」を一度だけ付与する（過去クリア勢の救済）。
+  if ((currentCharacter.storyProgress || 0) >= 4 && !currentCharacter.receivedEncounterReward) {
+    grantEncounterReward();
+  }
   if (editingDeckIndex >= currentCharacter.decks.length) editingDeckIndex = 0;
   const editingDeck = currentCharacter.decks[editingDeckIndex];
   renderDeckSlotTabs();

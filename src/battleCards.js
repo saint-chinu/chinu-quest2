@@ -368,6 +368,16 @@ export const SPELL_CATALOG = {
     { type: 'curseSanctuary' },
     '対象のモンスターを他プレイヤーが侵略できない状態にする。通行料も発生しない',
   ),
+  // 段ボール男初回撃破のクリア報酬。EXレア。使うと手札に戻る（捨てたら消滅）。
+  encounterUnknown: spell(
+    'encounterUnknown',
+    '未知との遭遇',
+    Rarity.EX,
+    40,
+    'self',
+    { type: 'encounterUnknown' },
+    'デッキにセットしていてまだ一度もドローしていない無属性モンスターを1体手札に加える（使うと手札に戻る／捨てたら消滅）。全種遭遇済みなら復帰せず200G＋2ドロー',
+  ),
 };
 
 let instanceCounter = 0;
@@ -705,6 +715,7 @@ export const CHARACTER_DECKS = {
       spells: [
         { def: SPELL_CATALOG.twitterLand, count: 2 }, { def: SPELL_CATALOG.senbonZakura, count: 2 },
         { def: SPELL_CATALOG.sideIncome, count: 1 }, { def: SPELL_CATALOG.iCanFly, count: 1 },
+        { def: SPELL_CATALOG.encounterUnknown, count: 1 },
       ],
     },
   },
