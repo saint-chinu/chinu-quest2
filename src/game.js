@@ -3086,24 +3086,39 @@ export class Game {
       const fresh = gears.filter((g) => !placedGearIds.has(catalogIdOf(g)));
       return (fresh.length > 0 ? fresh : gears)[0];
     };
+    const gears = options.filter(isGear);
+
+    // 全種類の古代ギアがデッキに入っているCPUは、無色地ではレインボーカメレオン等の
+    // 無属性より古代ギアを優先する（＝無色地では①をスキップして②のギア優先へ回し、
+    // ガシャーン合体を狙う）。属性地（火/水/雷/森）では従来どおり①を適用。
+    const preferGearsOnNeutral = tile.element === Element.NEUTRAL && this._deckHasAllGears(player);
 
     // ① 止まった空き地の属性にマッチするモンスターをレアリティの高い順に。
-    const matching = options.filter((c) => c.element === tile.element);
-    if (matching.length > 0) {
-      const topRank = Math.max(...matching.map(rank));
-      const top = matching.filter((c) => rank(c) === topRank);
-      const gearsInTop = top.filter(isGear);
-      // 最高レア帯にギアが含まれるなら④⑤⑥で未配置のギアを優先。
-      if (gearsInTop.length > 0) return pickGear(gearsInTop);
-      return top[0];
+    if (!preferGearsOnNeutral) {
+      const matching = options.filter((c) => c.element === tile.element);
+      if (matching.length > 0) {
+        const topRank = Math.max(...matching.map(rank));
+        const top = matching.filter((c) => rank(c) === topRank);
+        const gearsInTop = top.filter(isGear);
+        // 最高レア帯にギアが含まれるなら④⑤⑥で未配置のギアを優先。
+        if (gearsInTop.length > 0) return pickGear(gearsInTop);
+        return top[0];
+      }
     }
 
-    // ② マッチしない場合はギアを優先（④⑤⑥）。
-    const gears = options.filter(isGear);
+    // ②④⑤⑥ ギアを優先（マッチ無し、または全種ギア持ちCPUの無色地）。
     if (gears.length > 0) return pickGear(gears);
 
-    // フォールバック: 最も強いカード。
-    return this._strongestCard(options);
+    // フォールバック: 属性マッチ優先でレアリティの高い順（ギアが無い時のレインボー等）。
+    const fallbackMatching = options.filter((c) => c.element === tile.element);
+    const pool = fallbackMatching.length > 0 ? fallbackMatching : options;
+    return [...pool].sort((a, b) => rank(b) - rank(a))[0];
+  }
+
+  /** デッキに古代のギアA/B/C 全種が入っているか（deckNeutralMonsterIdsで判定）。 */
+  _deckHasAllGears(player) {
+    const ids = player?.deckNeutralMonsterIds;
+    return !!ids && ['kodaiNoGearA', 'kodaiNoGearB', 'kodaiNoGearC'].every((g) => ids.has(g));
   }
 
   _cpuPreferredGearCard(options, player) {

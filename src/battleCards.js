@@ -698,7 +698,7 @@ export const CHARACTER_DECKS = {
       monsters: [
         { def: MONSTER_CATALOG.kodaiNoGearA, count: 2 }, { def: MONSTER_CATALOG.kodaiNoGearB, count: 2 },
         { def: MONSTER_CATALOG.kodaiNoGearC, count: 2 }, { def: MONSTER_CATALOG.kunekune, count: 1 },
-        { def: MONSTER_CATALOG.rainbowChameleon, count: 2 }, { def: MONSTER_CATALOG.kaentake, count: 2 },
+        { def: MONSTER_CATALOG.rainbowChameleon, count: 1 }, { def: MONSTER_CATALOG.kaentake, count: 2 },
         { def: MONSTER_CATALOG.fireKick, count: 2 }, { def: MONSTER_CATALOG.hitodama, count: 2 },
         { def: MONSTER_CATALOG.hezumaDragon, count: 1 }, { def: MONSTER_CATALOG.flameGod, count: 1 },
         { def: MONSTER_CATALOG.hatsudenOni, count: 2 }, { def: MONSTER_CATALOG.raiun, count: 2 },
@@ -710,7 +710,7 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.stegoro, count: 1 }, { def: ITEM_CATALOG.twinHammer, count: 1 },
         { def: ITEM_CATALOG.fushichoNoKen, count: 1 }, { def: ITEM_CATALOG.heikeNoYoroi, count: 1 },
         { def: ITEM_CATALOG.zangokuKen, count: 1 }, { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
-        { def: ITEM_CATALOG.peeStaff, count: 1 },
+        { def: ITEM_CATALOG.peeStaff, count: 1 }, { def: ITEM_CATALOG.pegasusSword, count: 1 },
       ],
       spells: [
         { def: SPELL_CATALOG.twitterLand, count: 2 }, { def: SPELL_CATALOG.senbonZakura, count: 2 },
