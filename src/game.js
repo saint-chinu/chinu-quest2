@@ -3058,11 +3058,16 @@ export class Game {
   }
 
   _cpuChooseSummonCard(options, tile, profile, player) {
-    const gearCard = this._cpuPreferredGearCard(options, player);
-    if (gearCard) return gearCard;
-
     const onElement = options.filter((c) => this._cardBenefitsFromLandElement(c, tile));
     const offElement = options.filter((c) => !this._cardBenefitsFromLandElement(c, tile));
+
+    // 属性マッチ（土地ボーナスを活かせる）カードが手札にあれば最優先。ギア召喚を
+    // 優先するのは、マッチするカードが手札に無い空き地に止まった場合のみ。
+    if (onElement.length === 0) {
+      const gearCard = this._cpuPreferredGearCard(options, player);
+      if (gearCard) return gearCard;
+    }
+
     const preferOff = onElement.length === 0 || (offElement.length > 0 && Math.random() < profile.offElementSummonChance);
     const pool = preferOff && offElement.length > 0 ? offElement : onElement.length > 0 ? onElement : offElement;
     return this._strongestCard(pool);
@@ -3103,16 +3108,8 @@ export class Game {
     };
     const gears = options.filter(isGear);
 
-    // 全種類の古代ギアがデッキに入っているCPUは、無色地に限らずどのマスでも
-    // 合体ロボ・ガシャーンの召喚条件（全ギア種を自分の土地に配置）を満たすことを
-    // 最優先する。手札にある「まだ自分の土地に無い種類」のギア＝合体条件を前進させる
-    // ギアがあれば、属性マッチより先にそれを召喚する（④⑤⑥の狙いを全マスへ拡張）。
-    if (this._deckHasAllGears(player)) {
-      const advancingGears = gears.filter((g) => !placedGearIds.has(catalogIdOf(g)));
-      if (advancingGears.length > 0) return pickGear(advancingGears);
-    }
-
-    // ① 止まった空き地の属性を活かせるモンスターをレアリティの高い順に。
+    // ① 止まった空き地の属性を活かせるモンスターをレアリティの高い順に【最優先】。
+    // 属性マッチのカードが手札にあれば必ずこれを召喚する。
     // レインボーカメレオンは有属性土地でここに含まれ、無色地では含まれない。
     {
       const matching = options.filter((c) => this._cardBenefitsFromLandElement(c, tile));
@@ -3126,7 +3123,9 @@ export class Game {
       }
     }
 
-    // ②④⑤⑥ ギアを優先（属性マッチ無し）。
+    // ②④⑤⑥ 属性マッチのカードが手札に無い空き地でのみ、合体（ガシャーン）を狙って
+    // ギアを優先召喚する。pickGearが「まだ自分の土地に無い種類」を優先するので、
+    // 合体条件を前進させるギアから置いていく。
     if (gears.length > 0) return pickGear(gears);
 
     // フォールバック: 土地を活かせるカード優先でレアリティの高い順（ギアが無い時のレインボー等）。
