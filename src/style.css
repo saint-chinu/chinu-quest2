@@ -2072,6 +2072,69 @@ html, body {
   display: none;
 }
 
+/* ===== 目標総資産の選択（CPU戦） ===== */
+#goal-select-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 62;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(4, 12, 20, 0.72);
+  backdrop-filter: blur(4px);
+}
+/* IDセレクタはクラスより詳細度が高い。この明示ルールが無いと class="hidden"
+   でも全画面表示が残り操作不能（フリーズ）になる。必ずIDで隠すこと。 */
+#goal-select-modal.hidden {
+  display: none;
+}
+#goal-select-box {
+  width: min(400px, 94vw);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px 22px;
+  border: 1px solid rgba(174, 232, 238, 0.2);
+  border-radius: 20px;
+  background: linear-gradient(145deg, rgba(18, 48, 66, 0.96), rgba(10, 24, 39, 0.94));
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.5);
+  text-align: center;
+}
+.goal-select-title { font-size: 18px; letter-spacing: 0.03em; }
+.goal-select-hint { font-size: 12px; color: #a8bec9; }
+.goal-select-stepper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin: 4px 0;
+}
+.goal-select-stepper button {
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
+  border: 1px solid rgba(174, 232, 238, 0.3);
+  background: rgba(255, 255, 255, 0.07);
+  color: #d9f4f6;
+  font-size: 20px;
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease, opacity 140ms ease;
+}
+.goal-select-stepper button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(116, 220, 225, 0.7);
+}
+.goal-select-stepper button:disabled { opacity: 0.3; cursor: default; }
+.goal-select-value {
+  min-width: 140px;
+  font-size: 30px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  color: #ffe6a8;
+  text-shadow: 0 2px 14px rgba(244, 202, 104, 0.25);
+}
+.goal-select-value small { font-size: 16px; font-weight: 700; margin-left: 3px; color: #cdeff1; }
+
 #game-menu-box {
   background: #22223b;
   border-radius: 12px;

@@ -415,6 +415,20 @@
         </div>
       </div>
 
+      <div id="goal-select-modal" class="hidden">
+        <div id="goal-select-box">
+          <h3 class="goal-select-title">目標総資産を選択</h3>
+          <p class="goal-select-hint">この金額を超えてゴールに止まると勝利</p>
+          <div class="goal-select-stepper">
+            <button id="goal-select-dec" type="button" aria-label="下げる">◀</button>
+            <div id="goal-select-value" class="goal-select-value"></div>
+            <button id="goal-select-inc" type="button" aria-label="上げる">▶</button>
+          </div>
+          <button id="goal-select-confirm" class="pg-button">この目標で対戦</button>
+          <button id="goal-select-cancel" class="pg-button pg-button-secondary">戻る</button>
+        </div>
+      </div>
+
       <div id="game-menu-modal" class="hidden">
         <div id="game-menu-box">
           <button id="game-menu-mute" aria-label="BGMのオン/オフ">🔊 BGM</button>

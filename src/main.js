@@ -2833,6 +2833,12 @@ const battleMenuScreen = document.getElementById('battle-menu-screen');
 const battleCpuButton = document.getElementById('battle-cpu');
 const battlePvpButton = document.getElementById('battle-pvp');
 const battleMenuBack = document.getElementById('battle-back');
+const goalSelectModal = document.getElementById('goal-select-modal');
+const goalSelectValue = document.getElementById('goal-select-value');
+const goalSelectDec = document.getElementById('goal-select-dec');
+const goalSelectInc = document.getElementById('goal-select-inc');
+const goalSelectConfirm = document.getElementById('goal-select-confirm');
+const goalSelectCancel = document.getElementById('goal-select-cancel');
 const battleBackButton = document.getElementById('battle-back');
 const pvpMenuScreen = document.getElementById('pvp-menu-screen');
 const pvpCreateButton = document.getElementById('pvp-create-button');
@@ -5241,9 +5247,42 @@ breedHelpClose.addEventListener('click', () => {
 
 battleMenuBack.addEventListener('click', showHubScreen);
 
-// CPU戦の目標総資産（これを超えてゴールに止まると勝利）。開始時の所持500Gでは
-// 決して達成できない値にして、「開始＝ゴールしたもの勝ち」状態を防ぐ。
-const CPU_BATTLE_GOAL_CURRENCY = 5000;
+// CPU戦の目標総資産は「先頭の数字（3〜15）×1000G」から選ぶ（下2桁は,000固定）。
+// これを超えてゴールに止まると勝利。開始時の所持500Gでは即達成にならない。
+const GOAL_LEAD_MIN = 3;
+const GOAL_LEAD_MAX = 15;
+const GOAL_LEAD_DEFAULT = 5;
+
+/** 目標総資産の選択（先頭3〜15を◀▶で選ぶ）。選んだ値(3000〜15000)を返す。
+ *  「戻る」でnullを返す。 */
+function promptGoalSelection() {
+  return new Promise((resolve) => {
+    let lead = GOAL_LEAD_DEFAULT;
+    const render = () => {
+      goalSelectValue.innerHTML = `${lead},000<small>G</small>`;
+      goalSelectDec.disabled = lead <= GOAL_LEAD_MIN;
+      goalSelectInc.disabled = lead >= GOAL_LEAD_MAX;
+    };
+    const onDec = () => { if (lead > GOAL_LEAD_MIN) { lead -= 1; render(); } };
+    const onInc = () => { if (lead < GOAL_LEAD_MAX) { lead += 1; render(); } };
+    const cleanup = (result) => {
+      goalSelectModal.classList.add('hidden');
+      goalSelectDec.removeEventListener('click', onDec);
+      goalSelectInc.removeEventListener('click', onInc);
+      goalSelectConfirm.removeEventListener('click', onConfirm);
+      goalSelectCancel.removeEventListener('click', onCancel);
+      resolve(result);
+    };
+    const onConfirm = () => cleanup(lead * 1000);
+    const onCancel = () => cleanup(null);
+    goalSelectDec.addEventListener('click', onDec);
+    goalSelectInc.addEventListener('click', onInc);
+    goalSelectConfirm.addEventListener('click', onConfirm);
+    goalSelectCancel.addEventListener('click', onCancel);
+    render();
+    goalSelectModal.classList.remove('hidden');
+  });
+}
 
 // 退出報酬を得るのに必要な最低経過ターン数。開始直後に退出して下限50Mを
 // 得る無限金策を防ぐ（これ未満で退出した場合は報酬なし）。
@@ -5266,6 +5305,8 @@ async function handleCasualBattleEnd({ won }) {
 battleCpuButton.addEventListener('click', async () => {
   const chosenDeck = await promptDeckSelection({ onCancel: () => showScreen(battleMenuScreen) });
   if (!chosenDeck) return; // 「戻る」で対戦メニューへ
+  const goalCurrency = await promptGoalSelection();
+  if (goalCurrency == null) { showScreen(battleMenuScreen); return; } // 目標選択で「戻る」
   await confirmLandscapeReady();
   preGame.classList.add('hidden');
   appEl.classList.remove('hidden');
@@ -5276,7 +5317,7 @@ battleCpuButton.addEventListener('click', async () => {
       // 目標総資産を設けて「勝敗のつく1本の対戦」にする（storyMode相当の
       // 決着処理を使うが、ストーリーの筋書きは絡まない＝退出報酬の対象）。
       storyMode: true,
-      goalCurrency: CPU_BATTLE_GOAL_CURRENCY,
+      goalCurrency,
       onStoryBattleEnd: handleCasualBattleEnd,
     },
   );
