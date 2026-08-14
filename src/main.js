@@ -2994,7 +2994,6 @@ function showHubScreen() {
   }
   showScreen(hubScreen);
   refreshMailBadge();
-  grantCancelCulture();
 }
 
 // ===== 管理ダッシュボード（管理者のみ） =====
@@ -4264,19 +4263,6 @@ function grantEncounterReward() {
   showToast('クリア報酬「未知との遭遇」を入手しました！', 2600);
 }
 
-/** 全プレイヤーへの配布カード「キャンセルカルチャー」を一度だけ付与する（受領フラグ付き）。
- *  既存プレイヤーは次回ハブを開いたときに、新規プレイヤーもキャラ作成後に受け取る。 */
-function grantCancelCulture() {
-  if (!currentCharacter || currentCharacter.receivedCancelCulture) return;
-  const def = SPELL_CATALOG.cancelCulture;
-  if (!def) return;
-  const key = cardKey(def);
-  currentCharacter.ownedCards = currentCharacter.ownedCards || {};
-  currentCharacter.ownedCards[key] = (currentCharacter.ownedCards[key] || 0) + 1;
-  currentCharacter.receivedCancelCulture = true;
-  saveCharacter(currentUserId, currentCharacter);
-  showToast('新カード「キャンセルカルチャー」を配布しました！', 2800);
-}
 
 // ===== 運営からのお知らせ（メール） =====
 // Firestore announcements/{id}: { subject, body, cards:[{name,count}], createdAt }
