@@ -3345,9 +3345,11 @@ export class Game {
     const savedLog = this.onLog;
     this.onLog = () => {};
     try {
+      // 完成ギアで侵略する場合は合体先ガシャーン(70/70)の想定で勝算を見積もる。
+      const attackerDef = this._gashaanDefIfCompleting(card, attackerOwnerId);
       let wins = 0;
       for (let i = 0; i < trials; i++) {
-        const attackerUnit = createFieldUnit(card, attackerOwnerId);
+        const attackerUnit = createFieldUnit(attackerDef, attackerOwnerId);
         const defenderUnit = this._cloneFieldUnitForSim(defenderTile.unit);
         if (useItem) {
           const item = this._bestBattleItemFromHand(attackerHand);
@@ -3605,6 +3607,23 @@ export class Game {
       this.onLog(`${player.name}の${card.name}が「絶対攻撃」の効果で貫通を得た！`);
     }
 
+    // 完成ギアでの侵略は、侵略と同時に合体してガシャーンで出撃する（他2種のギアを
+    // 消費し、召喚コストを払い戻す＝_maybeFuseGearと同じ扱い）。ダンボール男AIはこれを
+    // 前提に勝率を見積もっている（_gashaanDefIfCompleting参照）。
+    const gearPartnerTiles = this._completingGearPartnerTiles(card, player);
+    if (gearPartnerTiles) {
+      for (const t of gearPartnerTiles) {
+        t.unit = null;
+        t.owner = null;
+        t.transparentCursed = false;
+        this._repaintTileToElement(t);
+      }
+      player.currency += card.cost; // 合体特典: 召喚コスト払い戻し
+      card = { ...GASHAAN_FIELD_MONSTER, id: `gashaan-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+      this.onLog(`${player.name}のギアが侵略と同時に合体し「${card.name}」が出撃！ (召喚コスト払い戻し)`);
+      this._notifyState();
+    }
+
     const defenderPlayer = this.players.find((p) => p.id === tile.owner);
     const attackerUnit = createFieldUnit(card, player.id);
     const defenderUnit = tile.unit;
@@ -3765,6 +3784,24 @@ export class Game {
     tile.unit = createFieldUnit(fusedDef, player.id);
     this.onLog(`${player.name}のギアが合体し「${fusedDef.name}」が誕生した！ (召喚コスト${card.cost}Gを払い戻し)`);
     this._notifyState();
+  }
+
+  /** cardが「他2種のギアが自分の土地に配置済み」の完成ギアなら、そのパートナーtile配列を返す。違えばnull。 */
+  _completingGearPartnerTiles(card, player) {
+    if (card?.effect?.type !== 'fusionSummon') return null;
+    const partnerTiles = card.effect.partners.map((catalogId) =>
+      this.tiles.find((t) => t.unit && t.unit.ownerId === player.id && catalogIdOf(t.unit.def) === catalogId),
+    );
+    return partnerTiles.every(Boolean) ? partnerTiles : null;
+  }
+
+  /** 侵略勝率シミュレーション用: cardが完成ギア（今召喚すれば合体できる）なら合体先ガシャーンのdefを、
+   *  そうでなければcardをそのまま返す（盤面は変更しない）。ダンボール男が「ガシャーン召喚ありき」で
+   *  侵略の勝算を見積もれるようにするため。 */
+  _gashaanDefIfCompleting(card, ownerId) {
+    const player = this.players.find((p) => p.id === ownerId);
+    if (player && this._completingGearPartnerTiles(card, player)) return GASHAAN_FIELD_MONSTER;
+    return card;
   }
 
   /**
