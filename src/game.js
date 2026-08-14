@@ -3933,6 +3933,7 @@ export class Game {
     await this._cpuMaybeFixLandElementSpell(this.currentPlayer);
     await this._cpuMaybeUseDisruptionSpell(this.currentPlayer);
     await this._cpuMaybeUseDamageSpell(this.currentPlayer);
+    await this._cpuMaybeUsePoisonSpell(this.currentPlayer);
     await this._cpuMaybeUseSplitEvenlySpell(this.currentPlayer);
     await this._cpuMaybeUseImmediateSpell(this.currentPlayer);
     await this._cpuMaybeUseDiceSpell(this.currentPlayer);
@@ -3954,7 +3955,14 @@ export class Game {
     if (player.spellUsedThisTurn) return;
     const fly = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'doubleNextDice');
     if (fly && player.currency >= (fly.cost || 0)) {
-      await this._cpuCastSpell(player, fly, { targetPlayerId: player.id });
+      // 強化スペル（アイキャンフライ＝出目2倍）は基本は自分に使う。ただし同盟戦で
+      // 同盟仲間が妨害呪い（1/3固定・後退）を受けている場合は、その仲間にかけて
+      // 呪いを上書きし打ち消す（diceCurseは1枠なので上書き＝解除＋強化になる）。
+      const cursedAlly = this.players.find(
+        (p) => p.id !== player.id && !p.defeated && this._isAllyOf(p, player) && this._hasHarmfulDiceCurse(p),
+      );
+      const targetPlayerId = cursedAlly ? cursedAlly.id : player.id;
+      await this._cpuCastSpell(player, fly, { targetPlayerId });
       return;
     }
     const income = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'lapCountGold');
@@ -3991,19 +3999,74 @@ export class Game {
 
   /**
    * directDamage型スペル（ファイヤーボール/千本桜等）のCPU使用判断。
-   * 対象は_cpuPickDamageTargetで選ぶ。target: 'enemyMonster'の対象範囲
-   * （_resolveSpellCastと同じ - 同盟仲間も対象に含む既存仕様に合わせる）。
+   * 妨害スペルなので同盟戦では同盟仲間のモンスターは対象から除外し、同盟でない
+   * 相手のモンスターだけを狙う。対象は_cpuPickDamageTargetで選ぶ。
    */
   async _cpuMaybeUseDamageSpell(player) {
     if (player.spellUsedThisTurn) return;
     const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'directDamage');
     if (!card || player.currency < (card.cost || 0)) return;
 
-    const candidates = this.tiles.filter((t) => t.unit && t.unit.ownerId !== player.id);
+    const candidates = this.tiles.filter((t) => t.unit && !this._isFriendlyUnitTile(t, player));
     const target = this._cpuPickDamageTarget(candidates, card.effect.amount);
     if (!target) return;
 
     await this._cpuCastSpell(player, card, { targetTileId: target.id });
+  }
+
+  /** 同盟戦の妨害スペル用: そのマスのモンスターが自分または同盟仲間の所有か。 */
+  _isFriendlyUnitTile(tile, player) {
+    const ownerId = tile.unit?.ownerId;
+    if (ownerId == null) return false;
+    if (ownerId === player.id) return true;
+    const owner = this.players.find((p) => p.id === ownerId);
+    return owner?.allianceId != null && owner.allianceId === player.allianceId;
+  }
+
+  /** そのプレイヤーが同盟戦で自分の味方（自分自身または同盟仲間）か。 */
+  _isAllyOf(other, player) {
+    if (other.id === player.id) return true;
+    return other.allianceId != null && other.allianceId === player.allianceId;
+  }
+
+  /**
+   * サイコロ呪い（diceCurse）が「妨害系（＝そのプレイヤーに不利）」か。
+   * 1/3固定（出目を小さく固定）と後退は妨害。6固定と出目2倍は有益なので除外。
+   */
+  _hasHarmfulDiceCurse(player) {
+    const curse = player.diceCurse;
+    if (!curse) return false;
+    if (curse.type === 'reverse') return true;
+    if (curse.type === 'fixed') return (curse.value ?? 6) < 6;
+    return false;
+  }
+
+  /**
+   * 毒霧（poisonArea）のCPU使用判断。妨害スペルなので同盟戦では味方を巻き込まない。
+   * 自分・同盟仲間のモンスターを1体も含まない中心マスの中から、非同盟の相手
+   * モンスターを最も多く毒にできるマスを選ぶ。相手を1体も巻き込めないなら使わない。
+   */
+  async _cpuMaybeUsePoisonSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'poisonArea');
+    if (!card || player.currency < (card.cost || 0)) return;
+
+    let best = null;
+    for (const center of this.tiles) {
+      const area = [center, ...center.neighbors.map((id) => this.tiles[id])];
+      let enemy = 0;
+      let friendly = 0;
+      for (const t of area) {
+        if (!t.unit) continue;
+        if (this._isFriendlyUnitTile(t, player)) friendly += 1;
+        else enemy += 1;
+      }
+      if (friendly > 0 || enemy === 0) continue; // 味方を巻き込むマス・敵ゼロのマスは避ける
+      if (!best || enemy > best.enemy) best = { id: center.id, enemy };
+    }
+    if (!best) return;
+
+    await this._cpuCastSpell(player, card, { targetTileId: best.id });
   }
 
   /**
