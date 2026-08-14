@@ -379,6 +379,64 @@ export const SPELL_CATALOG = {
     { type: 'encounterUnknown' },
     'デッキにセットしていてまだ一度もドローしていない無属性モンスターを1体手札に加える（使うと手札に戻る／捨てたら消滅）。全種遭遇済みなら復帰せず200G＋2ドロー',
   ),
+  // 色の魔法陣シリーズ: デッキ内（drawPile/discardPile）の該当属性モンスターを
+  // 1枚ランダムに引き当てて空き地へ直接召喚する（手札もコストも経由しない）。
+  // 対象の属性モンスターがデッキ内に1体も残っていない場合は150Gを得る。
+  neutralMagicCircle: spell(
+    'neutralMagicCircle',
+    '無色の魔法陣',
+    Rarity.S,
+    60,
+    'none',
+    { type: 'randomDeckMonsterSummon', element: Element.NEUTRAL },
+    'デッキの中の無属性モンスターをランダムな空き地に召喚する。対象のモンスターがデッキにいない場合、150Gを得る',
+  ),
+  fireMagicCircle: spell(
+    'fireMagicCircle',
+    '赤色の魔法陣',
+    Rarity.S,
+    60,
+    'none',
+    { type: 'randomDeckMonsterSummon', element: Element.FIRE },
+    'デッキの中の火属性モンスターをランダムな空き地に召喚する。対象のモンスターがデッキにいない場合、150Gを得る',
+  ),
+  waterMagicCircle: spell(
+    'waterMagicCircle',
+    '青色の魔法陣',
+    Rarity.S,
+    60,
+    'none',
+    { type: 'randomDeckMonsterSummon', element: Element.WATER },
+    'デッキの中の水属性モンスターをランダムな空き地に召喚する。対象のモンスターがデッキにいない場合、150Gを得る',
+  ),
+  forestMagicCircle: spell(
+    'forestMagicCircle',
+    '緑色の魔法陣',
+    Rarity.S,
+    60,
+    'none',
+    { type: 'randomDeckMonsterSummon', element: Element.FOREST },
+    'デッキの中の森属性モンスターをランダムな空き地に召喚する。対象のモンスターがデッキにいない場合、150Gを得る',
+  ),
+  thunderMagicCircle: spell(
+    'thunderMagicCircle',
+    '黄色の魔法陣',
+    Rarity.S,
+    60,
+    'none',
+    { type: 'randomDeckMonsterSummon', element: Element.THUNDER },
+    'デッキの中の雷属性モンスターをランダムな空き地に召喚する。対象のモンスターがデッキにいない場合、150Gを得る',
+  ),
+  // この試合中に死んだモンスター（敵味方問わず）を1体選び、自分の配下として蘇生する。
+  necromancer: spell(
+    'necromancer',
+    'ネクロマンサー',
+    Rarity.R,
+    100,
+    'deadMonster',
+    { type: 'reviveDeadMonster' },
+    'この試合中に死んだモンスター（敵プレイヤーのものも対象）の中から1体を選び、ランダムな空き地に自分の所有として蘇生する',
+  ),
 };
 
 let instanceCounter = 0;
@@ -697,12 +755,12 @@ export const CHARACTER_DECKS = {
   danball: {
     composition: {
       monsters: [
-        { def: MONSTER_CATALOG.kodaiNoGearA, count: 2 }, { def: MONSTER_CATALOG.kodaiNoGearB, count: 2 },
-        { def: MONSTER_CATALOG.kodaiNoGearC, count: 2 }, { def: MONSTER_CATALOG.kunekune, count: 1 },
-        { def: MONSTER_CATALOG.rainbowChameleon, count: 1 }, { def: MONSTER_CATALOG.kaentake, count: 2 },
-        { def: MONSTER_CATALOG.fireKick, count: 2 }, { def: MONSTER_CATALOG.hitodama, count: 2 },
+        { def: MONSTER_CATALOG.kodaiNoGearA, count: 3 }, { def: MONSTER_CATALOG.kodaiNoGearB, count: 3 },
+        { def: MONSTER_CATALOG.kodaiNoGearC, count: 3 }, { def: MONSTER_CATALOG.kunekune, count: 1 },
+        { def: MONSTER_CATALOG.rainbowChameleon, count: 1 }, { def: MONSTER_CATALOG.kaentake, count: 1 },
+        { def: MONSTER_CATALOG.fireKick, count: 1 }, { def: MONSTER_CATALOG.hitodama, count: 2 },
         { def: MONSTER_CATALOG.hezumaDragon, count: 1 }, { def: MONSTER_CATALOG.flameGod, count: 1 },
-        { def: MONSTER_CATALOG.hatsudenOni, count: 2 }, { def: MONSTER_CATALOG.raiun, count: 2 },
+        { def: MONSTER_CATALOG.hatsudenOni, count: 1 }, { def: MONSTER_CATALOG.raiun, count: 2 },
         { def: MONSTER_CATALOG.erekiMagician, count: 1 }, { def: MONSTER_CATALOG.aruKagakuNo, count: 1 },
         { def: MONSTER_CATALOG.raijin, count: 1 },
       ],
@@ -714,9 +772,9 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.peeStaff, count: 1 }, { def: ITEM_CATALOG.pegasusSword, count: 1 },
       ],
       spells: [
-        { def: SPELL_CATALOG.twitterLand, count: 2 }, { def: SPELL_CATALOG.senbonZakura, count: 2 },
-        { def: SPELL_CATALOG.sideIncome, count: 1 }, { def: SPELL_CATALOG.iCanFly, count: 1 },
-        { def: SPELL_CATALOG.encounterUnknown, count: 1 },
+        { def: SPELL_CATALOG.twitterLand, count: 1 }, { def: SPELL_CATALOG.senbonZakura, count: 2 },
+        { def: SPELL_CATALOG.sideIncome, count: 1 }, { def: SPELL_CATALOG.neutralMagicCircle, count: 1 },
+        { def: SPELL_CATALOG.necromancer, count: 1 }, { def: SPELL_CATALOG.encounterUnknown, count: 1 },
       ],
     },
   },

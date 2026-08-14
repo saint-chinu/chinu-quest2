@@ -210,6 +210,11 @@ export class Game {
     // 何もしないようにするためのフラグ（_isCancelled/cancel参照）。
     this._isCancelled = false;
 
+    // ネクロマンサー用: この試合中に死んだモンスターの記録（敵味方問わず、
+    // _handleUnitDeathで一括記録・蘇生時に消費される。プレイヤー個別ではなく
+    // Game全体で1本 - 「敵プレイヤーのモンスターも対象」のため）。
+    this._deadMonstersThisMatch = [];
+
     // 2人対戦（通常の対戦モード）呼び出し元との後方互換: playerConfigsが
     // 渡されなければ、これまで通りhumanPlayer+固定CPUの2人構成を組む。
     // ストーリーモード（1vs1vs1・2vs2同盟戦など）はplayerConfigsで任意の
@@ -621,6 +626,26 @@ export class Game {
       return { targetPlayerId, targetCardId };
     }
 
+    // ネクロマンサー: この試合中に死んだモンスター（敵味方問わず）から1体選ぶ。
+    if (target === 'deadMonster') {
+      if (this._deadMonstersThisMatch.length === 0) {
+        this.onLog('この試合ではまだモンスターが死んでいません');
+        return null;
+      }
+      const targetId = await this.onPickAbilityTarget(
+        this._deadMonstersThisMatch.map((entry) => {
+          const originalOwner = this.players.find((p) => p.id === entry.originalOwnerId);
+          return {
+            id: entry.id,
+            label: `${originalOwner?.name ?? '???'}の${entry.def.name}（${entry.def.rarity}・ATK${entry.def.atk}/HP${entry.def.hp}）を蘇生`,
+          };
+        }),
+        player.id,
+      );
+      if (targetId == null) return null;
+      return { targetDeadMonsterId: targetId };
+    }
+
     if (target === 'twoOwnMonsters') {
       const tiles = this._ownedTiles(player).filter((t) => t.unit);
       if (tiles.length < 2) {
@@ -853,6 +878,66 @@ export class Game {
       case 'encounterUnknown':
         await this._spellEncounterUnknown(player, card);
         return false;
+
+      // 色の魔法陣シリーズ: デッキ（drawPile/discardPile、手札・盤上は含まない）に
+      // 残っている対象属性のモンスターを1体ランダムに引き当て、ランダムな空き地へ
+      // 直接召喚する（手札もコストも経由しない）。対象が1体もいなければ150Gを得る。
+      case 'randomDeckMonsterSummon': {
+        const pool = [...player.deck.drawPile, ...player.deck.discardPile].filter(
+          (c) => c.type === CardType.MONSTER && c.element === effect.element,
+        );
+        if (pool.length === 0) {
+          player.currency += 150;
+          this.onLog(`${player.name}は「${card.name}」を使ったが対象のモンスターがデッキになく、150Gを得た`);
+          this._notifyState();
+          return false;
+        }
+        const emptyLands = this.tiles.filter((t) => t.type === TileType.LAND && t.owner == null);
+        if (emptyLands.length === 0) {
+          this.onLog('召喚できる空き地がありません');
+          return false;
+        }
+        const picked = pool[Math.floor(Math.random() * pool.length)];
+        if (player.deck.drawPile.some((c) => c.id === picked.id)) {
+          player.deck.drawPile = player.deck.drawPile.filter((c) => c.id !== picked.id);
+        } else {
+          player.deck.discardPile = player.deck.discardPile.filter((c) => c.id !== picked.id);
+        }
+        const targetTile = emptyLands[Math.floor(Math.random() * emptyLands.length)];
+        const summonedCard = { ...picked, id: `magiccircle-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+        this._placeUnit(targetTile, player, summonedCard);
+        this.onLog(`${player.name}は「${card.name}」で${summonedCard.name}を空き地に召喚した`);
+        this._notifyState();
+        await this.onSummonEffect?.({ tileId: targetTile.id, unitName: summonedCard.name });
+        return false;
+      }
+
+      // ネクロマンサー: _deadMonstersThisMatchから対象を取り除き、自分の所有として
+      // ランダムな空き地に蘇生する（元の所有者は問わない）。
+      case 'reviveDeadMonster': {
+        const idx = this._deadMonstersThisMatch.findIndex((entry) => entry.id === cast.targetDeadMonsterId);
+        if (idx === -1) {
+          this.onLog('対象のモンスターは既に蘇生されています');
+          return false;
+        }
+        const emptyLands = this.tiles.filter((t) => t.type === TileType.LAND && t.owner == null);
+        if (emptyLands.length === 0) {
+          this.onLog('召喚できる空き地がありません');
+          return false;
+        }
+        const [entry] = this._deadMonstersThisMatch.splice(idx, 1);
+        const targetTile = emptyLands[Math.floor(Math.random() * emptyLands.length)];
+        const revivedCard = {
+          ...entry.def,
+          id: `necro-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+          catalogId: catalogIdOf(entry.def),
+        };
+        this._placeUnit(targetTile, player, revivedCard);
+        this.onLog(`${player.name}は「ネクロマンサー」で${entry.def.name}を蘇生し、自分の配下にした`);
+        this._notifyState();
+        await this.onSummonEffect?.({ tileId: targetTile.id, unitName: revivedCard.name });
+        return false;
+      }
 
       default:
         return false;
@@ -3824,6 +3909,14 @@ export class Game {
    * 無ければ何もしない。
    */
   async _handleUnitDeath(unit, ownerPlayer) {
+    // ネクロマンサー用の記録。不死鳥/ゾンビ復活で結果的に盤面へ戻る場合も
+    // 「一度死んだ」事実自体は変わらないので、分岐より前に無条件で積む。
+    this._deadMonstersThisMatch.push({
+      id: `dead-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      def: { ...unit.def },
+      originalOwnerId: ownerPlayer.id,
+    });
+
     if (unit.def.effect?.type === 'deathRespawnChance' && Math.random() < unit.def.effect.chance) {
       const emptyLands = this.tiles.filter((t) => t.type === TileType.LAND && t.owner == null);
       if (emptyLands.length > 0) {
@@ -4002,12 +4095,14 @@ export class Game {
     // ダンボール男は③手札の「未知との遭遇」を最優先で使う（無属性モンスター＝ギアを
     // 引き寄せてガシャーン合体を狙う）。1ターン1スペルなので他スペルより先に判定。
     await this._cpuMaybeUseEncounterSpell(this.currentPlayer);
+    await this._cpuMaybeUseMagicCircleSpell(this.currentPlayer);
     if (await this._cpuMaybeWarpToHighValueLand(this.currentPlayer)) return;
     await this._cpuMaybeFixLandElementSpell(this.currentPlayer);
     await this._cpuMaybeUseDisruptionSpell(this.currentPlayer);
     await this._cpuMaybeUseDamageSpell(this.currentPlayer);
     await this._cpuMaybeUsePoisonSpell(this.currentPlayer);
     await this._cpuMaybeUseCancelCultureSpell(this.currentPlayer);
+    await this._cpuMaybeUseNecromancerSpell(this.currentPlayer);
     await this._cpuMaybeUseSplitEvenlySpell(this.currentPlayer);
     await this._cpuMaybeUseImmediateSpell(this.currentPlayer);
     await this._cpuMaybeUseDiceSpell(this.currentPlayer);
@@ -4020,6 +4115,16 @@ export class Game {
   async _cpuMaybeUseEncounterSpell(player) {
     if (!this._isDanballBoss(player) || player.spellUsedThisTurn) return;
     const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'encounterUnknown');
+    if (!card || player.currency < (card.cost || 0)) return;
+    await this._cpuCastSpell(player, card, {});
+  }
+
+  /** ダンボール男専用: 手札に「無色の魔法陣」があれば積極的に使用する（ギア/合体狙いのデッキと相性が良いため）。 */
+  async _cpuMaybeUseMagicCircleSpell(player) {
+    if (!this._isDanballBoss(player) || player.spellUsedThisTurn) return;
+    const card = player.hand.find(
+      (c) => c.type === CardType.SPELL && c.effect?.type === 'randomDeckMonsterSummon' && c.effect.element === Element.NEUTRAL,
+    );
     if (!card || player.currency < (card.cost || 0)) return;
     await this._cpuCastSpell(player, card, {});
   }
@@ -4168,6 +4273,40 @@ export class Game {
     if (!targetCard) return;
 
     await this._cpuCastSpell(player, card, { targetPlayerId: targetPlayer.id, targetCardId: targetCard.id });
+  }
+
+  /**
+   * ネクロマンサー（reviveDeadMonster）の全AI共通の使用判断。
+   * ①この試合で4体以上モンスターが死んでいない限り使わない。
+   * ②手札が上限（HAND_LIMIT）に達していて余りそうな時だけ使う
+   * （使うと手札から1枚減るので、上限に達した手札を有効活用できる）。
+   * ③蘇生先の空き地が無ければ使わない。
+   */
+  async _cpuMaybeUseNecromancerSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'reviveDeadMonster');
+    if (!card || player.currency < (card.cost || 0)) return;
+    if (this._deadMonstersThisMatch.length < 4) return;
+    if (player.hand.length < HAND_LIMIT) return;
+    if (!this.tiles.some((t) => t.type === TileType.LAND && t.owner == null)) return;
+
+    const target = this._cpuChooseNecromancerTarget();
+    if (!target) return;
+    await this._cpuCastSpell(player, card, { targetDeadMonsterId: target.id });
+  }
+
+  /**
+   * ネクロマンサーの蘇生対象選び: ①レアリティが高い順（EX→R→S→N）、
+   * ②同レアリティならHP+ATK合計が高い順、③さらに同点なら先制/貫通持ちを優先。
+   */
+  _cpuChooseNecromancerTarget() {
+    const RARITY_RANK = { [Rarity.EX]: 3, [Rarity.R]: 2, [Rarity.S]: 1, [Rarity.N]: 0 };
+    const hasPriorityTrait = (def) => (def.traits?.includes('firstStrike') || def.traits?.includes('pierce')) ? 1 : 0;
+    return [...this._deadMonstersThisMatch].sort((a, b) => (
+      (RARITY_RANK[b.def.rarity] ?? 0) - (RARITY_RANK[a.def.rarity] ?? 0)
+      || (b.def.hp + b.def.atk) - (a.def.hp + a.def.atk)
+      || hasPriorityTrait(b.def) - hasPriorityTrait(a.def)
+    ))[0];
   }
 
   /**
