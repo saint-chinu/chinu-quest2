@@ -719,6 +719,7 @@ html, body {
 }
 
 .hub-shell {
+  position: relative;
   width: min(820px, 94vw);
   padding: clamp(22px, 4vw, 38px);
   border: 1px solid rgba(174, 232, 238, 0.16);
@@ -797,6 +798,178 @@ html, body {
 .hub-tile[data-mode="shop"] { --tile-accent: #f4ca68; }
 .hub-tile[data-mode="breed"] { --tile-accent: #73e69c; }
 .hub-tile[data-mode="card-editor"] { --tile-accent: #ff93c4; }
+
+/* ===== 運営メール（お知らせ）: ハブ右上のメールボタン ===== */
+.hub-mail-button {
+  position: absolute;
+  top: clamp(14px, 3vw, 22px);
+  right: clamp(14px, 3vw, 22px);
+  z-index: 4;
+  display: grid;
+  place-items: center;
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border: 1px solid rgba(174, 232, 238, 0.3);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.03));
+  color: #d9f4f6;
+  cursor: pointer;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.28);
+  transition: transform 160ms ease, border-color 160ms ease, background 160ms ease;
+}
+.hub-mail-button:hover,
+.hub-mail-button:focus-visible {
+  transform: translateY(-2px);
+  border-color: rgba(116, 220, 225, 0.7);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.05));
+  outline: none;
+}
+.hub-mail-icon { font-size: 22px; line-height: 1; }
+.hub-mail-badge {
+  position: absolute;
+  top: -7px;
+  right: -8px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  background: #ff4d5e;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  box-shadow: 0 2px 8px rgba(255, 77, 94, 0.55);
+  animation: mail-badge-pulse 1.6s ease-in-out infinite;
+}
+@keyframes mail-badge-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.14); }
+}
+
+/* ===== メールモーダル ===== */
+#mail-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: rgba(4, 12, 20, 0.72);
+  backdrop-filter: blur(4px);
+}
+#mail-box {
+  width: min(560px, 96vw);
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: clamp(16px, 3vw, 24px);
+  border: 1px solid rgba(174, 232, 238, 0.2);
+  border-radius: 22px;
+  background: linear-gradient(145deg, rgba(18, 48, 66, 0.96), rgba(10, 24, 39, 0.94));
+  box-shadow: 0 26px 70px rgba(0, 0, 0, 0.5);
+}
+.mail-header { display: flex; align-items: center; gap: 10px; }
+.mail-header-icon { font-size: 24px; }
+.mail-header-title { font-size: 18px; letter-spacing: 0.03em; }
+.mail-list {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  -webkit-overflow-scrolling: touch;
+}
+.mail-item {
+  padding: 14px 15px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 15px;
+  background: rgba(255, 255, 255, 0.04);
+}
+.mail-item.is-new {
+  border-color: rgba(255, 77, 94, 0.5);
+  background: rgba(255, 77, 94, 0.07);
+}
+.mail-item-head { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.mail-item-new-tag {
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #ff4d5e;
+  color: #fff;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+}
+.mail-item-subject { font-size: 15px; font-weight: 800; color: #eaf7f8; }
+.mail-item-date { margin-left: auto; font-size: 10px; color: #8fa8b4; }
+.mail-item-body { font-size: 13px; line-height: 1.6; color: #cfe0e8; white-space: pre-wrap; }
+.mail-item-cards {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.14);
+}
+.mail-item-cards-label { font-size: 11px; font-weight: 800; color: #74dce1; margin-bottom: 6px; }
+.mail-card-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.mail-card-chip {
+  padding: 4px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(244, 202, 104, 0.4);
+  background: rgba(244, 202, 104, 0.12);
+  color: #ffe6a8;
+  font-size: 11px;
+  font-weight: 700;
+}
+.mail-empty { padding: 26px 8px; text-align: center; color: #8fa8b4; font-size: 13px; }
+
+/* ===== 管理: お知らせ配信フォーム ===== */
+.admin-compose {
+  margin: 6px 0 18px;
+  padding: 16px;
+  border: 1px solid rgba(116, 220, 225, 0.24);
+  border-radius: 16px;
+  background: rgba(116, 220, 225, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.admin-compose-title { font-size: 15px; color: #cdeff1; }
+.admin-compose-hint { font-size: 11px; color: #90a9b5; }
+.admin-compose-input,
+.admin-compose-textarea,
+.admin-compose-count {
+  width: 100%;
+  padding: 9px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.28);
+  color: #eaf7f8;
+  font-size: 13px;
+  font-family: inherit;
+}
+.admin-compose-textarea { min-height: 72px; resize: vertical; }
+.admin-compose-cardrow { display: flex; gap: 8px; align-items: center; }
+.admin-compose-cardrow .admin-compose-input { flex: 1; }
+.admin-compose-count { width: 62px; flex: none; text-align: center; }
+.admin-compose-attachments { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.admin-compose-attachments li {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 10px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+}
+.admin-compose-attachments button {
+  margin-left: auto;
+  border: none;
+  background: rgba(255, 77, 94, 0.2);
+  color: #ffb4bc;
+  border-radius: 7px;
+  padding: 3px 9px;
+  cursor: pointer;
+  font-size: 11px;
+}
+.admin-compose-status { font-size: 12px; min-height: 16px; }
+.admin-compose-status.ok { color: #73e69c; }
+.admin-compose-status.err { color: #ff8a95; }
 
 .hub-tile:hover,
 .hub-tile:focus-visible {
