@@ -3042,12 +3042,27 @@ export class Game {
    * 選んだプール内ではATK+HP合計が高いカードを優先する（同点ならコストが
    * 高い方＝より強力な方を優先）。
    */
+  /**
+   * そのカードが「この土地の属性HPボーナス」を活かせるか。全AI共通の召喚判定に使う。
+   * 通常モンスターは土地と属性一致のとき該当。レインボーカメレオン等
+   * （elementHpBonusIgnoreElement＝属性を問わず土地レベル×10のHPボーナスを受ける）は
+   * どの有属性土地でもボーナスを活かせるので、有属性土地では属性一致モンスターと同格に
+   * 「土地ボーナスを活かせる」候補として扱う。無色地はレベルアップせず土地ボーナスが
+   * ほぼ無いため該当させず、有属性土地のために温存させる（＝無色地にはあまり置かない）。
+   */
+  _cardBenefitsFromLandElement(card, tile) {
+    if (card.effect?.type === 'elementHpBonusIgnoreElement') {
+      return tile.element !== Element.NEUTRAL;
+    }
+    return card.element === tile.element;
+  }
+
   _cpuChooseSummonCard(options, tile, profile, player) {
     const gearCard = this._cpuPreferredGearCard(options, player);
     if (gearCard) return gearCard;
 
-    const onElement = options.filter((c) => c.element === tile.element);
-    const offElement = options.filter((c) => c.element !== tile.element);
+    const onElement = options.filter((c) => this._cardBenefitsFromLandElement(c, tile));
+    const offElement = options.filter((c) => !this._cardBenefitsFromLandElement(c, tile));
     const preferOff = onElement.length === 0 || (offElement.length > 0 && Math.random() < profile.offElementSummonChance);
     const pool = preferOff && offElement.length > 0 ? offElement : onElement.length > 0 ? onElement : offElement;
     return this._strongestCard(pool);
@@ -3097,9 +3112,10 @@ export class Game {
       if (advancingGears.length > 0) return pickGear(advancingGears);
     }
 
-    // ① 止まった空き地の属性にマッチするモンスターをレアリティの高い順に。
+    // ① 止まった空き地の属性を活かせるモンスターをレアリティの高い順に。
+    // レインボーカメレオンは有属性土地でここに含まれ、無色地では含まれない。
     {
-      const matching = options.filter((c) => c.element === tile.element);
+      const matching = options.filter((c) => this._cardBenefitsFromLandElement(c, tile));
       if (matching.length > 0) {
         const topRank = Math.max(...matching.map(rank));
         const top = matching.filter((c) => rank(c) === topRank);
@@ -3113,8 +3129,8 @@ export class Game {
     // ②④⑤⑥ ギアを優先（属性マッチ無し）。
     if (gears.length > 0) return pickGear(gears);
 
-    // フォールバック: 属性マッチ優先でレアリティの高い順（ギアが無い時のレインボー等）。
-    const fallbackMatching = options.filter((c) => c.element === tile.element);
+    // フォールバック: 土地を活かせるカード優先でレアリティの高い順（ギアが無い時のレインボー等）。
+    const fallbackMatching = options.filter((c) => this._cardBenefitsFromLandElement(c, tile));
     const pool = fallbackMatching.length > 0 ? fallbackMatching : options;
     return [...pool].sort((a, b) => rank(b) - rank(a))[0];
   }
