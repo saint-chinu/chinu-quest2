@@ -113,7 +113,12 @@ function getEffect(unit, type) {
 
 /** Call once right before a battle to lock in this fight's max HP. */
 export function prepareForBattle(unit, bonus = {}) {
-  unit.currentHp = statTotals(unit, bonus).maxHp;
+  // マイナスHPアイテム（諸刃の剣-20/鉄パイプ-5）やアイテム効果2倍(Ninja)・
+  // ステータス上書き(ネット弁慶)の組み合わせで最大HPが0以下になると、
+  // resolveBattleの攻撃ループが「currentHp > 0」ガードで全ての一撃をスキップし、
+  // 演出もダメージも撃破も出ないまま戦闘が無音で終わってしまう。最低でも1は
+  // 残し、必ず一度は戦えるようにする（諸刃の剣の"大振りできるが脆い"性質は維持）。
+  unit.currentHp = Math.max(1, statTotals(unit, bonus).maxHp);
 }
 
 /** Traits may come from the monster itself, its one-use item, or a persistent spell curse. */
