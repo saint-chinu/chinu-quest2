@@ -35,15 +35,6 @@ service cloud.firestore {
       allow write: if false;
     }
 
-    // 運営からのお知らせ（メール）。カード配布もここで行う。
-    // 全ログインユーザーが閲覧でき、作成・編集・削除は管理者のみ。
-    // 既読/カード受領の状態は各プレイヤーの players/{uid}.character 側で
-    // 管理するため、このコレクションはグローバルな配信内容だけを保持する。
-    match /announcements/{id} {
-      allow read: if request.auth != null;
-      allow create, update, delete: if isAdmin();
-    }
-
     match /pvpRooms/{roomCode} {
       function signedIn() {
         return request.auth != null;
