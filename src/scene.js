@@ -435,6 +435,9 @@ export class GameScene {
     // (focusAndZoom/restoreFocus) - 1 = normal CAMERA_OFFSET distance,
     // <1 = zoomed in. Left at 1 outside of those effects.
     this.zoomScale = 1;
+    // タッチのドラッグ/ピンチでカメラを動かす機能の状態（enableTouchPan参照）。
+    this._touchPanCleanup = null;
+    this.panDidMove = false;
     // Safe area around the current focus, in screen-local (right, forward)
     // units - see toScreenLocal - derived from the actual camera frustum
     // by resize(). The near (bottom of screen) and far (top of screen)
@@ -966,6 +969,121 @@ export class GameScene {
     const hits = raycaster.intersectObjects(meshes);
     if (hits.length === 0) return null;
     return tiles.find((t) => t.mesh === hits[0].object) ?? null;
+  }
+
+  /** 現在の注視点・ズームを控える（選択系プロンプト開始時）。 */
+  snapshotCamera() {
+    return { fx: this.focus.x, fz: this.focus.z, zoom: this.zoomScale };
+  }
+
+  /** 控えた注視点・ズームへ即座に戻す（選択終了時）。 */
+  restoreCamera(snap) {
+    if (!snap) return;
+    this.focus.set(snap.fx, 0, snap.fz);
+    this.zoomScale = snap.zoom;
+    this._applyCamera();
+  }
+
+  /**
+   * タッチ/ポインタで盤面をドラッグ移動（パン）＋2本指ピンチでズームできるように
+   * する。土地情報・スペル対象選択・分岐などの選択中だけ有効化し、終わったら
+   * disableTouchPan()で解除する（矢印のカメラモードの置き換え）。掴んだ地点が指の
+   * 下に留まるようにfocusを動かすので地図をドラッグする感覚になる。panDidMoveは
+   * 「直前の操作がドラッグ/ピンチだったか」で、タップ選択と誤爆しないようクリック側が
+   * 参照する（ドラッグ直後のclickは無視する）。
+   */
+  enableTouchPan() {
+    if (this._touchPanCleanup) return;
+    const el = this.renderer.domElement;
+    const plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+    const pointers = new Map();
+    let grab = null;
+    let pinchPrev = 0;
+    let startX = 0;
+    let startY = 0;
+    let dragging = false;
+    const DRAG_THRESHOLD = 8; // これ未満の動きはタップ扱い（選択と誤爆させない）
+    this.panDidMove = false;
+    const ndc = (cx, cy) => {
+      const r = el.getBoundingClientRect();
+      return new THREE.Vector2(((cx - r.left) / r.width) * 2 - 1, -((cy - r.top) / r.height) * 2 + 1);
+    };
+    const ground = (cx, cy) => {
+      raycaster.setFromCamera(ndc(cx, cy), this.camera);
+      const p = new THREE.Vector3();
+      return raycaster.ray.intersectPlane(plane, p) ? p : null;
+    };
+    const twoFingerDist = () => {
+      const v = [...pointers.values()];
+      return v.length >= 2 ? Math.hypot(v[0].x - v[1].x, v[0].y - v[1].y) : 0;
+    };
+    const onDown = (e) => {
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 1) {
+        grab = ground(e.clientX, e.clientY);
+        this.panDidMove = false;
+        startX = e.clientX;
+        startY = e.clientY;
+        dragging = false;
+      } else if (pointers.size === 2) {
+        pinchPrev = twoFingerDist();
+        grab = null;
+        dragging = true;
+      }
+    };
+    const onMove = (e) => {
+      if (!pointers.has(e.pointerId)) return;
+      pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (pointers.size === 1 && grab) {
+        // しきい値未満の微小な動きはまだ「タップ」とみなし、ドラッグにしない
+        // （preventDefaultも呼ばないのでタップ選択のclickがそのまま発火する）。
+        if (!dragging && Math.hypot(e.clientX - startX, e.clientY - startY) < DRAG_THRESHOLD) return;
+        dragging = true;
+        const curr = ground(e.clientX, e.clientY);
+        if (curr) {
+          this.focus.x = THREE.MathUtils.clamp(this.focus.x + (grab.x - curr.x), -FREE_PAN_MAX_DISTANCE, FREE_PAN_MAX_DISTANCE);
+          this.focus.z = THREE.MathUtils.clamp(this.focus.z + (grab.z - curr.z), -FREE_PAN_MAX_DISTANCE, FREE_PAN_MAX_DISTANCE);
+          this._applyCamera();
+          this.panDidMove = true;
+          e.preventDefault();
+        }
+      } else if (pointers.size >= 2) {
+        const d = twoFingerDist();
+        if (pinchPrev > 0 && d > 0) {
+          this.zoomScale = THREE.MathUtils.clamp(this.zoomScale * (pinchPrev / d), 0.55, 1.9);
+          this._applyCamera();
+          this.panDidMove = true;
+        }
+        pinchPrev = d;
+        e.preventDefault();
+      }
+    };
+    const onUp = (e) => {
+      pointers.delete(e.pointerId);
+      pinchPrev = 0;
+      if (pointers.size === 1) {
+        const v = [...pointers.values()][0];
+        grab = ground(v.x, v.y);
+      } else if (pointers.size === 0) {
+        grab = null;
+      }
+    };
+    el.addEventListener('pointerdown', onDown);
+    el.addEventListener('pointermove', onMove, { passive: false });
+    el.addEventListener('pointerup', onUp);
+    el.addEventListener('pointercancel', onUp);
+    this._touchPanCleanup = () => {
+      el.removeEventListener('pointerdown', onDown);
+      el.removeEventListener('pointermove', onMove);
+      el.removeEventListener('pointerup', onUp);
+      el.removeEventListener('pointercancel', onUp);
+    };
+  }
+
+  disableTouchPan() {
+    this._touchPanCleanup?.();
+    this._touchPanCleanup = null;
+    this.panDidMove = false;
   }
 
   _applyCamera() {

@@ -2692,7 +2692,13 @@ html, body {
   50% { opacity: 0.35; }
 }
 
+/* カメラのパン矢印は廃止（タッチのドラッグ＝パン／ピンチ＝ズームに置き換え、
+   scene.enableTouchPan参照）。要素・配線は残すが常に非表示にする。 */
 .cam-arrow {
+  display: none !important;
+}
+
+.cam-arrow-legacy {
   position: absolute;
   pointer-events: auto;
   width: 60px;

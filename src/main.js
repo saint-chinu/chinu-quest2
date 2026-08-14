@@ -234,9 +234,22 @@ const BRANCH_ARROW_BY_DIR = {
  * `noBack` hides the camera-work "戻る" button (via the .no-back CSS class)
  * for choices that are mandatory rather than cancellable.
  */
+// 選択系プロンプトのカメラ操作: 開始時に現在のカメラ（注視点・ズーム）を控えて
+// タッチのドラッグ/ピンチによるパン・ズームを有効化し、終了時に元のカメラへ戻す。
+// 旧来の画面上下左右のパン矢印は廃止（.cam-arrowはCSSで非表示）。
+function beginCameraWork() {
+  const snap = scene.snapshotCamera();
+  scene.enableTouchPan();
+  return snap;
+}
+function endCameraWork(snap) {
+  scene.disableTouchPan();
+  scene.restoreCamera(snap);
+}
+
 function promptDirectionArrows(options, { noBack = false, confirmOnSecondTap = false } = {}) {
   return new Promise((resolve) => {
-    const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+    const camSnap = beginCameraWork();
     if (noBack) cameraWorkOverlay.classList.add('no-back');
     cameraWorkOverlay.classList.remove('hidden');
     directionArrowsOverlay.classList.remove('hidden');
@@ -272,7 +285,7 @@ function promptDirectionArrows(options, { noBack = false, confirmOnSecondTap = f
       camArrowLeft.removeEventListener('click', onPanLeft);
       camArrowRight.removeEventListener('click', onPanRight);
       camWorkBack.removeEventListener('click', onBack);
-      scene.setFocusImmediate(savedFocus.x, savedFocus.z);
+      endCameraWork(camSnap);
       unregisterPromptCanceller(cancelSelf);
       resolve(tileId);
     }
@@ -319,7 +332,7 @@ function promptDirectionArrows(options, { noBack = false, confirmOnSecondTap = f
  */
 function promptChooseBranch(options) {
   return new Promise((resolve) => {
-    const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+    const camSnap = beginCameraWork();
     const candidateIds = options.map((o) => o.tileId).filter((id) => tiles[id]?.mesh);
     const candidateSet = new Set(candidateIds);
     let selectedTileId = null;
@@ -352,6 +365,7 @@ function promptChooseBranch(options) {
       const rect = canvas.getBoundingClientRect();
       const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      if (scene.panDidMove) return; // 直前がドラッグ/ピンチなら選択しない
       const tile = scene.pickTileAt(ndcX, ndcY, tiles);
       if (!tile || !candidateSet.has(tile.id)) return;
       if (selectedTileId === tile.id) {
@@ -380,7 +394,7 @@ function promptChooseBranch(options) {
       camArrowDown.removeEventListener('click', onDown);
       camArrowLeft.removeEventListener('click', onLeft);
       camArrowRight.removeEventListener('click', onRight);
-      scene.setFocusImmediate(savedFocus.x, savedFocus.z);
+      endCameraWork(camSnap);
       unregisterPromptCanceller(cancelSelf);
       resolve(result);
     }
@@ -531,7 +545,7 @@ function promptPickAbilityTarget(targets) {
 /** 範囲土地スペル: 盤面をタップし、白点滅する効果範囲を見てから確定する。 */
 function promptPickAreaTarget(targets) {
   return new Promise((resolve) => {
-    const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+    const camSnap = beginCameraWork();
     const byId = new Map(targets.map((target) => [target.id, target]));
     let stopAreaHighlight = null;
     cameraWorkOverlay.classList.remove('hidden');
@@ -540,6 +554,7 @@ function promptPickAreaTarget(targets) {
       const rect = canvas.getBoundingClientRect();
       const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      if (scene.panDidMove) return; // 直前がドラッグ/ピンチなら選択しない
       const tile = scene.pickTileAt(ndcX, ndcY, tiles);
       const target = tile && byId.get(tile.id);
       if (!target) return;
@@ -570,7 +585,8 @@ function promptPickAreaTarget(targets) {
       camArrowRight.removeEventListener('click', onRight);
       camWorkBack.removeEventListener('click', onBack);
       unregisterPromptCanceller(cancelSelf);
-      scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 260).then(() => resolve(result));
+      scene.disableTouchPan();
+      scene.focusAndZoom(camSnap.fx, camSnap.fz, camSnap.zoom, 260).then(() => resolve(result));
     }
     function cancelSelf() {
       finish(null);
@@ -878,7 +894,7 @@ function startTileHighlight(tileIds, color = BROWSE_HIGHLIGHT_COLOR) {
  */
 function promptPickBrowseTile(candidates) {
   return new Promise((resolve) => {
-    const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+    const camSnap = beginCameraWork();
     const byId = new Map(candidates.map((c) => [c.id, c]));
     const stopHighlight = startTileHighlight(candidates.map((c) => c.id));
     cameraWorkOverlay.classList.remove('hidden');
@@ -887,6 +903,7 @@ function promptPickBrowseTile(candidates) {
       const rect = canvas.getBoundingClientRect();
       const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
       const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      if (scene.panDidMove) return; // 直前がドラッグ/ピンチなら選択しない
       const tile = scene.pickTileAt(ndcX, ndcY, tiles);
       const candidate = tile && byId.get(tile.id);
       if (!candidate) return;
@@ -926,7 +943,7 @@ function promptPickBrowseTile(candidates) {
       camArrowRight.removeEventListener('click', onRight);
       camWorkBack.removeEventListener('click', onWorkBack);
       tileInfoClose.removeEventListener('click', onInfoClose);
-      scene.setFocusImmediate(savedFocus.x, savedFocus.z);
+      endCameraWork(camSnap);
       unregisterPromptCanceller(cancelSelf);
       resolve(result);
     }
@@ -2627,7 +2644,7 @@ helpClose.addEventListener('click', () => {
  */
 function showLandInfoCamera() {
   if (!scene || !tiles?.length || !cameraWorkOverlay.classList.contains('hidden')) return;
-  const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+  const camSnap = beginCameraWork();
   cameraWorkOverlay.classList.remove('hidden');
   landInfoButton.classList.add('active');
   logEl.textContent = '確認したい土地をタップしてください';
@@ -2656,6 +2673,7 @@ function showLandInfoCamera() {
     const rect = canvas.getBoundingClientRect();
     const ndcX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
     const ndcY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+    if (scene.panDidMove) return; // 直前がドラッグ/ピンチなら選択しない
     const tile = scene.pickTileAt(ndcX, ndcY, tiles);
     if (!tile || tile.type !== TileType.LAND) return;
     tileInfoText.textContent = tileSummaryText(tileSummaryForInfo(tile));
@@ -2677,7 +2695,7 @@ function showLandInfoCamera() {
     camArrowRight.removeEventListener('click', onRight);
     camWorkBack.removeEventListener('click', finish);
     tileInfoClose.removeEventListener('click', onInfoClose);
-    scene.setFocusImmediate(savedFocus.x, savedFocus.z);
+    endCameraWork(camSnap);
   }
 
   canvas.addEventListener('click', onCanvasClick);
