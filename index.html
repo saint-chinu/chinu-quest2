@@ -76,6 +76,10 @@
 
       <div id="hub-screen" class="pg-screen hidden">
         <div class="hub-shell">
+          <button id="hub-mail-button" class="hub-mail-button" type="button" aria-label="運営からのお知らせ">
+            <span class="hub-mail-icon" aria-hidden="true">✉</span>
+            <span id="hub-mail-badge" class="hub-mail-badge" hidden>NEW</span>
+          </button>
           <header class="hub-header">
             <p class="hub-eyebrow">CHINU QUEST 2</p>
             <h2 id="hub-welcome" class="pg-title"></h2>
@@ -128,6 +132,20 @@
             <h2 class="pg-title">管理ダッシュボード</h2>
             <p class="hub-guidance">登録プレイヤーと進捗の集計（管理者専用）</p>
           </header>
+          <section id="admin-compose" class="admin-compose">
+            <h3 class="admin-compose-title">📮 お知らせ配信 / カード配布</h3>
+            <p class="admin-compose-hint">全プレイヤーのメールに届きます。カードを添付すると、開封時に配布されます。</p>
+            <input id="admin-compose-subject" class="admin-compose-input" type="text" maxlength="60" placeholder="件名（例：アップデート記念プレゼント）">
+            <textarea id="admin-compose-body" class="admin-compose-textarea" maxlength="600" placeholder="本文"></textarea>
+            <div class="admin-compose-cardrow">
+              <select id="admin-compose-card" class="admin-compose-input"></select>
+              <input id="admin-compose-count" class="admin-compose-count" type="number" min="1" max="9" value="1">
+              <button id="admin-compose-add" class="pg-button pg-button-secondary" type="button">添付に追加</button>
+            </div>
+            <ul id="admin-compose-attachments" class="admin-compose-attachments"></ul>
+            <button id="admin-compose-send" class="pg-button" type="button">この内容で配信する</button>
+            <p id="admin-compose-status" class="admin-compose-status"></p>
+          </section>
           <div id="admin-content" class="admin-content"></div>
           <button id="admin-refresh" class="pg-button pg-button-secondary">再読み込み</button>
           <button id="admin-back" class="pg-button pg-button-secondary">戻る</button>
@@ -386,6 +404,17 @@
         <button id="menu-button" aria-label="メニュー">メニュー</button>
         <div id="stage-goal-display" class="hidden">目標G: <span id="stage-goal-amount"></span></div>
       </div>
+      <div id="mail-modal" class="hidden">
+        <div id="mail-box">
+          <header class="mail-header">
+            <span class="mail-header-icon" aria-hidden="true">✉</span>
+            <h3 class="mail-header-title">運営からのお知らせ</h3>
+          </header>
+          <div id="mail-list" class="mail-list"></div>
+          <button id="mail-close" class="pg-button pg-button-secondary">閉じる</button>
+        </div>
+      </div>
+
       <div id="game-menu-modal" class="hidden">
         <div id="game-menu-box">
           <button id="game-menu-mute" aria-label="BGMのオン/オフ">🔊 BGM</button>

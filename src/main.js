@@ -4,7 +4,8 @@ import { GameScene, PIECE_REST_Y } from './scene.js';
 import { createBoard, MAPS, TileType, createMapThumbnailCanvas, getMapBackground } from './board.js';
 import { Game } from './game.js';
 import { CardType, CARD_COLOR, ELEMENT_LABEL, Element, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
-import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, buildCharacterDeckList, ITEM_CATALOG, SPELL_CATALOG } from './battleCards.js';
+import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, buildCharacterDeckList, MONSTER_CATALOG, ITEM_CATALOG, SPELL_CATALOG } from './battleCards.js';
+import { NEUTRAL_MONSTER_CATALOG } from './neutralMonsters.js';
 import { loginOrRegister, saveCharacter } from './auth.js';
 import { getCardCatalog, isLegacyPlaceholderCardName } from './cardCatalog.js';
 import { PACKS, drawPack } from './shopPacks.js';
@@ -28,7 +29,7 @@ import { STORY_STAGES, isStageUnlocked, isStageCleared } from './story.js';
 import { NPC_PORTRAIT_URL, loadNpcTokenImage } from './npcArt.js';
 import { defaultCardArtUrl } from './cardArt.js';
 import { firebaseReady, db, auth } from './firebase.js';
-import { collection, doc as fsDoc, getDoc as fsGetDoc, getDocs as fsGetDocs, getCountFromServer as fsGetCount } from 'firebase/firestore';
+import { collection, doc as fsDoc, getDoc as fsGetDoc, getDocs as fsGetDocs, getCountFromServer as fsGetCount, addDoc as fsAddDoc, serverTimestamp as fsServerTimestamp, query as fsQuery, orderBy as fsOrderBy } from 'firebase/firestore';
 import {
   createPvpRoom,
   joinPvpRoom,
@@ -2745,10 +2746,23 @@ const charmakeSubmit = document.getElementById('charmake-submit');
 const hubScreen = document.getElementById('hub-screen');
 const hubWelcome = document.getElementById('hub-welcome');
 const hubAdminTile = document.getElementById('hub-admin-tile');
+const hubMailButton = document.getElementById('hub-mail-button');
+const hubMailBadge = document.getElementById('hub-mail-badge');
+const mailModal = document.getElementById('mail-modal');
+const mailList = document.getElementById('mail-list');
+const mailClose = document.getElementById('mail-close');
 const adminScreen = document.getElementById('admin-screen');
 const adminContent = document.getElementById('admin-content');
 const adminBack = document.getElementById('admin-back');
 const adminRefresh = document.getElementById('admin-refresh');
+const adminComposeSubject = document.getElementById('admin-compose-subject');
+const adminComposeBody = document.getElementById('admin-compose-body');
+const adminComposeCard = document.getElementById('admin-compose-card');
+const adminComposeCount = document.getElementById('admin-compose-count');
+const adminComposeAdd = document.getElementById('admin-compose-add');
+const adminComposeAttachments = document.getElementById('admin-compose-attachments');
+const adminComposeSend = document.getElementById('admin-compose-send');
+const adminComposeStatus = document.getElementById('admin-compose-status');
 const catalogScreen = document.getElementById('catalog-screen');
 const catalogList = document.getElementById('catalog-list');
 const catalogCategoryTabs = document.getElementById('catalog-category-tabs');
@@ -2979,6 +2993,7 @@ function showHubScreen() {
     return;
   }
   showScreen(hubScreen);
+  refreshMailBadge();
 }
 
 // ===== 管理ダッシュボード（管理者のみ） =====
@@ -4247,6 +4262,238 @@ function grantEncounterReward() {
   saveCharacter(currentUserId, currentCharacter);
   showToast('クリア報酬「未知との遭遇」を入手しました！', 2600);
 }
+
+// ===== 運営からのお知らせ（メール） =====
+// Firestore announcements/{id}: { subject, body, cards:[{name,count}], createdAt }
+//   read: 全ログインユーザー / create: 管理者のみ（firestore.rules参照）。
+// 既読・カード受領はプレイヤーの character.inboxSeenIds（配列）で管理する。
+// characterはsaveCharacterでFirestoreにミラーされるので端末間でも整合する。
+const BASE_CARD_CATALOG = [
+  ...Object.values(MONSTER_CATALOG),
+  ...Object.values(NEUTRAL_MONSTER_CATALOG),
+  ...Object.values(ITEM_CATALOG),
+  ...Object.values(SPELL_CATALOG),
+];
+let cachedAnnouncements = null;
+
+async function loadAnnouncements(force = false) {
+  if (!firebaseReady || !db) return [];
+  if (cachedAnnouncements && !force) return cachedAnnouncements;
+  try {
+    const snap = await fsGetDocs(fsQuery(collection(db, 'announcements'), fsOrderBy('createdAt', 'desc')));
+    cachedAnnouncements = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  } catch (error) {
+    console.warn('お知らせの読み込みに失敗', error);
+    cachedAnnouncements = [];
+  }
+  return cachedAnnouncements;
+}
+
+function seenAnnouncementIds() {
+  const ids = currentCharacter?.inboxSeenIds;
+  return Array.isArray(ids) ? ids : [];
+}
+
+function unseenAnnouncementIds(list) {
+  const seen = new Set(seenAnnouncementIds());
+  return list.filter((a) => !seen.has(a.id)).map((a) => a.id);
+}
+
+/** ハブのメールバッジ（NEW）を、まだ開封していないお知らせがあるかで出し分ける。 */
+async function refreshMailBadge() {
+  if (!hubMailBadge) return;
+  hubMailBadge.hidden = true;
+  const list = await loadAnnouncements();
+  hubMailBadge.hidden = unseenAnnouncementIds(list).length === 0;
+}
+
+/** 未開封お知らせの添付カードを所持カードへ加算し、既読化する。付与したカード名一覧を返す。 */
+function claimAnnouncementCards(list) {
+  const seen = new Set(seenAnnouncementIds());
+  const granted = [];
+  let changed = false;
+  for (const a of list) {
+    if (seen.has(a.id)) continue;
+    seen.add(a.id);
+    changed = true;
+    if (!Array.isArray(a.cards)) continue;
+    for (const c of a.cards) {
+      const name = c?.name;
+      const count = Math.max(0, Math.min(99, Number(c?.count) || 0));
+      if (!name || count <= 0) continue;
+      currentCharacter.ownedCards = currentCharacter.ownedCards || {};
+      currentCharacter.ownedCards[name] = (currentCharacter.ownedCards[name] || 0) + count;
+      for (let i = 0; i < count; i++) granted.push(name);
+    }
+  }
+  if (changed) {
+    currentCharacter.inboxSeenIds = [...seen];
+    saveCharacter(currentUserId, currentCharacter);
+  }
+  return granted;
+}
+
+function renderMailList(list, newIds) {
+  mailList.replaceChildren();
+  if (list.length === 0) {
+    const empty = document.createElement('div');
+    empty.className = 'mail-empty';
+    empty.textContent = 'お知らせはまだありません';
+    mailList.appendChild(empty);
+    return;
+  }
+  for (const a of list) {
+    const isNew = newIds.has(a.id);
+    const item = document.createElement('div');
+    item.className = 'mail-item' + (isNew ? ' is-new' : '');
+
+    const head = document.createElement('div');
+    head.className = 'mail-item-head';
+    if (isNew) {
+      const tag = document.createElement('span');
+      tag.className = 'mail-item-new-tag';
+      tag.textContent = 'NEW';
+      head.appendChild(tag);
+    }
+    const subject = document.createElement('span');
+    subject.className = 'mail-item-subject';
+    subject.textContent = a.subject || '(無題)';
+    head.appendChild(subject);
+    const date = document.createElement('span');
+    date.className = 'mail-item-date';
+    date.textContent = fmtDate(a.createdAt);
+    head.appendChild(date);
+    item.appendChild(head);
+
+    if (a.body) {
+      const body = document.createElement('div');
+      body.className = 'mail-item-body';
+      body.textContent = a.body;
+      item.appendChild(body);
+    }
+
+    if (Array.isArray(a.cards) && a.cards.length > 0) {
+      const cardsBox = document.createElement('div');
+      cardsBox.className = 'mail-item-cards';
+      const label = document.createElement('div');
+      label.className = 'mail-item-cards-label';
+      label.textContent = isNew ? '🎁 カードを受け取りました' : '🎁 配布カード';
+      cardsBox.appendChild(label);
+      const chips = document.createElement('div');
+      chips.className = 'mail-card-chips';
+      for (const c of a.cards) {
+        const chip = document.createElement('span');
+        chip.className = 'mail-card-chip';
+        chip.textContent = `${c.name} ×${c.count}`;
+        chips.appendChild(chip);
+      }
+      cardsBox.appendChild(chips);
+      item.appendChild(cardsBox);
+    }
+    mailList.appendChild(item);
+  }
+}
+
+async function openMailModal() {
+  const list = await loadAnnouncements(true);
+  // 開封前に「未読」を確定させ、NEW表示とカード受領演出に使う。
+  const newIds = new Set(unseenAnnouncementIds(list));
+  renderMailList(list, newIds);
+  mailModal.classList.remove('hidden');
+  // 開封＝受領: 未読の添付カードを付与し、既読化してバッジを消す。
+  const granted = claimAnnouncementCards(list);
+  if (hubMailBadge) hubMailBadge.hidden = true;
+  if (granted.length > 0) {
+    const summary = granted.length <= 3 ? granted.join('・') : `${granted.slice(0, 3).join('・')} 他${granted.length - 3}枚`;
+    showToast(`カードを受け取りました: ${summary}`, 3000);
+  }
+}
+
+hubMailButton?.addEventListener('click', openMailModal);
+mailClose?.addEventListener('click', () => mailModal.classList.add('hidden'));
+mailModal?.addEventListener('click', (event) => { if (event.target === mailModal) mailModal.classList.add('hidden'); });
+
+// ===== 管理: お知らせ配信フォーム（管理者専用画面内） =====
+let composeAttachments = [];
+
+function populateComposeCardSelect() {
+  if (!adminComposeCard || adminComposeCard.options.length > 0) return;
+  const sorted = [...BASE_CARD_CATALOG].sort((a, b) => String(a.name).localeCompare(String(b.name), 'ja'));
+  for (const card of sorted) {
+    const opt = document.createElement('option');
+    opt.value = card.name;
+    opt.textContent = `${card.name}（${card.rarity}）`;
+    adminComposeCard.appendChild(opt);
+  }
+}
+
+function renderComposeAttachments() {
+  if (!adminComposeAttachments) return;
+  adminComposeAttachments.replaceChildren();
+  composeAttachments.forEach((att, idx) => {
+    const li = document.createElement('li');
+    const label = document.createElement('span');
+    label.textContent = `${att.name} ×${att.count}`;
+    li.appendChild(label);
+    const rm = document.createElement('button');
+    rm.type = 'button';
+    rm.textContent = '削除';
+    rm.addEventListener('click', () => { composeAttachments.splice(idx, 1); renderComposeAttachments(); });
+    li.appendChild(rm);
+    adminComposeAttachments.appendChild(li);
+  });
+}
+
+adminComposeAdd?.addEventListener('click', () => {
+  const name = adminComposeCard?.value;
+  const count = Math.max(1, Math.min(9, Number(adminComposeCount?.value) || 1));
+  if (!name) return;
+  const existing = composeAttachments.find((a) => a.name === name);
+  if (existing) existing.count = Math.min(9, existing.count + count);
+  else composeAttachments.push({ name, count });
+  renderComposeAttachments();
+});
+
+adminComposeSend?.addEventListener('click', async () => {
+  if (!isAdminUser || !firebaseReady || !db) {
+    adminComposeStatus.textContent = '配信できる環境ではありません';
+    adminComposeStatus.className = 'admin-compose-status err';
+    return;
+  }
+  const subject = (adminComposeSubject?.value || '').trim();
+  const body = (adminComposeBody?.value || '').trim();
+  if (!subject && !body && composeAttachments.length === 0) {
+    adminComposeStatus.textContent = '件名・本文・カードのいずれかを入力してください';
+    adminComposeStatus.className = 'admin-compose-status err';
+    return;
+  }
+  adminComposeSend.disabled = true;
+  adminComposeStatus.textContent = '配信中…';
+  adminComposeStatus.className = 'admin-compose-status';
+  try {
+    await fsAddDoc(collection(db, 'announcements'), {
+      subject: subject || '(無題)',
+      body,
+      cards: composeAttachments.map((a) => ({ name: a.name, count: a.count })),
+      createdAt: fsServerTimestamp(),
+    });
+    adminComposeSubject.value = '';
+    adminComposeBody.value = '';
+    composeAttachments = [];
+    renderComposeAttachments();
+    cachedAnnouncements = null; // 次回開封で最新を取得
+    adminComposeStatus.textContent = '配信しました！';
+    adminComposeStatus.className = 'admin-compose-status ok';
+  } catch (error) {
+    console.error('お知らせ配信に失敗', error);
+    adminComposeStatus.textContent = '配信に失敗しました（権限またはネットワークをご確認ください）';
+    adminComposeStatus.className = 'admin-compose-status err';
+  } finally {
+    adminComposeSend.disabled = false;
+  }
+});
+
+populateComposeCardSelect();
 
 /** getCardCatalog() plus this character's live breed-monster card (not cached globally - it's per-character and its stats change as parts are equipped). */
 function effectiveCatalog() {
