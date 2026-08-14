@@ -2347,6 +2347,12 @@ export class Game {
    */
   async _resolveNegativeCurrency(player) {
     if (player.currency >= 0 || player.defeated) return;
+    // 正味財産（手持ち＋全土地を1枚ずつ連鎖減衰込みで売った額）で払いきれない
+    // ＝支払いが正味財産を超えた場合は、土地を1枚ずつ売らせず即破産にする。
+    if (this._netWorthOf(player) < 0) {
+      await this._triggerBankruptcy(player);
+      return;
+    }
     while (player.currency < 0) {
       const candidates = this._ownedTiles(player);
       if (candidates.length === 0) {
@@ -2376,10 +2382,16 @@ export class Game {
    * 通常=500Gでゴールから再スタート）を行う。
    */
   async _triggerBankruptcy(player) {
+    const startTile = this.tiles.find((t) => t.type === TileType.START);
     await this.onBankruptcy({
       playerId: player.id,
       playerName: player.name,
       position: this.tiles[player.tileId]?.position ?? null,
+      // 通常戦のみ「スタートへワープ→500Gで再スタート」の演出をする（ストーリーは脱落）。
+      startPosition: !this.storyMode && startTile?.position
+        ? { x: startTile.position.x, z: startTile.position.z }
+        : null,
+      restartCurrency: 500,
     });
     if (this.storyMode) {
       player.defeated = true;
@@ -2398,7 +2410,6 @@ export class Game {
       this._checkStoryWinCondition();
       return;
     }
-    const startTile = this.tiles.find((t) => t.type === TileType.START);
     player.currency = 500;
     player.tileId = startTile.id;
     player.previousTileId = null;
@@ -4079,6 +4090,42 @@ export class Game {
     const teammates =
       player.allianceId != null ? this.players.filter((p) => p.allianceId === player.allianceId) : [player];
     return teammates.reduce((sum, p) => sum + p.currency + this._landValueOf(p.id), 0);
+  }
+
+  /**
+   * 正味財産の「全所有地を売った時の総額」部分。まとめて売るのではなく1枚ずつ
+   * 売る想定で、売るたびに連鎖が減って残りの地価が下がるのを反映する（毎回いちばん
+   * 高く売れる土地から売る順でシミュレート＝回収額を最大化）。実際には売らず、
+   * tile.owner を一時的に外して計算し、最後に必ず元へ戻す。売値は地価の半額
+   * （強制売却_sellLandTileと同じ）。無色地も売却対象。
+   */
+  _liquidationValueOf(player) {
+    const owned = this._ownedTiles(player);
+    if (owned.length === 0) return 0;
+    const savedOwners = owned.map((t) => t.owner);
+    const remaining = [...owned];
+    let total = 0;
+    while (remaining.length) {
+      let bestIdx = 0;
+      let bestVal = -Infinity;
+      for (let i = 0; i < remaining.length; i++) {
+        const v = this._landValueOfTile(remaining[i]);
+        if (v > bestVal) {
+          bestVal = v;
+          bestIdx = i;
+        }
+      }
+      const tile = remaining.splice(bestIdx, 1)[0];
+      total += Math.round(this._landValueOfTile(tile) / 2);
+      tile.owner = null; // 売った扱いにして残りの連鎖計算へ反映（後で復元）
+    }
+    owned.forEach((t, i) => { t.owner = savedOwners[i]; });
+    return total;
+  }
+
+  /** 隠しステータス「正味財産」= 手持ちG + 全土地を1枚ずつ売った時の総額（連鎖減衰込み）。 */
+  _netWorthOf(player) {
+    return player.currency + this._liquidationValueOf(player);
   }
 
   _notifyState() {

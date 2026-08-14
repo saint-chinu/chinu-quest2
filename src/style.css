@@ -293,6 +293,27 @@ html, body {
   100% { transform: translate(-50%, -100%) scale(0.9); opacity: 0; }
 }
 
+/* 破産後「500Gで再スタート」メッセージ（スタート地点で表示）。破産の赤に対し
+   再出発の前向きさを緑系で。 */
+.fx-bankrupt-restart {
+  position: fixed;
+  z-index: 71;
+  transform: translate(-50%, -100%);
+  padding: 8px 20px;
+  border-radius: 10px;
+  color: #eafff0;
+  background: rgba(8, 40, 24, 0.92);
+  border: 2px solid #34d399;
+  font-size: clamp(18px, 3.4vw, 30px);
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+  text-shadow: 0 2px 0 #052015, 0 6px 14px rgba(0, 0, 0, 0.6);
+  box-shadow: 0 0 24px rgba(52, 211, 153, 0.5);
+  pointer-events: none;
+  animation: bankrupt-pop 1600ms cubic-bezier(0.2, 1.7, 0.4, 1) forwards;
+}
+
 .fx-land-loss {
   position: absolute;
   z-index: 58;

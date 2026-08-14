@@ -1500,7 +1500,7 @@ async function showBankruptcyText(position) {
  * （_triggerBankruptcy）が通常の破産処理（500Gで再スタート/ストーリー
  * 脱落）を続ける。
  */
-async function promptBankruptcy({ playerId, playerName, position }) {
+async function promptBankruptcy({ playerId, playerName, position, startPosition = null, restartCurrency = 500 }) {
   if (!scene) return;
   const isPvpGuest = pvpMatch && !pvpMatch.isHost;
   const mesh = isPvpGuest ? findPvpGuestPieceSprite(playerId) : game?.players?.find((p) => p.id === playerId)?.mesh;
@@ -1509,13 +1509,35 @@ async function promptBankruptcy({ playerId, playerName, position }) {
 
   playSfx('block');
   const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+  // ① 現在地でクローズアップ＋ゆれ＋大きく「破産」表示。
   await scene.focusAndZoom(pos.x, pos.z, 1.6, 400);
   await Promise.all([
     scene.playSummonBurst(pos),
     mesh ? scene.shakeSprite(mesh, 900) : Promise.resolve(),
     showBankruptcyText(pos),
   ]);
+  // ② スタート地点へワープする演出＋「500Gで再スタート」メッセージ（通常戦のみ）。
+  if (startPosition) {
+    await scene.focusAndZoom(startPosition.x, startPosition.z, 1.5, 500);
+    if (mesh) mesh.position.set(startPosition.x, PIECE_REST_Y, startPosition.z);
+    await Promise.all([
+      scene.playSummonBurst(startPosition),
+      showBankruptcyRestartText(startPosition, restartCurrency),
+    ]);
+  }
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 400);
+}
+
+async function showBankruptcyRestartText(position, amount) {
+  const screen = scene.worldToScreen(position.x, PIECE_REST_Y + 2.0, position.z);
+  const el = document.createElement('div');
+  el.className = 'fx-bankrupt-restart';
+  el.textContent = `${amount}Gで再スタート`;
+  el.style.left = `${screen.x}px`;
+  el.style.top = `${screen.y}px`;
+  fxLayer.appendChild(el);
+  await new Promise((resolve) => setTimeout(resolve, 1600));
+  el.remove();
 }
 
 let stopMoveDestinationHighlight = null;
