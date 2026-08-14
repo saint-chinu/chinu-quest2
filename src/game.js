@@ -200,6 +200,9 @@ export class Game {
     this.storyMode = storyMode;
     this.goalCurrency = Number.isFinite(Number(goalCurrency)) ? Number(goalCurrency) : null;
     this.storyEnded = false;
+    // 経過ターン数（_beginTurnごとに+1）。退出報酬の最低ターン数判定に使う
+    // （開始直後に退出して報酬を得る無限金策の防止）。
+    this.turnCount = 0;
     // 呼び出し元（main.jsの「退出」）がこのGameを見捨てた後も、宙に浮いた
     // await（onBattleSceneEnter等）がいつか解決して先へ進んでしまうと、
     // 既に始まっている次のセッションのUI/状態を巻き込んで壊してしまう。
@@ -422,6 +425,7 @@ export class Game {
   async _beginTurn() {
     this.isBusy = true;
     this.awaitingRoll = false;
+    this.turnCount += 1;
     this.currentPlayer.spellUsedThisTurn = false;
     // 不動産鑑〇士: 自分の手番が来るたびに残りターン数を1つ消化する。
     if (this.currentPlayer.allTilesAccessTurnsRemaining > 0) this.currentPlayer.allTilesAccessTurnsRemaining -= 1;

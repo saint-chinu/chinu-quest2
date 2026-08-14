@@ -2832,6 +2832,7 @@ const shopSectionBack = document.getElementById('shop-section-back');
 const battleMenuScreen = document.getElementById('battle-menu-screen');
 const battleCpuButton = document.getElementById('battle-cpu');
 const battlePvpButton = document.getElementById('battle-pvp');
+const battleMenuBack = document.getElementById('battle-back');
 const battleBackButton = document.getElementById('battle-back');
 const pvpMenuScreen = document.getElementById('pvp-menu-screen');
 const pvpCreateButton = document.getElementById('pvp-create-button');
@@ -5238,13 +5239,47 @@ breedHelpClose.addEventListener('click', () => {
   breedHelpModal.classList.add('hidden');
 });
 
+battleMenuBack.addEventListener('click', showHubScreen);
+
+// CPU戦の目標総資産（これを超えてゴールに止まると勝利）。開始時の所持500Gでは
+// 決して達成できない値にして、「開始＝ゴールしたもの勝ち」状態を防ぐ。
+const CPU_BATTLE_GOAL_CURRENCY = 5000;
+
+// 退出報酬を得るのに必要な最低経過ターン数。開始直後に退出して下限50Mを
+// 得る無限金策を防ぐ（これ未満で退出した場合は報酬なし）。
+const MIN_REWARD_TURNS = 10;
+
+/** CPU戦の決着（どちらかが目標達成 or 破産脱落）。勝敗を出し、対戦報酬Mを
+ *  付与して対戦メニューに戻る。CPUが先にゴールしてもフリーズせずここで終わる。 */
+async function handleCasualBattleEnd({ won }) {
+  const humanPlayer = game?.players?.find((p) => !p.isCPU);
+  const endingAssets = humanPlayer && game ? game._totalAssetsOf(humanPlayer) : 0;
+  const mReward = grantExitReward(endingAssets);
+  game = undefined;
+  stopMusic();
+  appEl.classList.add('hidden');
+  preGame.classList.remove('hidden');
+  showScreen(battleMenuScreen);
+  showToast(`${won ? '勝利！🎉' : '敗北…'}　対戦報酬として${mReward.earnedM}M獲得しました`, 3200);
+}
+
 battleCpuButton.addEventListener('click', async () => {
-  const chosenDeck = await promptDeckSelection();
+  const chosenDeck = await promptDeckSelection({ onCancel: () => showScreen(battleMenuScreen) });
+  if (!chosenDeck) return; // 「戻る」で対戦メニューへ
   await confirmLandscapeReady();
   preGame.classList.add('hidden');
   appEl.classList.remove('hidden');
   const iconImage = (await resolveCharacterIcon(currentCharacter))?.canvas ?? null;
-  startBattle({ ...currentCharacter, iconImage, deckList: chosenDeck.deckList });
+  startBattle(
+    { ...currentCharacter, iconImage, deckList: chosenDeck.deckList },
+    {
+      // 目標総資産を設けて「勝敗のつく1本の対戦」にする（storyMode相当の
+      // 決着処理を使うが、ストーリーの筋書きは絡まない＝退出報酬の対象）。
+      storyMode: true,
+      goalCurrency: CPU_BATTLE_GOAL_CURRENCY,
+      onStoryBattleEnd: handleCasualBattleEnd,
+    },
+  );
 });
 
 // ---- 対人戦(PvP): 部屋コードでの招待・参加ロビー ----
@@ -5933,6 +5968,9 @@ gameMenuExit.addEventListener('click', async () => {
 
   let confirmed;
   let endingAssetsShare = 0;
+  // 開始直後の退出で報酬を得る無限金策の防止: 一定ターン未満は報酬なし
+  // （ゲストは手元にturnCountが無いので従来どおり対象）。
+  let rewardEligible = false;
   if (wasStoryBattle) {
     confirmed = await confirmYesNo('対戦をやめますか？\n進行状況を保存し、次回このステージを選ぶと続きから再開できます。');
   } else {
@@ -5947,16 +5985,22 @@ gameMenuExit.addEventListener('click', async () => {
       ? (pvpMatch.lastAssets ?? pvpMatch.lastCurrency ?? 0) / (pvpMatch.lastAllianceSize || 1)
       : game._totalAssetsOf(hostPlayer) / hostAllianceSize;
     const isPvp = Boolean(pvpMatch);
+    rewardEligible = isPvpGuest || (game?.turnCount ?? 0) >= MIN_REWARD_TURNS;
     const { earnedM: previewM, rewardRate } = computeExitRewardM(endingAssetsShare);
-    const rewardMessage = isPvp
-      ? `対戦終了報酬：総資産(自分の取り分)${Math.round(endingAssetsShare)}Gの${Math.round(rewardRate * 100)}%（${previewM}M、下限50M）を獲得します。`
-      : `総資産${Math.round(endingAssetsShare)}Gの${Math.round(rewardRate * 100)}%（${previewM}M、下限50M）を獲得します。`;
+    let rewardMessage;
+    if (!rewardEligible) {
+      rewardMessage = `対戦開始から${MIN_REWARD_TURNS}ターン未満のため、報酬はありません。`;
+    } else if (isPvp) {
+      rewardMessage = `対戦終了報酬：総資産(自分の取り分)${Math.round(endingAssetsShare)}Gの${Math.round(rewardRate * 100)}%（${previewM}M、下限50M）を獲得します。`;
+    } else {
+      rewardMessage = `総資産${Math.round(endingAssetsShare)}Gの${Math.round(rewardRate * 100)}%（${previewM}M、下限50M）を獲得します。`;
+    }
     confirmed = await confirmYesNo(`対戦をやめますか？\n${rewardMessage}`);
   }
   if (!confirmed) return;
 
   if (wasStoryBattle) saveStoryResume();
-  const rewardResult = wasStoryBattle ? null : grantExitReward(endingAssetsShare);
+  const rewardResult = wasStoryBattle || !rewardEligible ? null : grantExitReward(endingAssetsShare);
 
   // 退出時、もし戦闘シーン演出の途中（onBattleSceneEnter等のPromiseが
   // 未解決のまま）だった場合、そのGameインスタンスの続きが後から勝手に
