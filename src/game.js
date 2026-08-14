@@ -610,7 +610,7 @@ export class Game {
         return null;
       }
       const targetCardId = await this.onPickAbilityTarget(
-        cards.map((c) => ({ id: c.id, label: `${c.name}（${c.type === CardType.SPELL ? 'スペル' : 'アイテム'}・${c.rarity}）を破壊` })),
+        cards.map((c) => ({ id: c.id, label: `${c.name}（${c.type === CardType.SPELL ? 'スペル' : 'アイテム'}・${c.rarity}）を捨てさせる` })),
         player.id,
       );
       if (targetCardId == null) return null;
@@ -648,16 +648,18 @@ export class Game {
 
     switch (effect.type) {
       case 'destroyHandCard': {
-        // キャンセルカルチャー: 対象の手札からスペル/アイテム1枚を破壊（盤外へ）。
-        // 捨札には戻さない（デッキは捨札を再シャッフルするため）。
+        // キャンセルカルチャー: 対象の手札からスペル/アイテム1枚を「捨てる」。
+        // 盤外ではなく通常の捨札と同じ扱い（deck.discard）＝後でデッキ再シャッフル
+        // 時に戻り得る。
         if (!targetPlayer || cast.targetCardId == null) return false;
-        const destroyed = targetPlayer.hand.find((c) => c.id === cast.targetCardId);
-        if (!destroyed) {
+        const discarded = targetPlayer.hand.find((c) => c.id === cast.targetCardId);
+        if (!discarded) {
           this.onLog('対象のカードは既に手札にありません');
           return false;
         }
         targetPlayer.hand = targetPlayer.hand.filter((c) => c.id !== cast.targetCardId);
-        this.onLog(`${player.name}は「${card.name}」で${targetPlayer.name}の「${destroyed.name}」を破壊した`);
+        targetPlayer.deck.discard(discarded);
+        this.onLog(`${player.name}は「${card.name}」で${targetPlayer.name}の「${discarded.name}」を捨てさせた`);
         this._notifyState();
         return false;
       }
