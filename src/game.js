@@ -3943,9 +3943,16 @@ export class Game {
    */
   _cpuPickDamageTarget(candidates, amount) {
     if (candidates.length === 0) return null;
+    const ownerAssets = (t) => {
+      const owner = this.players.find((p) => p.id === t.unit.ownerId);
+      return owner ? this._totalAssetsOf(owner) : 0;
+    };
+    // ①そのスペルで確実に倒せる相手モンスターがいれば最優先（複数なら総資産が
+    // 最上位のプレイヤーのモンスター）。②倒せる相手がいなければ、総資産1位の
+    // プレイヤーのモンスターを狙う。いずれも同点は土地レベルが高い方。
     const killable = candidates.filter((t) => t.unit.currentHp <= amount);
     const pool = killable.length > 0 ? killable : candidates;
-    return [...pool].sort((a, b) => b.level - a.level)[0];
+    return [...pool].sort((a, b) => ownerAssets(b) - ownerAssets(a) || b.level - a.level)[0];
   }
 
   /**
@@ -4095,9 +4102,10 @@ export class Game {
     );
     if (!card || player.currency < (card.cost || 0)) return;
 
-    const opponents = this.players.filter(
-      (p) => !p.defeated && p.id !== player.id && !(p.allianceId != null && p.allianceId === player.allianceId),
-    );
+    const opponents = this.players
+      .filter((p) => !p.defeated && p.id !== player.id && !(p.allianceId != null && p.allianceId === player.allianceId))
+      // 総資産が上位（1位）のプレイヤーの土地から優先的に妨害する。
+      .sort((a, b) => this._totalAssetsOf(b) - this._totalAssetsOf(a));
 
     for (const opponent of opponents) {
       const ownedElements = new Set(
@@ -4185,9 +4193,8 @@ export class Game {
       (p) => !p.defeated && p.id !== player.id && !(p.allianceId != null && p.allianceId === player.allianceId),
     );
     if (candidates.length === 0) return null;
-    const human = candidates.find((p) => !p.isCPU);
-    if (human) return human;
-    return candidates.reduce((best, p) => (p.currency > best.currency ? p : best));
+    // ②総資産が最上位（＝1位）のプレイヤーを狙う（CPUも含む。自分・同盟は除外）。
+    return candidates.reduce((best, p) => (this._totalAssetsOf(p) > this._totalAssetsOf(best) ? p : best));
   }
 
   /**
