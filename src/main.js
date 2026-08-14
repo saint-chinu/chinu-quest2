@@ -1512,6 +1512,19 @@ async function promptLandLoss({ position, landLabel, chainBefore, chainAfter, as
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
 }
 
+async function promptLandChain({ position, playerName, elementLabel, chainBefore, chainAfter, chainBonus }) {
+  if (!scene || !position) return;
+  const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+  await scene.focusAndZoom(position.x, position.z, 1.35, 320);
+  const el = document.createElement('div');
+  el.className = 'fx-land-loss fx-land-chain';
+  el.textContent = `${playerName}の${elementLabel}属性 ${chainBefore}連鎖→${chainAfter}連鎖\n（連鎖ボーナス+${Math.round(chainBonus)}G）`;
+  fxLayer.appendChild(el);
+  await new Promise((resolve) => setTimeout(resolve, 1500));
+  el.remove();
+  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
+}
+
 async function promptGoalAchieved({ position, playerName }) {
   if (!scene || !position) return;
   playSfx('fanfare');
@@ -2340,6 +2353,7 @@ function startBattle(character, storyOptions = {}) {
     onTollPayment: relayable('tollPayment', promptTollPayment, { broadcast: true }),
     onMoveDestination: relayable('moveDestination', promptMoveDestination, { broadcast: true }),
     onLandLoss: relayable('landLoss', promptLandLoss, { broadcast: true }),
+    onLandChain: relayable('landChain', promptLandChain, { broadcast: true }),
     onLandLevelUp: relayable('landLevelUp', promptLandLevelUp, { broadcast: true }),
     onCheckpoint: relayable('checkpoint', promptCheckpointSound, { broadcast: true }),
     onGoalBonus: relayable('goalBonus', promptGoalBonusSound, { broadcast: true }),
@@ -5187,6 +5201,7 @@ const pvpGuestHandlers = {
   battleSceneEnter: promptBattleSceneEnter,
   pickBattleItem: promptPickBattleItem,
   battleEquip: promptBattleEquip,
+  battleTraitReveal: promptBattleTraitReveal,
   battleAttack: promptBattleAttack,
   battleRetreat: promptBattleRetreat,
   battleOutcome: promptBattleOutcome,
@@ -5194,6 +5209,7 @@ const pvpGuestHandlers = {
   tollPayment: promptTollPayment,
   moveDestination: promptMoveDestination,
   landLoss: promptLandLoss,
+  landChain: promptLandChain,
   landLevelUp: promptLandLevelUp,
   checkpoint: promptCheckpointSound,
   goalBonus: promptGoalBonusSound,

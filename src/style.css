@@ -313,6 +313,12 @@ html, body {
   box-shadow: 0 10px 30px rgba(0, 0, 0, 0.65);
 }
 
+/* 連鎖ボーナス（土地取得で連鎖が増えた時）はプラスの出来事なので緑で強調。 */
+.fx-land-chain {
+  border-color: #34d399;
+  box-shadow: 0 0 26px rgba(52, 211, 153, 0.45), 0 10px 30px rgba(0, 0, 0, 0.6);
+}
+
 .fx-goal-achieved {
   position: absolute;
   z-index: 70;

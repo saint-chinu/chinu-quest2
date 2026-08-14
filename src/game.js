@@ -88,6 +88,7 @@ export class Game {
     onTollPayment,
     onMoveDestination,
     onLandLoss,
+    onLandChain,
     onLandLevelUp,
     onCheckpoint,
     onGoalBonus,
@@ -150,6 +151,7 @@ export class Game {
     this.onTollPayment = onTollPayment || (() => Promise.resolve());
     this.onMoveDestination = onMoveDestination || (() => {});
     this.onLandLoss = onLandLoss || (() => Promise.resolve());
+    this.onLandChain = onLandChain || (() => Promise.resolve());
     this.onLandLevelUp = onLandLevelUp || (() => Promise.resolve());
     this.onCheckpoint = onCheckpoint || (() => Promise.resolve());
     this.onGoalBonus = onGoalBonus || (() => Promise.resolve());
@@ -2025,6 +2027,39 @@ export class Game {
     });
   }
 
+  /** 土地取得（召喚・侵略奪取）で連鎖が増える直前の状態を控える。土地の所有権を
+   *  変える前に呼ぶこと。無色地は連鎖しないので対象外。 */
+  _captureLandGain(player, tile) {
+    if (!player || !tile || tile.element === Element.NEUTRAL) return null;
+    return {
+      player,
+      element: tile.element,
+      chainBefore: this._chainCount(player.id, tile.element),
+      // 連鎖ボーナス＝連鎖で増えた総資産分。通貨（カード代・700G等）の増減を
+      // 拾わないよう、総資産のうち土地価値だけの増分で測る。
+      landValueBefore: this._landValueOf(player.id),
+      position: tile.position ? { x: tile.position.x, z: tile.position.z } : null,
+    };
+  }
+
+  /** 取得後に連鎖が実際に増えて2連鎖以上になった時だけ「◯連鎖→◯連鎖（連鎖ボーナス+◯G）」を見せる。 */
+  async _presentLandGain(snapshot) {
+    if (!snapshot) return;
+    const { player, element, chainBefore, landValueBefore, position } = snapshot;
+    const chainAfter = this._chainCount(player.id, element);
+    if (chainAfter <= chainBefore || chainAfter < 2) return;
+    const chainBonus = Math.max(0, Math.round(this._landValueOf(player.id) - landValueBefore));
+    await this.onLandChain({
+      playerId: player.id,
+      playerName: player.name,
+      elementLabel: ELEMENT_LABEL[element],
+      chainBefore,
+      chainAfter,
+      chainBonus,
+      position,
+    });
+  }
+
   /** 連鎖倍率: 連鎖数をCHAIN_MULTIPLIERテーブルに当てはめる（地価/通行料計算専用）。無所有・無色は連鎖1扱い。 */
   _chainMultiplier(ownerId, element) {
     const count = this._chainCount(ownerId, element);
@@ -2090,10 +2125,12 @@ export class Game {
           id: `swap-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         });
       }
+      const chainGain = this._captureLandGain(player, tile);
       this._placeUnit(tile, player, card);
       this.onLog(`${player.name}は${card.name}を${actionType === 'summon' ? '召喚' : '入れ替え'}した (-${card.cost}G)`);
       this._notifyState();
       await this.onSummonEffect?.({ tileId: tile.id, unitName: card.name });
+      await this._presentLandGain(chainGain);
       if (card.effect?.type === 'copyOnSummon') {
         await this._maybeCopyOnSummon(tile, player);
       }
@@ -2741,10 +2778,12 @@ export class Game {
       player.hand = player.hand.filter((c) => c.id !== card.id);
       player.deck.discard(card);
       player.currency -= card.cost;
+      const chainGain = this._captureLandGain(player, tile);
       this._placeUnit(tile, player, card);
       this.onLog(`${player.name}は${card.name}を召喚した (-${card.cost}G)`);
       this._notifyState();
       await this.onSummonEffect?.({ tileId: tile.id, unitName: card.name });
+      await this._presentLandGain(chainGain);
       return;
     }
 
@@ -3435,6 +3474,7 @@ export class Game {
     const attackerUnit = createFieldUnit(card, player.id);
     const defenderUnit = tile.unit;
     const defenderLandLoss = this._captureLandLoss(defenderPlayer, tile);
+    const attackerLandGain = this._captureLandGain(player, tile);
 
     // お前も〇ぬんだ: 次の侵略が戦闘無しで確定勝利になる（700G消費、通常の
     // 決着処理と同じ形で土地を奪う。避雷針侍の身代わり等の介入も一切挟まない）。
@@ -3449,6 +3489,7 @@ export class Game {
       this._paintTile(tile, player.color);
       await this._handleUnitDeath(defenderUnit, defenderPlayer);
       await this._presentLandLoss(defenderLandLoss);
+      await this._presentLandGain(attackerLandGain);
       this._notifyState();
       return;
     }
@@ -3480,6 +3521,7 @@ export class Game {
       if (!result.attackerSurvived) await this._handleUnitDeath(attackerUnit, player);
     }
     if (tile.owner !== defenderPlayer.id) await this._presentLandLoss(defenderLandLoss);
+    if (tile.owner === player.id) await this._presentLandGain(attackerLandGain);
   }
 
   /**
