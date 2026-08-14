@@ -32,12 +32,15 @@ export const GASHAAN_FIELD_MONSTER = {
   id: 'gashaan-field',
   catalogId: 'gashaan-field',
   type: CardType.MONSTER,
-  name: 'ガシャーン',
+  name: '合体ロボ・ガシャーン',
   element: Element.NEUTRAL,
   rarity: Rarity.EX,
   hp: 70,
   atk: 70,
   cost: 0,
+  traits: ['pierce'],
+  ability: { type: 'warpToAnyEmptyLand' },
+  effectDescription: '貫通。土地コマンド: 任意の空き地へ移動する',
 };
 
 /** 無属性モンスター20種。画像未指定時はcardArt.jsの無属性共通画像を使う。 */
@@ -51,20 +54,23 @@ export const NEUTRAL_MONSTER_CATALOG = {
     effect: { type: 'deathRespawnChance', chance: 0.5 },
     effectDescription: '倒された時、1/2の確率で別の空き地に再出現する',
   }),
-  kodaiNoGearA: neutralMonster('kodaiNoGearA', '古代のギアA', Rarity.N, 25, 10, {
+  kodaiNoGearA: neutralMonster('kodaiNoGearA', '古代のギアA', Rarity.S, 25, 10, {
     cost: 10,
+    traits: ['reflectHalfDamage'],
     effect: { type: 'fusionSummon', partners: ['kodaiNoGearB', 'kodaiNoGearC'] },
-    effectDescription: 'ほかのギアが2種類配置された状態で召喚すると…',
+    effectDescription: '受けたダメージの1/2を相手に反射。ほかのギアが2種類配置された状態で召喚すると…',
   }),
-  kodaiNoGearB: neutralMonster('kodaiNoGearB', '古代のギアB', Rarity.N, 25, 10, {
+  kodaiNoGearB: neutralMonster('kodaiNoGearB', '古代のギアB', Rarity.S, 25, 10, {
     cost: 10,
+    traits: ['elementHpBonusIgnoreElement'],
     effect: { type: 'fusionSummon', partners: ['kodaiNoGearA', 'kodaiNoGearC'] },
-    effectDescription: 'ほかのギアが2種類配置された状態で召喚すると…',
+    effectDescription: 'どの属性の土地でも土地レベル×10のHP加算を受ける。ほかのギアが2種類配置された状態で召喚すると…',
   }),
-  kodaiNoGearC: neutralMonster('kodaiNoGearC', '古代のギアC', Rarity.N, 25, 10, {
+  kodaiNoGearC: neutralMonster('kodaiNoGearC', '古代のギアC', Rarity.S, 25, 10, {
     cost: 10,
+    traits: ['neutralHpAura'],
     effect: { type: 'fusionSummon', partners: ['kodaiNoGearA', 'kodaiNoGearB'] },
-    effectDescription: 'ほかのギアが2種類配置された状態で召喚すると…',
+    effectDescription: '配置中、すべての無属性モンスターは戦闘中HP+10。ほかのギアが2種類配置された状態で召喚すると…',
   }),
   toumeiNingen: neutralMonster('toumeiNingen', '透明人間', Rarity.N, 10, 20, {
     effect: { type: 'challengeOdds', attackFailureChance: 0, negateIncomingChance: 0.75 },

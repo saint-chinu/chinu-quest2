@@ -2761,9 +2761,12 @@ export class Game {
       return true;
     }
 
-    if (ability.type === 'warpToEmptyElementLand') {
+    if (ability.type === 'warpToEmptyElementLand' || ability.type === 'warpToAnyEmptyLand') {
       const targets = this.tiles.filter(
-        (t) => t.type === TileType.LAND && t.owner == null && t.element === ability.element && t.id !== tile.id,
+        (t) => t.type === TileType.LAND
+          && t.owner == null
+          && (ability.type === 'warpToAnyEmptyLand' || t.element === ability.element)
+          && t.id !== tile.id,
       );
       if (targets.length === 0) {
         this.onLog('ワープ先の空き地がありません');
@@ -2778,14 +2781,18 @@ export class Game {
 
       const targetTile = this.tiles.find((t) => t.id === targetId);
       const unit = tile.unit;
+      const mesh = tile.unitMesh;
+      tile.unitMesh = null;
       targetTile.unit = unit;
       targetTile.owner = player.id;
+      targetTile.unitMesh = mesh;
       this._paintTile(targetTile, player.color);
       tile.unit = null;
       tile.owner = null;
       tile.transparentCursed = false;
       this._repaintTileToElement(tile);
       this.onLog(`${player.name}の${unitDef.name}が空き地へワープした`);
+      await this._hopUnitIcon(mesh, tile.position, targetTile.position);
       this._notifyState();
       await this.onTargetEffect?.({ tileId: targetTile.id, position: targetTile.position, message: `${unitDef.name}がワープした！` });
       return true;
@@ -3350,7 +3357,8 @@ export class Game {
   _elementHpBonus(unit, positionTile) {
     if (!positionTile || positionTile.owner !== unit.ownerId) return 0;
     // レインボーカメレオン: 属性一致を問わず土地レベル×10を受け取る。
-    const ignoresElement = unit.def.effect?.type === 'elementHpBonusIgnoreElement';
+    const ignoresElement = unit.def.effect?.type === 'elementHpBonusIgnoreElement'
+      || unit.def.traits?.includes('elementHpBonusIgnoreElement');
     if (!ignoresElement && positionTile.element !== unit.def.element) return 0;
     return Math.min(positionTile.level * 10, 50);
   }
@@ -3387,12 +3395,20 @@ export class Game {
       hp += 10;
       this.onLog(`${unit.def.name}は電柱の恩恵でHP+10`);
     }
+    if (unit.def.element === Element.NEUTRAL && this._hasFieldTraitOnBoard('neutralHpAura')) {
+      hp += 10;
+      this.onLog(`${unit.def.name}は古代のギアCの応援でHP+10`);
+    }
     return { atk, hp };
   }
 
   /** 盤面上のどこかに、指定catalogIdのモンスターが（所有者問わず）配置されているか。電柱の全体効果用。 */
   _hasFieldMonsterOnBoard(catalogId) {
     return this.tiles.some((t) => t.unit && catalogIdOf(t.unit.def) === catalogId);
+  }
+
+  _hasFieldTraitOnBoard(trait) {
+    return this.tiles.some((t) => t.unit?.def?.traits?.includes(trait));
   }
 
   /**
@@ -4089,9 +4105,125 @@ export class Game {
     } while (this.players[this.currentPlayerIndex].defeated);
   }
 
+  /**
+   * ダンボール男専用のガシャーン運用。Lv3以上の敵地に隣接していれば
+   * モンスター移動で侵略し、離れていればその敵地に隣接する空き地へ
+   * 固有土地コマンドで先回りする。どちらも土地コマンド1回分として
+   * そのターンを終了する。
+   */
+  async _cpuMaybeUseGashaanTactics(player) {
+    if (!this._isDanballBoss(player)) return false;
+    const source = this.tiles.find(
+      (tile) => tile.unit?.ownerId === player.id && catalogIdOf(tile.unit.def) === 'gashaan-field',
+    );
+    if (!source) return false;
+
+    const enemyLands = this.tiles
+      .filter((tile) => {
+        if (tile.type !== TileType.LAND || tile.level < 3 || tile.owner == null || tile.owner === player.id || !tile.unit) return false;
+        const owner = this.players.find((candidate) => candidate.id === tile.owner);
+        return owner && !this._isAllyOf(owner, player) && !tile.transparentCursed;
+      })
+      .sort((a, b) => b.level - a.level || this._landValueOfTile(b) - this._landValueOfTile(a));
+    if (enemyLands.length === 0) return false;
+
+    const adjacentEnemy = enemyLands.find((target) => source.neighbors.includes(target.id));
+    if (adjacentEnemy) {
+      this.onLog(`${player.name}は${source.unit.def.name}を移動させ、Lv${adjacentEnemy.level}の敵地へ侵略する！`);
+      await this._cpuMoveOwnedUnit(player, source, adjacentEnemy);
+      return true;
+    }
+
+    const staging = enemyLands.flatMap((enemy) => enemy.neighbors
+      .map((id) => this.tiles[id])
+      .filter((tile) => tile.type === TileType.LAND && tile.owner == null)
+      .map((tile) => ({ tile, enemy })));
+    if (staging.length === 0) return false;
+    staging.sort((a, b) => b.enemy.level - a.enemy.level || this._landValueOfTile(b.enemy) - this._landValueOfTile(a.enemy));
+    const target = staging[0].tile;
+    const unit = source.unit;
+    const mesh = source.unitMesh;
+    source.unitMesh = null;
+    target.unit = unit;
+    target.owner = player.id;
+    target.unitMesh = mesh;
+    this._paintTile(target, player.color);
+    source.unit = null;
+    source.owner = null;
+    source.transparentCursed = false;
+    this._repaintTileToElement(source);
+    this.onLog(`${player.name}の${unit.def.name}がLv${staging[0].enemy.level}の敵地の横へ移動した！`);
+    await this._hopUnitIcon(mesh, source.position, target.position);
+    this._notifyState();
+    await this.onTargetEffect?.({ tileId: target.id, position: target.position, message: `${unit.def.name}が敵地の横へワープした！` });
+    return true;
+  }
+
+  /** CPU用の隣接モンスター移動。人間の「移動」と同じ一戦・奪取処理を使う。 */
+  async _cpuMoveOwnedUnit(player, source, target) {
+    const attackerUnit = source.unit;
+    const defenderPlayer = this.players.find((candidate) => candidate.id === target.owner);
+    const defenderUnit = target.unit;
+    const defenderLandLoss = this._captureLandLoss(defenderPlayer, target);
+    const attackerLandGain = this._captureLandGain(player, target);
+    attackerUnit.curses = [];
+    const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, source, target);
+    if (!result) return false;
+    target.forcedStopCursed = false;
+    await this._maybeRedirectDeathToLightningRod(defenderPlayer, target, result);
+
+    if (result.attackerSurvived && !result.defenderSurvived) {
+      const mesh = source.unitMesh;
+      source.unitMesh = null;
+      this.scene.removeUnitIcon?.(target.unitMesh);
+      target.unit = attackerUnit;
+      target.owner = player.id;
+      target.unitMesh = mesh;
+      this._paintTile(target, player.color);
+      source.unit = null;
+      source.owner = null;
+      source.transparentCursed = false;
+      this._repaintTileToElement(source);
+      await this._handleUnitDeath(defenderUnit, defenderPlayer);
+      await this._hopUnitIcon(mesh, source.position, target.position);
+      this.onLog(`${player.name}の${attackerUnit.def.name}がLv${target.level}の土地を奪取した！`);
+      await this._presentLandLoss(defenderLandLoss);
+      await this._presentLandGain(attackerLandGain);
+    } else if (result.attackerSurvived && result.defenderSurvived) {
+      await this._hopUnitIcon(source.unitMesh, source.position, target.position);
+      await this._hopUnitIcon(source.unitMesh, target.position, source.position);
+      this.onLog(`${defenderPlayer.name}が防衛し、${attackerUnit.def.name}は元の土地へ戻った`);
+    } else {
+      source.unit = null;
+      source.owner = null;
+      source.transparentCursed = false;
+      this._repaintTileToElement(source);
+      await this._handleUnitDeath(attackerUnit, player);
+      if (!result.defenderSurvived) {
+        target.unit = null;
+        target.owner = null;
+        target.transparentCursed = false;
+        this._repaintTileToElement(target);
+        await this._handleUnitDeath(defenderUnit, defenderPlayer);
+        await this._presentLandLoss(defenderLandLoss);
+      }
+    }
+    this._notifyState();
+    return true;
+  }
+
   async _runCPUTurn() {
     await delay(CPU_PRE_ROLL_MS);
     if (!this.currentPlayer.isCPU) return;
+    if (await this._cpuMaybeUseGashaanTactics(this.currentPlayer)) {
+      await delay(400);
+      for (const candidate of this.players) await this._resolveNegativeCurrency(candidate);
+      if (!this.storyEnded) {
+        this._nextTurn();
+        await this._beginTurn();
+      }
+      return;
+    }
     // ダンボール男は③手札の「未知との遭遇」を最優先で使う（無属性モンスター＝ギアを
     // 引き寄せてガシャーン合体を狙う）。1ターン1スペルなので他スペルより先に判定。
     await this._cpuMaybeUseEncounterSpell(this.currentPlayer);

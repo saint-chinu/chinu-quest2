@@ -219,8 +219,11 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
   // ハリネズミの服(reflectHalfDamage): くねくねと違い自分も普通にダメージを
   // 受けたうえで、その半分を追加で攻撃側にも返す。
   let resultReflectedDamage = 0;
-  const halfReflectItem = !pierces && defenderUnit.items.find((i) => i.effect?.type === 'reflectHalfDamage');
-  if (halfReflectItem && damage > 0) {
+  const hasHalfReflect = !pierces && (
+    defenderUnit.items.some((i) => i.effect?.type === 'reflectHalfDamage')
+    || hasTrait(defenderUnit, 'reflectHalfDamage')
+  );
+  if (hasHalfReflect && damage > 0) {
     const reflected = Math.round(damage / 2);
     // 反射分を受ける攻撃側がナンカのお守りを持っていれば無効化する。
     if (consumeDamageNegation(attackerUnit, log)) {
