@@ -2103,6 +2103,21 @@ export class Game {
 
   /** 土地取得（召喚・侵略奪取）で連鎖が増える直前の状態を控える。土地の所有権を
    *  変える前に呼ぶこと。無色地は連鎖しないので対象外。 */
+  /** 同盟（自分＋同盟仲間）が所有する全土地の地価合計。ソロなら自分の分のみ。
+   *  連鎖ボーナスは同盟全体の地価上昇で測るため、この合計の増分を使う。 */
+  _allianceLandValueOf(player) {
+    const allianceId = player?.allianceId ?? null;
+    return this.tiles
+      .filter((t) => {
+        if (t.owner == null) return false;
+        if (t.owner === player.id) return true;
+        if (allianceId == null) return false;
+        const owner = this.players.find((p) => p.id === t.owner);
+        return owner?.allianceId === allianceId;
+      })
+      .reduce((sum, t) => sum + this._landValueOfTile(t), 0);
+  }
+
   _captureLandGain(player, tile) {
     if (!player || !tile || tile.element === Element.NEUTRAL) return null;
     return {
@@ -2110,8 +2125,9 @@ export class Game {
       element: tile.element,
       chainBefore: this._chainCount(player.id, tile.element),
       // 連鎖ボーナス＝連鎖で増えた総資産分。通貨（カード代・700G等）の増減を
-      // 拾わないよう、総資産のうち土地価値だけの増分で測る。
-      landValueBefore: this._landValueOf(player.id),
+      // 拾わないよう、総資産のうち土地価値だけの増分で測る。同盟戦では連鎖が
+      // 同盟仲間の同属性地の地価も押し上げるので、同盟全体の地価増分で測る。
+      landValueBefore: this._allianceLandValueOf(player),
       position: tile.position ? { x: tile.position.x, z: tile.position.z } : null,
     };
   }
@@ -2122,7 +2138,7 @@ export class Game {
     const { player, element, chainBefore, landValueBefore, position } = snapshot;
     const chainAfter = this._chainCount(player.id, element);
     if (chainAfter <= chainBefore || chainAfter < 2) return;
-    const chainBonus = Math.max(0, Math.round(this._landValueOf(player.id) - landValueBefore));
+    const chainBonus = Math.max(0, Math.round(this._allianceLandValueOf(player) - landValueBefore));
     await this.onLandChain({
       playerId: player.id,
       playerName: player.name,
