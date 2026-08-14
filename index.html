@@ -404,30 +404,6 @@
         <button id="menu-button" aria-label="メニュー">メニュー</button>
         <div id="stage-goal-display" class="hidden">目標G: <span id="stage-goal-amount"></span></div>
       </div>
-      <div id="mail-modal" class="hidden">
-        <div id="mail-box">
-          <header class="mail-header">
-            <span class="mail-header-icon" aria-hidden="true">✉</span>
-            <h3 class="mail-header-title">運営からのお知らせ</h3>
-          </header>
-          <div id="mail-list" class="mail-list"></div>
-          <button id="mail-close" class="pg-button pg-button-secondary">閉じる</button>
-        </div>
-      </div>
-
-      <div id="goal-select-modal" class="hidden">
-        <div id="goal-select-box">
-          <h3 class="goal-select-title">目標総資産を選択</h3>
-          <p class="goal-select-hint">この金額を超えてゴールに止まると勝利</p>
-          <div class="goal-select-stepper">
-            <button id="goal-select-dec" type="button" aria-label="下げる">◀</button>
-            <div id="goal-select-value" class="goal-select-value"></div>
-            <button id="goal-select-inc" type="button" aria-label="上げる">▶</button>
-          </div>
-          <button id="goal-select-confirm" class="pg-button">この目標で対戦</button>
-          <button id="goal-select-cancel" class="pg-button pg-button-secondary">戻る</button>
-        </div>
-      </div>
 
       <div id="game-menu-modal" class="hidden">
         <div id="game-menu-box">
@@ -658,6 +634,35 @@
         <p id="battle-message-text" class="hidden"></p>
       </div>
     </div>
+
+    <!-- 全画面オーバーレイは #pre-game / #app のどちらが表示中でも出せるよう
+         body直下に置く（#app は非表示時 display:none になり、その内側だと
+         メニュー/ハブなどpre-game中に開いても表示されずフリーズするため）。 -->
+    <div id="mail-modal" class="hidden">
+      <div id="mail-box">
+        <header class="mail-header">
+          <span class="mail-header-icon" aria-hidden="true">✉</span>
+          <h3 class="mail-header-title">運営からのお知らせ</h3>
+        </header>
+        <div id="mail-list" class="mail-list"></div>
+        <button id="mail-close" class="pg-button pg-button-secondary">閉じる</button>
+      </div>
+    </div>
+
+    <div id="goal-select-modal" class="hidden">
+      <div id="goal-select-box">
+        <h3 class="goal-select-title">目標総資産を選択</h3>
+        <p class="goal-select-hint">この金額を超えてゴールに止まると勝利</p>
+        <div class="goal-select-stepper">
+          <button id="goal-select-dec" type="button" aria-label="下げる">◀</button>
+          <div id="goal-select-value" class="goal-select-value"></div>
+          <button id="goal-select-inc" type="button" aria-label="上げる">▶</button>
+        </div>
+        <button id="goal-select-confirm" class="pg-button">この目標で対戦</button>
+        <button id="goal-select-cancel" class="pg-button pg-button-secondary">戻る</button>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
