@@ -150,6 +150,20 @@ function damageReductionMultiplier(defenderUnit, attackerUnit) {
   return { multiplier, triggeredMessage };
 }
 
+// ナンカのお守り(negateNextDamage): このユニットが次に受けるダメージを1回だけ
+// 完全無効化するチャージ。あれば消費してメッセージ文字列を返す（＝呼び出し側は
+// ダメージを0にする）。通常攻撃だけでなく、反射(くねくね/ハリネズミの服)や
+// 道連れ(deathRetaliation)など dealDamage を通らない戦闘ダメージにも共通で使う。
+// アイテム本体にconsumedを立てて再発動を防ぐ（itemsは戦闘終了時に必ずクリア）。
+function consumeDamageNegation(unit, log) {
+  const item = unit.items.find((i) => i.effect?.type === 'negateNextDamage' && !i.consumed);
+  if (!item) return null;
+  item.consumed = true;
+  const message = `${unit.def.name}は「${item.name}」でダメージを無効化した`;
+  log.push(message);
+  return message;
+}
+
 function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
   const atkStats = statTotals(attackerUnit, attackerBonus);
   const reduction = damageReductionMultiplier(defenderUnit, attackerUnit);
@@ -164,21 +178,19 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
   // 側の処理はgame.js側で別途行う（_runBattleScene参照）。
   const pierces = hasTrait(attackerUnit, 'pierce');
 
-  // ナンカのお守り(negateNextDamage): このアイテムで1回だけダメージを
-  // 完全無効化する（アイテム本体にconsumedを立てて再発動を防ぐ - itemsは
-  // 戦闘終了時に必ずクリアされるので使い回しの心配は無い）。
-  const negateItem = !pierces && defenderUnit.items.find((i) => i.effect?.type === 'negateNextDamage' && !i.consumed);
-  if (negateItem && damage > 0) {
-    negateItem.consumed = true;
-    const message = `${defenderUnit.def.name}は「${negateItem.name}」でダメージを無効化した`;
-    log.push(message);
-    return { damage: 0, message };
+  // ナンカのお守り(negateNextDamage): このアイテムで1回だけダメージを完全無効化。
+  if (!pierces && damage > 0) {
+    const negatedMsg = consumeDamageNegation(defenderUnit, log);
+    if (negatedMsg) return { damage: 0, message: negatedMsg };
   }
 
   // くねくね(reflectDamage): 攻撃をそのまま跳ね返す - 自身はノーダメージ、
   // 攻撃側がその分のダメージを受ける。攻撃自体が「届かなかった」扱いなので
   // 命中時オンヒット効果（毒付与など）は発動させない - damage:0を返す。
   if (!pierces && defenderUnit.def.effect?.type === 'reflectDamage' && damage > 0) {
+    // 反射ダメージを受ける攻撃側がナンカのお守りを持っていれば無効化する。
+    const negatedMsg = consumeDamageNegation(attackerUnit, log);
+    if (negatedMsg) return { damage: 0, message: negatedMsg };
     attackerUnit.currentHp -= damage;
     const message = `${defenderUnit.def.name}が反射！ ${attackerUnit.def.name}に${damage}ダメージ`;
     log.push(message);
@@ -205,9 +217,14 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
   const halfReflectItem = !pierces && defenderUnit.items.find((i) => i.effect?.type === 'reflectHalfDamage');
   if (halfReflectItem && damage > 0) {
     const reflected = Math.round(damage / 2);
-    attackerUnit.currentHp -= reflected;
-    message += `／${defenderUnit.def.name}が${reflected}ダメージを反射した`;
-    resultReflectedDamage = reflected;
+    // 反射分を受ける攻撃側がナンカのお守りを持っていれば無効化する。
+    if (consumeDamageNegation(attackerUnit, log)) {
+      message += `／${defenderUnit.def.name}の反射は${attackerUnit.def.name}のお守りで無効化された`;
+    } else {
+      attackerUnit.currentHp -= reflected;
+      message += `／${defenderUnit.def.name}が${reflected}ダメージを反射した`;
+      resultReflectedDamage = reflected;
+    }
   }
 
   log.push(message);
@@ -335,8 +352,11 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
       log.push(`${attackerUnit.def.name}は${defenderUnit.def.name}を倒して${attackerEffect.amount}Gを得た`);
     }
     if (defenderEffect?.type === 'deathRetaliation' && defenderEffect.trigger === 'enemyAttack') {
-      attackerUnit.currentHp -= defenderEffect.damage;
-      log.push(`${defenderUnit.def.name}は道連れに${attackerUnit.def.name}へ${defenderEffect.damage}ダメージ！`);
+      // 道連れダメージも攻撃側のナンカのお守りで1回無効化できる。
+      if (!consumeDamageNegation(attackerUnit, log)) {
+        attackerUnit.currentHp -= defenderEffect.damage;
+        log.push(`${defenderUnit.def.name}は道連れに${attackerUnit.def.name}へ${defenderEffect.damage}ダメージ！`);
+      }
     }
   }
 

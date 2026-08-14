@@ -1165,16 +1165,21 @@ function renderHand(hand, spellUsable = false) {
     el.style.pointerEvents = 'auto';
     renderCardEl(el, card, { showMonsterStats: true });
     const canUseThis = card.type === CardType.SPELL && spellUsable;
-    el.addEventListener('click', () => showCardDetail(card, canUseThis ? () => {
-      el.classList.add('blinking');
-      setTimeout(() => {
-        if (pvpMatch && !pvpMatch.isHost) {
-          pvpMatch.actionSender.send({ type: 'useSpell', cardId: card.id, playerId: pvpMatch.localPlayerId });
-        } else {
-          game.useSpell(card);
-        }
-      }, BLINK_MS);
-    } : null));
+    el.addEventListener('click', () => {
+      // サイコロを振り始めてから確定前に手札（コマンド選択）へ戻った場合は、
+      // 回転を止めてリセットする（放置すると裏で回り続けてしまう）。
+      if (diceState === 'spinning') resetDice();
+      showCardDetail(card, canUseThis ? () => {
+        el.classList.add('blinking');
+        setTimeout(() => {
+          if (pvpMatch && !pvpMatch.isHost) {
+            pvpMatch.actionSender.send({ type: 'useSpell', cardId: card.id, playerId: pvpMatch.localPlayerId });
+          } else {
+            game.useSpell(card);
+          }
+        }, BLINK_MS);
+      } : null);
+    });
     handPanel.appendChild(el);
   }
 }
@@ -2399,6 +2404,8 @@ gameMenuMute.addEventListener('click', () => {
 });
 
 menuButton.addEventListener('click', () => {
+  // サイコロ回転中にメニューを開いたら回転を止める（確定前の中断）。
+  if (diceState === 'spinning') resetDice();
   gameMenuModal.classList.remove('hidden');
   gameMenuBan.classList.toggle('hidden', !(pvpMatch?.isHost && game));
 });
