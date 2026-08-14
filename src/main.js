@@ -311,14 +311,88 @@ function promptDirectionArrows(options, { noBack = false, confirmOnSecondTap = f
 }
 
 /**
- * Every time movement reaches a tile with more than one way forward (the
- * board's 4 edge-midpoints and its center - see board.js), not just once at
- * game start. The first tap arms/highlights the route and its possible
- * destination tiles; tapping the same arrow again confirms movement. The
- * choice is mandatory (no camera-work "戻る").
+ * マスの分岐: 進める候補マス（分岐の各方向の次マス）を盤面上で白く点滅させ、
+ * 直接タップして選ぶ（矢印UIは使わない）。1回タップでそのマスが高速点滅
+ * （選択状態）になり、高速点滅中のマスをもう一度タップすると確定して進む。
+ * 別の候補マスをタップすると選択が移る。分岐は必須選択なので「戻る」は無い。
+ * 盤面が見切れている時はカメラのパン矢印（cam-arrow-*）で寄せられる。
  */
 function promptChooseBranch(options) {
-  return promptDirectionArrows(options, { noBack: true, confirmOnSecondTap: true });
+  return new Promise((resolve) => {
+    const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+    const candidateIds = options.map((o) => o.tileId).filter((id) => tiles[id]?.mesh);
+    const candidateSet = new Set(candidateIds);
+    let selectedTileId = null;
+
+    // 分岐中は移動先ハイライトを一旦消して候補マスだけに集中させる
+    // （分岐確定後に_movePlayerが改めてonMoveDestinationで点け直す）。
+    stopMoveDestinationHighlight?.();
+    stopMoveDestinationHighlight = null;
+
+    cameraWorkOverlay.classList.add('no-back');
+    cameraWorkOverlay.classList.remove('hidden');
+    // 分岐の方向矢印は廃止したので出さない。
+    directionArrowsOverlay.classList.add('hidden');
+
+    const start = performance.now();
+    let raf = requestAnimationFrame(function frame(now) {
+      const t = (now - start) / 1000;
+      const slow = 0.35 + 0.25 * Math.sin(t * 2.4);
+      const fast = 0.55 + 0.4 * Math.sin(t * 9);
+      for (const id of candidateIds) {
+        const mesh = tiles[id]?.mesh;
+        if (!mesh) continue;
+        mesh.material.emissive.setHex(0xffffff);
+        mesh.material.emissiveIntensity = id === selectedTileId ? fast : slow;
+      }
+      raf = requestAnimationFrame(frame);
+    });
+
+    function onCanvasClick(e) {
+      const rect = canvas.getBoundingClientRect();
+      const ndcX = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+      const ndcY = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+      const tile = scene.pickTileAt(ndcX, ndcY, tiles);
+      if (!tile || !candidateSet.has(tile.id)) return;
+      if (selectedTileId === tile.id) {
+        finish(tile.id); // 高速点滅中のマスを再タップ → 確定して進む
+      } else {
+        selectedTileId = tile.id; // 1回目のタップ → 高速点滅で選択
+      }
+    }
+    function onUp() { scene.panByDirection('up'); }
+    function onDown() { scene.panByDirection('down'); }
+    function onLeft() { scene.panByDirection('left'); }
+    function onRight() { scene.panByDirection('right'); }
+    function finish(result) {
+      cancelAnimationFrame(raf);
+      for (const id of candidateIds) {
+        const mesh = tiles[id]?.mesh;
+        if (mesh) {
+          mesh.material.emissive.setHex(0x000000);
+          mesh.material.emissiveIntensity = 0;
+        }
+      }
+      cameraWorkOverlay.classList.add('hidden');
+      cameraWorkOverlay.classList.remove('no-back');
+      canvas.removeEventListener('click', onCanvasClick);
+      camArrowUp.removeEventListener('click', onUp);
+      camArrowDown.removeEventListener('click', onDown);
+      camArrowLeft.removeEventListener('click', onLeft);
+      camArrowRight.removeEventListener('click', onRight);
+      scene.setFocusImmediate(savedFocus.x, savedFocus.z);
+      unregisterPromptCanceller(cancelSelf);
+      resolve(result);
+    }
+    function cancelSelf() { finish(null); }
+    registerPromptCanceller(cancelSelf);
+
+    canvas.addEventListener('click', onCanvasClick);
+    camArrowUp.addEventListener('click', onUp);
+    camArrowDown.addEventListener('click', onDown);
+    camArrowLeft.addEventListener('click', onLeft);
+    camArrowRight.addEventListener('click', onRight);
+  });
 }
 
 /** 土地コマンドの「移動」: same diagonal-arrow chooser, but cancellable (the player already has a monster placed - trying doesn't have to commit). */
