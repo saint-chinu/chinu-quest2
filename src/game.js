@@ -3203,15 +3203,20 @@ export class Game {
   }
 
   /**
-   * 応援ボーナス: 戦闘地（battleTile）に隣接するマスに同じ所有者の別
-   * モンスターがいればATK+10。攻撃側・防御側どちらにも同じ判定を使う
+   * 応援ボーナス: 戦闘地（battleTile）に隣接するマスに、自分または同盟仲間の
+   * 別モンスターがいればATK+10。攻撃側・防御側どちらにも同じ判定を使う
    * （`unit !== t.unit` は移動コマンドで自分の元いた土地が戦闘地の隣接
-   * マスに含まれてしまう＝自分自身を援護扱いしないための除外）。
+   * マスに含まれてしまう＝自分自身を援護扱いしないための除外）。同盟戦では
+   * 同盟者の土地のモンスターも応援に含める。
    */
   _cheerAtkBonus(unit, battleTile) {
+    const owner = this.players.find((p) => p.id === unit.ownerId);
+    if (!owner) return 0;
     const hasAlly = battleTile.neighbors.some((id) => {
       const t = this.tiles[id];
-      return t.unit != null && t.unit !== unit && t.unit.ownerId === unit.ownerId;
+      if (t.unit == null || t.unit === unit) return false;
+      const supporter = this.players.find((p) => p.id === t.unit.ownerId);
+      return supporter != null && this._isAllyOf(supporter, owner);
     });
     return hasAlly ? 10 : 0;
   }
