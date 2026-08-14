@@ -856,6 +856,12 @@ html, body {
   background: rgba(4, 12, 20, 0.72);
   backdrop-filter: blur(4px);
 }
+/* IDセレクタ(#mail-modal)はクラス(.hidden)より詳細度が高い。この明示ルールが
+   無いと class="hidden" を付けても display:grid のまま全画面表示が残り、
+   アプリ全体を覆って操作不能（フリーズ）になる。必ずIDで隠すこと。 */
+#mail-modal.hidden {
+  display: none;
+}
 #mail-box {
   width: min(560px, 96vw);
   max-height: 86vh;

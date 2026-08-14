@@ -4280,11 +4280,14 @@ async function loadAnnouncements(force = false) {
   if (!firebaseReady || !db) return [];
   if (cachedAnnouncements && !force) return cachedAnnouncements;
   try {
-    const snap = await fsGetDocs(fsQuery(collection(db, 'announcements'), fsOrderBy('createdAt', 'desc')));
+    // オフライン等でserver取得がハングしてもUIを固めないよう、8秒でタイムアウト。
+    const fetchPromise = fsGetDocs(fsQuery(collection(db, 'announcements'), fsOrderBy('createdAt', 'desc')));
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000));
+    const snap = await Promise.race([fetchPromise, timeout]);
     cachedAnnouncements = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   } catch (error) {
     console.warn('お知らせの読み込みに失敗', error);
-    cachedAnnouncements = [];
+    cachedAnnouncements = cachedAnnouncements || [];
   }
   return cachedAnnouncements;
 }
@@ -4395,11 +4398,20 @@ function renderMailList(list, newIds) {
 }
 
 async function openMailModal() {
+  // まずモーダルを即座に開いて「読み込み中」を出す。ネットワークが遅くても
+  // タップに必ず反応し、閉じるボタンも常に効く（ハング＝フリーズを防ぐ）。
+  mailList.replaceChildren();
+  const loading = document.createElement('div');
+  loading.className = 'mail-empty';
+  loading.textContent = '読み込み中…';
+  mailList.appendChild(loading);
+  mailModal.classList.remove('hidden');
+
   const list = await loadAnnouncements(true);
+  if (mailModal.classList.contains('hidden')) return; // 読み込み中に閉じられたら何もしない
   // 開封前に「未読」を確定させ、NEW表示とカード受領演出に使う。
   const newIds = new Set(unseenAnnouncementIds(list));
   renderMailList(list, newIds);
-  mailModal.classList.remove('hidden');
   // 開封＝受領: 未読の添付カードを付与し、既読化してバッジを消す。
   const granted = claimAnnouncementCards(list);
   if (hubMailBadge) hubMailBadge.hidden = true;
