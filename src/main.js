@@ -2082,11 +2082,25 @@ async function promptBattleItemSteal({ fromSide, toSide, items = [] }) {
   flying.style.top = `${sourceRect.top + sourceRect.height / 2}px`;
   document.body.appendChild(flying);
 
-  await new Promise((resolve) => requestAnimationFrame(() => {
-    flying.style.transform = `translate(${targetRect.left + targetRect.width / 2 - sourceRect.left - sourceRect.width / 2}px, ${targetRect.top + targetRect.height / 2 - sourceRect.top - sourceRect.height / 2}px) scale(1.08) rotate(${toSide === 'attacker' ? '-8deg' : '8deg'})`;
-    flying.classList.add('moving');
-    setTimeout(resolve, 900);
-  }));
+  await new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      resolve();
+    };
+    // iOSの画面回転・アプリ切替中はrequestAnimationFrameが停止することが
+    // ある。戦闘本体がこのPromiseを待ち続けないよう、演出全体にも必ず
+    // 解決するwatchdogを置く（ステージ③の真剣白刃取りで頻発した停止対策）。
+    const watchdog = setTimeout(finish, 1200);
+    requestAnimationFrame(() => {
+      if (settled) return;
+      flying.style.transform = `translate(${targetRect.left + targetRect.width / 2 - sourceRect.left - sourceRect.width / 2}px, ${targetRect.top + targetRect.height / 2 - sourceRect.top - sourceRect.height / 2}px) scale(1.08) rotate(${toSide === 'attacker' ? '-8deg' : '8deg'})`;
+      flying.classList.add('moving');
+      setTimeout(finish, 900);
+    });
+  });
 
   fromEls.item.classList.add('hidden');
   fromEls.item.replaceChildren();
