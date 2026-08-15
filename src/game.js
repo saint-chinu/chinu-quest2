@@ -1885,7 +1885,13 @@ export class Game {
     const isDanball = this._isDanballBoss(player);
     const checkpointTarget = this._nearestUnpassedCheckpointTileId(player);
     const target = checkpointTarget ?? this._nearestGoalTileId(player);
+    // 次点の誘導先（最短チェックポイント/ゴールへの距離が同点の分岐同士の
+    // タイブレークに使う）。ダンボール男は「道中でギアを置ける空き地」を最優先
+    // で狙い、置けるギアが無い時だけ通常の同属性空き地へ寄る。それ以外のCPUは
+    // 従来どおり同属性空き地。
+    const gearLandTarget = isDanball ? this._nearestGearPlaceableEmptyLandTileId(player) : null;
     const matchingElementTarget = this._nearestSummonableMatchingEmptyLandTileId(player);
+    const secondaryTarget = isDanball ? (gearLandTarget ?? matchingElementTarget) : matchingElementTarget;
     const leadingOniku = player.name === '暴君マダイ' ? this._leadingOnikuOpponent(player) : null;
     const onikuLands = leadingOniku ? this.tiles.filter((tile) => tile.owner === leadingOniku.id) : [];
     const scores = optionIds.map((id) => {
@@ -1895,11 +1901,12 @@ export class Game {
       const distance = target == null ? 0 : this._forwardTileDistance(id, player.tileId, target);
       // CP/ゴールへの1マス差を他の加点では覆せない大きさにする。
       let score = -distance * 10000;
-      // CP/ゴールまで同じ距離の分岐同士では、召喚できる同属性空き地へ
-      // 近づく方向を次点で優先する。
-      if (matchingElementTarget != null) {
-        const matchingDistance = this._forwardTileDistance(id, player.tileId, matchingElementTarget);
-        if (Number.isFinite(matchingDistance)) score -= matchingDistance * 10;
+      // CP/ゴールまで同じ距離の分岐同士では、次点の誘導先（ダンボール男は
+      // ギアを置ける空き地、それ以外は召喚できる同属性空き地）へ近づく方向を
+      // 優先する。※チェックポイント/ゴールへの最短(×10000)は絶対に覆さない。
+      if (secondaryTarget != null) {
+        const secondaryDistance = this._forwardTileDistance(id, player.tileId, secondaryTarget);
+        if (Number.isFinite(secondaryDistance)) score -= secondaryDistance * 10;
       }
       if (isDanball) {
         // CP→ゴールへの距離は絶対優先。同じ最短距離の方向だけで、ギアを
@@ -2010,6 +2017,28 @@ export class Game {
       const countFor = (element) => this._affordableMonsterCards(player)
         .filter((card) => card.element === element).length;
       return countFor(tile.element) > countFor(best.element) ? tile : best;
+    }).id;
+  }
+
+  /**
+   * ダンボール男専用: 手札に召喚可能なギア（古代のギアA/B/C）がある時、
+   * それを置ける空き地のうち最短のtile idを返す。ギアは無属性なので属性は
+   * 不問＝全ての空き地が対象。ギアが無い/空き地が無いならnull。分岐選択で
+   * 「道中の空き地へ寄ってギアを置く（合体ロボ・ガシャーン狙い）」方向を
+   * 次点で優先するために使う（未回収チェックポイント/ゴールへの最短は絶対優先）。
+   */
+  _nearestGearPlaceableEmptyLandTileId(player) {
+    const GEAR_IDS = ['kodaiNoGearA', 'kodaiNoGearB', 'kodaiNoGearC'];
+    const hasAffordableGear = player.hand.some(
+      (c) => c.type === CardType.MONSTER && GEAR_IDS.includes(catalogIdOf(c)) && (c.cost || 0) <= player.currency,
+    );
+    if (!hasAffordableGear) return null;
+    const candidates = this.tiles.filter((t) => t.type === TileType.LAND && t.owner == null);
+    if (candidates.length === 0) return null;
+    return candidates.reduce((best, tile) => {
+      const distance = this._forwardTileDistance(player.tileId, player.previousTileId, tile.id);
+      const bestDistance = this._forwardTileDistance(player.tileId, player.previousTileId, best.id);
+      return distance < bestDistance ? tile : best;
     }).id;
   }
 
