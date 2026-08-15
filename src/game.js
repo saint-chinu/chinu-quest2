@@ -1,4 +1,4 @@
-import { TileType, mapRequiresAllCheckpoints } from './board.js';
+import { TileType, mapRequiresAllCheckpoints, mapCheckpointBonus } from './board.js';
 import { PIECE_REST_Y, UNIT_ICON_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity } from './cards.js';
 import { buildStarterCardList, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf } from './battleCards.js';
@@ -140,6 +140,7 @@ export class Game {
   }) {
     this.tiles = tiles;
     this.requireAllCheckpoints = mapRequiresAllCheckpoints(mapId);
+    this.checkpointBonus = mapCheckpointBonus(mapId);
     // このマップに実在するチェックポイント番号一覧（board.jsが生成順に
     // 1から振ったもの）- プレイヤーパネルの通過状況表示用に_notifyState
     // で毎回そのまま送る（renderPlayerPanels参照）。
@@ -1837,18 +1838,19 @@ export class Game {
     return true;
   }
 
-  /** 初めて通過したCPだけ100Gを付与し、残り番号を案内して一瞬停止する。 */
+  /** 初めて通過したCPだけボーナス（マップ依存、既定100G／④⑤⑥は150G）を付与し、残り番号を案内して一瞬停止する。 */
   async _visitCheckpoint(player, tile) {
     if (player.passedCheckpoints.has(tile.id)) return;
     player.passedCheckpoints.add(tile.id);
-    player.currency += 100;
+    const bonus = this.checkpointBonus ?? 100;
+    player.currency += bonus;
     const remaining = this.tiles
       .filter((candidate) => candidate.type === TileType.EVENT && !player.passedCheckpoints.has(candidate.id))
       .map((candidate) => candidate.checkpointNumber);
     const guidance = remaining.length
       ? `残りのCPは${remaining.map((number) => `${number}番`).join('、')}です`
       : 'すべてのCPを通過しました。ゴールしてください';
-    this.onLog(`${player.name}はCP${tile.checkpointNumber}を通過！ +100G　${guidance}`);
+    this.onLog(`${player.name}はCP${tile.checkpointNumber}を通過！ +${bonus}G　${guidance}`);
     await this.onCheckpoint({ playerId: player.id, playerName: player.name, checkpointNumber: tile.checkpointNumber });
     this._notifyState();
     await delay(900);

@@ -56,6 +56,11 @@ import { getSpeedMultiplier, setSpeedMultiplier, getWaitCutRate, setWaitCutRate 
 // Firestoreフェッチのタイムアウトガードのような「演出ではない」待ちは
 // window.setTimeoutを明示して意図的にこの対象から外す（該当箇所参照）。
 const scaledWaitMs = (timeoutMs) => ((timeoutMs ?? 0) * (1 - getWaitCutRate())) / getSpeedMultiplier();
+// カメラtween(focusAndZoom)や独自rAFアニメ(レベルアップの通行料カウントアップ等)は
+// 上のsetTimeoutシャドウを通らず、対人戦の待機カット(waitCutRate)が効かない。これらの
+// 演出尺だけ対人戦で短縮するための係数（ローカル戦はwaitCutRate=0なので不変）。tweenは
+// 速度倍率を内部で掛けるのでここでは掛けない。
+const pvpWaitCut = (ms) => Math.max(0, (ms ?? 0) * (1 - getWaitCutRate()));
 const setTimeout = (handler, timeoutMs, ...args) => window.setTimeout(handler, scaledWaitMs(timeoutMs), ...args);
 const setInterval = (handler, timeoutMs, ...args) => window.setInterval(handler, scaledWaitMs(timeoutMs), ...args);
 
@@ -1550,12 +1555,12 @@ async function promptSummonEffect({ tileId, unitName }) {
   const tile = tiles.find((entry) => entry.id === tileId);
   if (!tile || !scene) return;
   const savedFocus = { x: scene.focus.x, z: scene.focus.z };
-  await scene.focusAndZoom(tile.position.x, tile.position.z, 1.28, 320);
+  await scene.focusAndZoom(tile.position.x, tile.position.z, 1.28, pvpWaitCut(320));
   await Promise.all([
     scene.playSummonBurst(tile.position),
     showTargetEffectMessage(tile.position, `${unitName} 召喚！`),
   ]);
-  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
+  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, pvpWaitCut(320));
 }
 
 async function promptTargetEffect({ tileId = null, playerId = null, position = null, message }) {
@@ -1705,7 +1710,7 @@ async function promptTollPayment({ position, amount }) {
 async function promptLandLevelUp({ position, playerName, element, previousLevel, newLevel, tollBefore, tollAfter }) {
   if (!scene || !position) return;
   const savedFocus = { x: scene.focus.x, z: scene.focus.z };
-  await scene.focusAndZoom(position.x, position.z, 1.48, 360);
+  await scene.focusAndZoom(position.x, position.z, 1.48, pvpWaitCut(360));
   const screen = scene.worldToScreen(position.x, PIECE_REST_Y + 1.5, position.z);
   const panel = document.createElement('div');
   panel.className = 'fx-land-level-up';
@@ -1721,7 +1726,7 @@ async function promptLandLevelUp({ position, playerName, element, previousLevel,
   fxLayer.appendChild(panel);
   requestAnimationFrame(() => panel.classList.add('show'));
 
-  const duration = 1200;
+  const duration = Math.max(200, pvpWaitCut(1200) / getSpeedMultiplier());
   const startedAt = performance.now();
   const countUp = new Promise((resolve) => {
     const frame = (now) => {
@@ -1739,7 +1744,7 @@ async function promptLandLevelUp({ position, playerName, element, previousLevel,
   panel.classList.add('fade-out');
   await new Promise((resolve) => setTimeout(resolve, 250));
   panel.remove();
-  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
+  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, pvpWaitCut(320));
 }
 
 async function promptLandLoss({ position, landLabel, chainBefore, chainAfter, assetsBefore, assetsAfter }) {

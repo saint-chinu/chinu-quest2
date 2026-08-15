@@ -163,9 +163,9 @@ export const MAPS = [
   { id: 'hitode', name: '① ヒトデの縄張り', rows: HITODE_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage1.png') },
   { id: 'madai', name: '② マダイの岩礁', rows: MADAI_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage2.jpg'), spacing: 2.8 },
   { id: 'budou', name: '③ 決闘の浜辺', rows: BUDOU_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage3.png'), spacing: 2.8 },
-  { id: 'q-train', name: '④ 暴走列車Q号', rows: Q_TRAIN_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage-q-train.png'), spacing: 2.8 },
-  { id: 'danball', name: '⑤ 暗転した世界', rows: DANBALL_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage4.png'), spacing: 2.8 },
-  { id: 'kare', name: '⑥ 創造主の世界', rows: KARE_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage6-cyberspace.png'), spacing: 2.8 },
+  { id: 'q-train', name: '④ 暴走列車Q号', rows: Q_TRAIN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage-q-train.png'), spacing: 2.8 },
+  { id: 'danball', name: '⑤ 暗転した世界', rows: DANBALL_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage4.png'), spacing: 2.8 },
+  { id: 'kare', name: '⑥ 創造主の世界', rows: KARE_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage6-cyberspace.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {
@@ -197,6 +197,11 @@ export function getMapBackground(mapId) {
 /** そのマップで「全チェックポイントを通過しないとゴールにならない」ルールが有効かどうか（Game側のGoal判定が参照する）。 */
 export function mapRequiresAllCheckpoints(mapId) {
   return !!getMap(mapId).requireAllCheckpoints;
+}
+
+/** チェックポイント通過ボーナス（G）。マップ未指定なら100。④⑤⑥は150。 */
+export function mapCheckpointBonus(mapId) {
+  return getMap(mapId).checkpointBonus ?? 100;
 }
 
 const LAND_ELEMENT_BY_CODE = {
