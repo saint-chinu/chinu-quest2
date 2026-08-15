@@ -3170,6 +3170,30 @@ html, body {
 
 #pvp-menu-screen .pg-label { color: #e3eaf7; }
 
+#pvp-room-screen {
+  background: rgba(5, 9, 18, 0.82);
+}
+
+#pvp-room-popup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 11px;
+  width: min(430px, 88vw);
+  max-height: 82vh;
+  overflow-y: auto;
+  padding: 22px 24px;
+  border: 2px solid rgba(117, 224, 226, 0.72);
+  border-radius: 18px;
+  background: #172033;
+  color: #fff;
+  box-shadow: 0 18px 55px rgba(0, 0, 0, 0.58);
+}
+
+#pvp-room-popup .pg-title { margin: 0; }
+#pvp-room-popup .pg-label { color: #eef5ff; text-align: center; }
+#pvp-room-code { color: #ffd166 !important; font-size: 25px; font-weight: 900; letter-spacing: 0.16em; }
+
 #branch-undo-button {
   position: fixed;
   right: 18px;

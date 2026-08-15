@@ -20,8 +20,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 
-const ROOM_CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // 紛らわしい0/O・1/I/Lは除外
-const ROOM_CODE_LENGTH = 8;
+const ROOM_CODE_LENGTH = 3;
 
 export function normalizePvpParticipants(room) {
   if (!room) return [];
@@ -32,13 +31,9 @@ export function normalizePvpParticipants(room) {
 }
 
 function randomRoomCode() {
-  const randomBytes = new Uint32Array(ROOM_CODE_LENGTH);
-  crypto.getRandomValues(randomBytes);
-  let code = '';
-  for (let i = 0; i < ROOM_CODE_LENGTH; i++) {
-    code += ROOM_CODE_CHARS[randomBytes[i] % ROOM_CODE_CHARS.length];
-  }
-  return code;
+  const randomValue = new Uint32Array(1);
+  crypto.getRandomValues(randomValue);
+  return String(randomValue[0] % (10 ** ROOM_CODE_LENGTH)).padStart(ROOM_CODE_LENGTH, '0');
 }
 
 function roomRef(roomCode) {
@@ -56,10 +51,9 @@ function promptResponseRef(roomCode, uid) {
 }
 
 /** Creates a new waiting room and returns its code + this browser's Firebase uid (host). `mapId` is the board layout the host picked (see board.js MAPS) - stored on the room so the guest builds the identical board. */
-export async function createPvpRoom({ name, color, mapId, goalCurrency = 5000, playerCount = 2, allianceMode = false, randomAlliance = false, cpuNames = [] }) {
+export async function createPvpRoom({ name, color, iconDataUrl = '', mapId, goalCurrency = 5000, playerCount = 2, allianceMode = false, randomAlliance = false, cpuNames = [] }) {
   const uid = await ensurePvpUser();
-  const roomCode = randomRoomCode();
-  await setDoc(roomRef(roomCode), {
+  const roomData = {
     hostUid: uid,
     hostName: name,
     hostColor: color,
@@ -69,7 +63,7 @@ export async function createPvpRoom({ name, color, mapId, goalCurrency = 5000, p
     allianceMode,
     randomAlliance,
     cpuNames: Array.isArray(cpuNames) ? cpuNames.slice(0, 3) : [],
-    participants: [{ uid, name, color, deckList: null, ready: true }],
+    participants: [{ uid, name, color, iconDataUrl, deckList: null, ready: true }],
     participantUids: [uid],
     guestUid: null,
     guestName: null,
@@ -82,12 +76,26 @@ export async function createPvpRoom({ name, color, mapId, goalCurrency = 5000, p
     hostRequest: null,
     guestResponseId: 0,
     guestResponse: null,
-  });
-  return { roomCode, uid, isHost: true };
+  };
+  // 3桁コードは総数が少ないため、既存ルームへの上書きを避けて衝突時は再抽選する。
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const roomCode = randomRoomCode();
+    try {
+      // 他人の既存ルームならFirestoreルールがupdateを拒否するので再抽選。
+      // 存在確認のgetを先に行うと、存在しない文書のread自体がルールで拒否
+      // されるため、createを直接試す。
+      await setDoc(roomRef(roomCode), roomData);
+      return { roomCode, uid, isHost: true };
+    } catch (error) {
+      if (error?.code === 'permission-denied') continue;
+      throw error;
+    }
+  }
+  throw new Error('空いている部屋コードを確保できませんでした。少し待って再試行してください');
 }
 
 /** Joins an existing waiting room as guest, submitting their deck choice in the same write (guests can only write further fields once past 'waiting' status per firestore.rules, so the deck has to ride along with the join itself). Throws a Japanese-language Error on failure (room not found / already full). */
-export async function joinPvpRoom(roomCodeInput, { name, color, deckList }) {
+export async function joinPvpRoom(roomCodeInput, { name, color, iconDataUrl = '', deckList }) {
   const roomCode = roomCodeInput.trim().toUpperCase();
   if (!Array.isArray(deckList) || deckList.length !== 40) throw new Error('参加には40枚のデッキ確定が必要です');
   const uid = await ensurePvpUser();
@@ -100,7 +108,7 @@ export async function joinPvpRoom(roomCodeInput, { name, color, deckList }) {
     const participants = Array.isArray(room.participants) ? room.participants.filter((p) => p?.uid) : [];
     const limit = Math.max(2, Math.min(4, Number(room.playerCount) || 2));
     if (participants.some((p) => p.uid === uid) || participants.length >= limit) throw new Error('その部屋にはもう入れません（満員または対戦中）');
-    const update = { participants: [...participants, { uid, name, color, deckList, ready: true }], participantUids: [...participants.map((p) => p.uid), uid] };
+    const update = { participants: [...participants, { uid, name, color, iconDataUrl, deckList, ready: true }], participantUids: [...participants.map((p) => p.uid), uid] };
     if (!room.guestUid) Object.assign(update, { guestUid: uid, guestName: name, guestColor: color, guestDeckList: deckList });
     tx.update(ref, update);
   });
@@ -291,7 +299,7 @@ export class GuestActionSender {
     this.uid = uid;
     // 再接続・再読込後も以前のactionIdより必ず大きくなるよう時刻を起点にする。
     this.nextActionId = Date.now();
-    this.heartbeat = setInterval(() => sendParticipantAction(this.roomCode, this.uid, this.nextActionId, { type: 'heartbeat' }), 10000);
+    this.heartbeat = setInterval(() => this.send({ type: 'heartbeat' }).catch(() => {}), 10000);
   }
   send(action) {
     const actionId = this.nextActionId;

@@ -92,6 +92,16 @@ export function iconFromDataUrl(dataUrl) {
   return loadImageUrl(dataUrl);
 }
 
+/** Firestoreのルーム文書へ載せる軽量版。元画像の縦横比と透過は維持する。 */
+export function compactCharacterIconDataUrl(icon, size = 160) {
+  if (!icon?.canvas) return '';
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  canvas.getContext('2d').drawImage(icon.canvas, 0, 0, size, size);
+  return canvas.toDataURL('image/webp', 0.76);
+}
+
 /** 新形式（アップロード→プリセット）を優先し、旧iconIndexも互換表示する。 */
 export async function resolveCharacterIcon(character) {
   if (character.iconImageDataUrl) return iconFromDataUrl(character.iconImageDataUrl);

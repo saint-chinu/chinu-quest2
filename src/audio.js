@@ -162,6 +162,12 @@ window.addEventListener('pagehide', () => {
   stopMusic();
 });
 
+// アプリ切替やbfcacheから同じページへ戻った場合は、新しい盤面で再生可能に戻す。
+// 実際に盤面を破棄するかどうかはmain.js側が判断する。
+window.addEventListener('pageshow', () => {
+  pageExited = false;
+});
+
 let sfxContext = null;
 export function playSfx(type = 'hit') {
   try {

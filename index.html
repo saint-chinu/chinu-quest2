@@ -322,7 +322,7 @@
         <p class="pg-label">または部屋コードで参加</p>
         <div class="pg-field">
           <label for="pvp-join-code">部屋コード</label>
-          <input id="pvp-join-code" type="text" minlength="8" maxlength="8" pattern="[A-HJ-NP-Z2-9]{8}" autocapitalize="characters" autocomplete="off" />
+          <input id="pvp-join-code" type="text" minlength="3" maxlength="3" pattern="[0-9]{3}" inputmode="numeric" autocomplete="off" />
         </div>
         <button id="pvp-join-button" class="pg-button">部屋に入る</button>
         <p id="pvp-menu-error" class="pg-error hidden"></p>
@@ -330,13 +330,15 @@
       </div>
 
       <div id="pvp-room-screen" class="pg-screen hidden">
-        <h2 class="pg-title">対人戦ルーム</h2>
-        <p id="pvp-room-code" class="pg-label"></p>
-        <p id="pvp-room-status" class="pg-label"></p>
-        <p id="pvp-room-settings" class="pg-label"></p>
-        <p id="pvp-room-teams" class="pg-label"></p>
-        <button id="pvp-room-start" class="pg-button hidden">対戦開始</button>
-        <button id="pvp-room-leave" class="pg-button pg-button-secondary">やめる</button>
+        <div id="pvp-room-popup">
+          <h2 class="pg-title">対人戦ルーム</h2>
+          <p id="pvp-room-code" class="pg-label"></p>
+          <p id="pvp-room-status" class="pg-label"></p>
+          <p id="pvp-room-settings" class="pg-label"></p>
+          <p id="pvp-room-teams" class="pg-label"></p>
+          <button id="pvp-room-start" class="pg-button hidden">対戦開始</button>
+          <button id="pvp-room-leave" class="pg-button pg-button-secondary">やめる</button>
+        </div>
       </div>
 
       <div id="pvp-map-select-screen" class="pg-screen hidden">

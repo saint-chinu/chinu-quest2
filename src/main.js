@@ -9,7 +9,7 @@ import { loginOrRegister, saveCharacter } from './auth.js';
 import { getCardCatalog, isLegacyPlaceholderCardName } from './cardCatalog.js';
 import { PACKS, drawPack } from './shopPacks.js';
 import { CARD_EFFECTS, saveCustomCard, saveCustomCardsBulk, setCloudCustomCardUser, validateCustomCard } from './customCards.js';
-import { loadCharacterIconPresets, fileToCharacterIcon, resolveCharacterIcon } from './playerIcons.js';
+import { loadCharacterIconPresets, fileToCharacterIcon, resolveCharacterIcon, iconFromDataUrl, compactCharacterIconDataUrl } from './playerIcons.js';
 import {
   BREED_BASE,
   BREED_DEFAULT_IMAGE_URL,
@@ -5810,7 +5810,9 @@ function showPvpMapConfirm(map) {
       const randomAlliance = allianceMode && pvpRandomAlliance.checked;
       const playerCount = allianceMode ? 4 : Number(pvpPlayerCount.value);
       const cpuNames = pvpCpuSelects.map((select) => select.value).filter(Boolean).slice(0, playerCount - 1);
-      const session = await createPvpRoom({ name: currentCharacter.name, color: currentCharacter.color, mapId: map.id, goalCurrency, playerCount, allianceMode, randomAlliance, cpuNames });
+      const characterIcon = await resolveCharacterIcon(currentCharacter);
+      const iconDataUrl = compactCharacterIconDataUrl(characterIcon);
+      const session = await createPvpRoom({ name: currentCharacter.name, color: currentCharacter.color, iconDataUrl, mapId: map.id, goalCurrency, playerCount, allianceMode, randomAlliance, cpuNames });
       enterPvpRoomScreen(session);
     } catch (error) {
       console.error('PvP room creation failed:', error);
@@ -5834,14 +5836,20 @@ pvpCreateButton.addEventListener('click', showPvpMapSelectScreen);
 
 pvpJoinButton.addEventListener('click', async () => {
   const code = pvpJoinCode.value.trim();
-  if (!code) return;
+  if (!/^\d{3}$/.test(code)) {
+    pvpMenuError.textContent = '部屋コードは3桁の数字で入力してください';
+    pvpMenuError.classList.remove('hidden');
+    return;
+  }
   pvpMenuError.classList.add('hidden');
   pvpJoinButton.disabled = true;
   try {
     // 招待コード制の合言葉どおり: コードを入れたら先にデッキを選んでから
     // 入室する（入室後は部屋の相手待ち画面に直行、デッキ選択で止まらない）。
     const chosenDeck = await promptDeckSelection();
-    const session = await joinPvpRoom(code, { name: currentCharacter.name, color: currentCharacter.color, deckList: chosenDeck.deckList });
+    const characterIcon = await resolveCharacterIcon(currentCharacter);
+    const iconDataUrl = compactCharacterIconDataUrl(characterIcon);
+    const session = await joinPvpRoom(code, { name: currentCharacter.name, color: currentCharacter.color, iconDataUrl, deckList: chosenDeck.deckList });
     enterPvpRoomScreen(session);
   } catch (error) {
     pvpMenuError.textContent = error.message || '入室できませんでした';
@@ -6057,7 +6065,10 @@ function applyPvpBoardState(publicState) {
     if (!tile) continue;
     let piece = pvpPieces.get(p.id);
     if (!piece) {
-      piece = scene.createPiece(p.color, tile.position);
+      const iconImage = pvpMatch?.iconImagesByPlayerId?.get(p.id);
+      piece = iconImage
+        ? scene.createPieceFromImage(iconImage, tile.position)
+        : scene.createPiece(p.color, tile.position);
       pvpPieces.set(p.id, piece);
     }
     piece.position.set(tile.position.x, PIECE_REST_Y, tile.position.z);
@@ -6145,6 +6156,16 @@ async function startPvpGuestBattle() {
   scene = new GameScene(canvas);
   tiles = createBoard(pvpLastRoom?.mapId);
   scene.buildBoard(tiles);
+  pvpMatch.iconImagesByPlayerId = new Map();
+  for (const participant of normalizePvpParticipants(pvpLastRoom)) {
+    if (!participant.iconDataUrl) continue;
+    try {
+      const icon = await iconFromDataUrl(participant.iconDataUrl);
+      pvpMatch.iconImagesByPlayerId.set(participant.playerId, icon.canvas);
+    } catch (error) {
+      console.warn(`対戦アイコンを読み込めませんでした: ${participant.name}`, error);
+    }
+  }
   requestAnimationFrame(animate);
   playMapTheme(currentMapId);
 
@@ -6226,7 +6247,11 @@ pvpRoomStart.addEventListener('click', async () => {
   ];
   for (const participant of roster.filter((entry) => entry.uid !== pvpSession.uid)) {
     if (Array.isArray(participant.deckList) && participant.deckList.length === 40) {
-      playerConfigs.push({ name: participant.name, isCPU: false, color: participant.color, deckList: participant.deckList });
+      let participantIcon = null;
+      if (participant.iconDataUrl) {
+        try { participantIcon = (await iconFromDataUrl(participant.iconDataUrl)).canvas; } catch { /* 色付き駒へフォールバック */ }
+      }
+      playerConfigs.push({ name: participant.name, isCPU: false, color: participant.color, deckList: participant.deckList, iconImage: participantIcon });
     }
   }
   const cpuNames = Array.isArray(pvpLastRoom.cpuNames) ? pvpLastRoom.cpuNames : [];
@@ -6429,6 +6454,9 @@ gameMenuExit.addEventListener('click', async () => {
  * し得るため、UI・購読・音声をまとめて破棄する。
  */
 function forceTerminateBoardSession() {
+  // ルーム待機画面など盤面開始前の最小化/pagehideではセッションを破棄しない。
+  // iOSでLINEやDiscordへ切り替えて部屋コードを共有しても、そのまま戻れる。
+  if (appEl?.classList.contains('hidden')) return;
   // ストーリーのみ端末へ保存してから破棄する。オンライン対戦は共有状態を
   // ローカル単独で復元すると混線するため、従来どおり終了扱いにする。
   if (activeStoryStageIndex != null) saveStoryResume();
@@ -6467,8 +6495,10 @@ window.addEventListener('beforeunload', forceTerminateBoardSession);
 window.addEventListener('pageshow', (event) => {
   // iOS Safariがページをbfcacheから復元した場合も、盤面を再開させない。
   if (!event.persisted) return;
-  forceTerminateBoardSession();
-  showScreen(loginScreen);
+  if (!appEl?.classList.contains('hidden')) {
+    forceTerminateBoardSession();
+    showScreen(loginScreen);
+  }
 });
 
 // 初期表示時点で、前ページのAudio状態が残っていても必ず無音から始める。

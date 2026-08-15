@@ -1736,12 +1736,19 @@ export class Game {
           return d < bestD || (d === bestD && this._landValueOfTile(tile) > this._landValueOfTile(best)) ? tile : best;
         }).id
       : this._nearestGoalTileId(player);
+    const leadingOniku = player.name === '暴君マダイ' ? this._leadingOnikuOpponent(player) : null;
+    const onikuLands = leadingOniku ? this.tiles.filter((tile) => tile.owner === leadingOniku.id) : [];
     const scores = optionIds.map((id) => {
       const tile = this.tiles[id];
       // 分岐へ来た方向へ即座に引き返す経路を「最短」と誤認しないよう、
       // 選択後の進行方向を含む状態で距離を測る。
       const distance = target == null ? 0 : this._forwardTileDistance(id, player.tileId, target);
       let score = -distance;
+      if (leadingOniku && onikuLands.length > 0) {
+        const onikuDistance = Math.min(...onikuLands.map((land) => this._forwardTileDistance(id, player.tileId, land.id)));
+        if (Number.isFinite(onikuDistance)) score += Math.max(0, 4 - onikuDistance * 0.5);
+        if (tile.owner === leadingOniku.id) score += 10;
+      }
       if (tile.owner == null && tile.level >= 2) score += 12 + tile.level * 3;
       if (tile.type === TileType.LAND && tile.level >= 3 && tile.owner != null && tile.owner !== player.id) {
         const owner = this.players.find((p) => p.id === tile.owner);
@@ -1786,6 +1793,14 @@ export class Game {
     }
     const startTile = this.tiles.find((t) => t.type === TileType.START);
     return startTile ? startTile.id : null;
+  }
+
+  /** 暴君マダイ専用: お肉が生存者の総資産1位（同率含む）なら返す。 */
+  _leadingOnikuOpponent(player) {
+    const oniku = this.players.find((candidate) => !candidate.defeated && candidate.id !== player.id && candidate.name === 'お肉');
+    if (!oniku) return null;
+    const topAssets = Math.max(...this.players.filter((candidate) => !candidate.defeated).map((candidate) => this._totalAssetsOf(candidate)));
+    return this._totalAssetsOf(oniku) >= topAssets ? oniku : null;
   }
 
   /** 重み付き抽選（重みの合計に対する乱数で選ぶ）。重みが全て0以下なら単純な一様ランダムにフォールバックする。 */
@@ -3389,6 +3404,10 @@ export class Game {
     if (!best) return null;
 
     let threshold = profile.minWinProbabilityToInvade;
+    const defender = this.players.find((candidate) => candidate.id === tile.owner);
+    if (player.name === '暴君マダイ' && defender?.name === 'お肉' && this._leadingOnikuOpponent(player)) {
+      threshold = Math.min(threshold, 0.1);
+    }
     if (tile.level >= 3) threshold = Math.min(0.97, threshold + profile.highValueAvoidance * 0.3);
 
     if (best.noItemRate >= threshold) return { card: best.card };
