@@ -627,10 +627,12 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.jukaiNoOnryou, count: 4 },
         { def: MONSTER_CATALOG.mountGorilla, count: 4 },
         { def: MONSTER_CATALOG.moriNoYousei, count: 2 },
+        // 未知の侵略者（貫通アサシン、30G）。守備召喚はせず移動侵略で敵高レベル地を
+        // 削る運用（_cpuChooseSummonCardForKare / _cpuMaybeUseAssassinTactics参照）。
+        { def: MONSTER_CATALOG.mysteriousInvader, count: 2 },
         // 中量級の壁・アタッカー（120G前後、1連鎖）。
         { def: MONSTER_CATALOG.bigMermaid, count: 3 },
-        { def: MONSTER_CATALOG.sekaiju, count: 2 },
-        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 1 },
+        { def: MONSTER_CATALOG.sekaiju, count: 1 },
         // フィニッシャーの神（150G・2連鎖、各1枚に抑える）。
         { def: MONSTER_CATALOG.suijin, count: 1 },
         { def: MONSTER_CATALOG.yamagami, count: 1 },
@@ -640,14 +642,16 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
         { def: ITEM_CATALOG.kaenHoushakiki, count: 1 },
         { def: ITEM_CATALOG.iceSlugger, count: 1 },
+        // 強めの武器: 斬〇剣（後攻・貫通・50%即死）。侵略の決定力を底上げする。
+        { def: ITEM_CATALOG.zangokuKen, count: 1 },
       ],
       // 旧構成のphoenixCurse/psychokinesisはCPUが一切詠唱しない死に札だったため
-      // 撤去。全てCPUが実際に使うスペルに差し替え、収入(副業収入)と課税(追徴課税)で
-      // 通行料破産を防ぎ、占術で事故を減らす。
+      // 撤去。全てCPUが実際に使うスペルに差し替え、収入(副業収入)で通行料破産を
+      // 防ぎ、占術で事故を減らす。追徴課税は1枚に抑える。
       spells: [
         { def: SPELL_CATALOG.sideIncome, count: 3 },
         { def: SPELL_CATALOG.divination, count: 2 },
-        { def: SPELL_CATALOG.specialAudit, count: 2 },
+        { def: SPELL_CATALOG.specialAudit, count: 1 },
         { def: SPELL_CATALOG.disclosureRequest, count: 1 },
         { def: SPELL_CATALOG.senbonZakura, count: 1 },
         { def: SPELL_CATALOG.blueOcean, count: 1 },

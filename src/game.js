@@ -3514,9 +3514,9 @@ export class Game {
     const accessible = candidates.filter((tile) => tile?.owner === player.id && tile.unit);
     if (accessible.length === 0) return false;
 
-    // 固有AIも権限候補を必ず受け取り、盤面上の任意のガシャーンを直接
-    // 動かすことは禁止する。
-    if (await this._cpuMaybeUseGashaanTactics(player, accessible.map((tile) => tile.id))) return true;
+    // アサシンユニット運用（ガシャーン／未知の侵略者）。固有AIも権限候補を必ず
+    // 受け取り、盤面上の任意のユニットを直接動かすことは禁止する。
+    if (await this._cpuMaybeUseAssassinTactics(player, accessible.map((tile) => tile.id))) return true;
 
     for (const tile of accessible) {
       if (await this._cpuMaybeUseDamageAbility(player, tile)) return true;
@@ -3809,7 +3809,7 @@ export class Game {
   /** CPUが空き地召喚時に手元へ残しておきたい通行料の備え。盤上で自分が払い得る
    *  最大の敵地（非同盟）通行料を目安にする。序盤は土地レベルが低く小さいので
    *  自由に召喚でき、中盤以降は高くなり高コストカードでの散財を抑える。上限は
-   *  過剰な溜め込み（＝盤面が育たない）を防ぐため800Gでキャップ。 */
+   *  召喚・レベルアップをある程度積極的に回せるよう500Gでキャップ。 */
   _cpuSummonReserve(player) {
     let maxToll = 0;
     for (const tile of this.tiles) {
@@ -3818,7 +3818,7 @@ export class Game {
       if (owner?.allianceId != null && owner.allianceId === player.allianceId) continue;
       maxToll = Math.max(maxToll, this._tollOfTile(tile));
     }
-    return Math.min(maxToll, 800);
+    return Math.min(maxToll, 500);
   }
 
   _cpuChooseSummonCard(options, tile, profile, player) {
@@ -3852,11 +3852,34 @@ export class Game {
     return this._cpuChooseSummonCard(options, tile, profile, player);
   }
 
-  /** 「彼」専用: 水土地では水神、森土地では山神を最優先で召喚する。 */
+  /**
+   * 「彼」専用の召喚選択。
+   * ①未知の侵略者(HP10の貫通アサシン)は基本、守備召喚しない。ただし今止まった
+   *   空き地が敵Lv3以上の土地に隣接しているなら、そこへ置いて次ターンの移動侵略に
+   *   備える（積極的に前線へ配置）。他に召喚候補が無い時だけ仕方なく召喚する。
+   * ②それ以外は水土地なら水神、森土地なら山神を最優先、無ければ汎用選択。
+   */
   _cpuChooseSummonCardForKare(options, tile, profile, player) {
+    const invader = options.find((card) => catalogIdOf(card) === 'mysteriousInvader');
+    const nonInvader = options.filter((card) => catalogIdOf(card) !== 'mysteriousInvader');
+    if (invader) {
+      const adjacentToHighEnemyLand = (tile.neighbors || []).some((id) => this._isInvadeWorthyEnemyLand(this.tiles[id], player));
+      if (adjacentToHighEnemyLand) return invader;
+      if (nonInvader.length === 0) return invader;
+    }
+    const pool = nonInvader.length > 0 ? nonInvader : options;
     const preferredId = tile.element === Element.WATER ? 'suijin' : tile.element === Element.FOREST ? 'yamagami' : null;
-    const god = preferredId ? options.find((card) => catalogIdOf(card) === preferredId) : null;
-    return god || this._cpuChooseSummonCard(options, tile, profile, player);
+    const god = preferredId ? pool.find((card) => catalogIdOf(card) === preferredId) : null;
+    return god || this._cpuChooseSummonCard(pool, tile, profile, player);
+  }
+
+  /** 移動侵略の狙い目になる敵地か: Lv3以上・非同盟の相手が守るモンスター有り・
+   *  聖域/透過の呪い無し。ガシャーン/未知の侵略者の運用AIで共用する。 */
+  _isInvadeWorthyEnemyLand(tile, player) {
+    if (!tile || tile.type !== TileType.LAND || tile.level < 3 || tile.owner == null || tile.owner === player.id || !tile.unit) return false;
+    if (tile.transparentCursed) return false;
+    const owner = this.players.find((candidate) => candidate.id === tile.owner);
+    return !!owner && !this._isAllyOf(owner, player);
   }
 
   /**
@@ -4915,27 +4938,28 @@ export class Game {
   }
 
   /**
-   * ダンボール男専用のガシャーン運用。Lv3以上の敵地に隣接していれば
-   * モンスター移動で侵略し、離れていればその敵地に隣接する空き地へ
-   * 固有土地コマンドで先回りする。どちらも土地コマンド1回分として
-   * そのターンを終了する。
+   * アサシンユニット運用（ダンボール男のガシャーン／「彼」の未知の侵略者）。
+   * Lv3以上の敵地に隣接していればモンスター移動で侵略し、離れていればその敵地に
+   * 隣接する空き地へワープで先回りする。どちらも土地コマンド1回分としてそのターンを
+   * 終了する。ワープ時は各ユニットのcommandCostを消費する（未知の侵略者=30G）。
    */
-  async _cpuMaybeUseGashaanTactics(player, accessibleTileIds = []) {
-    if (!this._isDanballBoss(player)) return false;
+  async _cpuMaybeUseAssassinTactics(player, accessibleTileIds = []) {
+    const assassinId = this._isDanballBoss(player)
+      ? 'gashaan-field'
+      : player.name === '「彼」'
+        ? 'mysteriousInvader'
+        : null;
+    if (!assassinId) return false;
     const accessibleSet = new Set(accessibleTileIds);
     const source = this.tiles.find(
       (tile) => accessibleSet.has(tile.id)
         && tile.unit?.ownerId === player.id
-        && catalogIdOf(tile.unit.def) === 'gashaan-field',
+        && catalogIdOf(tile.unit.def) === assassinId,
     );
     if (!source) return false;
 
     const enemyLands = this.tiles
-      .filter((tile) => {
-        if (tile.type !== TileType.LAND || tile.level < 3 || tile.owner == null || tile.owner === player.id || !tile.unit) return false;
-        const owner = this.players.find((candidate) => candidate.id === tile.owner);
-        return owner && !this._isAllyOf(owner, player) && !tile.transparentCursed;
-      })
+      .filter((tile) => this._isInvadeWorthyEnemyLand(tile, player))
       .sort((a, b) => b.level - a.level || this._landValueOfTile(b) - this._landValueOfTile(a));
     if (enemyLands.length === 0) return false;
 
@@ -4951,12 +4975,16 @@ export class Game {
       .filter((tile) => tile.type === TileType.LAND && tile.owner == null)
       .map((tile) => ({ tile, enemy })));
     if (staging.length === 0) return false;
+    // ワープにはcommandCostが要る（未知の侵略者=30G、ガシャーン=0G）。払えないなら見送る。
+    const warpCost = source.unit.def.commandCost || 0;
+    if (player.currency < warpCost) return false;
     staging.sort((a, b) => b.enemy.level - a.enemy.level || this._landValueOfTile(b.enemy) - this._landValueOfTile(a.enemy));
     const target = staging[0].tile;
     const unit = source.unit;
     const mesh = source.unitMesh;
     const sourceLandLoss = this._captureLandLoss(player, source);
     const destinationLandGain = this._captureLandGain(player, target, { showAnyChange: true });
+    player.currency -= warpCost;
     source.unitMesh = null;
     target.unit = unit;
     target.owner = player.id;
@@ -4966,7 +4994,7 @@ export class Game {
     source.owner = null;
     source.transparentCursed = false;
     this._repaintTileToElement(source);
-    this.onLog(`${player.name}の${unit.def.name}がLv${staging[0].enemy.level}の敵地の横へ移動した！`);
+    this.onLog(`${player.name}の${unit.def.name}がLv${staging[0].enemy.level}の敵地の横へ移動した！${warpCost > 0 ? ` (-${warpCost}G)` : ''}`);
     await this._hopUnitIcon(mesh, source.position, target.position);
     this._notifyState();
     await this.onTargetEffect?.({ tileId: target.id, position: target.position, message: `${unit.def.name}が敵地の横へワープした！` });

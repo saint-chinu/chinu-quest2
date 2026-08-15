@@ -179,4 +179,13 @@ export const NEUTRAL_MONSTER_CATALOG = {
     effect: { type: 'statsPerTotalChain', atkPerChain: 5, hpPerChain: 5 },
     effectDescription: '戦闘中、盤面全体の連鎖数（属性問わず合計）×5だけHP/ATKともに上昇する',
   }),
+  // 高ATK・低HPの貫通アサシン。守備には向かず、移動侵略で敵高レベル地を
+  // 貫通で削り取るためのカード（「彼」の専用AIが移動侵略に活用する）。
+  mysteriousInvader: neutralMonster('mysteriousInvader', '未知の侵略者', Rarity.R, 10, 60, {
+    cost: 30,
+    traits: ['pierce'],
+    commandCost: 30,
+    ability: { type: 'warpToAnyEmptyLand' },
+    effectDescription: '貫通。土地コマンド（30G）: 任意の空き地へ移動する',
+  }),
 };
