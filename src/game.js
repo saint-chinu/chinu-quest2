@@ -1853,21 +1853,26 @@ export class Game {
    */
   _cpuChooseNextTile(player, optionIds) {
     const profile = player.aiProfile;
-    // 育った空き地は投資済み価値をそのまま獲得できるため、CP/ゴールより
-    // 一時的に優先して接近する。複数ある場合は現在地から近い最高額候補。
-    // マダイはステージ2の周回進行を最優先する。高額空地へ寄り道させると
-    // 左右の環状路のCP付近を循環し続けることがあるため、未通過CP→ゴール
-    // の順を常に目標にする。他CPUの「高額空地優先」は維持する。
+    // 全CPU共通の移動優先順位:
+    // ①未通過CP ②手札から召喚できる同属性の空き地 ③育った空き地
+    // ④全CP通過後のゴール。CPが残っている間は他の価値判断で寄り道しない。
     const isDanball = this._isDanballBoss(player);
     const prioritizesLapRoute = ['暴君マダイ', 'Q', '「彼」'].includes(player.name) || isDanball;
-    const valuableEmpty = prioritizesLapRoute ? [] : this._cpuHighValueEmptyLands();
-    const target = valuableEmpty.length > 0
+    const checkpointTarget = this._nearestUnpassedCheckpointTileId(player);
+    const matchingElementTarget = checkpointTarget == null
+      ? this._nearestSummonableMatchingEmptyLandTileId(player)
+      : null;
+    const valuableEmpty = checkpointTarget == null && matchingElementTarget == null && !prioritizesLapRoute
+      ? this._cpuHighValueEmptyLands()
+      : [];
+    const fallbackTarget = valuableEmpty.length > 0
       ? valuableEmpty.reduce((best, tile) => {
           const d = this._forwardTileDistance(player.tileId, player.previousTileId, tile.id);
           const bestD = this._forwardTileDistance(player.tileId, player.previousTileId, best.id);
           return d < bestD || (d === bestD && this._landValueOfTile(tile) > this._landValueOfTile(best)) ? tile : best;
         }).id
       : this._nearestGoalTileId(player);
+    const target = checkpointTarget ?? matchingElementTarget ?? fallbackTarget;
     const leadingOniku = player.name === '暴君マダイ' ? this._leadingOnikuOpponent(player) : null;
     const onikuLands = leadingOniku ? this.tiles.filter((tile) => tile.owner === leadingOniku.id) : [];
     const scores = optionIds.map((id) => {
@@ -1875,7 +1880,10 @@ export class Game {
       // 分岐へ来た方向へ即座に引き返す経路を「最短」と誤認しないよう、
       // 選択後の進行方向を含む状態で距離を測る。
       const distance = target == null ? 0 : this._forwardTileDistance(id, player.tileId, target);
-      let score = -distance;
+      // CPは絶対優先、同属性空き地はその次の強い優先度として距離差を
+      // 大きく重み付けし、後段の高額土地等の加点で逆転しないようにする。
+      const routePriority = checkpointTarget != null ? 10000 : matchingElementTarget != null ? 100 : 1;
+      let score = -distance * routePriority;
       if (isDanball) {
         // CP→ゴールへの距離は絶対優先。同じ最短距離の方向だけで、ギアを
         // 置ける空地、その次に通常モンスターを置ける空地をタイブレークに使う。
@@ -1943,6 +1951,49 @@ export class Game {
     }
     const startTile = this.tiles.find((t) => t.type === TileType.START);
     return startTile ? startTile.id : null;
+  }
+
+  /** 未通過CPのうち、現在の進行状態から最短のもの。無ければnull。 */
+  _nearestUnpassedCheckpointTileId(player) {
+    if (!this.requireAllCheckpoints) return null;
+    const candidates = this.tiles.filter(
+      (tile) => tile.type === TileType.EVENT && !player.passedCheckpoints.has(tile.id),
+    );
+    if (candidates.length === 0) return null;
+    return candidates.reduce((best, tile) => {
+      const distance = this._forwardTileDistance(player.tileId, player.previousTileId, tile.id);
+      const bestDistance = this._forwardTileDistance(player.tileId, player.previousTileId, best.id);
+      return distance < bestDistance ? tile : best;
+    }).id;
+  }
+
+  /**
+   * 手札にある、コスト・連鎖条件を満たした火/水/森/雷モンスターと同属性の
+   * 空き地から最短のものを返す。無属性モンスターと無属性土地は対象外。
+   */
+  _nearestSummonableMatchingEmptyLandTileId(player) {
+    const elemental = new Set([Element.FIRE, Element.WATER, Element.FOREST, Element.THUNDER]);
+    const summonableElements = new Set(
+      this._affordableMonsterCards(player)
+        .map((card) => card.element)
+        .filter((element) => elemental.has(element)),
+    );
+    if (summonableElements.size === 0) return null;
+    const candidates = this.tiles.filter(
+      (tile) => tile.type === TileType.LAND
+        && tile.owner == null
+        && summonableElements.has(tile.element),
+    );
+    if (candidates.length === 0) return null;
+    return candidates.reduce((best, tile) => {
+      const distance = this._forwardTileDistance(player.tileId, player.previousTileId, tile.id);
+      const bestDistance = this._forwardTileDistance(player.tileId, player.previousTileId, best.id);
+      if (distance !== bestDistance) return distance < bestDistance ? tile : best;
+      // 同距離なら、その属性の召喚可能カードが多い方を優先する。
+      const countFor = (element) => this._affordableMonsterCards(player)
+        .filter((card) => card.element === element).length;
+      return countFor(tile.element) > countFor(best.element) ? tile : best;
+    }).id;
   }
 
   /** 暴君マダイ専用: お肉が生存者の総資産1位（同率含む）なら返す。 */
