@@ -534,6 +534,7 @@ export class GameScene {
       this.scene.add(mesh);
       tile.mesh = mesh;
       tile.markerSprite = this._createBoardMarker(tile);
+      if (tile.type === TileType.RUNAWAY) this._createRunawayTileDecal(tile);
       this._createSpecialTileLabel(tile);
     }
     // No ground-plane mesh anymore - it used to fill the entire frustum
@@ -566,7 +567,6 @@ export class GameScene {
     else if (tile.type === TileType.EVENT) label = `CP${tile.checkpointNumber}`;
     else if (tile.type === TileType.SHRINE) label = 'ほこら';
     else if (tile.type === TileType.WARP) label = 'ワープ';
-    else if (tile.type === TileType.RUNAWAY) label = '暴走';
     else if (tile.type === TileType.SHOP) label = 'ショップ';
     if (!label) return;
 
@@ -590,6 +590,37 @@ export class GameScene {
     // カメラは+X/+Z側にあるため、同方向へ寄せると画面上でマスの下側になる。
     sprite.position.set(tile.position.x + 0.72, 0.48, tile.position.z + 0.72);
     this.scene.add(sprite);
+  }
+
+  /** 暴走マスは立体物や下部ラベルではなく、マス表面へ文字画像を直接貼る。 */
+  _createRunawayTileDecal(tile) {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.font = '900 138px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 26;
+    ctx.strokeStyle = 'rgba(30, 0, 0, 0.95)';
+    ctx.strokeText('暴走', 256, 132);
+    ctx.fillStyle = '#fff3a6';
+    ctx.fillText('暴走', 256, 132);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.colorSpace = THREE.SRGBColorSpace;
+    texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+    const decal = new THREE.Mesh(
+      new THREE.PlaneGeometry(2.35, 1.18),
+      new THREE.MeshBasicMaterial({ map: texture, transparent: true, depthWrite: false }),
+    );
+    decal.rotation.x = -Math.PI / 2;
+    decal.position.set(tile.position.x, 0.012, tile.position.z);
+    decal.renderOrder = 3;
+    this.scene.add(decal);
+    tile.runawayDecal = decal;
   }
 
   /**
