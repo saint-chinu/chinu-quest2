@@ -1415,7 +1415,22 @@ function findPvpGuestPieceSprite(playerId) {
  * が`{x,z}`まで解決済みなので、ホスト・ゲストどちらでも同じ処理で描画できる。
  */
 async function showTargetEffectMessage(position, message, holdMs = 1800, variant = '') {
-  if (!position || !message) return;
+  if (!position || !message || !scene) return;
+  const lines = String(message).split('\n').map((line) => line.trim()).filter(Boolean);
+  // 複数行（事象のタイトル＋説明文）を一度に全部出すと縦に伸びて説明文が画面外へ
+  // 見切れてしまう。そこで「タイトル（最終行以外）→ 一旦消す → 説明文（最終行）→
+  // 消す」の順で逐次表示する。単一行はそのまま1回だけ表示する。
+  if (lines.length <= 1) {
+    await showOneTargetEffectMessage(position, lines[0] ?? String(message), holdMs, variant);
+    return;
+  }
+  const title = lines.slice(0, -1).join('\n');
+  const description = lines[lines.length - 1];
+  await showOneTargetEffectMessage(position, title, Math.min(holdMs, 1200), variant);
+  await showOneTargetEffectMessage(position, description, holdMs, variant);
+}
+
+async function showOneTargetEffectMessage(position, message, holdMs, variant) {
   const screen = scene.worldToScreen(position.x, PIECE_REST_Y + 1.8, position.z);
   const el = document.createElement('div');
   el.className = 'fx-target-effect-message';
@@ -1494,7 +1509,7 @@ async function promptShrineEffect({ position, title, message }) {
   if (!scene || !position) return;
   const savedFocus = { x: scene.focus.x, z: scene.focus.z };
   await scene.focusAndZoom(position.x, position.z, 1.45, 360);
-  const presentation = showTargetEffectMessage(position, `${title}\n${message}`, 2600, 'shrine');
+  const presentation = showTargetEffectMessage(position, `${title}\n${message}`, 1800, 'shrine');
   await Promise.all([
     scene.playSpellAura(position),
     scene.playSummonBurst(position),

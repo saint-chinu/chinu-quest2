@@ -103,7 +103,7 @@ html, body {
   border-radius: 10px;
   background: rgba(10, 12, 24, 0.9);
   color: #fff4a3;
-  font-size: clamp(20px, 3vw, 32px);
+  font-size: clamp(16px, 2.5vw, 26px);
   font-weight: 900;
   line-height: 1.35;
   text-align: center;
