@@ -1,7 +1,7 @@
 import './style.css';
 import './pwa.js';
 import { GameScene, PIECE_REST_Y } from './scene.js';
-import { createBoard, MAPS, TileType, createMapThumbnailCanvas, getMapBackground } from './board.js';
+import { createBoard, MAPS, PVP_MAPS, TileType, createMapThumbnailCanvas, getMapBackground } from './board.js';
 import { Game } from './game.js';
 import { CardType, CARD_COLOR, ELEMENT_LABEL, Element, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
 import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, buildCharacterDeckList, MONSTER_CATALOG, ITEM_CATALOG, SPELL_CATALOG } from './battleCards.js';
@@ -5777,7 +5777,7 @@ function enterPvpRoomScreen(session) {
 
 function showPvpMapSelectScreen() {
   pvpMapList.replaceChildren();
-  for (const map of MAPS) {
+  for (const map of PVP_MAPS) {
     const card = document.createElement('button');
     card.type = 'button';
     card.className = 'pvp-map-card';
@@ -5812,8 +5812,12 @@ function showPvpMapConfirm(map) {
       const cpuNames = pvpCpuSelects.map((select) => select.value).filter(Boolean).slice(0, playerCount - 1);
       const session = await createPvpRoom({ name: currentCharacter.name, color: currentCharacter.color, mapId: map.id, goalCurrency, playerCount, allianceMode, randomAlliance, cpuNames });
       enterPvpRoomScreen(session);
-    } catch {
-      pvpMenuError.textContent = '部屋を作成できませんでした';
+    } catch (error) {
+      console.error('PvP room creation failed:', error);
+      const detail = error?.code === 'permission-denied'
+        ? '（サーバーの権限設定を確認してください）'
+        : error?.message ? `（${error.message}）` : '';
+      pvpMenuError.textContent = `部屋を作成できませんでした${detail}`;
       pvpMenuError.classList.remove('hidden');
       showScreen(pvpMenuScreen);
     }

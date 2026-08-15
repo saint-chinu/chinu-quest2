@@ -3119,6 +3119,57 @@ html, body {
   display: none;
 }
 
+/* 対人戦の初期設定。ブラウザ既定の白いselectと薄い文字が混ざらないよう、
+   背景・文字・入力欄を高コントラストで統一する。 */
+#pvp-menu-screen {
+  background: radial-gradient(circle at 50% 0%, #203954 0%, #111827 48%, #090d17 100%);
+  color: #f5f8ff;
+}
+
+#pvp-menu-screen .pg-form-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: min(460px, 92vw);
+  padding: 10px 14px;
+  border: 1px solid rgba(117, 224, 226, 0.28);
+  border-radius: 11px;
+  background: rgba(15, 24, 40, 0.94);
+  color: #f5f8ff;
+}
+
+#pvp-menu-screen label {
+  color: #f5f8ff;
+  font-weight: 700;
+}
+
+#pvp-menu-screen select,
+#pvp-menu-screen input[type="text"] {
+  min-height: 38px;
+  padding: 7px 10px;
+  border: 1px solid #72cfd2;
+  border-radius: 8px;
+  background: #f5f8ff;
+  color: #101827;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+#pvp-menu-screen select option {
+  background: #fff;
+  color: #101827;
+}
+
+#pvp-menu-screen input[type="checkbox"] {
+  width: 19px;
+  height: 19px;
+  accent-color: #2ec4b6;
+  vertical-align: middle;
+}
+
+#pvp-menu-screen .pg-label { color: #e3eaf7; }
+
 #branch-undo-button {
   position: fixed;
   right: 18px;

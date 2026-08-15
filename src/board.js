@@ -135,6 +135,14 @@ const HITODE_FIRST_MAP = {
   background: assetUrl('/images/stage/stage1.png'),
 };
 
+// 対戦モードでは、ステージ1の短い初戦マップと長い再戦マップを別々に
+// 選べるようにする。ストーリー側が使うMAPSの意味は変えない。
+export const PVP_MAPS = [
+  { ...HITODE_FIRST_MAP, name: '① はじまりの海（初戦マップ）' },
+  { ...MAPS[0], name: '① ヒトデの縄張り（再戦マップ）' },
+  ...MAPS.slice(1),
+];
+
 function getMap(mapId) {
   if (mapId === HITODE_FIRST_MAP.id) return HITODE_FIRST_MAP;
   return MAPS.find((m) => m.id === mapId) ?? MAPS[0];

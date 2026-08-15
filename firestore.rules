@@ -124,7 +124,7 @@ service cloud.firestore {
         request.resource.data.hostColor is int &&
         request.resource.data.keys().hasOnly([
           'hostUid', 'hostName', 'hostColor', 'mapId',
-          'goalCurrency', 'playerCount', 'allianceMode', 'randomAlliance', 'cpuNames', 'participants',
+          'goalCurrency', 'playerCount', 'allianceMode', 'randomAlliance', 'cpuNames', 'participants', 'participantUids',
           'guestUid', 'guestName', 'guestColor', 'guestDeckList',
           'status', 'createdAt', 'publicState',
           'hostRequestId', 'hostRequest',
