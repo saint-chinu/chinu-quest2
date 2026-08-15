@@ -132,6 +132,10 @@ const debtSaleChoices = document.getElementById('debt-sale-choices');
 const tileInfoModal = document.getElementById('tile-info-modal');
 const tileInfoText = document.getElementById('tile-info-text');
 const tileInfoClose = document.getElementById('tile-info-close');
+const tileInfoMonster = document.getElementById('tile-info-monster');
+const tileInfoMonsterCard = document.getElementById('tile-info-monster-card');
+const tileInfoMonsterDetail = document.getElementById('tile-info-monster-detail');
+const branchRemainingSteps = document.getElementById('branch-remaining-steps');
 const cardRevealModal = document.getElementById('card-reveal-modal');
 const cardRevealCard = document.getElementById('card-reveal-card');
 const discardModal = document.getElementById('discard-modal');
@@ -210,6 +214,29 @@ function tileSummaryText(tile) {
     if (tile.cursed) lines.push('呪い: 強制停止中（戦闘が起きると解ける）');
   }
   return lines.join('\n');
+}
+
+function renderTileInfo(tile) {
+  tileInfoText.textContent = tileSummaryText(tile);
+  const card = tile.unitCard;
+  tileInfoMonster.classList.toggle('hidden', !card);
+  if (!card) {
+    tileInfoMonsterCard.replaceChildren();
+    tileInfoMonsterDetail.textContent = '';
+    return;
+  }
+  renderCardEl(tileInfoMonsterCard, card);
+  const traits = (card.traits || [])
+    .map((trait) => BATTLE_ITEM_TRAITS.find(([id]) => id === trait)?.[1]
+      || CARD_EFFECTS.find((effect) => effect.id === trait)?.label
+      || trait)
+    .filter(Boolean);
+  const ability = card.effectDescription || (traits.length ? traits.join('・') : '能力なし');
+  tileInfoMonsterDetail.textContent = [
+    `${card.rarity || Rarity.N} / ${ELEMENT_LABEL[card.element] || '無属性'} / コスト${card.cost ?? 0}G`,
+    `現在HP ${tile.unitHp ?? card.hp} / 基礎HP ${card.hp} / 基礎ATK ${card.atk}`,
+    `能力：${ability}`,
+  ].join('\n');
 }
 
 /**
@@ -347,10 +374,16 @@ function promptDirectionArrows(options, { noBack = false, confirmOnSecondTap = f
  * 盤面が見切れている時はカメラのパン矢印（cam-arrow-*）で寄せられる。
  */
 let branchChoiceActive = false;
+let boardMovementActive = false;
+let closeLandInfoCamera = null;
 
 function promptChooseBranch(options) {
   return new Promise((resolve) => {
+    closeLandInfoCamera?.();
     branchChoiceActive = true;
+    const remaining = Math.max(0, Number(options[0]?.remainingSteps) || 0);
+    branchRemainingSteps.querySelector('span').textContent = String(remaining);
+    branchRemainingSteps.classList.remove('hidden');
     const camSnap = beginCameraWork();
     const candidateIds = options.map((o) => o.tileId).filter((id) => tiles[id]?.mesh);
     const candidateSet = new Set(candidateIds);
@@ -395,6 +428,7 @@ function promptChooseBranch(options) {
     function onRight() { scene.panByDirection('right'); }
     function finish(result) {
       branchChoiceActive = false;
+      branchRemainingSteps.classList.add('hidden');
       cancelAnimationFrame(raf);
       for (const id of candidateIds) {
         const mesh = tiles[id]?.mesh;
@@ -880,7 +914,7 @@ function promptShowTileInfo(tile) {
       unregisterPromptCanceller(onClose);
       resolve();
     }
-    tileInfoText.textContent = tileSummaryText(tile);
+    renderTileInfo(tile);
     tileInfoModal.classList.remove('hidden');
     tileInfoClose.addEventListener('click', onClose);
     registerPromptCanceller(onClose);
@@ -941,7 +975,7 @@ function promptPickBrowseTile(candidates) {
       if (candidate.isMine) {
         finish(candidate.id);
       } else {
-        tileInfoText.textContent = tileSummaryText(candidate);
+        renderTileInfo(candidate);
         tileInfoModal.classList.remove('hidden');
       }
     }
@@ -1636,6 +1670,8 @@ async function showBankruptcyRestartText(position, amount) {
 
 let stopMoveDestinationHighlight = null;
 function promptMoveDestination({ tileId = null, tileIds = null, active }) {
+  boardMovementActive = !!active;
+  if (active) closeLandInfoCamera?.();
   stopMoveDestinationHighlight?.();
   stopMoveDestinationHighlight = null;
   const ids = tileIds || (tileId != null ? [tileId] : []);
@@ -3004,7 +3040,7 @@ helpClose.addEventListener('click', () => {
  * 切り替え、盤面上の任意の土地を直接タップして何度でも詳細を確認できる。
  */
 function showLandInfoCamera() {
-  if (branchChoiceActive || !scene || !tiles?.length || !cameraWorkOverlay.classList.contains('hidden')) return;
+  if (branchChoiceActive || boardMovementActive || !scene || !tiles?.length || !cameraWorkOverlay.classList.contains('hidden')) return;
   const camSnap = beginCameraWork();
   cameraWorkOverlay.classList.remove('hidden');
   landInfoButton.classList.add('active');
@@ -3033,6 +3069,20 @@ function showLandInfoCamera() {
       unitName: tile.unit?.def?.name || null,
       unitAtk: tile.unit?.def?.atk ?? null,
       unitHp: tile.unit?.currentHp ?? null,
+      unitCard: tile.unit ? {
+        catalogId: tile.unit.catalogId ?? tile.unit.def?.catalogId ?? null,
+        name: tile.unit.name ?? tile.unit.def?.name,
+        type: CardType.MONSTER,
+        rarity: tile.unit.rarity ?? tile.unit.def?.rarity ?? Rarity.N,
+        element: tile.unit.element ?? tile.unit.def?.element ?? Element.NEUTRAL,
+        cost: tile.unit.cost ?? tile.unit.def?.cost ?? 0,
+        atk: tile.unit.atk ?? tile.unit.def?.atk ?? 0,
+        hp: tile.unit.maxHp ?? tile.unit.def?.hp ?? tile.unit.hp ?? 0,
+        traits: tile.unit.traits ?? tile.unit.def?.traits ?? [],
+        effectDescription: tile.unit.effectDescription ?? tile.unit.def?.effectDescription ?? '',
+        imageDataUrl: tile.unit.imageDataUrl ?? tile.unit.def?.imageDataUrl ?? null,
+        imageFit: tile.unit.imageFit ?? tile.unit.def?.imageFit ?? null,
+      } : null,
     };
   }
 
@@ -3043,7 +3093,7 @@ function showLandInfoCamera() {
     if (scene.panDidMove) return; // 直前がドラッグ/ピンチなら選択しない
     const tile = scene.pickTileAt(ndcX, ndcY, tiles);
     if (!tile || tile.type !== TileType.LAND) return;
-    tileInfoText.textContent = tileSummaryText(tileSummaryForInfo(tile));
+    renderTileInfo(tileSummaryForInfo(tile));
     tileInfoModal.classList.remove('hidden');
   }
 
@@ -3063,7 +3113,10 @@ function showLandInfoCamera() {
     camWorkBack.removeEventListener('click', finish);
     tileInfoClose.removeEventListener('click', onInfoClose);
     endCameraWork(camSnap);
+    if (closeLandInfoCamera === finish) closeLandInfoCamera = null;
   }
+
+  closeLandInfoCamera = finish;
 
   canvas.addEventListener('click', onCanvasClick);
   camArrowUp.addEventListener('click', onUp);
@@ -6248,10 +6301,16 @@ function applyPvpBoardState(publicState) {
           def: {
             catalogId: tileState.unit.catalogId,
             name: tileState.unit.name,
+            type: CardType.MONSTER,
+            rarity: tileState.unit.rarity ?? Rarity.N,
+            cost: tileState.unit.cost ?? 0,
             atk: tileState.unit.atk,
             hp: tileState.unit.maxHp,
             element: tileState.unit.element,
+            traits: tileState.unit.traits ?? [],
+            effectDescription: tileState.unit.effectDescription ?? '',
             imageDataUrl: tileState.unit.imageDataUrl,
+            imageFit: tileState.unit.imageFit ?? null,
           },
           currentHp: tileState.unit.hp,
         }

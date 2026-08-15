@@ -419,6 +419,7 @@
         <div id="player-panel-3" class="player-panel corner-br hidden"></div>
         <div id="log"></div>
         <div id="hand-panel"></div>
+        <div id="branch-remaining-steps" class="hidden">残り <span>0</span>マス</div>
         <button id="land-info-button" aria-label="土地情報を見る">土地情報</button>
         <button id="menu-button" aria-label="メニュー">メニュー</button>
         <div id="stage-goal-display" class="hidden">目標G: <span id="stage-goal-amount"></span></div>
@@ -579,6 +580,10 @@
       <div id="tile-info-modal" class="hidden">
         <div id="tile-info-box">
           <p id="tile-info-text"></p>
+          <div id="tile-info-monster" class="hidden">
+            <div id="tile-info-monster-card" class="card card-large"></div>
+            <p id="tile-info-monster-detail"></p>
+          </div>
           <div id="tile-info-actions">
             <button id="tile-info-close">閉じる</button>
           </div>

@@ -2539,6 +2539,25 @@ html, body {
   pointer-events: none;
 }
 
+#branch-remaining-steps {
+  position: absolute;
+  left: 20px;
+  bottom: 128px;
+  z-index: 22;
+  padding: 7px 14px;
+  border: 2px solid rgba(255, 209, 102, 0.9);
+  border-radius: 12px;
+  background: rgba(20, 22, 36, 0.9);
+  color: #fff4c2;
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  pointer-events: none;
+  box-shadow: 0 5px 18px rgba(0, 0, 0, 0.45);
+}
+
+#branch-remaining-steps.hidden { display: none; }
+
 #center-panel {
   position: absolute;
   top: 50%;
@@ -2992,6 +3011,33 @@ html, body {
   display: flex;
   gap: 10px;
   justify-content: center;
+}
+
+#tile-info-monster {
+  display: grid;
+  grid-template-columns: 150px minmax(220px, 1fr);
+  align-items: center;
+  gap: 18px;
+  margin: 8px 0 18px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.2);
+  text-align: left;
+}
+
+#tile-info-monster.hidden { display: none; }
+
+#tile-info-monster-card {
+  width: 140px;
+  height: 196px;
+  flex: none;
+}
+
+#tile-info-monster-detail {
+  margin: 0;
+  color: #f3f4ff;
+  font-size: 15px;
+  line-height: 1.65;
+  white-space: pre-line;
 }
 
 /* Vertical stacked list, distinct from the top-level menu's horizontal row (see 土地コマンド「土地」submenu spec: 入れ替え/Lvアップ/属性変更/移動/情報/もどる). */

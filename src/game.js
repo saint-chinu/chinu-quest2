@@ -1876,7 +1876,7 @@ export class Game {
       const previewTileIds = remainingSteps > 0
         ? this._forwardDestinationIdsFrom(player, id, fromTile.id, remainingSteps)
         : [id];
-      return { tileId: id, screenDir, previewTileIds };
+      return { tileId: id, screenDir, previewTileIds, remainingSteps: remainingSteps + 1 };
     });
     return this.onChooseBranch(options, player.id);
   }
@@ -4762,6 +4762,20 @@ export class Game {
       // 「倍化」がかかっていても数値に反映されない）。
       unitAtk: tile.unit ? this._baseStats(tile.unit).atk : null,
       unitHp: tile.unit ? (tile.unit.currentHp ?? this._baseStats(tile.unit).hp) : null,
+      unitCard: tile.unit ? {
+        catalogId: tile.unit.def.catalogId ?? null,
+        name: tile.unit.def.name,
+        type: tile.unit.def.type,
+        rarity: tile.unit.def.rarity,
+        element: tile.unit.def.element,
+        cost: tile.unit.def.cost ?? 0,
+        atk: tile.unit.def.atk,
+        hp: tile.unit.def.hp,
+        traits: tile.unit.def.traits ?? [],
+        effectDescription: tile.unit.def.effectDescription ?? '',
+        imageDataUrl: tile.unit.def.imageDataUrl ?? null,
+        imageFit: tile.unit.def.imageFit ?? null,
+      } : null,
       hasAbility: !!tile.unit?.def.ability,
       // forcedStopCursedはtrue（ほこら）かプレイヤーid（アリジゴク、0始まり）が
       // 入る - !!だとid=0がfalseに化けるので明示的にnull/false判定する。
@@ -5629,6 +5643,11 @@ export class Game {
                 hp: t.unit.currentHp ?? t.unit.def.hp,
                 element: t.unit.def.element ?? null,
                 imageDataUrl: t.unit.def.imageDataUrl ?? null,
+                rarity: t.unit.def.rarity ?? null,
+                cost: t.unit.def.cost ?? 0,
+                traits: t.unit.def.traits ?? [],
+                effectDescription: t.unit.def.effectDescription ?? '',
+                imageFit: t.unit.def.imageFit ?? null,
                 toll: this._tollOfTile(t),
               }
             : null,
