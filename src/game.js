@@ -2355,15 +2355,28 @@ export class Game {
     return CHAIN_MULTIPLIER[Math.min(Math.max(count, 1), LEVEL_CAP)];
   }
 
-  /** 地価 = (基本地価 + 累計レベルアップ投資額) × 連鎖倍率。 */
-  _landValueOfTile(tile) {
-    return Math.round((tile.price + (LEVEL_INVESTMENT[tile.level] || 0)) * this._chainMultiplier(tile.owner, tile.element));
+  /** 連鎖を掛ける前の土地価値（基本地価＋累計レベルアップ投資額）。 */
+  _baseLandValueOfTile(tile) {
+    return tile.price + (LEVEL_INVESTMENT[tile.level] || 0);
   }
 
-  /** 通行料 = 地価 × 通行料倍率。透過の呪い（深海魚X）がかかった土地は通行料ゼロ。 */
+  /** 地価 = (基本地価 + 累計レベルアップ投資額) × 連鎖倍率。 */
+  _landValueOfTile(tile) {
+    return Math.round(this._baseLandValueOfTile(tile) * this._chainMultiplier(tile.owner, tile.element));
+  }
+
+  /**
+   * 本家同様、通行料にも連鎖倍率を直接適用する。
+   * 通行料 = 連鎖前土地価値 × 連鎖倍率 × レベル別通行料率。
+   * 透過の呪い（深海魚X）がかかった土地は通行料ゼロ。
+   */
   _tollOfTile(tile) {
     if (tile.transparentCursed) return 0;
-    let toll = Math.round(this._landValueOfTile(tile) * TOLL_RATE[tile.level]);
+    let toll = Math.round(
+      this._baseLandValueOfTile(tile)
+        * this._chainMultiplier(tile.owner, tile.element)
+        * TOLL_RATE[tile.level],
+    );
     // 増税通知: 通行料を割合で恒久的に減らす呪い（表示にも反映される安定した値、
     // 追徴課税の1回限り倍率とは別枠 - こちらは_settleLandingToll側で扱う）。
     if (tile.tollReductionRatio) toll = Math.round(toll * (1 - tile.tollReductionRatio));
@@ -4275,6 +4288,7 @@ export class Game {
       level: isLand ? tile.level : null,
       landValue: isLand ? this._landValueOfTile(tile) : null,
       toll: isLand ? this._tollOfTile(tile) : null,
+      chainCount: isLand ? this._chainCount(tile.owner, tile.element) : null,
       price: tile.price,
       ownerName: owner ? owner.name : null,
       ownerColor: owner ? owner.color : null,
@@ -5066,6 +5080,9 @@ export class Game {
           owner: t.owner,
           level: t.level,
           element: t.element,
+          landValue: this._landValueOfTile(t),
+          toll: this._tollOfTile(t),
+          chainCount: this._chainCount(t.owner, t.element),
           unit: t.unit
             ? {
                 catalogId: t.unit.def.catalogId ?? null,

@@ -203,6 +203,7 @@ function tileSummaryText(tile) {
   if (tile.type === 'land') {
     lines.push(`属性: ${ELEMENT_LABEL[tile.element]} / Lv${tile.level}`);
     lines.push(tile.ownerName ? `所有者: ${tile.ownerName}` : '所有者: なし');
+    if ((tile.chainCount ?? 0) >= 2) lines.push(`連鎖: ${tile.chainCount}連鎖`);
     if (tile.unitName) lines.push(`配置モンスター: ${tile.unitName} (ATK${tile.unitAtk}/HP${tile.unitHp})`);
     lines.push(`地価: ${tile.landValue}G / 通行料: ${tile.toll}G`);
     if (tile.cursed) lines.push('呪い: 強制停止中（戦闘が起きると解ける）');
@@ -2864,7 +2865,13 @@ function showLandInfoCamera() {
       type: tile.type,
       element: tile.element,
       level: tile.level || 1,
-      ownerName: tile.owner == null ? null : `プレイヤー${tile.owner + 1}`,
+      ownerName: tile.owner == null
+        ? null
+        : (pvpMatch?.latestPublicState?.players?.find((player) => player.id === tile.owner)?.name
+          ?? `プレイヤー${tile.owner + 1}`),
+      landValue: tile.landValue ?? 0,
+      toll: tile.toll ?? 0,
+      chainCount: tile.chainCount ?? 0,
       unitName: tile.unit?.def?.name || null,
       unitAtk: tile.unit?.def?.atk ?? null,
       unitHp: tile.unit?.currentHp ?? null,
@@ -6063,6 +6070,9 @@ function applyPvpBoardState(publicState) {
     tile.owner = tileState.owner;
     tile.level = tileState.level;
     tile.element = tileState.element;
+    tile.landValue = tileState.landValue;
+    tile.toll = tileState.toll;
+    tile.chainCount = tileState.chainCount;
     const ownerPlayer = tile.owner != null ? publicState.players.find((p) => p.id === tile.owner) : null;
     const previousUnitKey = tile.unit
       ? `${tile.unit.def.catalogId ?? ''}:${tile.unit.def.name ?? ''}`
@@ -6091,7 +6101,7 @@ function applyPvpBoardState(publicState) {
       scene.updateUnitIcon(tile.unitMesh, {
         hp: tile.unit.currentHp,
         maxHp: tile.unit.def.hp,
-        toll: tileState.unit.toll ?? 0,
+      toll: tileState.unit.toll ?? 0,
         ownerName: ownerPlayer?.name ?? '',
       });
     } else if (tile.unitMesh) {
