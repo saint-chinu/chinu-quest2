@@ -1612,23 +1612,23 @@ html, body {
 
 #story-overlay-dialogue[data-stage="budou"] .story-overlay-portrait[data-character="紫の魔女ホフク"] {
   right: calc(2vw + 5mm);
-  bottom: 5mm;
-  width: 44.2vw;
-  max-width: 390px;
+  bottom: 17mm;
+  width: 53.04vw;
+  max-width: 468px;
 }
 
 #story-overlay-dialogue[data-stage="budou"] .story-overlay-portrait[data-character="ウサギン"] {
   left: 2vw;
   bottom: calc(57px + 3mm);
-  width: 40.8vw;
-  max-width: 360px;
+  width: 48.96vw;
+  max-width: 432px;
 }
 
 #story-overlay-dialogue[data-stage="budou"] .story-overlay-portrait[data-character="少女A"] {
   left: calc(2vw + min(27vw, 238px));
   bottom: 57px;
-  width: 44.2vw;
-  max-width: 390px;
+  width: 53.04vw;
+  max-width: 468px;
 }
 
 .story-overlay-name {

@@ -447,7 +447,22 @@ export class GameScene {
     this._applyCamera();
 
     this.resize();
-    window.addEventListener('resize', () => this.resize());
+    // iOSは横→縦→横の回転中、CSSレイアウトが確定する前の中間サイズで
+    // resizeを1回だけ通知することがある。その比率をカメラに固定すると、
+    // billboardの駒・モンスター・オブジェクトまで横につぶれて見える。
+    // 即時＋数フレーム後＋遅延後に取り直し、visualViewportも監視する。
+    this._viewportResizeTimers = [];
+    this._handleViewportResize = () => {
+      this._viewportResizeTimers.forEach((id) => clearTimeout(id));
+      this._viewportResizeTimers = [];
+      this.resize();
+      requestAnimationFrame(() => requestAnimationFrame(() => this.resize()));
+      this._viewportResizeTimers.push(setTimeout(() => this.resize(), 120));
+      this._viewportResizeTimers.push(setTimeout(() => this.resize(), 360));
+    };
+    window.addEventListener('resize', this._handleViewportResize);
+    window.addEventListener('orientationchange', this._handleViewportResize);
+    window.visualViewport?.addEventListener('resize', this._handleViewportResize);
   }
 
   _setupLights() {
@@ -460,10 +475,15 @@ export class GameScene {
   }
 
   resize() {
-    const { clientWidth, clientHeight } = this.canvas;
-    this.camera.aspect = clientWidth / clientHeight;
+    const rect = this.canvas.getBoundingClientRect();
+    const width = Math.round(rect.width || this.canvas.clientWidth || window.innerWidth);
+    const height = Math.round(rect.height || this.canvas.clientHeight || window.innerHeight);
+    // 回転途中の一瞬だけ0pxになる値は採用せず、次の再計測を待つ。
+    if (width <= 1 || height <= 1) return;
+    this.camera.aspect = width / height;
     this.camera.updateProjectionMatrix();
-    this.renderer.setSize(clientWidth, clientHeight, false);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+    this.renderer.setSize(width, height, false);
     this._recomputeDeadzone();
   }
 
