@@ -1466,6 +1466,9 @@ export class Game {
       // 止められる（このターンの残りステップは消化しない）。
       if (this._isForcedStopFor(player, toTile)) {
         if (i < steps - 1) this.onLog(`${player.name}は強制停止の呪いで足を止めた！`);
+        // ほこら由来（boolean true）の強制停止は、この土地で誰かを一度
+        // 止めた時点で消費される。アリジゴク等の数値ID型の呪いは従来通り。
+        if (toTile.forcedStopCursed === true) toTile.forcedStopCursed = false;
         break;
       }
     }
@@ -1532,6 +1535,7 @@ export class Game {
 
       if (this._isForcedStopFor(player, toTile)) {
         if (i < steps - 1) this.onLog(`${player.name}は強制停止の呪いで足を止めた！`);
+        if (toTile.forcedStopCursed === true) toTile.forcedStopCursed = false;
         break;
       }
     }
@@ -1720,7 +1724,11 @@ export class Game {
     const profile = player.aiProfile;
     // 育った空き地は投資済み価値をそのまま獲得できるため、CP/ゴールより
     // 一時的に優先して接近する。複数ある場合は現在地から近い最高額候補。
-    const valuableEmpty = this._cpuHighValueEmptyLands();
+    // マダイはステージ2の周回進行を最優先する。高額空地へ寄り道させると
+    // 左右の環状路のCP付近を循環し続けることがあるため、未通過CP→ゴール
+    // の順を常に目標にする。他CPUの「高額空地優先」は維持する。
+    const prioritizesLapRoute = player.name === '暴君マダイ';
+    const valuableEmpty = prioritizesLapRoute ? [] : this._cpuHighValueEmptyLands();
     const target = valuableEmpty.length > 0
       ? valuableEmpty.reduce((best, tile) => {
           const d = this._forwardTileDistance(player.tileId, player.previousTileId, tile.id);
@@ -1989,7 +1997,7 @@ export class Game {
     return { message };
   }
 
-  /** 右の頬をシバかれたら、左の頬をシバきなさい: 盤上に配置中の全モンスターの土地に強制停止の呪いをかける（自分の土地以外を素通りできなくなる。同盟仲間は対象外 - _isForcedStopFor参照）。この呪いは戦闘が起きると解ける（_runInvasion/_humanMoveFlow参照）。 */
+  /** 右の頬をシバかれたら、左の頬をシバきなさい: 盤上に配置中の全モンスターの土地に強制停止の呪いをかける（自分の土地以外を素通りできなくなる。同盟仲間は対象外 - _isForcedStopFor参照）。各土地の呪いは誰かを一度停止させると消える。 */
   _shrineForcedStop() {
     const targets = this.tiles.filter((t) => t.unit != null);
     for (const tile of targets) tile.forcedStopCursed = true;
