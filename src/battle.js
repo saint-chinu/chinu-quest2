@@ -405,6 +405,11 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
     attackerUnit.currentHp -= attackerEffect.damage;
     log.push(`${attackerUnit.def.name}は攻撃の反動で${attackerEffect.damage}ダメージを受けた`);
   }
+  if (attackerEffect?.type === 'selfDamageRatioAfterAttack') {
+    const recoil = Math.max(1, Math.round(attackerUnit.def.hp * attackerEffect.ratio));
+    attackerUnit.currentHp -= recoil;
+    log.push(`${attackerUnit.def.name}は攻撃の反動で${recoil}ダメージを受けた`);
+  }
   if (attackerEffect?.type === 'chanceSelfDamageOnAttack' && Math.random() < attackerEffect.chance) {
     attackerUnit.currentHp -= attackerEffect.damage;
     log.push(`${attackerUnit.def.name}は自らの攻撃で${attackerEffect.damage}ダメージを受けた`);
@@ -466,6 +471,20 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     attacker.items = [];
     itemDestructions.push({ targetSide: 'attacker', sourceName: source.name, items: destroyedItems });
     log.push(`${defender.def.name}が${attacker.def.name}のアイテムを破壊した`);
+  }
+  const attackerItemNullify = getEffect(attacker, 'chanceDestroyItemBeforeAttack');
+  if (attackerItemNullify && defender.items.length > 0 && Math.random() < attackerItemNullify.chance) {
+    const destroyedItems = [...defender.items];
+    defender.items = [];
+    itemDestructions.push({ targetSide: 'defender', sourceName: attacker.def.name, items: destroyedItems });
+    log.push(`${attacker.def.name}の予報が的中し、${defender.def.name}のアイテムを無効化した`);
+  }
+  const defenderItemNullify = getEffect(defender, 'chanceDestroyItemBeforeAttack');
+  if (defenderItemNullify && attacker.items.length > 0 && Math.random() < defenderItemNullify.chance) {
+    const destroyedItems = [...attacker.items];
+    attacker.items = [];
+    itemDestructions.push({ targetSide: 'attacker', sourceName: defender.def.name, items: destroyedItems });
+    log.push(`${defender.def.name}の予報が的中し、${attacker.def.name}のアイテムを無効化した`);
   }
 
   // 攻撃開始前効果: アイテム強奪（真剣白刃取り）。破壊と同じタイミングで

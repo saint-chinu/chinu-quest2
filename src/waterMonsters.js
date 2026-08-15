@@ -58,6 +58,10 @@ export const WATER_MONSTER_CATALOG = {
     traits: ['halfDamage'],
     effectDescription: '被ダメージ半減',
   }),
+  baketsuRelayTai: waterMonster('baketsuRelayTai', 'バケツリレー隊', Rarity.N, 35, 15, {
+    cost: 30,
+    imageDataUrl: assetUrl('/images/card-art/baketsuRelayTai.png'),
+  }),
 
   kaizokuS: waterMonster('kaizokuS', '海賊S', Rarity.S, 30, 30, {
     cost: 100,
@@ -90,6 +94,12 @@ export const WATER_MONSTER_CATALOG = {
     effect: { type: 'atkBonusAgainstRarity', targetRarity: Rarity.R, ratio: 0.4 },
     effectDescription: '召喚条件: 水の土地1連鎖以上。相手がRなら基礎ATKが40%上昇する',
   }),
+  shinkaiCleaner: waterMonster('shinkaiCleaner', '深海のクリーナー', Rarity.S, 30, 30, {
+    cost: 60,
+    effect: { type: 'cleanseSelfAtBattleStart' },
+    effectDescription: '戦闘開始時、自身にかかっている呪いをすべて解除する',
+    imageDataUrl: assetUrl('/images/card-art/shinkaiCleaner.png'),
+  }),
 
   arashiwoyobuOnna: waterMonster('arashiwoyobuOnna', '嵐を呼ぶ〇女', Rarity.R, 50, 50, {
     cost: 100,
@@ -112,5 +122,12 @@ export const WATER_MONSTER_CATALOG = {
     chainRequired: 2,
     effect: { type: 'statsPerElementChain', element: Element.WATER, atkPerChain: 7, hpPerChain: 7 },
     effectDescription: '召喚条件: 2連鎖以上。戦闘中、水の土地の連鎖数×7だけHP・ATKが上昇する',
+  }),
+  kaikyouSekishoKurage: waterMonster('kaikyouSekishoKurage', '海峡の関所クラゲ', Rarity.R, 30, 30, {
+    cost: 80,
+    chainRequired: 1,
+    traits: ['permanentForcedStop'],
+    effectDescription: '召喚条件: 水の土地1連鎖以上。敵はこの土地で必ず停止する',
+    imageDataUrl: assetUrl('/images/card-art/kaikyouSekishoKurage.png'),
   }),
 };

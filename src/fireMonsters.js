@@ -61,6 +61,10 @@ export const FIRE_MONSTER_CATALOG = {
   }),
   bonfireUncle: fireMonster('bonfireUncle', '焚火おじさん', Rarity.N, 40, 10, { cost: 30, imageDataUrl: assetUrl('/images/card-art/bonfireUncle.jpg') }),
   flameLizard: fireMonster('flameLizard', '炎トカゲ', Rarity.N, 30, 30, { cost: 40, imageDataUrl: assetUrl('/images/card-art/flameLizard.jpg') }),
+  yakiTomorokoshiHei: fireMonster('yakiTomorokoshiHei', '焼きとうもろこし兵', Rarity.N, 30, 20, {
+    cost: 30,
+    imageDataUrl: assetUrl('/images/card-art/yakiTomorokoshiHei.png'),
+  }),
 
   flameChallenger: fireMonster('flameChallenger', '炎のチャレンジャー', Rarity.S, 30, 40, {
     traits: ['firstStrike'],
@@ -97,6 +101,12 @@ export const FIRE_MONSTER_CATALOG = {
     effectDescription: '召喚条件: 火の土地1連鎖以上。相手がRなら基礎ATKが40%上昇する',
     imageDataUrl: assetUrl('/images/card-art/fireKick.jpg'),
   }),
+  rengokuMonbanhei: fireMonster('rengokuMonbanhei', '煉獄の門番兵', Rarity.S, 25, 40, {
+    cost: 60,
+    traits: ['firstStrike'],
+    effectDescription: '先制',
+    imageDataUrl: assetUrl('/images/card-art/rengokuMonbanhei.png'),
+  }),
 
   hezumaDragon: fireMonster('hezumaDragon', 'へ〇ま竜', Rarity.R, 50, 50, {
     effect: { type: 'chanceSelfDamageOnAttack', chance: 0.5, damage: 10 },
@@ -119,5 +129,12 @@ export const FIRE_MONSTER_CATALOG = {
     chainRequired: 2,
     effect: { type: 'statsPerElementChain', element: Element.FIRE, atkPerChain: 7, hpPerChain: 7 },
     effectDescription: '召喚条件: 2連鎖以上。戦闘中、火の土地の連鎖数×7だけHP・ATKが上昇する',
+  }),
+  kakouFudoumyouou: fireMonster('kakouFudoumyouou', '火口の不動明王', Rarity.R, 35, 20, {
+    cost: 90,
+    chainRequired: 2,
+    traits: ['immovableByMoveCommand', 'permanentForcedStop'],
+    effectDescription: '召喚条件: 火の土地2連鎖以上。通常の移動不可。敵はこの土地で必ず停止する',
+    imageDataUrl: assetUrl('/images/card-art/kakouFudoumyouou.png'),
   }),
 };

@@ -72,6 +72,10 @@ export const THUNDER_MONSTER_CATALOG = {
     ability: { type: 'cursePlayerHaste', turns: 2 },
     effectDescription: '土地コマンド（80G）: 選んだプレイヤーに高速化の呪いをかける（2ターン継続。サイコロ・スペルフェーズがスキップされ、代わりに6マス固定で移動する）',
   }),
+  juudenGireRobot: thunderMonster('juudenGireRobot', '充電切れロボ', Rarity.N, 20, 35, {
+    cost: 30,
+    imageDataUrl: assetUrl('/images/card-art/juudenGireRobot.png'),
+  }),
 
   thunderbird: thunderMonster('thunderbird', 'サンダーバード', Rarity.S, 30, 30, {
     traits: ['firstStrike'],
@@ -102,6 +106,13 @@ export const THUNDER_MONSTER_CATALOG = {
     effect: { type: 'atkBonusAgainstRarity', targetRarity: Rarity.R, ratio: 0.4 },
     effectDescription: '召喚条件: 雷の土地1連鎖以上。相手がRなら基礎ATKが40%上昇する',
   }),
+  kadenryuuCheetah: thunderMonster('kadenryuuCheetah', '過電流チーター', Rarity.S, 25, 40, {
+    cost: 60,
+    traits: ['firstStrike'],
+    effect: { type: 'selfDamageRatioAfterAttack', ratio: 0.2 },
+    effectDescription: '先制。攻撃後、自身の基礎HPの20%ダメージを受ける',
+    imageDataUrl: assetUrl('/images/card-art/kadenryuuCheetah.png'),
+  }),
 
   gandamu: thunderMonster('gandamu', '願駄無', Rarity.R, 30, 55, {
     cost: 120,
@@ -123,5 +134,12 @@ export const THUNDER_MONSTER_CATALOG = {
     chainRequired: 2,
     effect: { type: 'statsPerElementChain', element: Element.THUNDER, atkPerChain: 7, hpPerChain: 7 },
     effectDescription: '召喚条件: 2連鎖以上。戦闘中、雷の土地の連鎖数×7だけHP・ATKが上昇する',
+  }),
+  rakuraiYohoushi: thunderMonster('rakuraiYohoushi', '落雷予報士', Rarity.R, 35, 40, {
+    cost: 90,
+    chainRequired: 2,
+    effect: { type: 'chanceDestroyItemBeforeAttack', chance: 0.5 },
+    effectDescription: '召喚条件: 雷の土地2連鎖以上。戦闘開始時、50%の確率で相手の装備アイテムを無効化する',
+    imageDataUrl: assetUrl('/images/card-art/rakuraiYohoushi.png'),
   }),
 };

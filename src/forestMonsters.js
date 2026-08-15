@@ -56,6 +56,10 @@ export const FOREST_MONSTER_CATALOG = {
   }),
   abareInoshishi: forestMonster('abareInoshishi', '暴れイノシシ', Rarity.N, 20, 40, { cost: 30 }),
   tsutaOnna: forestMonster('tsutaOnna', 'ツタ女', Rarity.N, 30, 30, { cost: 40 }),
+  donguriInvestor: forestMonster('donguriInvestor', 'どんぐり投資家', Rarity.N, 25, 25, {
+    cost: 30,
+    imageDataUrl: assetUrl('/images/card-art/donguriInvestor.png'),
+  }),
 
   trufuButa: forestMonster('trufuButa', 'トリュフ豚', Rarity.S, 30, 30, {
     effect: { type: 'chanceGoldAfterBattle', chance: 1 / 3, amount: 150 },
@@ -85,6 +89,12 @@ export const FOREST_MONSTER_CATALOG = {
     effect: { type: 'atkBonusAgainstRarity', targetRarity: Rarity.R, ratio: 0.4 },
     effectDescription: '召喚条件: 森の土地1連鎖以上。相手がRなら基礎ATKが40%上昇する',
   }),
+  kokeRecoveryBear: forestMonster('kokeRecoveryBear', '苔むした回復熊', Rarity.S, 40, 20, {
+    cost: 60,
+    effect: { type: 'lapHealMultiplier', multiplier: 2 },
+    effectDescription: '周回時に受けるHP回復量が2倍になる',
+    imageDataUrl: assetUrl('/images/card-art/kokeRecoveryBear.png'),
+  }),
 
   sekaiju: forestMonster('sekaiju', '世界樹', Rarity.R, 70, 0, {
     cost: 120,
@@ -106,5 +116,12 @@ export const FOREST_MONSTER_CATALOG = {
     chainRequired: 2,
     effect: { type: 'statsPerElementChain', element: Element.FOREST, atkPerChain: 7, hpPerChain: 7 },
     effectDescription: '召喚条件: 2連鎖以上。戦闘中、森の土地の連鎖数×7だけHP・ATKが上昇する',
+  }),
+  shinrinChouzeikan: forestMonster('shinrinChouzeikan', '森林徴税官', Rarity.R, 40, 35, {
+    cost: 90,
+    chainRequired: 2,
+    effect: { type: 'tollMultiplier', tollMultiplier: 1.3 },
+    effectDescription: '召喚条件: 森の土地2連鎖以上。この土地の通行料が1.3倍になる',
+    imageDataUrl: assetUrl('/images/card-art/shinrinChouzeikan.png'),
   }),
 };

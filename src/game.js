@@ -1829,7 +1829,10 @@ export class Game {
     for (const t of this._ownedTiles(player)) {
       if (!t.unit) continue;
       const mechanicMasoBonus = hasMechanicMaso && t.unit.def.element === Element.THUNDER;
-      const healRatio = mechanicMasoBonus ? 0.2 : 0.1;
+      const lapHealMultiplier = t.unit.def.effect?.type === 'lapHealMultiplier'
+        ? Number(t.unit.def.effect.multiplier || 1)
+        : 1;
+      const healRatio = (mechanicMasoBonus ? 0.2 : 0.1) * lapHealMultiplier;
       // 上限は基礎HP（同属性ボーナスは含めない）。
       const maxHp = this._baseStats(t.unit).hp;
       const healed = Math.min(t.unit.currentHp + Math.round(maxHp * healRatio), maxHp);
@@ -1854,6 +1857,13 @@ export class Game {
    * 呪いあり判定される）。免除対象の同盟仲間も素通りできる。
    */
   _isForcedStopFor(player, tile) {
+    const permanentForcedStop = tile.unit?.def?.traits?.includes('permanentForcedStop');
+    if (permanentForcedStop && tile.type === TileType.LAND && tile.owner != null) {
+      if (tile.owner === player.id) return false;
+      const owner = this.players.find((p) => p.id === tile.owner);
+      if (owner?.allianceId != null && owner.allianceId === player.allianceId) return false;
+      return true;
+    }
     // player.idは0始まりなので、免除idがプレイヤー0の時に`!tile.forcedStopCursed`
     // だと`!0`=trueになり「呪い無し」と誤判定してしまう - null/undefined/false
     // だけを「呪い無し」として明示的に弾く。
@@ -2823,6 +2833,10 @@ export class Game {
    * move, win or lose.
    */
   async _humanMoveFlow(player, tile) {
+    if (tile.unit?.def?.traits?.includes('immovableByMoveCommand')) {
+      this.onLog(`${tile.unit.def.name}は通常の移動コマンドでは動かせません`);
+      return false;
+    }
     const candidates = tile.neighbors
       .map((id) => this.tiles[id])
       .filter((t) => t.type === TileType.LAND && !t.transparentCursed && (t.owner == null || t.owner !== player.id));
@@ -3604,6 +3618,7 @@ export class Game {
    */
   async _cpuMaybeMoveToHighValueLand(player, tile) {
     if (tile.owner !== player.id || !tile.unit) return false;
+    if (tile.unit.def.traits?.includes('immovableByMoveCommand')) return false;
     const adjacent = tile.neighbors.map((id) => this.tiles[id]);
     const target = this._cpuHighValueEmptyLands(adjacent)
       .find((land) => this._landValueOfTile(land) > this._landValueOfTile(tile));
@@ -4206,6 +4221,12 @@ export class Game {
    * (that part differs between straight invasion and move-invasion).
    */
   async _runBattleScene(attackerUnit, attackerPlayer, defenderUnit, defenderPlayer, attackerPositionTile, battleTile) {
+    for (const unit of [attackerUnit, defenderUnit]) {
+      if (unit.def.effect?.type === 'cleanseSelfAtBattleStart' && unit.curses?.length) {
+        unit.curses = [];
+        this.onLog(`${unit.def.name}は戦闘開始時に自身の呪いを解除した`);
+      }
+    }
     let attackerBase = this._baseStats(attackerUnit);
     let defenderBase = this._baseStats(defenderUnit);
     const attackerBonus = this._battleBonus(attackerUnit, attackerPositionTile, battleTile);
@@ -4893,6 +4914,7 @@ export class Game {
   /** CPU用の隣接モンスター移動。人間の「移動」と同じ一戦・奪取処理を使う。 */
   async _cpuMoveOwnedUnit(player, source, target) {
     const attackerUnit = source.unit;
+    if (attackerUnit?.def?.traits?.includes('immovableByMoveCommand')) return false;
     const defenderPlayer = this.players.find((candidate) => candidate.id === target.owner);
     const defenderUnit = target.unit;
     const sourceLandLoss = this._captureLandLoss(player, source);
