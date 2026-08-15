@@ -264,6 +264,20 @@ const UNIT_OWNER_HEIGHT = 30;
 const CARD_BODY_HEIGHT = 120;
 const UNIT_CARD_CANVAS_HEIGHT = TOLL_BADGE_HEIGHT + CARD_BODY_HEIGHT + HP_GAUGE_HEIGHT + UNIT_OWNER_HEIGHT;
 
+const UNIT_ELEMENT_MARK = {
+  fire: '火',
+  water: '水',
+  forest: '森',
+  thunder: '雷',
+  neutral: '無',
+};
+
+const UNIT_TRAIT_MARK = {
+  firstStrike: '先',
+  lastStrike: '後',
+  pierce: '貫',
+};
+
 const unitCardArtCache = new Map();
 /** 同じURLの実イラストは1度だけロードして使い回す（複数体を盤面に出しても再ダウンロードしない）。 */
 function loadUnitCardArt(url, onLoad) {
@@ -322,6 +336,37 @@ function drawUnitCard(state) {
     const drawH = imageH * scale;
     ctx.drawImage(state.artImage, 2 + (areaW - drawW) / 2, bodyY + (areaH - drawH) / 2, drawW, drawH);
     ctx.restore();
+  }
+
+  // 盤面上でも属性と主要戦闘特性を瞬時に判別できるよう、イラスト下端へ
+  // 左=属性、右=先制/後攻/貫通の短縮マークを重ねる。
+  const markY = bodyY + bodyH * 0.72 - 25;
+  const elementMark = UNIT_ELEMENT_MARK[state.element] || '?';
+  roundRectPath(ctx, 5, markY, 25, 23, 6);
+  ctx.fillStyle = 'rgba(0,0,0,0.82)';
+  ctx.fill();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = CARD_COLOR[state.element] || '#ffffff';
+  ctx.stroke();
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 16px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(elementMark, 17.5, markY + 12);
+
+  const traitMarks = (state.traits || []).map((trait) => UNIT_TRAIT_MARK[trait]).filter(Boolean);
+  if (traitMarks.length > 0) {
+    const traitText = traitMarks.join('');
+    const traitW = 10 + traitMarks.length * 17;
+    roundRectPath(ctx, w - traitW - 5, markY, traitW, 23, 6);
+    ctx.fillStyle = 'rgba(0,0,0,0.82)';
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#ffd166';
+    ctx.stroke();
+    ctx.fillStyle = '#ffd166';
+    ctx.font = 'bold 15px sans-serif';
+    ctx.fillText(traitText, w - traitW / 2 - 5, markY + 12);
   }
 
   const nameStripY = bodyY + bodyH * 0.72;
@@ -707,6 +752,7 @@ export class GameScene {
       texture,
       name: unit.def.name,
       element: unit.def.element,
+      traits: [...(unit.def.traits || [])],
       hp: unit.currentHp,
       maxHp: unit.def.hp,
       toll: 0,
