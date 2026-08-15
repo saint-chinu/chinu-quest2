@@ -1,4 +1,5 @@
 import { CardType, Element, Rarity } from './cards.js';
+import { assetUrl } from './assetUrl.js';
 
 const NORMAL_COST = 50;
 const thunderMonster = (id, name, rarity, hp, atk, options = {}) => ({
@@ -16,6 +17,7 @@ const thunderMonster = (id, name, rarity, hp, atk, options = {}) => ({
   ...(options.traits ? { traits: options.traits } : {}),
   ...(options.effect ? { effect: options.effect } : {}),
   ...(options.effectDescription ? { effectDescription: options.effectDescription } : {}),
+  imageDataUrl: options.imageDataUrl ?? assetUrl(`/images/card-art/${id}.jpg`),
 });
 
 /**

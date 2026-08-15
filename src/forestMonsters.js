@@ -17,7 +17,7 @@ const forestMonster = (id, name, rarity, hp, atk, options = {}) => ({
   ...(options.traits ? { traits: options.traits } : {}),
   ...(options.effect ? { effect: options.effect } : {}),
   ...(options.effectDescription ? { effectDescription: options.effectDescription } : {}),
-  ...(options.imageDataUrl ? { imageDataUrl: options.imageDataUrl } : {}),
+  imageDataUrl: options.imageDataUrl ?? assetUrl(`/images/card-art/${id}.jpg`),
 });
 
 /** 森属性モンスター20種。画像未指定時はcardArt.jsの森属性共通画像を使う。 */

@@ -51,7 +51,7 @@ const item = (id, name, rarity, itemType, cost, atkBonus, hpBonus, options = {})
   ...(options.atkBonusRange ? { atkBonusRange: options.atkBonusRange } : {}),
   ...(options.forceZeroAtk ? { forceZeroAtk: true } : {}),
   ...(options.returnsToHandIfUsed ? { returnsToHandIfUsed: true } : {}),
-  ...(options.imageDataUrl ? { imageDataUrl: options.imageDataUrl } : {}),
+  imageDataUrl: options.imageDataUrl ?? assetUrl(`/images/card-art/${id}.jpg`),
 });
 
 /**
@@ -168,6 +168,7 @@ const spell = (id, name, rarity, cost, target, effect, effectDescription) => ({
   target,
   effect,
   effectDescription,
+  imageDataUrl: assetUrl(`/images/card-art/${id}.jpg`),
 });
 
 /**
