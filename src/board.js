@@ -126,10 +126,10 @@ const DANBALL_ROWS = [
 // ⑥「彼」戦。⑤の最終決戦盤面を基礎に、外周へ「誹謗中傷」マスを
 // 4つ配置する。Dへちょうど停止するとEXスペル「開示請求」を得る。
 const KARE_ROWS = [
-  'GFFDTTTDWWC',
-  'M..M.N.F..N',
-  'MMMMNNFFFNN',
-  'M..M.N.F..N',
+  'GFFDFTTDWWC',
+  'M..M...F...',
+  'MMMM..FFF..',
+  'M..M...F...',
   'W..F.N.M..H',
   'WWWFNCNMNNH',
   'W..F.N.M..H',
