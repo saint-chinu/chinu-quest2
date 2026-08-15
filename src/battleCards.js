@@ -604,25 +604,33 @@ export const CHARACTER_DECKS = {
   kare: {
     composition: {
       monsters: [
-        // S 12枚
-        { def: MONSTER_CATALOG.aoriika, count: 2 },
-        { def: MONSTER_CATALOG.tsurara, count: 2 },
-        { def: MONSTER_CATALOG.azarashisan, count: 2 },
-        { def: MONSTER_CATALOG.matagiNoKoshirou, count: 2 },
-        { def: MONSTER_CATALOG.moriNoYousei, count: 2 },
-        { def: MONSTER_CATALOG.jinmenchou, count: 2 },
-        // R 26枚（水神・山神は各2枚）
+        // 元のSモンスター12枚から水・森を1枚ずつ残し、指定の10枚へ差し替え。
+        { def: MONSTER_CATALOG.aoriika, count: 1 },
+        { def: MONSTER_CATALOG.moriNoYousei, count: 1 },
+        { def: MONSTER_CATALOG.kunekune, count: 2 },
+        { def: MONSTER_CATALOG.battleTrain, count: 3 },
+        { def: MONSTER_CATALOG.sacrificeCar, count: 3 },
+        // Rモンスター20枚（水神・山神は各2枚）
         { def: MONSTER_CATALOG.suijin, count: 2 },
-        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 4 },
+        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 2 },
         { def: MONSTER_CATALOG.uminoieTencho, count: 3 },
         { def: MONSTER_CATALOG.bigMermaid, count: 4 },
         { def: MONSTER_CATALOG.yamagami, count: 2 },
-        { def: MONSTER_CATALOG.sekaiju, count: 3 },
-        { def: MONSTER_CATALOG.jukaiNoOnryou, count: 4 },
-        { def: MONSTER_CATALOG.mountGorilla, count: 4 },
+        { def: MONSTER_CATALOG.sekaiju, count: 2 },
+        { def: MONSTER_CATALOG.jukaiNoOnryou, count: 3 },
+        { def: MONSTER_CATALOG.mountGorilla, count: 2 },
       ],
-      items: [],
-      spells: [{ def: SPELL_CATALOG.disclosureRequest, count: 2 }],
+      items: [
+        { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
+        { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
+        { def: ITEM_CATALOG.kaenHoushakiki, count: 1 },
+        { def: ITEM_CATALOG.iceSlugger, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.phoenixCurse, count: 2 },
+        { def: SPELL_CATALOG.psychokinesis, count: 2 },
+        { def: SPELL_CATALOG.disclosureRequest, count: 2 },
+      ],
     },
   },
   hitode: {
