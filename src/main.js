@@ -1729,13 +1729,26 @@ async function promptLandLevelUp({ position, playerName, element, previousLevel,
   const duration = Math.max(200, pvpWaitCut(1200) / getSpeedMultiplier());
   const startedAt = performance.now();
   const countUp = new Promise((resolve) => {
+    let settled = false;
+    // requestAnimationFrameはタブ非アクティブ等で停止し得る。stopするとこの
+    // Promiseが永久に解決されず、awaitしているホストの進行が止まる。所要時間＋
+    // 余裕の保険タイマーで必ず最終値にして解決させる。
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(watchdog);
+      toll.textContent = `通行料 ${Math.round(tollAfter)}G`;
+      resolve();
+    };
+    const watchdog = window.setTimeout(finish, duration + 600);
     const frame = (now) => {
+      if (settled) return;
       const progress = Math.min(1, (now - startedAt) / duration);
       const eased = 1 - ((1 - progress) ** 3);
       const value = Math.round(tollBefore + (tollAfter - tollBefore) * eased);
       toll.textContent = `通行料 ${value}G`;
       if (progress < 1) requestAnimationFrame(frame);
-      else resolve();
+      else finish();
     };
     requestAnimationFrame(frame);
   });
@@ -6249,13 +6262,31 @@ function handlePvpGuestAction(action) {
  * いる（pvpJoinButton参照）ので、対戦開始そのものの合図はroom.statusの
  * 'battling'遷移を見て検知する（enterPvpRoomScreenのリスナー参照）。
  */
+// ゲスト側のカメラ演出（focusAndZoom）専用の直列化ロック。ホスト高速化で演出
+// イベントが束になって届くと、複数のprompt*がscene.focusの退避／復帰を奪い合って
+// カメラがぐちゃぐちゃになる。カメラ系ハンドラだけをこのチェーンに載せて1件ずつ
+// 再生する（イベント配送そのものは直列化しない＝サイコロ/選択などのインタラクティブ
+// prompt は従来どおり即時処理され、絶対に止まらない）。万一演出が固まっても
+// タイムアウトでチェーンを必ず進め、ゲーム全体を止めない。
+let guestCameraChain = Promise.resolve();
+function serializedCamera(fn) {
+  return (payload) => {
+    const run = guestCameraChain.then(() => Promise.race([
+      Promise.resolve().then(() => fn(payload)).catch(() => {}),
+      new Promise((resolve) => window.setTimeout(resolve, 4000)),
+    ]));
+    guestCameraChain = run.catch(() => {});
+    return run;
+  };
+}
+
 const pvpGuestHandlers = {
   cardReveal: promptCardReveal,
   discardChoice: promptDiscardChoice,
   spellUse: promptSpellUse,
-  spellCastEffect: promptSpellCastEffect,
-  shrineEffect: promptShrineEffect,
-  warpEffect: promptWarpEffect,
+  spellCastEffect: serializedCamera(promptSpellCastEffect),
+  shrineEffect: serializedCamera(promptShrineEffect),
+  warpEffect: serializedCamera(promptWarpEffect),
   spellComplete: finishSpellPresentation,
   // landCommand/shopPurchaseはgame.js側でpayloadとplayer.idの間に追加引数を
   // 挟む型なので、relayable()が[複数引数]の配列としてまとめて送ってくる -
@@ -6286,15 +6317,15 @@ const pvpGuestHandlers = {
   battleAttack: promptBattleAttack,
   battleRetreat: promptBattleRetreat,
   battleOutcome: promptBattleOutcome,
-  damageEffect: promptDamageEffect,
-  tollPayment: promptTollPayment,
+  damageEffect: serializedCamera(promptDamageEffect),
+  tollPayment: serializedCamera(promptTollPayment),
   moveDestination: promptMoveDestination,
-  landLoss: promptLandLoss,
-  landChain: promptLandChain,
-  landLevelUp: promptLandLevelUp,
+  landLoss: serializedCamera(promptLandLoss),
+  landChain: serializedCamera(promptLandChain),
+  landLevelUp: serializedCamera(promptLandLevelUp),
   checkpoint: promptCheckpointSound,
   goalBonus: promptGoalBonusSound,
-  goalAchieved: promptGoalAchieved,
+  goalAchieved: serializedCamera(promptGoalAchieved),
 };
 
 const pvpPieces = new Map(); // playerId -> billboard sprite (ゲスト側のローカル駒キャッシュ)
