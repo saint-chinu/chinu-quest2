@@ -616,22 +616,24 @@ export function buildStarterDeckList(bookId = 'fireForest') {
 export const CHARACTER_DECKS = {
   kare: {
     composition: {
+      // 水・森の神テーマは残しつつ、破産対策で「安価で腐りにくい50G級Rを厚く／
+      // 高コストの神と大型は少数／収入と課税で経済を回す」構成へ見直し。
+      // マウントゴリラ(手持ちG優位でATK2倍)は副業収入との相性が良い。
       monsters: [
-        // 元のSモンスター12枚から水・森を1枚ずつ残し、指定の10枚へ差し替え。
-        { def: MONSTER_CATALOG.aoriika, count: 1 },
-        { def: MONSTER_CATALOG.moriNoYousei, count: 1 },
-        { def: MONSTER_CATALOG.kunekune, count: 2 },
-        { def: MONSTER_CATALOG.battleTrain, count: 3 },
-        { def: MONSTER_CATALOG.sacrificeCar, count: 3 },
-        // Rモンスター20枚（水神・山神は各2枚）
-        { def: MONSTER_CATALOG.suijin, count: 2 },
-        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 2 },
+        // 安価で効率のよい主力（50G中心・低い連鎖条件）。
+        { def: MONSTER_CATALOG.aoriika, count: 2 },
+        { def: MONSTER_CATALOG.kunekune, count: 3 },
         { def: MONSTER_CATALOG.uminoieTencho, count: 3 },
-        { def: MONSTER_CATALOG.bigMermaid, count: 4 },
-        { def: MONSTER_CATALOG.yamagami, count: 2 },
+        { def: MONSTER_CATALOG.jukaiNoOnryou, count: 4 },
+        { def: MONSTER_CATALOG.mountGorilla, count: 4 },
+        { def: MONSTER_CATALOG.moriNoYousei, count: 2 },
+        // 中量級の壁・アタッカー（120G前後、1連鎖）。
+        { def: MONSTER_CATALOG.bigMermaid, count: 3 },
         { def: MONSTER_CATALOG.sekaiju, count: 2 },
-        { def: MONSTER_CATALOG.jukaiNoOnryou, count: 3 },
-        { def: MONSTER_CATALOG.mountGorilla, count: 2 },
+        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 1 },
+        // フィニッシャーの神（150G・2連鎖、各1枚に抑える）。
+        { def: MONSTER_CATALOG.suijin, count: 1 },
+        { def: MONSTER_CATALOG.yamagami, count: 1 },
       ],
       items: [
         { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
@@ -639,10 +641,16 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.kaenHoushakiki, count: 1 },
         { def: ITEM_CATALOG.iceSlugger, count: 1 },
       ],
+      // 旧構成のphoenixCurse/psychokinesisはCPUが一切詠唱しない死に札だったため
+      // 撤去。全てCPUが実際に使うスペルに差し替え、収入(副業収入)と課税(追徴課税)で
+      // 通行料破産を防ぎ、占術で事故を減らす。
       spells: [
-        { def: SPELL_CATALOG.phoenixCurse, count: 2 },
-        { def: SPELL_CATALOG.psychokinesis, count: 2 },
-        { def: SPELL_CATALOG.disclosureRequest, count: 2 },
+        { def: SPELL_CATALOG.sideIncome, count: 3 },
+        { def: SPELL_CATALOG.divination, count: 2 },
+        { def: SPELL_CATALOG.specialAudit, count: 2 },
+        { def: SPELL_CATALOG.disclosureRequest, count: 1 },
+        { def: SPELL_CATALOG.senbonZakura, count: 1 },
+        { def: SPELL_CATALOG.blueOcean, count: 1 },
       ],
     },
   },

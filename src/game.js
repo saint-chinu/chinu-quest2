@@ -3465,13 +3465,21 @@ export class Game {
     if (options.length === 0) return;
 
     if (tile.owner == null) {
+      // 通行料破産の防止: 手元に「払い得る最大の敵地通行料」の備え(reserve)を
+      // 残せる範囲でだけ通常の召喚選択を行う。どのカードも備えを残せないほど
+      // 手持ちが薄い時は最安の1枚だけに絞って土地は確保しつつ散財を避ける。
+      const reserve = this._cpuSummonReserve(player);
+      const withinReserve = options.filter((c) => player.currency - (c.cost || 0) >= reserve);
+      const pool = withinReserve.length > 0
+        ? withinReserve
+        : [options.reduce((cheap, c) => ((c.cost || 0) < (cheap.cost || 0) ? c : cheap))];
       const card = this._isDanballBoss(player)
-        ? this._cpuChooseSummonCardForDanball(options, tile, player)
+        ? this._cpuChooseSummonCardForDanball(pool, tile, player)
         : player.name === 'Q'
-          ? this._cpuChooseSummonCardForQ(options, tile, profile, player)
+          ? this._cpuChooseSummonCardForQ(pool, tile, profile, player)
           : player.name === '「彼」'
-            ? this._cpuChooseSummonCardForKare(options, tile, profile, player)
-            : this._cpuChooseSummonCard(options, tile, profile, player);
+            ? this._cpuChooseSummonCardForKare(pool, tile, profile, player)
+            : this._cpuChooseSummonCard(pool, tile, profile, player);
       player.hand = player.hand.filter((c) => c.id !== card.id);
       player.deck.discard(card);
       player.currency -= card.cost;
@@ -3796,6 +3804,21 @@ export class Game {
       return tile.element !== Element.NEUTRAL;
     }
     return card.element === tile.element;
+  }
+
+  /** CPUが空き地召喚時に手元へ残しておきたい通行料の備え。盤上で自分が払い得る
+   *  最大の敵地（非同盟）通行料を目安にする。序盤は土地レベルが低く小さいので
+   *  自由に召喚でき、中盤以降は高くなり高コストカードでの散財を抑える。上限は
+   *  過剰な溜め込み（＝盤面が育たない）を防ぐため800Gでキャップ。 */
+  _cpuSummonReserve(player) {
+    let maxToll = 0;
+    for (const tile of this.tiles) {
+      if (tile.type !== TileType.LAND || tile.owner == null || tile.owner === player.id) continue;
+      const owner = this.players.find((p) => p.id === tile.owner);
+      if (owner?.allianceId != null && owner.allianceId === player.allianceId) continue;
+      maxToll = Math.max(maxToll, this._tollOfTile(tile));
+    }
+    return Math.min(maxToll, 800);
   }
 
   _cpuChooseSummonCard(options, tile, profile, player) {
