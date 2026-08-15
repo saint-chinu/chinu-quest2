@@ -1094,8 +1094,15 @@ export class Game {
     }
 
     const pickedId = undrawn[Math.floor(Math.random() * undrawn.length)];
+    // ブリードモンスター等はMONSTER_CATALOGに載っていない（プレイヤー固有の
+    // カード）。その場合はデッキ内（山札/捨札）の実カードからdefを引き当てる。
+    // これが無いと無属性のブリモンを引いた時にdef未解決で何も召喚されず、
+    // 「未知との遭遇が機能しない」状態になっていた。
+    const deckCard = [...(player.deck?.drawPile || []), ...(player.deck?.discardPile || [])]
+      .find((c) => catalogIdOf(c) === pickedId);
     const def = MONSTER_CATALOG[pickedId]
-      || Object.values(MONSTER_CATALOG).find((m) => catalogIdOf(m) === pickedId);
+      || Object.values(MONSTER_CATALOG).find((m) => catalogIdOf(m) === pickedId)
+      || deckCard;
     if (def) {
       const monsterCard = {
         ...def,
@@ -3874,19 +3881,24 @@ export class Game {
   _applyEffectBonus(unit, opponentUnit, bonus) {
     const effect = unit.def.effect;
     if (effect) this._applyEffectBonusFor(unit, opponentUnit, bonus, effect);
+  }
 
-    // イカサマのサイコロ(atkFromLastDiceRoll): カード自身の効果ではなく
-    // 装備アイテムの効果なので、上のunit.def.effect起点の分岐とは別枠で
-    // チェックする（プレイヤーの直近のサイコロの目を参照するのでboard側の
-    // Gameインスタンスでないと計算できない）。
+  /**
+   * 装備アイテム由来の動的ATK加算。アイテムはequip後でないとunit.itemsに
+   * 乗らないため、_applyEffectBonus（召喚前・装備前でも呼ばれる）とは別枠で、
+   * 必ず装備が確定した"後"に呼ぶ。ここで呼ばないとイカサマのサイコロの加算が
+   * 一切効かない（unit.itemsが空のまま計算されてしまう）。
+   * イカサマのサイコロ(atkFromLastDiceRoll): ATK+前回移動したサイコロの目×倍率。
+   * プレイヤーの直近のサイコロの目を参照するのでboard側のGameインスタンス側で計算する。
+   */
+  _applyEquippedItemBonus(unit, bonus) {
     const diceItem = unit.items.find((i) => i.effect?.type === 'atkFromLastDiceRoll');
-    if (diceItem) {
-      const owner = this.players.find((p) => p.id === unit.ownerId);
-      const roll = owner?.lastDiceSteps || 0;
-      const atk = roll * diceItem.effect.multiplier;
-      bonus.atk += atk;
-      if (atk > 0) this.onLog(`${unit.def.name}は「${diceItem.name}」でATK+${atk}（前回の出目${roll}）`);
-    }
+    if (!diceItem) return;
+    const owner = this.players.find((p) => p.id === unit.ownerId);
+    const roll = owner?.lastDiceSteps || 0;
+    const atk = roll * diceItem.effect.multiplier;
+    bonus.atk += atk;
+    if (atk > 0) this.onLog(`${unit.def.name}は「${diceItem.name}」でATK+${atk}（前回の出目${roll}）`);
   }
 
   _applyEffectBonusFor(unit, opponentUnit, bonus, effect) {
@@ -4044,6 +4056,8 @@ export class Game {
         const defenderBonus = this._battleBonus(defenderUnit, defenderTile, defenderTile);
         this._applyEffectBonus(attackerUnit, defenderUnit, attackerBonus);
         this._applyEffectBonus(defenderUnit, attackerUnit, defenderBonus);
+        this._applyEquippedItemBonus(attackerUnit, attackerBonus);
+        this._applyEquippedItemBonus(defenderUnit, defenderBonus);
         const attackerHasPierce =
           attackerUnit.def.traits?.includes('pierce') || attackerUnit.items.some((i) => i.traits?.includes('pierce'));
         const battleDefenderBonus = attackerHasPierce ? { ...defenderBonus, hp: 0 } : defenderBonus;
@@ -4203,6 +4217,11 @@ export class Game {
       if (this._isCancelled) return null;
     }
 
+    // 装備が確定した"後"に、装備アイテム由来の動的加算（イカサマのサイコロの
+    // ATK+出目×倍率）を反映する。ここでやらないと装備前計算になってしまい効かない。
+    this._applyEquippedItemBonus(attackerUnit, attackerBonus);
+    this._applyEquippedItemBonus(defenderUnit, defenderBonus);
+
     // 貫通: nullifies the defender's 同属性ボーナス (land-added HP) for this
     // battle's math specifically - the stat panel above already showed the
     // "nominal" bonus, since traits (unlike items) aren't secret and the
@@ -4308,9 +4327,32 @@ export class Game {
     return result;
   }
 
+  /**
+   * 不死鳥系（不死鳥の剣・不死鳥特性のモンスター）が手札に戻る際に呼ぶ。
+   * 召喚/装備した時点で捨札（＝再シャッフルで山札に戻る）へ送られた同一カタログの
+   * カードを1枚だけ回収して取り除く。これをやらないと「手札に戻った1枚」と
+   * 「捨札に残った1枚」で実質2枚に増殖してしまう（デッキが循環するたびに増える）。
+   * 捨札→山札の順に探し、最初に見つかった1枚だけ取り除く。
+   */
+  _reclaimCardFromDeck(player, catalogId) {
+    const deck = player?.deck;
+    if (!deck || catalogId == null) return;
+    for (const pile of [deck.discardPile, deck.drawPile]) {
+      if (!pile) continue;
+      const idx = pile.findIndex((c) => catalogIdOf(c) === catalogId);
+      if (idx !== -1) {
+        pile.splice(idx, 1);
+        return;
+      }
+    }
+  }
+
   /** 不死鳥の剣: 実際に戦闘で使用された（=装備された）場合のみ、使い切った後も新しいidで持ち主の手札に戻る（手札上限で使わずに捨てられた場合はここを通らないので、通常のアイテム同様消滅する）。 */
   _maybeReturnItemToHand(item, player) {
     if (!item || !item.returnsToHandIfUsed) return;
+    // _consumeBattleItemが捨札へ送った同一アイテムを1枚回収してから手札へ戻す
+    // （手札分＋捨札分で増殖するのを防ぐ）。
+    this._reclaimCardFromDeck(player, catalogIdOf(item));
     const card = { ...item, id: `itemreturn-${Date.now()}-${Math.random().toString(36).slice(2)}` };
     player.hand.push(card);
     this.onLog(`「${card.name}」は${player.name}の手札に戻った`);
@@ -4476,10 +4518,14 @@ export class Game {
 
     if (!unit.def.traits?.includes('phoenix')) return;
 
+    const catalogId = catalogIdOf(unit.def);
+    // 召喚時に捨札へ送られた同一モンスターを1枚回収してから手札へ戻す
+    // （不死鳥で手札に戻る分＋捨札に残った分で増殖するのを防ぐ）。
+    this._reclaimCardFromDeck(ownerPlayer, catalogId);
     const card = {
       ...unit.def,
       id: `phoenix-${ownerPlayer.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
-      catalogId: catalogIdOf(unit.def),
+      catalogId,
     };
     ownerPlayer.hand.push(card);
     this.onLog(`${unit.def.name}は不死鳥の力で${ownerPlayer.name}の手札に戻った`);
