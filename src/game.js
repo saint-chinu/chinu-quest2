@@ -1075,9 +1075,19 @@ export class Game {
     const removeUsedFromDiscard = () => {
       player.deck.discardPile = player.deck.discardPile.filter((c) => c.id !== card.id);
     };
-    const deckNeutrals = player.deckNeutralMonsterIds || new Set();
-    const drawn = player.drawnCatalogIds || new Set();
-    const undrawn = [...deckNeutrals].filter((id) => !drawn.has(id));
+    const deckNeutrals = player.deckNeutralMonsterIds;
+    const drawn = player.drawnCatalogIds;
+    const drawnHas = (id) => (drawn instanceof Set ? drawn.has(id) : false);
+    // ギア（fusionSummon）と合体ロボ・ガシャーンは「未知との遭遇」の対象外。
+    // ギアを引き当てて召喚すると他2種と合体して「ガシャーン」になってしまい、
+    // デッキに積んでいないガシャーン（＝合体専用でデッキには存在しない）が
+    // 実質召喚できてしまうため、遭遇候補から除外する。
+    const encounterable = (id) => {
+      if (id === 'gashaan-field') return false;
+      return MONSTER_CATALOG[id]?.effect?.type !== 'fusionSummon';
+    };
+    const undrawn = (deckNeutrals instanceof Set ? [...deckNeutrals] : [])
+      .filter((id) => !drawnHas(id) && encounterable(id));
 
     if (undrawn.length === 0) {
       // 全種遭遇済み: 復帰なし・200G＋2ドロー。

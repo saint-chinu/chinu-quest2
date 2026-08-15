@@ -3630,15 +3630,10 @@ function saveStoryResume() {
 }
 
 async function selectStoryStage(index, cleared, stage) {
-  const saved = loadStoryResume();
-  if (saved?.stageIndex === index && saved.gameState) {
-    const resume = await confirmYesNo('途中保存した対戦があります。続きから再開しますか？');
-    if (resume) {
-      await startStoryBattle(index, saved.heroDeckList, !!saved.isReplay, saved.replayVariant || null, saved.gameState);
-      return;
-    }
-    clearStoryResume();
-  }
+  // 途中再開は廃止。途中退室したら盤面は完全リセットして最初から始める方針
+  // （旧再開機能はセーブデータの不整合で再開時フリーズを起こしていた）。
+  // 古い保存データが残っていても無視して消す。
+  clearStoryResume();
   if (cleared && stage.replay) await playStoryReplay(index);
   else await playStoryStage(index);
 }
@@ -6620,7 +6615,7 @@ gameMenuExit.addEventListener('click', async () => {
   // （ゲストは手元にturnCountが無いので従来どおり対象）。
   let rewardEligible = false;
   if (wasStoryBattle) {
-    confirmed = await confirmYesNo('対戦をやめますか？\n進行状況を保存し、次回このステージを選ぶと続きから再開できます。');
+    confirmed = await confirmYesNo('対戦をやめますか？\n進行状況は保存されず、盤面は最初からになります。');
   } else {
     // ゲスト側はGameを持たないので、直近のpublicStateから自分のGを読む
     // （publicStateがまだ届いていない対戦開始直後は0扱い）。同盟時は
@@ -6647,7 +6642,10 @@ gameMenuExit.addEventListener('click', async () => {
   }
   if (!confirmed) return;
 
-  if (wasStoryBattle) saveStoryResume();
+  // 途中退室は「盤面を完全リセット」する方針。途中保存＝再開はデータ不整合
+  // （Setがシリアライズで壊れる等）で再開時フリーズの原因になっていたため廃止し、
+  // 退室時は保存せず、むしろ残っている保存データも消してから抜ける。
+  if (wasStoryBattle) clearStoryResume();
   const rewardResult = wasStoryBattle || !rewardEligible ? null : grantExitReward(endingAssetsShare);
 
   // 退出時、もし戦闘シーン演出の途中（onBattleSceneEnter等のPromiseが
@@ -6697,9 +6695,9 @@ function forceTerminateBoardSession() {
   // ルーム待機画面など盤面開始前の最小化/pagehideではセッションを破棄しない。
   // iOSでLINEやDiscordへ切り替えて部屋コードを共有しても、そのまま戻れる。
   if (appEl?.classList.contains('hidden')) return;
-  // ストーリーのみ端末へ保存してから破棄する。オンライン対戦は共有状態を
-  // ローカル単独で復元すると混線するため、従来どおり終了扱いにする。
-  if (activeStoryStageIndex != null) saveStoryResume();
+  // 途中再開は廃止（データ不整合で再開時フリーズの原因になっていた）。保存は
+  // 行わず、残っている保存データも消して、次回は必ず最初から始まるようにする。
+  if (activeStoryStageIndex != null) clearStoryResume();
   game?.cancel?.();
   cancelActiveBattleItemPicker?.();
   cancelActiveBattleItemPicker = null;
