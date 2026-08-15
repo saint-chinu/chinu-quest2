@@ -937,7 +937,9 @@ export class Game {
 
       case 'fullHeal':
         if (!targetTile?.unit) return false;
-        targetTile.unit.currentHp = this._baseStats(targetTile.unit).hp + this._elementHpBonus(targetTile.unit, targetTile);
+        // currentHpは常に基礎HPスケールで保持する。土地レベルのHP加算は
+        // 戦闘中だけの一時値であり、回復量として盤面へ保存しない。
+        targetTile.unit.currentHp = this._baseStats(targetTile.unit).hp;
         this.onLog(`${targetTile.unit.def.name}のHPが全回復した`);
         return false;
 
@@ -1242,7 +1244,7 @@ export class Game {
     let count = 0;
     for (const t of this.tiles) {
       if (!t.unit) continue;
-      const maxHp = this._baseStats(t.unit).hp + this._elementHpBonus(t.unit, t);
+      const maxHp = this._baseStats(t.unit).hp;
       const healed = Math.min(t.unit.currentHp + Math.round(maxHp * ratio), maxHp);
       if (healed > t.unit.currentHp) {
         t.unit.currentHp = healed;
@@ -3192,7 +3194,7 @@ export class Game {
       for (const t of this._ownedTiles(player)) {
         if (!t.unit) continue;
         t.unit.curses = [];
-        t.unit.currentHp = this._baseStats(t.unit).hp + this._elementHpBonus(t.unit, t);
+        t.unit.currentHp = this._baseStats(t.unit).hp;
         healedCount += 1;
       }
       this.onLog(`${player.name}の${unitDef.name}が味方全体を回復し、呪いを解除した（${healedCount}体）`);
@@ -3487,7 +3489,7 @@ export class Game {
       spend();
       for (const candidate of ownedUnits) {
         candidate.unit.curses = [];
-        candidate.unit.currentHp = this._baseStats(candidate.unit).hp + this._elementHpBonus(candidate.unit, candidate);
+        candidate.unit.currentHp = this._baseStats(candidate.unit).hp;
       }
       this.onLog(`${player.name}の${unitDef.name}が味方全体を回復し、呪いを解除した (-${cost}G)`);
       this._notifyState();
@@ -4219,6 +4221,7 @@ export class Game {
         ownerName: attackerPlayer.name,
         atk: attackerBase.atk,
         hp: attackerBase.hp,
+        currentHp: Math.min(attackerUnit.currentHp, attackerBase.hp),
         cheerAtk: attackerBonus.atk,
         elementHp: attackerBonus.hp,
         element: attackerPositionTile?.element ?? null,
@@ -4230,6 +4233,7 @@ export class Game {
         ownerName: defenderPlayer.name,
         atk: defenderBase.atk,
         hp: defenderBase.hp,
+        currentHp: Math.min(defenderUnit.currentHp, defenderBase.hp),
         cheerAtk: defenderBonus.atk,
         elementHp: defenderBonus.hp,
         element: battleTile.element,
@@ -4285,6 +4289,7 @@ export class Game {
       await this.onBattleEquip({
         side: 'attacker', item: equippedAttackerItem, unitName: attackerUnit.def.name,
         baseAtk: attackerBase.atk, baseHp: attackerBase.hp,
+        baseCurrentHp: Math.min(attackerUnit.currentHp, attackerBase.hp),
         existingAtkBonus: attackerBonus.atk, existingHpBonus: attackerBonus.hp,
         fusionCard: attackerFusion,
       });
@@ -4294,6 +4299,7 @@ export class Game {
       await this.onBattleEquip({
         side: 'defender', item: equippedDefenderItem, unitName: defenderUnit.def.name,
         baseAtk: defenderBase.atk, baseHp: defenderBase.hp,
+        baseCurrentHp: Math.min(defenderUnit.currentHp, defenderBase.hp),
         existingAtkBonus: defenderBonus.atk, existingHpBonus: defenderBonus.hp,
         fusionCard: defenderFusion,
       });
@@ -4576,7 +4582,12 @@ export class Game {
     rodTile.transparentCursed = false;
     this._repaintTileToElement(rodTile);
 
-    defenderUnit.currentHp = this._baseStats(defenderUnit).hp + this._elementHpBonus(defenderUnit, defenderTile);
+    // 身代わりは防衛モンスターへの攻撃を無効化するが、過去の負傷まで
+    // 回復する効果ではない。戦闘開始前の基礎HPへ戻す。
+    defenderUnit.currentHp = Math.max(1, Math.min(
+      defenderUnit._boardHpBeforeBattle ?? defenderUnit.currentHp,
+      this._baseStats(defenderUnit).hp,
+    ));
     result.defenderSurvived = true;
     this._notifyState();
     await this._handleUnitDeath(rodUnit, defenderPlayer);

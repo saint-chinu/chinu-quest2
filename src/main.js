@@ -1775,11 +1775,14 @@ const BATTLE_FADE_OUT_MS = 450;
 
 /** Resets one side's panel/card/item-overlay/matchup-label to a fresh state and fills in this battle's base stats + bonuses. */
 function renderBattleStat(sideEls, data) {
+  const currentHp = Math.max(0, Math.min(data.currentHp ?? data.hp, data.hp));
+  const battleCurrentHp = currentHp + (data.elementHp || 0);
+  const battleMaxHp = data.hp + (data.elementHp || 0);
   sideEls.owner.textContent = data.ownerName;
-  sideEls.hp.textContent = data.hp;
-  sideEls.hp.dataset.current = String(data.hp + (data.elementHp || 0));
-  sideEls.hp.dataset.max = String(data.hp + (data.elementHp || 0));
-  sideEls.hpFill.style.width = '100%';
+  sideEls.hp.textContent = currentHp;
+  sideEls.hp.dataset.current = String(battleCurrentHp);
+  sideEls.hp.dataset.max = String(battleMaxHp);
+  sideEls.hpFill.style.width = `${Math.max(0, Math.min(100, (battleCurrentHp / Math.max(battleMaxHp, 1)) * 100))}%`;
   sideEls.atk.textContent = data.atk;
   sideEls.atk.dataset.built = 'false';
   sideEls.atkFill.style.width = `${Math.min(100, ((data.atk + (data.cheerAtk || 0)) / 150) * 100)}%`;
@@ -2009,20 +2012,20 @@ async function promptBattleAttack({ side, item, message, damage = 0, element, at
     await new Promise((resolve) => setTimeout(resolve, BATTLE_ACTION_GAP_MS));
 }
 
-async function promptBattleEquip({ side, item, unitName, baseAtk, baseHp, existingAtkBonus = 0, existingHpBonus = 0, fusionCard = null }) {
+async function promptBattleEquip({ side, item, unitName, baseAtk, baseHp, baseCurrentHp = baseHp, existingAtkBonus = 0, existingHpBonus = 0, fusionCard = null }) {
   const sideEls = battleSide[side];
   if (fusionCard) {
     renderCardEl(sideEls.card, fusionCard);
     sideEls.item.replaceChildren();
     sideEls.item.classList.add('hidden');
     sideEls.atk.textContent = String(baseAtk);
-    sideEls.hp.textContent = String(baseHp);
+    sideEls.hp.textContent = String(baseCurrentHp);
     sideEls.atkBonus.classList.add('hidden');
     sideEls.hpBonus.classList.add('hidden');
     sideEls.atkFill.style.width = `${Math.min(100, (baseAtk / 150) * 100)}%`;
-    sideEls.hp.dataset.current = String(baseHp);
+    sideEls.hp.dataset.current = String(baseCurrentHp);
     sideEls.hp.dataset.max = String(baseHp);
-    sideEls.hpFill.style.width = '100%';
+    sideEls.hpFill.style.width = `${Math.max(0, Math.min(100, (baseCurrentHp / Math.max(baseHp, 1)) * 100))}%`;
     battleMessageText.textContent = `${item.name}と合体！\n${unitName}に変身した`;
     battleMessageText.classList.add('special');
     battleMessageText.classList.remove('hidden');
@@ -2051,15 +2054,18 @@ async function promptBattleEquip({ side, item, unitName, baseAtk, baseHp, existi
   sideEls.hpBonus.textContent = hpBonus > 0 ? `+${hpBonus}` : '';
   sideEls.hpBonus.classList.toggle('hidden', hpBonus <= 0);
   sideEls.atk.textContent = String(baseAtk);
-  sideEls.hp.textContent = String(baseHp);
+  sideEls.hp.textContent = String(baseCurrentHp);
   sideEls.atkFill.style.width = `${Math.min(100, ((baseAtk + atkBonus) / 150) * 100)}%`;
 
-  const previousMax = Number(sideEls.hp.dataset.max) || baseHp;
+  const previousCurrent = Number(sideEls.hp.dataset.current) || baseCurrentHp;
   const nextMax = baseHp + hpBonus;
-  sideEls.hp.dataset.current = String(nextMax);
+  const nextCurrent = Math.max(1, baseCurrentHp + hpBonus);
+  sideEls.hp.dataset.current = String(nextCurrent);
   sideEls.hp.dataset.max = String(nextMax);
-  sideEls.hpFill.style.width = `${Math.min(100, (previousMax / Math.max(nextMax, 1)) * 100)}%`;
-  requestAnimationFrame(() => { sideEls.hpFill.style.width = '100%'; });
+  sideEls.hpFill.style.width = `${Math.max(0, Math.min(100, (previousCurrent / Math.max(nextMax, 1)) * 100))}%`;
+  requestAnimationFrame(() => {
+    sideEls.hpFill.style.width = `${Math.max(0, Math.min(100, (nextCurrent / Math.max(nextMax, 1)) * 100))}%`;
+  });
   sideEls.el.classList.add('battle-equip-boost');
   await new Promise((resolve) => setTimeout(resolve, 1800));
   sideEls.el.classList.remove('battle-equip-boost');

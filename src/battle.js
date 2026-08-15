@@ -127,6 +127,9 @@ function baseMaxHp(unit) {
  * ので、その時点で自動的に全快扱いに戻る（resolveBattle末尾の再格納も参照）。
  */
 export function prepareForBattle(unit, bonus = {}) {
+  // 戦闘前の盤面HPを保存する。避雷針侍の身代わりなどで戦闘結果を無効化する
+  // 場合も、全快させずこの値へ戻すために使う。
+  unit._boardHpBeforeBattle = unit.currentHp;
   const battleMax = statTotals(unit, bonus).maxHp;
   const carriedDamage = Math.max(0, baseMaxHp(unit) - unit.currentHp);
   // マイナスHPアイテム（諸刃の剣-20/鉄パイプ-5）やアイテム効果2倍(Ninja)・
