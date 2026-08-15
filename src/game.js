@@ -126,6 +126,7 @@ export class Game {
     onBattleItemDestroy,
     onBattleItemSteal,
     onBattleTraitReveal,
+    onBattleLightningRod,
     onBattleAttack,
     onBattleRetreat,
     onBattleOutcome,
@@ -197,6 +198,7 @@ export class Game {
     this.onBattleItemDestroy = onBattleItemDestroy || (() => Promise.resolve());
     this.onBattleItemSteal = onBattleItemSteal || (() => Promise.resolve());
     this.onBattleTraitReveal = onBattleTraitReveal || (() => Promise.resolve());
+    this.onBattleLightningRod = onBattleLightningRod || (() => Promise.resolve());
     this.onBattleRetreat = onBattleRetreat;
     this.onBattleOutcome = onBattleOutcome;
     // 直接ダメージ系の土地コマンド（damage/damageAndSelfDestruct）専用の
@@ -4395,6 +4397,16 @@ export class Game {
       });
       if (this._isCancelled) return null;
     }
+    // 決着表示より先に身代わりを確定する。これにより一度「侵略成功」と
+    // 表示してから防衛成功へ戻る不自然な流れを防ぐ。
+    const lightningRod = this._prepareLightningRodSubstitution(defenderPlayer, battleTile, result);
+    if (lightningRod) {
+      await this.onBattleLightningRod({
+        protectedUnitName: defenderUnit.def.name,
+        rodCard: lightningRod.unit.def,
+      });
+      if (this._isCancelled) return null;
+    }
     // Both sides got to strike and both survived - a genuine draw (見た目上
     // は防衛成功): retreat off-screen before the outcome message, rather
     // than either card crumbling.
@@ -4567,31 +4579,48 @@ export class Game {
    * 何もしない。
    */
   async _maybeRedirectDeathToLightningRod(defenderPlayer, defenderTile, result) {
-    if (result.defenderSurvived) return false;
-    const defenderUnit = defenderTile.unit;
-    if (!defenderUnit || catalogIdOf(defenderUnit.def) === 'raiheishinZamurai') return false;
-    const rodTile = this.tiles.find(
-      (t) => t !== defenderTile && t.unit && t.unit.ownerId === defenderPlayer.id && catalogIdOf(t.unit.def) === 'raiheishinZamurai',
-    );
+    const rodTile = result.lightningRodTileId != null
+      ? this.tiles.find((tile) => tile.id === result.lightningRodTileId)
+      : null;
     if (!rodTile) return false;
 
     const rodUnit = rodTile.unit;
-    this.onLog(`${defenderPlayer.name}の避雷針侍が${defenderUnit.def.name}の身代わりになった！`);
+    const defenderUnit = defenderTile.unit;
+    await this.onTargetEffect?.({
+      tileId: rodTile.id,
+      position: rodTile.position,
+      message: `避雷針侍が${defenderUnit.def.name}の身代わりとなって倒れた！`,
+    });
     rodTile.unit = null;
     rodTile.owner = null;
     rodTile.transparentCursed = false;
     this._repaintTileToElement(rodTile);
 
-    // 身代わりは防衛モンスターへの攻撃を無効化するが、過去の負傷まで
-    // 回復する効果ではない。戦闘開始前の基礎HPへ戻す。
+    this._notifyState();
+    await this._handleUnitDeath(rodUnit, defenderPlayer);
+    return true;
+  }
+
+  /** 戦闘結果表示前に避雷針侍の身代わりを予約し、防衛側を生存へ戻す。 */
+  _prepareLightningRodSubstitution(defenderPlayer, defenderTile, result) {
+    if (result.defenderSurvived) return null;
+    const defenderUnit = defenderTile?.unit;
+    if (!defenderUnit || catalogIdOf(defenderUnit.def) === 'raiheishinZamurai') return null;
+    const rodTile = this.tiles.find(
+      (tile) => tile !== defenderTile
+        && tile.unit?.ownerId === defenderPlayer.id
+        && catalogIdOf(tile.unit.def) === 'raiheishinZamurai',
+    );
+    if (!rodTile) return null;
+
     defenderUnit.currentHp = Math.max(1, Math.min(
       defenderUnit._boardHpBeforeBattle ?? defenderUnit.currentHp,
       this._baseStats(defenderUnit).hp,
     ));
     result.defenderSurvived = true;
-    this._notifyState();
-    await this._handleUnitDeath(rodUnit, defenderPlayer);
-    return true;
+    result.lightningRodTileId = rodTile.id;
+    this.onLog(`${defenderPlayer.name}の避雷針侍が${defenderUnit.def.name}の身代わりになった！`);
+    return { tile: rodTile, unit: rodTile.unit };
   }
 
   /**

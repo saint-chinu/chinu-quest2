@@ -2226,6 +2226,31 @@ async function promptBattleTraitReveal({ side, labels }) {
   battleMessageText.classList.remove('special');
 }
 
+/** 避雷針侍: 撃破表示を取り消し、身代わりカードを防衛側へ重ねて大きく知らせる。 */
+async function promptBattleLightningRod({ protectedUnitName, rodCard }) {
+  const sideEls = battleSide.defender;
+  sideEls.card.classList.remove('battle-crumble');
+  const card = document.createElement('div');
+  card.className = 'card battle-lightning-rod-card';
+  renderCardEl(card, rodCard);
+  sideEls.item.replaceChildren(card);
+  sideEls.item.classList.remove('hidden');
+  sideEls.item.classList.add('equip-show');
+  battleMessageText.textContent = `避雷針侍の身代わり発動！\n${protectedUnitName}への致命傷を引き受けた`;
+  battleMessageText.classList.remove('hidden');
+  battleMessageText.classList.add('special');
+  sideEls.el.classList.add('battle-lightning-rod-flash');
+  await new Promise((resolve) => setTimeout(resolve, 2200));
+  card.classList.add('battle-item-breaking');
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  sideEls.el.classList.remove('battle-lightning-rod-flash');
+  sideEls.item.classList.add('hidden');
+  sideEls.item.classList.remove('equip-show');
+  sideEls.item.replaceChildren();
+  battleMessageText.classList.add('hidden');
+  battleMessageText.classList.remove('special');
+}
+
 function playBattleElementBeam(sourceCard, targetCard, color) {
   return new Promise((resolve) => {
     const layerRect = fxLayer.getBoundingClientRect();
@@ -2830,6 +2855,7 @@ function startBattle(character, storyOptions = {}) {
     onBattleItemDestroy: relayable('battleItemDestroy', promptBattleItemDestroy, { broadcast: true }),
     onBattleItemSteal: relayable('battleItemSteal', promptBattleItemSteal, { broadcast: true }),
     onBattleTraitReveal: relayable('battleTraitReveal', promptBattleTraitReveal, { broadcast: true }),
+    onBattleLightningRod: relayable('battleLightningRod', promptBattleLightningRod, { broadcast: true }),
     onBattleAttack: relayable('battleAttack', promptBattleAttack, { broadcast: true }),
     onBattleRetreat: relayable('battleRetreat', promptBattleRetreat, { broadcast: true }),
     onBattleOutcome: relayable('battleOutcome', promptBattleOutcome, { broadcast: true }),
@@ -6251,6 +6277,7 @@ const pvpGuestHandlers = {
   battleItemDestroy: promptBattleItemDestroy,
   battleItemSteal: promptBattleItemSteal,
   battleTraitReveal: promptBattleTraitReveal,
+  battleLightningRod: promptBattleLightningRod,
   battleAttack: promptBattleAttack,
   battleRetreat: promptBattleRetreat,
   battleOutcome: promptBattleOutcome,
