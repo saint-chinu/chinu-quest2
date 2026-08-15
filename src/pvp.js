@@ -24,7 +24,18 @@ const ROOM_CODE_LENGTH = 3;
 
 export function normalizePvpParticipants(room) {
   if (!room) return [];
-  const list = Array.isArray(room.participants) ? room.participants.filter((p) => p?.uid) : [];
+  const source = Array.isArray(room.participants) ? room.participants.filter((p) => p?.uid) : [];
+  // playerIdはGame内の配列順そのものになる。Firestore更新や旧ルーム移行で
+  // participantsの並びが変わっても、ホストは必ずplayerId=0に固定する。
+  // ここがずれるとゲスト画面でホストの駒にCPU（例: 少女A）の名前が対応する。
+  const seen = new Set();
+  const unique = source.filter((p) => {
+    if (seen.has(p.uid)) return false;
+    seen.add(p.uid);
+    return true;
+  });
+  const host = room.hostUid ? unique.find((p) => p.uid === room.hostUid) : null;
+  const list = host ? [host, ...unique.filter((p) => p.uid !== room.hostUid)] : [...unique];
   if (room.hostUid && !list.some((p) => p.uid === room.hostUid)) list.unshift({ uid: room.hostUid, name: room.hostName, color: room.hostColor, deckList: null, ready: true });
   if (room.guestUid && !list.some((p) => p.uid === room.guestUid)) list.push({ uid: room.guestUid, name: room.guestName, color: room.guestColor, deckList: room.guestDeckList, ready: true });
   return list.slice(0, 4).map((p, playerId) => ({ ...p, playerId }));

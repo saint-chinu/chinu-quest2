@@ -5067,7 +5067,16 @@ export class Game {
           level: t.level,
           element: t.element,
           unit: t.unit
-            ? { name: t.unit.def.name, atk: t.unit.def.atk, hp: t.unit.currentHp ?? t.unit.def.hp }
+            ? {
+                catalogId: t.unit.def.catalogId ?? null,
+                name: t.unit.def.name,
+                atk: t.unit.def.atk,
+                maxHp: t.unit.def.hp ?? 0,
+                hp: t.unit.currentHp ?? t.unit.def.hp,
+                element: t.unit.def.element ?? null,
+                imageDataUrl: t.unit.def.imageDataUrl ?? null,
+                toll: this._tollOfTile(t),
+              }
             : null,
         })),
       hands: Object.fromEntries(this.players.filter((p) => !p.isCPU).map((p) => [p.id, p.hand])),

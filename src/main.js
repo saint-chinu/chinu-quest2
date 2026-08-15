@@ -1695,8 +1695,10 @@ const MATCHUP_LABEL = {
   disadvantage: '不利…被ダメージ1.2倍',
 };
 
-const BATTLE_FADE_MS = 450;
-const BATTLE_STAGE_REVEAL_MS = 450;
+// 盤面から戦闘画面へ入る待ちを短くする。攻撃中のメッセージ表示時間は
+// BATTLE_MESSAGE_HOLD_MS側で維持し、読みやすさには影響させない。
+const BATTLE_FADE_MS = 300;
+const BATTLE_STAGE_REVEAL_MS = 300;
 // 2026-08-13: 「文字が進むのが早すぎて読めない」との指摘で1500→2600に延長
 // （攻撃メッセージ・決着メッセージ両方がこの1定数を共用している）。
 // 戦闘中の数値・能力メッセージを読める時間を確保し、連続行動の間にも
@@ -6057,10 +6059,41 @@ function applyPvpBoardState(publicState) {
     tile.owner = tileState.owner;
     tile.level = tileState.level;
     tile.element = tileState.element;
-    tile.unit = tileState.unit
-      ? { def: { name: tileState.unit.name, atk: tileState.unit.atk }, currentHp: tileState.unit.hp }
-      : null;
     const ownerPlayer = tile.owner != null ? publicState.players.find((p) => p.id === tile.owner) : null;
+    const previousUnitKey = tile.unit
+      ? `${tile.unit.def.catalogId ?? ''}:${tile.unit.def.name ?? ''}`
+      : null;
+    const nextUnitKey = tileState.unit
+      ? `${tileState.unit.catalogId ?? ''}:${tileState.unit.name ?? ''}`
+      : null;
+    tile.unit = tileState.unit
+      ? {
+          def: {
+            catalogId: tileState.unit.catalogId,
+            name: tileState.unit.name,
+            atk: tileState.unit.atk,
+            hp: tileState.unit.maxHp,
+            element: tileState.unit.element,
+            imageDataUrl: tileState.unit.imageDataUrl,
+          },
+          currentHp: tileState.unit.hp,
+        }
+      : null;
+    if (tile.unit) {
+      if (!tile.unitMesh || previousUnitKey !== nextUnitKey) {
+        if (tile.unitMesh) scene.removeUnitIcon(tile.unitMesh);
+        tile.unitMesh = scene.createUnitIcon(tile.unit, tile.position);
+      }
+      scene.updateUnitIcon(tile.unitMesh, {
+        hp: tile.unit.currentHp,
+        maxHp: tile.unit.def.hp,
+        toll: tileState.unit.toll ?? 0,
+        ownerName: ownerPlayer?.name ?? '',
+      });
+    } else if (tile.unitMesh) {
+      scene.removeUnitIcon(tile.unitMesh);
+      tile.unitMesh = null;
+    }
     if (tile.mesh) {
       tile.mesh.material.color.set(CARD_COLOR[tile.element]);
     }
