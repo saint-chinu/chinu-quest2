@@ -1794,6 +1794,7 @@ function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, oppone
   return new Promise((resolve) => {
     let settled = false;
     let confirming = false;
+    let autoSkipTimer = null;
     battleItemPickerTitle.textContent =
       hand.length > 0 ? `${ownerName}の${unitName}: 使うアイテムを選んでください` : `${ownerName}の${unitName}: アイテムがありません`;
     battleItemPickerChoices.replaceChildren();
@@ -1866,6 +1867,7 @@ function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, oppone
     function cleanup(result) {
       if (settled) return;
       settled = true;
+      if (autoSkipTimer !== null) clearTimeout(autoSkipTimer);
       battleItemPickerBox.classList.add('hidden');
       battleOpponentItems.classList.add('hidden');
       battleItemPickerSkip.removeEventListener('click', onSkip);
@@ -1880,6 +1882,12 @@ function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, oppone
     }
     battleItemPickerSkip.addEventListener('click', onSkip);
     cancelActiveBattleItemPicker = cancelPicker;
+
+    // 装備可能カードが無ければ選択操作そのものが存在しない。従来はこの場合も
+    // 「使わない」のタップを無期限に待っていたため、CPUから侵略された場面で
+    // 戦闘が止まったように見えていた。相手の公開アイテムを確認できる時間だけ
+    // 残し、自動的に未装備として戦闘を続ける。
+    if (hand.length === 0) autoSkipTimer = setTimeout(() => cleanup(null), 900);
   });
 }
 
