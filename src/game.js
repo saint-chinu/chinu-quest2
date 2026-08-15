@@ -1314,6 +1314,10 @@ export class Game {
     if (destId == null) return;
     const destTile = this.tiles.find((t) => t.id === destId);
     unit.curses = []; // モンスターの呪いは一瞬でも移動すれば消滅する（防衛されて元の土地に戻った場合も含む）
+    const sourceLandLoss = this._captureLandLoss(unitOwner, targetTile);
+    const destinationLandGain = this._captureLandGain(unitOwner, destTile, { showAnyChange: true });
+    const destinationOwner = destTile.owner != null ? this.players.find((p) => p.id === destTile.owner) : null;
+    const destinationLandLoss = this._captureLandLoss(destinationOwner, destTile);
 
     if (destTile.owner == null) {
       const mesh = targetTile.unitMesh;
@@ -1328,6 +1332,8 @@ export class Game {
       this._repaintTileToElement(targetTile);
       this.onLog(`${unit.def.name}が${ELEMENT_LABEL[destTile.element]}属性の土地へ強制移動させられた`);
       await this._hopUnitIcon(mesh, targetTile.position, destTile.position);
+      await this._presentLandLoss(sourceLandLoss);
+      await this._presentLandGain(destinationLandGain);
     } else {
       const defenderPlayer = this.players.find((p) => p.id === destTile.owner);
       const defenderUnit = destTile.unit;
@@ -1351,6 +1357,9 @@ export class Game {
         this.onLog(`${unit.def.name}が強制移動の戦闘で土地を奪取した！`);
         await this._handleUnitDeath(defenderUnit, defenderPlayer);
         await this._hopUnitIcon(mesh, targetTile.position, destTile.position);
+        await this._presentLandLoss(sourceLandLoss);
+        await this._presentLandLoss(destinationLandLoss);
+        await this._presentLandGain(destinationLandGain);
       } else if (result.attackerSurvived && result.defenderSurvived) {
         this.onLog(`${unit.def.name}は強制移動先の防衛を受け、元の土地に戻った`);
         await this._hopUnitIcon(targetTile.unitMesh, targetTile.position, destTile.position);
@@ -1371,6 +1380,8 @@ export class Game {
           this.onLog(`${unit.def.name}は強制移動の戦闘で倒された`);
         }
         await this._handleUnitDeath(unit, unitOwner);
+        await this._presentLandLoss(sourceLandLoss);
+        if (!result.defenderSurvived) await this._presentLandLoss(destinationLandLoss);
       }
     }
     this._notifyState();
@@ -2571,7 +2582,7 @@ export class Game {
       .reduce((sum, t) => sum + this._landValueOfTile(t), 0);
   }
 
-  _captureLandGain(player, tile) {
+  _captureLandGain(player, tile, { showAnyChange = false } = {}) {
     if (!player || !tile || tile.element === Element.NEUTRAL) return null;
     return {
       player,
@@ -2582,15 +2593,16 @@ export class Game {
       // 同盟仲間の同属性地の地価も押し上げるので、同盟全体の地価増分で測る。
       landValueBefore: this._allianceLandValueOf(player),
       position: tile.position ? { x: tile.position.x, z: tile.position.z } : null,
+      showAnyChange,
     };
   }
 
   /** 取得後に連鎖が実際に増えて2連鎖以上になった時だけ「◯連鎖→◯連鎖（連鎖ボーナス+◯G）」を見せる。 */
   async _presentLandGain(snapshot) {
     if (!snapshot) return;
-    const { player, element, chainBefore, landValueBefore, position } = snapshot;
+    const { player, element, chainBefore, landValueBefore, position, showAnyChange } = snapshot;
     const chainAfter = this._chainCount(player.id, element);
-    if (chainAfter <= chainBefore || chainAfter < 2) return;
+    if (chainAfter <= chainBefore || (!showAnyChange && chainAfter < 2)) return;
     const chainBonus = Math.max(0, Math.round(this._allianceLandValueOf(player) - landValueBefore));
     await this.onLandChain({
       playerId: player.id,
@@ -2629,11 +2641,11 @@ export class Game {
     player.tileId = targetTile.id;
     if (player.mesh) player.mesh.position.set(targetTile.position.x, PIECE_REST_Y, targetTile.position.z);
     player.diceCurse = { type: 'double' };
-    this.onLog(`${player.name}は暴走して反対側へ飛ばされ、「アイキャンフライ」の呪いがかかった！`);
+    this.onLog(`${player.name}は暴走して反対側へ飛ばされ、次のサイコロの出目が2倍になった！`);
     await this.onTargetEffect?.({
       tileId: targetTile.id,
       position: targetTile.position,
-      message: 'アイキャンフライ\n次のサイコロの出目が2倍！',
+      message: '次のサイコロの出目が2倍！',
     });
     this._notifyState();
   }
@@ -2826,6 +2838,10 @@ export class Game {
     const attackerUnit = tile.unit;
     const attackerName = attackerUnit.def.name;
     attackerUnit.curses = []; // モンスターの呪いは一瞬でも移動すれば消滅する（防衛されて元の土地に戻った場合も含む）
+    const sourceLandLoss = this._captureLandLoss(player, tile);
+    const destinationLandGain = this._captureLandGain(player, targetTile, { showAnyChange: true });
+    const destinationOwner = targetTile.owner != null ? this.players.find((p) => p.id === targetTile.owner) : null;
+    const destinationLandLoss = this._captureLandLoss(destinationOwner, targetTile);
 
     if (targetTile.owner == null) {
       const mesh = tile.unitMesh;
@@ -2840,6 +2856,8 @@ export class Game {
       this._repaintTileToElement(tile);
       this.onLog(`${player.name}は${attackerName}を移動させた`);
       await this._hopUnitIcon(mesh, tile.position, targetTile.position);
+      await this._presentLandLoss(sourceLandLoss);
+      await this._presentLandGain(destinationLandGain);
     } else {
       const defenderPlayer = this.players.find((p) => p.id === targetTile.owner);
       const defenderUnit = targetTile.unit;
@@ -2863,6 +2881,9 @@ export class Game {
         this.onLog(`${player.name}が土地を奪取した！`);
         await this._handleUnitDeath(defenderUnit, defenderPlayer);
         await this._hopUnitIcon(mesh, tile.position, targetTile.position);
+        await this._presentLandLoss(sourceLandLoss);
+        await this._presentLandLoss(destinationLandLoss);
+        await this._presentLandGain(destinationLandGain);
       } else if (result.attackerSurvived && result.defenderSurvived) {
         this.onLog(`${defenderPlayer.name}の${defenderUnit.def.name}が防衛に成功し、${attackerName}は元の土地に戻った`);
         await this._hopUnitIcon(tile.unitMesh, tile.position, targetTile.position);
@@ -2883,6 +2904,8 @@ export class Game {
           this.onLog(`${attackerName}は倒された`);
         }
         await this._handleUnitDeath(attackerUnit, player);
+        await this._presentLandLoss(sourceLandLoss);
+        if (!result.defenderSurvived) await this._presentLandLoss(destinationLandLoss);
       }
     }
     this._notifyState();
@@ -3137,6 +3160,8 @@ export class Game {
       const targetTile = this.tiles.find((t) => t.id === targetId);
       const unit = tile.unit;
       const mesh = tile.unitMesh;
+      const sourceLandLoss = this._captureLandLoss(player, tile);
+      const destinationLandGain = this._captureLandGain(player, targetTile, { showAnyChange: true });
       tile.unitMesh = null;
       targetTile.unit = unit;
       targetTile.owner = player.id;
@@ -3148,6 +3173,8 @@ export class Game {
       this._repaintTileToElement(tile);
       this.onLog(`${player.name}の${unitDef.name}が空き地へワープした`);
       await this._hopUnitIcon(mesh, tile.position, targetTile.position);
+      await this._presentLandLoss(sourceLandLoss);
+      await this._presentLandGain(destinationLandGain);
       this._notifyState();
       await this.onTargetEffect?.({ tileId: targetTile.id, position: targetTile.position, message: `${unitDef.name}がワープした！` });
       return true;
@@ -3575,6 +3602,8 @@ export class Game {
 
     const unit = tile.unit;
     const mesh = tile.unitMesh;
+    const sourceLandLoss = this._captureLandLoss(player, tile);
+    const destinationLandGain = this._captureLandGain(player, target, { showAnyChange: true });
     unit.curses = [];
     tile.unitMesh = null;
     target.unit = unit;
@@ -3587,6 +3616,8 @@ export class Game {
     this._repaintTileToElement(tile);
     this.onLog(`${player.name}は${unit.def.name}を高額な空き地へ移動させた`);
     await this._hopUnitIcon(mesh, tile.position, target.position);
+    await this._presentLandLoss(sourceLandLoss);
+    await this._presentLandGain(destinationLandGain);
     this._notifyState();
     return true;
   }
@@ -3607,6 +3638,8 @@ export class Game {
       if (!target) return false;
       player.currency -= cost;
       const unit = tile.unit;
+      const sourceLandLoss = this._captureLandLoss(player, tile);
+      const destinationLandGain = this._captureLandGain(player, target, { showAnyChange: true });
       target.unit = unit;
       target.owner = player.id;
       this._paintTile(target, player.color);
@@ -3617,6 +3650,8 @@ export class Game {
       this.onLog(`${player.name}の${unitDef.name}が高額な空き地へワープした (-${cost}G)`);
       this._notifyState();
       await this.onTargetEffect?.({ tileId: target.id, position: target.position, message: `${unitDef.name}が高額空き地を確保！` });
+      await this._presentLandLoss(sourceLandLoss);
+      await this._presentLandGain(destinationLandGain);
       return true;
     }
 
@@ -4762,6 +4797,8 @@ export class Game {
     const target = staging[0].tile;
     const unit = source.unit;
     const mesh = source.unitMesh;
+    const sourceLandLoss = this._captureLandLoss(player, source);
+    const destinationLandGain = this._captureLandGain(player, target, { showAnyChange: true });
     source.unitMesh = null;
     target.unit = unit;
     target.owner = player.id;
@@ -4775,6 +4812,8 @@ export class Game {
     await this._hopUnitIcon(mesh, source.position, target.position);
     this._notifyState();
     await this.onTargetEffect?.({ tileId: target.id, position: target.position, message: `${unit.def.name}が敵地の横へワープした！` });
+    await this._presentLandLoss(sourceLandLoss);
+    await this._presentLandGain(destinationLandGain);
     return true;
   }
 
@@ -4783,8 +4822,9 @@ export class Game {
     const attackerUnit = source.unit;
     const defenderPlayer = this.players.find((candidate) => candidate.id === target.owner);
     const defenderUnit = target.unit;
+    const sourceLandLoss = this._captureLandLoss(player, source);
     const defenderLandLoss = this._captureLandLoss(defenderPlayer, target);
-    const attackerLandGain = this._captureLandGain(player, target);
+    const attackerLandGain = this._captureLandGain(player, target, { showAnyChange: true });
     attackerUnit.curses = [];
     const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, source, target);
     if (!result) return false;
@@ -4808,6 +4848,7 @@ export class Game {
       this.onLog(`${player.name}の${attackerUnit.def.name}がLv${target.level}の土地を奪取した！`);
       await this._presentLandLoss(defenderLandLoss);
       await this._presentLandGain(attackerLandGain);
+      await this._presentLandLoss(sourceLandLoss);
     } else if (result.attackerSurvived && result.defenderSurvived) {
       await this._hopUnitIcon(source.unitMesh, source.position, target.position);
       await this._hopUnitIcon(source.unitMesh, target.position, source.position);
@@ -4818,6 +4859,7 @@ export class Game {
       source.transparentCursed = false;
       this._repaintTileToElement(source);
       await this._handleUnitDeath(attackerUnit, player);
+      await this._presentLandLoss(sourceLandLoss);
       if (!result.defenderSurvived) {
         target.unit = null;
         target.owner = null;
