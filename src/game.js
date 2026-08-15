@@ -2407,6 +2407,11 @@ export class Game {
    */
   async _settleLandingToll(player, tile, owesTollUnlessConquered) {
     if (!owesTollUnlessConquered) return;
+    const conquestKey = `${player.id}:${tile.id}`;
+    if (this._conqueredLandingTiles?.delete(conquestKey)) {
+      this.onLog(`${player.name}は侵略に成功したため通行料を支払わない`);
+      return;
+    }
     if (tile.owner == null || tile.owner === player.id) return;
     const owner = this.players.find((p) => p.id === tile.owner);
     // 同盟戦: 仲間の土地に止まっても通行料は取られない。
@@ -4374,6 +4379,16 @@ export class Game {
       });
       if (this._isCancelled) return null;
     }
+    // 強盗は攻撃後に実際の与ダメージから奪取額を算出するため、通常攻撃の
+    // 再生が終わった直後に戦闘画面内で明示する。上部ログだけでは流れて
+    // 見落とされるため、特性表示と同じ大きな表示を使う。
+    for (const effect of result.robberEffects || []) {
+      await this.onBattleTraitReveal({
+        side: effect.side,
+        labels: [`強盗：${effect.amount}Gを奪った！`],
+      });
+      if (this._isCancelled) return null;
+    }
     // Both sides got to strike and both survived - a genuine draw (見た目上
     // は防衛成功): retreat off-screen before the outcome message, rather
     // than either card crumbling.
@@ -4492,6 +4507,8 @@ export class Game {
       this.onLog(`${player.name}は「お前も〇ぬんだ」の効果で戦闘なしに${defenderUnit.def.name}を倒した！ (-700G)`);
       tile.unit = attackerUnit;
       tile.owner = player.id;
+      if (!this._conqueredLandingTiles) this._conqueredLandingTiles = new Set();
+      this._conqueredLandingTiles.add(`${player.id}:${tile.id}`);
       tile.transparentCursed = false;
       tile.forcedStopCursed = false;
       this._paintTile(tile, player.color);
@@ -4512,6 +4529,8 @@ export class Game {
       if (result.attackerSurvived) {
         tile.unit = attackerUnit;
         tile.owner = player.id;
+        if (!this._conqueredLandingTiles) this._conqueredLandingTiles = new Set();
+        this._conqueredLandingTiles.add(`${player.id}:${tile.id}`);
         tile.transparentCursed = false;
         this._paintTile(tile, player.color);
         this.onLog(`${player.name}が土地を奪取した！`);

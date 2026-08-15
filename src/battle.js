@@ -595,17 +595,20 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
 
   const dmgToDefender = exchanges.filter((e) => e.side === 'attacker' && !e.reflected).reduce((sum, e) => sum + e.damage, 0);
   const dmgToAttacker = exchanges.filter((e) => e.side === 'defender' && !e.reflected).reduce((sum, e) => sum + e.damage, 0);
+  const robberEffects = [];
 
   // 強盗: 実際に与えたダメージの3倍を奪う（どちら側が持っていても効く）。
   if (hasTrait(attacker, 'robber') && dmgToDefender > 0) {
     const stolen = dmgToDefender * 3;
     gold.transfer(defender.ownerId, attacker.ownerId, stolen);
     log.push(`${attacker.def.name}が強盗で${stolen}Gを奪った`);
+    robberEffects.push({ side: 'attacker', unitName: attacker.def.name, amount: stolen });
   }
   if (hasTrait(defender, 'robber') && dmgToAttacker > 0) {
     const stolen = dmgToAttacker * 3;
     gold.transfer(attacker.ownerId, defender.ownerId, stolen);
     log.push(`${defender.def.name}が強盗で${stolen}Gを奪った`);
+    robberEffects.push({ side: 'defender', unitName: defender.def.name, amount: stolen });
   }
 
   // 毒tick: この時点でまだ生きている側だけ、保持している毒でさらに
@@ -692,5 +695,5 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   if (finalAttackerSurvived) attacker.currentHp = restoreOnBoardHp(attacker);
   if (finalDefenderSurvived) defender.currentHp = restoreOnBoardHp(defender);
 
-  return { log, dmgToAttacker, dmgToDefender, attackerSurvived: finalAttackerSurvived, defenderSurvived: finalDefenderSurvived, exchanges, itemSteals, itemDestructions };
+  return { log, dmgToAttacker, dmgToDefender, attackerSurvived: finalAttackerSurvived, defenderSurvived: finalDefenderSurvived, exchanges, itemSteals, itemDestructions, robberEffects };
 }
