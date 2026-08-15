@@ -1853,26 +1853,13 @@ export class Game {
    */
   _cpuChooseNextTile(player, optionIds) {
     const profile = player.aiProfile;
-    // 全CPU共通の移動優先順位:
-    // ①未通過CP ②手札から召喚できる同属性の空き地 ③育った空き地
-    // ④全CP通過後のゴール。CPが残っている間は他の価値判断で寄り道しない。
+    // 全CPU共通: 未通過CPがあればCP、全CP通過後はゴールを絶対優先。
+    // 同属性空き地・高額土地・個別AI判断は、その最短経路が同点の時だけ
+    // タイブレークとして使う。
     const isDanball = this._isDanballBoss(player);
-    const prioritizesLapRoute = ['暴君マダイ', 'Q', '「彼」'].includes(player.name) || isDanball;
     const checkpointTarget = this._nearestUnpassedCheckpointTileId(player);
-    const matchingElementTarget = checkpointTarget == null
-      ? this._nearestSummonableMatchingEmptyLandTileId(player)
-      : null;
-    const valuableEmpty = checkpointTarget == null && matchingElementTarget == null && !prioritizesLapRoute
-      ? this._cpuHighValueEmptyLands()
-      : [];
-    const fallbackTarget = valuableEmpty.length > 0
-      ? valuableEmpty.reduce((best, tile) => {
-          const d = this._forwardTileDistance(player.tileId, player.previousTileId, tile.id);
-          const bestD = this._forwardTileDistance(player.tileId, player.previousTileId, best.id);
-          return d < bestD || (d === bestD && this._landValueOfTile(tile) > this._landValueOfTile(best)) ? tile : best;
-        }).id
-      : this._nearestGoalTileId(player);
-    const target = checkpointTarget ?? matchingElementTarget ?? fallbackTarget;
+    const target = checkpointTarget ?? this._nearestGoalTileId(player);
+    const matchingElementTarget = this._nearestSummonableMatchingEmptyLandTileId(player);
     const leadingOniku = player.name === '暴君マダイ' ? this._leadingOnikuOpponent(player) : null;
     const onikuLands = leadingOniku ? this.tiles.filter((tile) => tile.owner === leadingOniku.id) : [];
     const scores = optionIds.map((id) => {
@@ -1880,10 +1867,14 @@ export class Game {
       // 分岐へ来た方向へ即座に引き返す経路を「最短」と誤認しないよう、
       // 選択後の進行方向を含む状態で距離を測る。
       const distance = target == null ? 0 : this._forwardTileDistance(id, player.tileId, target);
-      // CPは絶対優先、同属性空き地はその次の強い優先度として距離差を
-      // 大きく重み付けし、後段の高額土地等の加点で逆転しないようにする。
-      const routePriority = checkpointTarget != null ? 10000 : matchingElementTarget != null ? 100 : 1;
-      let score = -distance * routePriority;
+      // CP/ゴールへの1マス差を他の加点では覆せない大きさにする。
+      let score = -distance * 10000;
+      // CP/ゴールまで同じ距離の分岐同士では、召喚できる同属性空き地へ
+      // 近づく方向を次点で優先する。
+      if (matchingElementTarget != null) {
+        const matchingDistance = this._forwardTileDistance(id, player.tileId, matchingElementTarget);
+        if (Number.isFinite(matchingDistance)) score -= matchingDistance * 10;
+      }
       if (isDanball) {
         // CP→ゴールへの距離は絶対優先。同じ最短距離の方向だけで、ギアを
         // 置ける空地、その次に通常モンスターを置ける空地をタイブレークに使う。
