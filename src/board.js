@@ -9,6 +9,7 @@ export const TileType = {
   SHRINE: 'shrine',
   WARP: 'warp',
   RUNAWAY: 'runaway',
+  DEFAMATION: 'defamation',
 };
 
 const SPACING = 3.2;
@@ -20,6 +21,7 @@ const TILE_TYPE_COLOR = {
   [TileType.SHRINE]: '#c1440e',
   [TileType.WARP]: '#5e60ce',
   [TileType.RUNAWAY]: '#e53935',
+  [TileType.DEFAMATION]: '#7b1fa2',
 };
 
 /**
@@ -121,6 +123,22 @@ const DANBALL_ROWS = [
   'CFFFWWWMMMC',
 ];
 
+// ⑥「彼」戦。⑤の最終決戦盤面を基礎に、外周へ「誹謗中傷」マスを
+// 4つ配置する。Dへちょうど停止するとEXスペル「開示請求」を得る。
+const KARE_ROWS = [
+  'GFFDTTTDWWC',
+  'M..M.N.F..N',
+  'MMMMNNFFFNN',
+  'M..M.N.F..N',
+  'W..F.N.M..H',
+  'WWWFNCNMNNH',
+  'W..F.N.M..H',
+  'T..T.N.T..W',
+  'TTTTNNNTNNW',
+  'T..T.N.T..W',
+  'CFFDWWWDMMC',
+];
+
 // 対人戦のマップ選択・ストーリーモードの各ステージ盤面として使う一覧。
 // idはstory.jsの各ステージ`key`と揃えてある - ストーリーモードは自ステージ
 // のkeyをそのままmapIdとしてcreateBoard()へ渡すだけで対応する専用マップに
@@ -140,7 +158,7 @@ export const MAPS = [
   { id: 'budou', name: '③ 決闘の浜辺', rows: BUDOU_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage3.png'), spacing: 2.8 },
   { id: 'q-train', name: '④ 暴走列車Q号', rows: Q_TRAIN_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage-q-train.png'), spacing: 2.8 },
   { id: 'danball', name: '⑤ 暗転した世界', rows: DANBALL_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage4.png'), spacing: 2.8 },
-  { id: 'kare', name: '⑥ 創造主の世界', rows: DANBALL_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage6-cyberspace.png'), spacing: 2.8 },
+  { id: 'kare', name: '⑥ 創造主の世界', rows: KARE_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage6-cyberspace.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {
@@ -188,6 +206,7 @@ function typeForCode(code) {
   if (code === 'S') return TileType.SHOP;
   if (code === 'H') return TileType.SHRINE;
   if (code === 'B') return TileType.RUNAWAY;
+  if (code === 'D') return TileType.DEFAMATION;
   // V/Pは共に「ちょうど止まったらワープする」マス(TileType.WARP)。
   // V=ワープ1（1マスだけ）、P=ワープ2（複数マスありうる）- 区別は型では
   // なく、createBoard末尾のリンク付けでtile.warpTargetIdに焼き込む。

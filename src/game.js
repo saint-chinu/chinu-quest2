@@ -2070,6 +2070,8 @@ export class Game {
       await this._resolveWarpTile(player);
     } else if (tile.type === TileType.RUNAWAY) {
       await this._resolveRunawayTile(player);
+    } else if (tile.type === TileType.DEFAMATION) {
+      await this._resolveDefamationTile(player);
     }
 
     if (tile.type === TileType.START || tile.type === TileType.EVENT) {
@@ -2078,6 +2080,24 @@ export class Game {
     }
 
     await delay(200);
+  }
+
+  /** 誹謗中傷マス: EXスペル「開示請求」を手札へ直接1枚加える。 */
+  async _resolveDefamationTile(player) {
+    const definition = SPELL_CATALOG.disclosureRequest;
+    const card = {
+      ...definition,
+      id: `defamation-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    };
+    player.hand.push(card);
+    this.onLog(`${player.name}は誹謗中傷を受け、「開示請求」を1枚手札に加えた！`);
+    this._notifyState();
+    await this.onTargetEffect?.({
+      tileId: player.tileId,
+      position: this.tiles[player.tileId]?.position || null,
+      message: '誹謗中傷\n「開示請求」を手札に加えた！',
+    });
+    await this._enforceHandLimit(player);
   }
 
   /**

@@ -12,6 +12,7 @@ const TILE_COLOR = {
   [TileType.SHRINE]: 0xc1440e,
   [TileType.WARP]: 0x5e60ce,
   [TileType.RUNAWAY]: 0xe53935,
+  [TileType.DEFAMATION]: 0x7b1fa2,
 };
 
 /**
@@ -568,6 +569,7 @@ export class GameScene {
     else if (tile.type === TileType.SHRINE) label = 'ほこら';
     else if (tile.type === TileType.WARP) label = 'ワープ';
     else if (tile.type === TileType.SHOP) label = 'ショップ';
+    else if (tile.type === TileType.DEFAMATION) label = '誹謗中傷';
     if (!label) return;
 
     const canvas = document.createElement('canvas');

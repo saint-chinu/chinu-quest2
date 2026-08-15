@@ -197,7 +197,7 @@ const battleMessageText = document.getElementById('battle-message-text');
 
 const BLINK_MS = 600;
 
-const TILE_TYPE_LABEL = { start: 'ゴール', land: '土地', event: 'チェックポイント', shop: 'ショップ', shrine: 'ほこら', warp: 'ワープ', runaway: '暴走' };
+const TILE_TYPE_LABEL = { start: 'ゴール', land: '土地', event: 'チェックポイント', shop: 'ショップ', shrine: 'ほこら', warp: 'ワープ', runaway: '暴走', defamation: '誹謗中傷' };
 
 function tileSummaryText(tile) {
   const lines = [`【${TILE_TYPE_LABEL[tile.type]}】`];
