@@ -1114,6 +1114,10 @@ export class Game {
       || Object.values(MONSTER_CATALOG).find((m) => catalogIdOf(m) === pickedId)
       || deckCard;
     if (def) {
+      // 「デッキから1体手札に加える」＝複製ではなく移動。元のカードをデッキ
+      // （山札/捨札）から1枚取り除いてから手札へ加える。これをやらないと
+      // デッキに残った分と手札の分でメタ〇ン等が増殖してしまう。
+      this._reclaimCardFromDeck(player, pickedId);
       const monsterCard = {
         ...def,
         id: `encounter-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
