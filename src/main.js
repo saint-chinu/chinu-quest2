@@ -2389,6 +2389,7 @@ resetDice();
 syncCenterVisibility();
 
 function startDiceSpin() {
+  clearInterval(diceSpinTimer);
   diceState = 'spinning';
   diceSpinTimer = setInterval(() => {
     diceValue = (diceValue % 6) + 1;
@@ -2411,7 +2412,9 @@ function settleDiceSpin(forcedValue) {
       diceSpinTimer = null;
       if (forcedValue !== undefined) diceValue = forcedValue;
       setDiceFace(diceValue);
-      diceState = 'idle';
+      // 出目確定から移動開始までの表示中も再入力させない。ここをidleへ戻すと、
+      // 結果保持時間（倍速時は短縮）に連打して何度でも振り直せてしまう。
+      diceState = 'settled';
 
       setTimeout(() => resolve(diceValue), DICE_RESULT_HOLD_MS);
     }, DICE_STOP_DELAY_MS);
@@ -2420,7 +2423,13 @@ function settleDiceSpin(forcedValue) {
 
 /** Marks the dice as "riding along with the move" - kept visible until onMoveComplete fires. */
 function beginDiceMove(result) {
+  if (diceMoving || diceState === 'moving') return;
+  clearInterval(diceSpinTimer);
+  diceSpinTimer = null;
+  diceState = 'moving';
   diceMoving = true;
+  // Game.rollDiceのstate通知を待たず、このクリックと同じイベント内で即ロック。
+  diceButton.disabled = true;
   syncCenterVisibility();
   if (pvpMatch && !pvpMatch.isHost) {
     pvpMatch.actionSender.send({ type: 'rollDice', steps: result, playerId: pvpMatch.localPlayerId });
@@ -2438,7 +2447,6 @@ diceButton.addEventListener('click', () => {
     const result = fixedDiceValue;
     fixedDiceValue = null;
     diceButton.classList.remove('fixed-dice');
-    diceState = 'idle';
     beginDiceMove(result);
     return;
   }
@@ -4411,13 +4419,21 @@ function cardKey(card) {
  * でこの関数を通し、breedMonster枠だけ常に現在の装着状況からライブに
  * 再計算したものへ差し替える（保存データ自体は書き換えない）。
  */
-function resolveBreedCardInList(deckList) {
-  if (!Array.isArray(deckList) || !currentCharacter?.breedMonster) return deckList;
-  return deckList.map((card) => (
-    card?.catalogId === 'breedMonster'
-      ? { ...buildBreedCardDef(currentCharacter), id: card.id }
-      : card
-  ));
+function resolveDeckCardsForBattle(deckList) {
+  if (!Array.isArray(deckList)) return deckList;
+  const catalog = getCardCatalog(currentUserId);
+  const byId = new Map(catalog.map((def) => [def.id, def]));
+  const byName = new Map(catalog.map((def) => [def.name, def]));
+  return deckList.map((card) => {
+    if (card?.catalogId === 'breedMonster') {
+      return { ...buildBreedCardDef(currentCharacter), catalogId: 'breedMonster' };
+    }
+    // 旧セーブはカード定義一式（画像URLを含む）をデッキ内へコピーしている。
+    // 最新カタログを安定ID/名前で引き直し、画像・能力・数値の更新を盤面にも反映する。
+    const def = byId.get(card?.catalogId) || byId.get(card?.id) || byName.get(card?.name);
+    if (!def) return card;
+    return { ...def, catalogId: def.id };
+  });
 }
 
 /** 段ボール男クリア報酬「未知との遭遇」を所持カードへ一度だけ付与する（受領フラグ付き）。 */
@@ -4957,10 +4973,9 @@ function promptDeckSelection({ onCancel = null } = {}) {
     }
 
     function showConfirm(deck) {
-      // ブリードモンスターのステータスは保存データではなく現在の装着状況から
-      // 毎回ライブに再計算する（resolveBreedCardInList参照）。以後この
-      // resolvedDeckで統一し、確定時もこちらを渡す。
-      pendingDeck = { ...deck, deckList: resolveBreedCardInList(deck.deckList) };
+      // 保存済みの古いカードコピーではなく最新カタログを使い、画像・能力・
+      // 数値とブリードの現在状態を盤面開始直前に必ず反映する。
+      pendingDeck = { ...deck, deckList: resolveDeckCardsForBattle(deck.deckList) };
       deckSelectConfirmText.textContent = `「${deck.name}」にしますか？`;
 
       const counts = new Map(); // key -> { def, count }
