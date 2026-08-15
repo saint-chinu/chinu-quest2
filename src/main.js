@@ -4097,7 +4097,7 @@ async function handleStoryBattleEnd(index, { won }) {
       currentCharacter.ownedCards[key] = (currentCharacter.ownedCards[key] || 0) + 1;
     }
   }
-  // 段ボール男（ステージ④）を初めて撃破したら、EXスペル「未知との遭遇」をクリア報酬に。
+  // 段ボール男（ステージ⑤）を初めて撃破したら、EXスペル「未知との遭遇」をクリア報酬に。
   // 受領フラグで一度きり（再戦では付与しない）。
   if (stage.key === 'danball' && !currentCharacter.receivedEncounterReward) {
     grantEncounterReward();
@@ -5039,9 +5039,9 @@ function renderDeckSlotTabs() {
 }
 
 function showDeckScreen() {
-  // 既に段ボール男をクリア済み（storyProgress>=4）で未受領なら、デッキ画面を開いた
+  // 既に段ボール男をクリア済み（storyProgress>=5）で未受領なら、デッキ画面を開いた
   // タイミングでクリア報酬「未知との遭遇」を一度だけ付与する（過去クリア勢の救済）。
-  if ((currentCharacter.storyProgress || 0) >= 4 && !currentCharacter.receivedEncounterReward) {
+  if ((currentCharacter.storyProgress || 0) >= 5 && !currentCharacter.receivedEncounterReward) {
     grantEncounterReward();
   }
   if (editingDeckIndex >= currentCharacter.decks.length) editingDeckIndex = 0;

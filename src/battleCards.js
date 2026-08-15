@@ -382,7 +382,7 @@ export const SPELL_CATALOG = {
     { type: 'curseSanctuary' },
     '対象のモンスターを他プレイヤーが侵略できない状態にする。通行料も発生しない',
   ),
-  // 段ボール男初回撃破のクリア報酬。EXレア。使うと手札に戻る（捨てたら消滅）。
+  // ステージ⑤・段ボール男初回撃破のクリア報酬。EXレア。使うと手札に戻る（捨てたら消滅）。
   encounterUnknown: spell(
     'encounterUnknown',
     '未知との遭遇',
