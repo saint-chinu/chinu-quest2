@@ -3574,6 +3574,56 @@ html, body {
   overflow-y: auto;
 }
 
+#battle-opponent-items {
+  margin-top: 10px;
+  padding-top: 9px;
+  border-top: 1px solid rgba(255,255,255,.2);
+}
+
+#battle-opponent-items.hidden { display: none; }
+
+#battle-opponent-items-title {
+  margin: 0 0 6px;
+  color: #bdc8d8;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+#battle-opponent-items-choices {
+  display: flex;
+  gap: 6px;
+  max-width: min(72vw, 640px);
+  overflow-x: auto;
+  padding: 2px 2px 6px;
+}
+
+.battle-opponent-item-preview {
+  flex: 0 0 58px;
+  opacity: .82;
+  pointer-events: none;
+  text-align: center;
+  color: #d8deea;
+  font-size: 8px;
+}
+
+.battle-opponent-item-preview .card { width: 52px; height: 73px; margin: 0 auto 2px; }
+.battle-opponent-items-empty { color: #7e8999; font-size: 10px; }
+
+.battle-stolen-item-flying {
+  position: fixed;
+  z-index: 10050;
+  width: 72px;
+  height: 101px;
+  margin: -50px 0 0 -36px;
+  pointer-events: none;
+  filter: drop-shadow(0 0 14px #fff4a8);
+  transition: transform .85s cubic-bezier(.22,.8,.3,1), filter .85s ease;
+}
+
+.battle-stolen-item-flying .card { width: 72px; height: 101px; }
+.battle-stolen-item-flying.moving { filter: drop-shadow(0 0 25px #ffe35f); }
+.battle-item-overlay .battle-stolen-item { margin-left: -42%; transform: rotate(7deg); }
+
 #battle-item-picker-choices .card {
   width: 60px;
   height: 84px;

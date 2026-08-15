@@ -187,6 +187,9 @@ const battleSide = {
 const battleItemPickerBox = document.getElementById('battle-item-picker-box');
 const battleItemPickerTitle = document.getElementById('battle-item-picker-title');
 const battleItemPickerChoices = document.getElementById('battle-item-picker-choices');
+const battleOpponentItems = document.getElementById('battle-opponent-items');
+const battleOpponentItemsTitle = document.getElementById('battle-opponent-items-title');
+const battleOpponentItemsChoices = document.getElementById('battle-opponent-items-choices');
 const battleItemPickerSkip = document.getElementById('battle-item-picker-skip');
 const battleMessageText = document.getElementById('battle-message-text');
 
@@ -1744,14 +1747,13 @@ function promptBattleSceneEnter({ attacker, defender }) {
 }
 
 /**
- * Gear-only hand for this one side; tapping blinks then resolves that
- * card, "使わない" resolves null. Only ever one picker mounted at a time -
- * the other side's choice (already made, or not yet made) is never shown
- * here, which is what keeps each side's pick hidden from the other.
+ * 自分側のアイテムは選択可能、相手側の所持アイテムは確認専用で全て表示する。
+ * 相手が実際に選んだカードは装備公開まで一切表示せず、後から選ぶ側が結果を
+ * 見て決められない既存の秘匿フローを維持する。「使わない」はnullを返す。
  */
 let cancelActiveBattleItemPicker = null;
 
-function promptPickBattleItem({ hand, side, ownerName, unitName }) {
+function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, opponentName = '相手', unitName }) {
   return new Promise((resolve) => {
     let settled = false;
     let confirming = false;
@@ -1799,12 +1801,36 @@ function promptPickBattleItem({ hand, side, ownerName, unitName }) {
       choice.append(el, bonus, traits);
       battleItemPickerChoices.appendChild(choice);
     }
+
+    // 本家同様、相手が手札に持つアイテムは公開情報として確認できる。
+    // ここは閲覧専用で、相手が実際にどれを選んだかを示す状態は一切持たない。
+    battleOpponentItemsTitle.textContent = `${opponentName}の所持アイテム（選択内容は非公開）`;
+    battleOpponentItemsChoices.replaceChildren();
+    for (const card of opponentHand) {
+      const preview = document.createElement('div');
+      preview.className = 'battle-opponent-item-preview';
+      const el = document.createElement('div');
+      el.className = 'card';
+      renderCardEl(el, card);
+      const name = document.createElement('span');
+      name.textContent = card.name;
+      preview.append(el, name);
+      battleOpponentItemsChoices.appendChild(preview);
+    }
+    if (opponentHand.length === 0) {
+      const empty = document.createElement('span');
+      empty.className = 'battle-opponent-items-empty';
+      empty.textContent = 'アイテムなし';
+      battleOpponentItemsChoices.appendChild(empty);
+    }
+    battleOpponentItems.classList.remove('hidden');
     battleItemPickerBox.classList.remove('hidden');
 
     function cleanup(result) {
       if (settled) return;
       settled = true;
       battleItemPickerBox.classList.add('hidden');
+      battleOpponentItems.classList.add('hidden');
       battleItemPickerSkip.removeEventListener('click', onSkip);
       if (cancelActiveBattleItemPicker === cancelPicker) cancelActiveBattleItemPicker = null;
       resolve(result);
@@ -1925,6 +1951,49 @@ async function promptBattleEquip({ side, item, unitName, baseAtk, baseHp, existi
   await new Promise((resolve) => setTimeout(resolve, 1800));
   sideEls.el.classList.remove('battle-equip-boost');
   battleMessageText.classList.add('hidden');
+}
+
+/** 真剣白刃取り: 奪われた装備カードを相手側から使用者側へ飛ばして移動させる。 */
+async function promptBattleItemSteal({ fromSide, toSide, items = [] }) {
+  const fromEls = battleSide[fromSide];
+  const toEls = battleSide[toSide];
+  if (!fromEls || !toEls || items.length === 0) return;
+
+  const item = items[items.length - 1];
+  battleMessageText.textContent = `真剣白刃取りが発動！\n${item.name}を奪った`;
+  battleMessageText.classList.add('special');
+  battleMessageText.classList.remove('hidden');
+
+  const sourceRect = fromEls.item.getBoundingClientRect();
+  const targetRect = toEls.card.getBoundingClientRect();
+  const flying = document.createElement('div');
+  flying.className = 'battle-stolen-item-flying';
+  const card = document.createElement('div');
+  card.className = 'card';
+  renderCardEl(card, item);
+  flying.appendChild(card);
+  flying.style.left = `${sourceRect.left + sourceRect.width / 2}px`;
+  flying.style.top = `${sourceRect.top + sourceRect.height / 2}px`;
+  document.body.appendChild(flying);
+
+  await new Promise((resolve) => requestAnimationFrame(() => {
+    flying.style.transform = `translate(${targetRect.left + targetRect.width / 2 - sourceRect.left - sourceRect.width / 2}px, ${targetRect.top + targetRect.height / 2 - sourceRect.top - sourceRect.height / 2}px) scale(1.08) rotate(${toSide === 'attacker' ? '-8deg' : '8deg'})`;
+    flying.classList.add('moving');
+    setTimeout(resolve, 900);
+  }));
+
+  fromEls.item.classList.add('hidden');
+  fromEls.item.replaceChildren();
+  flying.remove();
+  const stolenCard = document.createElement('div');
+  stolenCard.className = 'card battle-stolen-item';
+  renderCardEl(stolenCard, item);
+  toEls.item.appendChild(stolenCard);
+  toEls.item.classList.remove('hidden');
+  toEls.item.classList.add('equip-show');
+  await new Promise((resolve) => setTimeout(resolve, 900));
+  battleMessageText.classList.add('hidden');
+  battleMessageText.classList.remove('special');
 }
 
 /** 先制/後攻/貫通の発動演出: 該当カードを一時的に10%拡大しラベルを1.5秒表示してから元に戻す。 */
@@ -2502,6 +2571,7 @@ function startBattle(character, storyOptions = {}) {
     onBattleSceneEnter: relayable('battleSceneEnter', promptBattleSceneEnter, { broadcast: true }),
     onPickBattleItem: relayable('pickBattleItem', promptPickBattleItem),
     onBattleEquip: relayable('battleEquip', promptBattleEquip, { broadcast: true }),
+    onBattleItemSteal: relayable('battleItemSteal', promptBattleItemSteal, { broadcast: true }),
     onBattleTraitReveal: relayable('battleTraitReveal', promptBattleTraitReveal, { broadcast: true }),
     onBattleAttack: relayable('battleAttack', promptBattleAttack, { broadcast: true }),
     onBattleRetreat: relayable('battleRetreat', promptBattleRetreat, { broadcast: true }),
@@ -5723,6 +5793,7 @@ const pvpGuestHandlers = {
   battleSceneEnter: promptBattleSceneEnter,
   pickBattleItem: promptPickBattleItem,
   battleEquip: promptBattleEquip,
+  battleItemSteal: promptBattleItemSteal,
   battleTraitReveal: promptBattleTraitReveal,
   battleAttack: promptBattleAttack,
   battleRetreat: promptBattleRetreat,

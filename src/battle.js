@@ -415,6 +415,7 @@ export function strikeOrderScore(unit) {
  */
 export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defenderBonus = {}) {
   const log = [];
+  const itemSteals = [];
 
   // 攻撃開始前効果: アイテム破壊（海賊S/ステゴロ）。prepareForBattleより
   // 前でないと破壊したアイテムのHPボーナスがmaxHpに残ってしまう。
@@ -430,13 +431,17 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   // 攻撃開始前効果: アイテム強奪（真剣白刃取り）。破壊と同じタイミングで
   // 判定する（相手のアイテムを消す代わりに自分の装備に加える）。
   if (getEffect(attacker, 'stealItemBeforeAttack') && defender.items.length > 0) {
+    const stolenItems = [...defender.items];
     attacker.items = [...attacker.items, ...defender.items];
     defender.items = [];
+    itemSteals.push({ fromSide: 'defender', toSide: 'attacker', items: stolenItems });
     log.push(`${attacker.def.name}が${defender.def.name}のアイテムを奪い装備した`);
   }
   if (getEffect(defender, 'stealItemBeforeAttack') && attacker.items.length > 0) {
+    const stolenItems = [...attacker.items];
     defender.items = [...defender.items, ...attacker.items];
     attacker.items = [];
+    itemSteals.push({ fromSide: 'attacker', toSide: 'defender', items: stolenItems });
     log.push(`${defender.def.name}が${attacker.def.name}のアイテムを奪い装備した`);
   }
 
@@ -645,5 +650,5 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   if (!finalAttackerSurvived) attacker.curses = [];
   if (!finalDefenderSurvived) defender.curses = [];
 
-  return { log, dmgToAttacker, dmgToDefender, attackerSurvived: finalAttackerSurvived, defenderSurvived: finalDefenderSurvived, exchanges };
+  return { log, dmgToAttacker, dmgToDefender, attackerSurvived: finalAttackerSurvived, defenderSurvived: finalDefenderSurvived, exchanges, itemSteals };
 }

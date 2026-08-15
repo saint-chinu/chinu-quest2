@@ -114,6 +114,7 @@ export class Game {
     onBattleSceneEnter,
     onPickBattleItem,
     onBattleEquip,
+    onBattleItemSteal,
     onBattleTraitReveal,
     onBattleAttack,
     onBattleRetreat,
@@ -182,6 +183,7 @@ export class Game {
     this.onPickBattleItem = onPickBattleItem;
     this.onBattleAttack = onBattleAttack;
     this.onBattleEquip = onBattleEquip || (() => Promise.resolve());
+    this.onBattleItemSteal = onBattleItemSteal || (() => Promise.resolve());
     this.onBattleTraitReveal = onBattleTraitReveal || (() => Promise.resolve());
     this.onBattleRetreat = onBattleRetreat;
     this.onBattleOutcome = onBattleOutcome;
@@ -3594,9 +3596,8 @@ export class Game {
    * Full battle-scene choreography, shared by both invasion entry points
    * (landing-invasion via _runInvasion, and the 移動 command's invasion
    * branch): fade in → reveal base stats + situational bonuses for both
-   * sides → each side secretly picks an item (CPU sides never pause; a
-   * human side never sees what the OTHER side already picked, since that
-   * pick already happened silently or its own picker already closed) →
+   * sides → each side secretly picks an item (所持アイテム一覧は双方に公開するが、
+   * 実際に選択したカードは両者の確定後まで非公開。CPU側は停止しない) →
    * resolveBattle → attacker's strike animation, then the defender's
    * counter-strike animation only if it survived to make one (see
    * battle.js's sequential resolution) → outcome message. Returns the
@@ -3654,8 +3655,10 @@ export class Game {
       : await this.onPickBattleItem(
           {
             hand: attackerPlayer.hand.filter((c) => c.type === CardType.GEAR),
+            opponentHand: defenderPlayer.hand.filter((c) => c.type === CardType.GEAR),
             side: 'attacker',
             ownerName: attackerPlayer.name,
+            opponentName: defenderPlayer.name,
             unitName: attackerUnit.def.name,
           },
           attackerPlayer.id,
@@ -3665,8 +3668,10 @@ export class Game {
       : await this.onPickBattleItem(
           {
             hand: defenderPlayer.hand.filter((c) => c.type === CardType.GEAR),
+            opponentHand: attackerPlayer.hand.filter((c) => c.type === CardType.GEAR),
             side: 'defender',
             ownerName: defenderPlayer.name,
+            opponentName: attackerPlayer.name,
             unitName: defenderUnit.def.name,
           },
           defenderPlayer.id,
@@ -3705,6 +3710,13 @@ export class Game {
 
     const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, battleDefenderBonus);
     result.log.forEach((line) => this.onLog(line));
+
+    // 真剣白刃取りはresolveBattle内で攻撃開始前に相手の装備を移し替える。
+    // 計算結果と同じ順序で、公開済みの装備画像も相手側から使用者側へ移動させる。
+    for (const steal of result.itemSteals || []) {
+      await this.onBattleItemSteal(steal);
+      if (this._isCancelled) return null;
+    }
 
     // 先制/後攻/貫通が発動する場合、攻撃演出の前に該当カードを一時的に拡大して
     // ラベルを見せる（先に攻撃する側から順に）。装備アイテム由来の特性
