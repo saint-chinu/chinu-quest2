@@ -245,11 +245,19 @@ export class GuestHostListener {
     this.handlers = handlers;
     this.lastHandledRequestId = 0;
     this.lastHandledPromptId = 0;
+    // ホストからの演出（召喚・レベルアップ等のカメラ寄せ）は1本のhostRequest
+    // レーンで次々届く。listenToRoomのコールバックはawaitしないため、そのまま
+    // だと複数の_handleが同時に走り、focusAndZoomのsavedFocus退避／復帰が
+    // 競合してゲスト側のカメラがぐちゃぐちゃになる（ホスト高速化で顕在化）。
+    // ここで直列キューに載せ、1件ずつ順番に再生する。
+    this._handleQueue = Promise.resolve();
     this.unsubscribe = listenToRoom(roomCode, (room) => {
       if (!room || !room.hostRequest) return;
       if (room.hostRequestId <= this.lastHandledRequestId) return;
       this.lastHandledRequestId = room.hostRequestId;
-      this._handle(room.hostRequestId, room.hostRequest);
+      const requestId = room.hostRequestId;
+      const request = room.hostRequest;
+      this._handleQueue = this._handleQueue.then(() => this._handle(requestId, request));
     });
     this.promptUnsubscribe = onSnapshot(promptRef(roomCode, uid), (snap) => {
       const prompt = snap.data();

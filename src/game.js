@@ -1749,6 +1749,11 @@ export class Game {
         break;
       }
     }
+    // バックファイアの後退はこの1ターンだけ。ループ内でprevousTileIdが「1つ前方
+    // （ゴール方向）」を指したままだと、次の前進で分岐判定がゴール方向を"戻る方向"
+    // と誤認し、後退し続けてしまう。停止地点のさらに後ろのマスへ向けておくことで、
+    // 次のサイコロから通常どおりゴール方向へ進み直せるようにする。
+    player.previousTileId = player.tileHistory[1] ?? null;
     if (destinationId != null) this.onMoveDestination({ tileId: destinationId, active: false });
   }
 
@@ -4671,9 +4676,18 @@ export class Game {
         await this._handleUnitDeath(attackerUnit, player);
       }
       await this._handleUnitDeath(defenderUnit, defenderPlayer);
+    } else if (result.attackerSurvived) {
+      // 引き分け（両者生存）: 召喚侵略で出したモンスターは手札に戻る。召喚時に
+      // 捨札へ送った同一カードを回収してから戻すことで増殖を防ぐ。
+      this.onLog(`${defenderPlayer.name}の${defenderUnit.def.name}が防衛に成功した`);
+      this._reclaimCardFromDeck(player, catalogIdOf(card));
+      player.hand.push({ ...card, id: `drawreturn-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}` });
+      this.onLog(`引き分けのため${card.name}は${player.name}の手札に戻った`);
+      this._notifyState();
+      await this._enforceHandLimit(player);
     } else {
       this.onLog(`${defenderPlayer.name}の${defenderUnit.def.name}が防衛に成功した`);
-      if (!result.attackerSurvived) await this._handleUnitDeath(attackerUnit, player);
+      await this._handleUnitDeath(attackerUnit, player);
     }
     if (tile.owner !== defenderPlayer.id) await this._presentLandLoss(defenderLandLoss);
     if (tile.owner === player.id) await this._presentLandGain(attackerLandGain);
