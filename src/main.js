@@ -6061,6 +6061,16 @@ const pvpGuestHandlers = {
 
 const pvpPieces = new Map(); // playerId -> billboard sprite (ゲスト側のローカル駒キャッシュ)
 
+/** 対戦をまたいで前のThree.jsシーンの駒を再利用しないよう、ゲスト駒を破棄する。 */
+function clearPvpPieces() {
+  for (const piece of pvpPieces.values()) {
+    if (piece?.parent) piece.parent.remove(piece);
+    piece?.material?.map?.dispose?.();
+    piece?.material?.dispose?.();
+  }
+  pvpPieces.clear();
+}
+
 /** ゲスト側専用: publicStateの土地(所有者/レベル/属性/配置モンスター)と各プレイヤーの駒位置をローカルのtiles/sceneへそのまま反映する。ホストのように1マスずつアニメーションはしない（毎回のsync時点の最終状態へスナップするだけ）。 */
 function applyPvpBoardState(publicState) {
   if (!publicState || !tiles) return;
@@ -6205,6 +6215,7 @@ async function startPvpGuestBattle() {
   preGame.classList.add('hidden');
   appEl.classList.remove('hidden');
 
+  clearPvpPieces();
   currentMapId = pvpLastRoom?.mapId ?? null;
   applyMapBackground(currentMapId);
   scene = new GameScene(canvas);
@@ -6237,6 +6248,7 @@ async function startPvpGuestBattle() {
       pvpMatch?.stopHandListener?.();
       pvpMatch?.listener?.destroy();
       pvpMatch?.actionSender?.destroy();
+      clearPvpPieces();
       pvpMatch = null;
       stopMusic();
       appEl.classList.add('hidden');
@@ -6432,12 +6444,12 @@ async function handlePvpBattleEnd(result = {}) {
   pvpMatch.relay?.destroy?.();
   pvpMatch.participantActionListener?.destroy?.();
   pvpMatch.presenceMonitor?.destroy?.();
-  try {
-    await finishPvpRoom(roomCode);
-  } catch (error) {
+  // Firestoreが一時的に遅くてもホストの画面復帰を待たせない。ゲストへの
+  // finished通知は非同期で送信し、ホスト自身は報酬保存後すぐメニューへ戻る。
+  Promise.resolve(finishPvpRoom(roomCode)).catch((error) => {
     console.error('対人戦の終了通知に失敗しました', error);
-  }
-
+  });
+  clearPvpPieces();
   pvpMatch = null;
   game = undefined;
   stopMusic();

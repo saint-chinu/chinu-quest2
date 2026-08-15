@@ -1616,7 +1616,10 @@ export class Game {
       const winnerSideHasHuman = this.players.some((candidate) =>
         !candidate.isCPU && (candidate.id === player.id || (player.allianceId != null && candidate.allianceId === player.allianceId)),
       );
-      this.onStoryBattleEnd?.({
+      // 決着後の報酬保存・画面遷移が完了するまで、このGameの非同期処理を
+      // 生かしたまま待つ。特に対人戦では終了処理を投げっぱなしにすると、
+      // 古いターン処理が盤面へ触り続けることがある。
+      await this.onStoryBattleEnd?.({
         won: winnerSideHasHuman,
         winnerPlayerId: player.id,
         alivePlayerIds: this.players.filter((candidate) => !candidate.defeated).map((candidate) => candidate.id),
