@@ -571,6 +571,27 @@ export class Game {
     const target = card.target;
     if (target === 'self' || target === 'none') return {};
 
+    if (target === 'cardTypeChoice') {
+      const labels = {
+        [CardType.MONSTER]: 'モンスター',
+        [CardType.GEAR]: 'アイテム',
+        [CardType.SPELL]: 'スペル',
+      };
+      const availableTypes = [CardType.MONSTER, CardType.GEAR, CardType.SPELL].filter((type) =>
+        [...player.deck.drawPile, ...player.deck.discardPile]
+          .some((candidate) => candidate.id !== card.id && candidate.type === type));
+      if (availableTypes.length === 0) {
+        this.onLog('デッキに引けるカードがありません');
+        return null;
+      }
+      const chosenType = await this.onPickAbilityTarget(
+        availableTypes.map((type) => ({ id: type, label: `${labels[type]}を1枚引く` })),
+        player.id,
+      );
+      if (chosenType == null) return null;
+      return { chosenCardType: chosenType };
+    }
+
     if (target === 'enemyMonster' || target === 'anyMonster' || target === 'ownMonster') {
       const tiles = this.tiles.filter((t) => {
         if (!t.unit) return false;
@@ -745,6 +766,25 @@ export class Game {
       : (card.target === 'self' ? player : null);
 
     switch (effect.type) {
+      case 'drawRandomCardOfChosenType': {
+        const labels = {
+          [CardType.MONSTER]: 'モンスター',
+          [CardType.GEAR]: 'アイテム',
+          [CardType.SPELL]: 'スペル',
+        };
+        const drawn = this._drawCardOfType(player, cast.chosenCardType, { excludeCardId: card.id });
+        if (!drawn) {
+          this.onLog(`デッキに${labels[cast.chosenCardType] || '対象'}カードがなく、「占術」は不発になった`);
+          return false;
+        }
+        player.hand.push(drawn);
+        this._recordDraw(player, drawn);
+        this.onLog(`${player.name}は「占術」でデッキから${labels[cast.chosenCardType]}「${drawn.name}」を手札に加えた`);
+        this._notifyState();
+        await this._enforceHandLimit(player);
+        return false;
+      }
+
       case 'destroyHandCard': {
         // キャンセルカルチャー: 対象の手札からスペル/アイテム1枚を「捨てる」。
         // 盤外ではなく通常の捨札と同じ扱い（deck.discard）＝後でデッキ再シャッフル
@@ -3377,10 +3417,11 @@ export class Game {
   }
 
   /** あざらしさんの「選んだ種類のカードをランダムに1枚引ける」用: まず山札から、無ければ捨て札から、指定typeのカードを1枚抜き出して返す（見つからなければnull）。 */
-  _drawCardOfType(player, cardType) {
-    const fromDraw = player.deck.drawPile.filter((c) => c.type === cardType);
+  _drawCardOfType(player, cardType, { excludeCardId = null } = {}) {
+    const isEligible = (card) => card.type === cardType && card.id !== excludeCardId;
+    const fromDraw = player.deck.drawPile.filter(isEligible);
     const pile = fromDraw.length > 0 ? player.deck.drawPile : player.deck.discardPile;
-    const matches = fromDraw.length > 0 ? fromDraw : player.deck.discardPile.filter((c) => c.type === cardType);
+    const matches = fromDraw.length > 0 ? fromDraw : player.deck.discardPile.filter(isEligible);
     if (matches.length === 0) return null;
     const picked = matches[Math.floor(Math.random() * matches.length)];
     pile.splice(pile.indexOf(picked), 1);
@@ -4984,6 +5025,7 @@ export class Game {
     await this._cpuMaybeUseCancelCultureSpell(this.currentPlayer);
     await this._cpuMaybeUseNecromancerSpell(this.currentPlayer);
     await this._cpuMaybeUseSplitEvenlySpell(this.currentPlayer);
+    await this._cpuMaybeUseDivinationSpell(this.currentPlayer);
     await this._cpuMaybeUseImmediateSpell(this.currentPlayer);
     await this._cpuMaybeUseDiceSpell(this.currentPlayer);
     const fixedDiceValue = this.currentPlayer.diceCurse?.type === 'fixed' ? this.currentPlayer.diceCurse.value : null;
@@ -5064,6 +5106,25 @@ export class Game {
     );
     if (!card || player.currency < (card.cost || 0)) return;
     await this._cpuCastSpell(player, card, {});
+  }
+
+  /** 占術: 手札が少ない種類を補い、候補が同数ならモンスター→アイテム→スペルを優先する。 */
+  async _cpuMaybeUseDivinationSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((candidate) => candidate.effect?.type === 'drawRandomCardOfChosenType');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const priority = [CardType.MONSTER, CardType.GEAR, CardType.SPELL];
+    const candidates = priority
+      .map((type) => ({
+        type,
+        handCount: player.hand.filter((candidate) => candidate.type === type).length,
+        deckCount: [...player.deck.drawPile, ...player.deck.discardPile]
+          .filter((candidate) => candidate.id !== card.id && candidate.type === type).length,
+      }))
+      .filter(({ deckCount }) => deckCount > 0)
+      .sort((a, b) => a.handCount - b.handCount || priority.indexOf(a.type) - priority.indexOf(b.type));
+    if (candidates.length === 0) return;
+    await this._cpuCastSpell(player, card, { chosenCardType: candidates[0].type });
   }
 
   /** 配られたら即時使うスペル。アイキャンフライを副業収入より優先する。 */

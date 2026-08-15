@@ -172,16 +172,29 @@ const spell = (id, name, rarity, cost, target, effect, effectDescription) => ({
 });
 
 /**
- * スペル40種。`target`はgame.jsの_resolveSpellCastが対象選択のUIフローを
+ * スペル一覧。`target`はgame.jsの_resolveSpellCastが対象選択のUIフローを
  * 出し分けるための種別で、`effect.type`が実際の効果本体（game.jsの
  * _applySpellEffectがディスパッチする）。
  * - 'enemyMonster'/'anyMonster'/'ownMonster': モンスター1体（onPickAbilityTarget流用）
  * - 'enemyPlayer'/'anyPlayer': プレイヤー1人（同上、{id,label}形式）
  * - 'anyTile'/'ownTile': 土地1マス（同上、tileSummary形式）
  * - 'twoOwnMonsters': 自分のモンスター2体
+ * - 'cardTypeChoice': モンスター・アイテム・スペルから、山札より引く種類を選ぶ
  * - 'self'/'none': 対象選択なし（'self'は発動者自身への適用、'none'は盤面全体等）
  */
 export const SPELL_CATALOG = {
+  divination: {
+    ...spell(
+      'divination',
+      '占術',
+      Rarity.N,
+      40,
+      'cardTypeChoice',
+      { type: 'drawRandomCardOfChosenType' },
+      'モンスター・アイテム・スペルから1種類を選び、デッキ内の該当カードをランダムに1枚手札へ加える',
+    ),
+    imageDataUrl: assetUrl('/images/card-art/divination.png'),
+  },
   disclosureRequest: {
     ...spell(
       'disclosureRequest',
