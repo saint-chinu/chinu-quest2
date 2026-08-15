@@ -554,6 +554,17 @@ export class Game {
    * モンスター・土地・プレイヤーいずれの対象選びにも使い回す（渡す配列の
    * 形が違うだけ）。
    */
+  _disclosureEligibleCards(caster, targetPlayer, disclosureCost = 150) {
+    const emptyLandExists = this.tiles.some((tile) => tile.type === TileType.LAND && tile.owner == null);
+    const availableForExtraCost = Math.max(0, caster.currency - disclosureCost);
+    return targetPlayer.hand.filter((card) => {
+      if (catalogIdOf(card) === 'disclosureRequest') return false;
+      if ((card.cost || 0) > availableForExtraCost) return false;
+      if (card.type === CardType.MONSTER) return emptyLandExists;
+      return card.type === CardType.SPELL;
+    });
+  }
+
   async _resolveSpellCast(player, card) {
     const target = card.target;
     if (target === 'self' || target === 'none') return {};
@@ -646,6 +657,42 @@ export class Game {
       return { targetPlayerId, targetCardId };
     }
 
+    // 開示請求: 相手を選ぶ→その相手のモンスター/スペルを1枚選ぶ。
+    // スペルの場合は、奪う前にそのスペル自身の対象選択まで済ませておく。
+    if (target === 'enemyPlayerDisclosureCard') {
+      const opponents = this.players.filter(
+        (candidate) => !candidate.defeated && candidate.id !== player.id
+          && !this._isAllyOf(candidate, player),
+      );
+      if (opponents.length === 0) return null;
+      const targetPlayerId = await this.onPickAbilityTarget(
+        opponents.map((candidate) => ({ id: candidate.id, label: `${candidate.name}へ開示請求する` })),
+        player.id,
+      );
+      if (targetPlayerId == null) return null;
+      const targetPlayer = this.players.find((candidate) => candidate.id === targetPlayerId);
+      const eligible = targetPlayer ? this._disclosureEligibleCards(player, targetPlayer, card.cost || 0) : [];
+      if (eligible.length === 0) {
+        this.onLog('開示できるモンスター/スペルがないため「開示請求」は手札に戻った');
+        return null;
+      }
+      const targetCardId = await this.onPickAbilityTarget(
+        eligible.map((candidate) => ({
+          id: candidate.id,
+          label: `${candidate.name}（${candidate.type === CardType.MONSTER ? 'モンスター' : 'スペル'}・${candidate.rarity}・追加${candidate.cost || 0}G）`,
+        })),
+        player.id,
+      );
+      if (targetCardId == null) return null;
+      const targetCard = eligible.find((candidate) => candidate.id === targetCardId);
+      let nestedCast = null;
+      if (targetCard?.type === CardType.SPELL) {
+        nestedCast = await this._resolveSpellCast(player, targetCard);
+        if (!nestedCast) return null;
+      }
+      return { targetPlayerId, targetCardId, nestedCast };
+    }
+
     // ネクロマンサー: この試合中に死んだモンスター（敵味方問わず）から1体選ぶ。
     if (target === 'deadMonster') {
       if (this._deadMonstersThisMatch.length === 0) {
@@ -711,6 +758,58 @@ export class Game {
         this.onLog(`${player.name}は「${card.name}」で${targetPlayer.name}の「${discarded.name}」を捨てさせた`);
         this._notifyState();
         return false;
+      }
+
+      case 'disclosureRequest': {
+        if (!targetPlayer || cast.targetCardId == null) return false;
+        const stolen = targetPlayer.hand.find((candidate) => candidate.id === cast.targetCardId);
+        if (!stolen || (stolen.type !== CardType.MONSTER && stolen.type !== CardType.SPELL)) {
+          this.onLog('対象カードがなくなったため「開示請求」は不発になった');
+          return false;
+        }
+        const extraCost = stolen.cost || 0;
+        if (player.currency < extraCost) {
+          this.onLog('追加コストを支払えないため「開示請求」は不発になった');
+          return false;
+        }
+
+        targetPlayer.hand = targetPlayer.hand.filter((candidate) => candidate.id !== stolen.id);
+        player.currency -= extraCost;
+        player.deck.discard(stolen);
+
+        let endedTurn = false;
+        if (stolen.type === CardType.MONSTER) {
+          const emptyLands = this.tiles.filter((tile) => tile.type === TileType.LAND && tile.owner == null);
+          const matching = emptyLands.filter((tile) => tile.element === stolen.element);
+          const pool = matching.length > 0 ? matching : emptyLands;
+          if (pool.length === 0) return false;
+          const summonTile = pool[Math.floor(Math.random() * pool.length)];
+          const chainGain = this._captureLandGain(player, summonTile);
+          this._placeUnit(summonTile, player, stolen);
+          this.onLog(`${player.name}は開示された「${stolen.name}」を${ELEMENT_LABEL[summonTile.element]}属性の空き地へ召喚した (-${extraCost}G)`);
+          await this.onSummonEffect?.({ tileId: summonTile.id, unitName: stolen.name });
+          await this._presentLandGain(chainGain);
+        } else {
+          const casterTile = this.tiles[player.tileId];
+          this.onLog(`${player.name}は開示された「${stolen.name}」を自分の詠唱として使用した (-${extraCost}G)`);
+          await this.onSpellUse({
+            card: stolen,
+            casterPosition: casterTile?.position ? { x: casterTile.position.x, z: casterTile.position.z } : null,
+          });
+          await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast.nestedCast || {}, stolen));
+          endedTurn = await this._applySpellEffect(player, stolen, cast.nestedCast || {});
+        }
+
+        const replacement = targetPlayer.deck.draw();
+        if (replacement) {
+          this._recordDraw(targetPlayer, replacement);
+          targetPlayer.hand.push(replacement);
+        }
+        targetPlayer.currency += 100;
+        this.onLog(`${targetPlayer.name}は補償としてカードを1枚引き、100Gを得た`);
+        this._notifyState();
+        await this._enforceHandLimit(targetPlayer);
+        return endedTurn;
       }
 
       case 'setNextDice':
@@ -1760,7 +1859,7 @@ export class Game {
     // 左右の環状路のCP付近を循環し続けることがあるため、未通過CP→ゴール
     // の順を常に目標にする。他CPUの「高額空地優先」は維持する。
     const isDanball = this._isDanballBoss(player);
-    const prioritizesLapRoute = player.name === '暴君マダイ' || player.name === 'Q' || isDanball;
+    const prioritizesLapRoute = ['暴君マダイ', 'Q', '彼'].includes(player.name) || isDanball;
     const valuableEmpty = prioritizesLapRoute ? [] : this._cpuHighValueEmptyLands();
     const target = valuableEmpty.length > 0
       ? valuableEmpty.reduce((best, tile) => {
@@ -1795,6 +1894,10 @@ export class Game {
         const onikuDistance = Math.min(...onikuLands.map((land) => this._forwardTileDistance(id, player.tileId, land.id)));
         if (Number.isFinite(onikuDistance)) score += Math.max(0, 4 - onikuDistance * 0.5);
         if (tile.owner === leadingOniku.id) score += 10;
+      }
+      if (player.name === '彼' && tile.type === TileType.LAND && tile.owner == null) {
+        const preferredGodId = tile.element === Element.WATER ? 'suijin' : tile.element === Element.FOREST ? 'yamagami' : null;
+        if (preferredGodId && player.hand.some((card) => catalogIdOf(card) === preferredGodId)) score += 0.25;
       }
       if (tile.owner == null && tile.level >= 2) score += 12 + tile.level * 3;
       if (tile.type === TileType.LAND && tile.level >= 3 && tile.owner != null && tile.owner !== player.id) {
@@ -3158,7 +3261,9 @@ export class Game {
         ? this._cpuChooseSummonCardForDanball(options, tile, player)
         : player.name === 'Q'
           ? this._cpuChooseSummonCardForQ(options, tile, profile, player)
-          : this._cpuChooseSummonCard(options, tile, profile, player);
+          : player.name === '彼'
+            ? this._cpuChooseSummonCardForKare(options, tile, profile, player)
+            : this._cpuChooseSummonCard(options, tile, profile, player);
       player.hand = player.hand.filter((c) => c.id !== card.id);
       player.deck.discard(card);
       player.currency -= card.cost;
@@ -3505,6 +3610,13 @@ export class Game {
       ));
     }
     return this._cpuChooseSummonCard(options, tile, profile, player);
+  }
+
+  /** 「彼」専用: 水土地では水神、森土地では山神を最優先で召喚する。 */
+  _cpuChooseSummonCardForKare(options, tile, profile, player) {
+    const preferredId = tile.element === Element.WATER ? 'suijin' : tile.element === Element.FOREST ? 'yamagami' : null;
+    const god = preferredId ? options.find((card) => catalogIdOf(card) === preferredId) : null;
+    return god || this._cpuChooseSummonCard(options, tile, profile, player);
   }
 
   /**
@@ -4563,6 +4675,7 @@ export class Game {
     if (!this.currentPlayer.isCPU) return;
     // ダンボール男は③手札の「未知との遭遇」を最優先で使う（無属性モンスター＝ギアを
     // 引き寄せてガシャーン合体を狙う）。1ターン1スペルなので他スペルより先に判定。
+    await this._cpuMaybeUseDisclosureRequest(this.currentPlayer);
     await this._cpuMaybeUseEncounterSpell(this.currentPlayer);
     await this._cpuMaybeUseMagicCircleSpell(this.currentPlayer);
     if (await this._cpuMaybeWarpToHighValueLand(this.currentPlayer)) return;
@@ -4578,6 +4691,63 @@ export class Game {
     const fixedDiceValue = this.currentPlayer.diceCurse?.type === 'fixed' ? this.currentPlayer.diceCurse.value : null;
     const steps = await this.onCpuRoll(fixedDiceValue);
     this.rollDice(steps);
+  }
+
+  _cpuDisclosureCastForSpell(player, card) {
+    const target = card.target;
+    if (target === 'self' || target === 'none') return {};
+    const enemies = this.players.filter((candidate) => !candidate.defeated && candidate.id !== player.id && !this._isAllyOf(candidate, player));
+    if (target === 'enemyPlayer') return enemies[0] ? { targetPlayerId: enemies[0].id } : null;
+    if (target === 'anyPlayer') {
+      const beneficial = card.effect?.type === 'doubleNextDice'
+        || (card.effect?.type === 'setNextDice' && card.effect.value === 6);
+      const picked = beneficial ? player : enemies[0];
+      return picked ? { targetPlayerId: picked.id } : null;
+    }
+    if (target === 'enemyMonster' || target === 'anyMonster' || target === 'ownMonster') {
+      const candidates = this.tiles.filter((tile) => {
+        if (!tile.unit) return false;
+        if (target === 'enemyMonster') return tile.unit.ownerId !== player.id;
+        if (target === 'ownMonster') return tile.unit.ownerId === player.id;
+        return true;
+      });
+      return candidates[0] ? { targetTileId: candidates[0].id } : null;
+    }
+    if (target === 'anyTile' || target === 'ownTile') {
+      const candidates = this.tiles.filter((tile) => tile.type === TileType.LAND && (target !== 'ownTile' || tile.owner === player.id));
+      return candidates[0] ? { targetTileId: candidates[0].id } : null;
+    }
+    return null;
+  }
+
+  /** 「彼」専用: 開示請求はモンスター優先、その中でEX→R→S→Nの順に奪う。 */
+  async _cpuMaybeUseDisclosureRequest(player) {
+    if (player.name !== '彼' || player.spellUsedThisTurn) return;
+    const disclosure = player.hand.find((card) => card.type === CardType.SPELL && card.effect?.type === 'disclosureRequest');
+    if (!disclosure || player.currency < (disclosure.cost || 0)) return;
+    const rarityRank = { [Rarity.N]: 0, [Rarity.S]: 1, [Rarity.R]: 2, [Rarity.EX]: 3 };
+    const candidates = this.players
+      .filter((target) => !target.defeated && target.id !== player.id && !this._isAllyOf(target, player))
+      .flatMap((target) => this._disclosureEligibleCards(player, target, disclosure.cost || 0)
+        .map((card) => ({ target, card })));
+    if (candidates.length === 0) return;
+    const monsters = candidates.filter(({ card }) => card.type === CardType.MONSTER);
+    const ordered = [...(monsters.length > 0 ? monsters : candidates)].sort((a, b) =>
+      (rarityRank[b.card.rarity] ?? 0) - (rarityRank[a.card.rarity] ?? 0)
+      || ((b.card.atk || 0) + (b.card.hp || 0)) - ((a.card.atk || 0) + (a.card.hp || 0))
+      || (b.card.cost || 0) - (a.card.cost || 0));
+    for (const picked of ordered) {
+      const nestedCast = picked.card.type === CardType.SPELL
+        ? this._cpuDisclosureCastForSpell(player, picked.card)
+        : null;
+      if (picked.card.type === CardType.SPELL && !nestedCast) continue;
+      await this._cpuCastSpell(player, disclosure, {
+        targetPlayerId: picked.target.id,
+        targetCardId: picked.card.id,
+        nestedCast,
+      });
+      return;
+    }
   }
 
   /** ダンボール男専用: 手札に「未知との遭遇」があれば最優先で使用（コスト40G以上あれば）。 */

@@ -182,6 +182,18 @@ const spell = (id, name, rarity, cost, target, effect, effectDescription) => ({
  * - 'self'/'none': 対象選択なし（'self'は発動者自身への適用、'none'は盤面全体等）
  */
 export const SPELL_CATALOG = {
+  disclosureRequest: {
+    ...spell(
+      'disclosureRequest',
+      '開示請求',
+      Rarity.EX,
+      150,
+      'enemyPlayerDisclosureCard',
+      { type: 'disclosureRequest' },
+      '相手の手札からモンスターかスペルを1枚選ぶ。モンスターは自分の空き地へ召喚し、スペルは自分の詠唱として即時使用する。追加コストは使用者が負担。相手は1枚引き100Gを得る',
+    ),
+    imageDataUrl: null,
+  },
   // ── 移動系 ──
   diceOne: spell('diceOne', '1のダイス', Rarity.N, 30, 'anyPlayer', { type: 'setNextDice', value: 1 }, '選んだプレイヤーの次のサイコロを1にする'),
   backfire: spell('backfire', 'バックファイア', Rarity.S, 50, 'anyPlayer', { type: 'reverseNextDice' }, '選んだプレイヤーを次のサイコロの数だけ後退させる'),
@@ -589,6 +601,30 @@ export function buildStarterDeckList(bookId = 'fireForest') {
  * buildThemedDeckList's themed-random deck (see main.js buildBattlePlayerConfigs).
  */
 export const CHARACTER_DECKS = {
+  kare: {
+    composition: {
+      monsters: [
+        // S 12枚
+        { def: MONSTER_CATALOG.aoriika, count: 2 },
+        { def: MONSTER_CATALOG.tsurara, count: 2 },
+        { def: MONSTER_CATALOG.azarashisan, count: 2 },
+        { def: MONSTER_CATALOG.matagiNoKoshirou, count: 2 },
+        { def: MONSTER_CATALOG.moriNoYousei, count: 2 },
+        { def: MONSTER_CATALOG.jinmenchou, count: 2 },
+        // R 26枚（水神・山神は各2枚）
+        { def: MONSTER_CATALOG.suijin, count: 2 },
+        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 4 },
+        { def: MONSTER_CATALOG.uminoieTencho, count: 3 },
+        { def: MONSTER_CATALOG.bigMermaid, count: 4 },
+        { def: MONSTER_CATALOG.yamagami, count: 2 },
+        { def: MONSTER_CATALOG.sekaiju, count: 3 },
+        { def: MONSTER_CATALOG.jukaiNoOnryou, count: 4 },
+        { def: MONSTER_CATALOG.mountGorilla, count: 4 },
+      ],
+      items: [],
+      spells: [{ def: SPELL_CATALOG.disclosureRequest, count: 2 }],
+    },
+  },
   hitode: {
     composition: {
       monsters: [

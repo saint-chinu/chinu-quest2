@@ -3319,8 +3319,8 @@ function buildAdminDashboardHtml(players) {
   const total = players.length;
   const withCharacter = players.filter((p) => p.character && p.character.name).length;
 
-  // ストーリー進捗分布（storyProgress 0〜4）。
-  const progressCounts = [0, 0, 0, 0, 0];
+  // ストーリー進捗分布（全ステージ数に追従）。
+  const progressCounts = Array.from({ length: STORY_STAGES.length + 1 }, () => 0);
   let mSum = 0;
   let mMax = 0;
   let mMaxName = '—';
@@ -3329,7 +3329,7 @@ function buildAdminDashboardHtml(players) {
 
   for (const p of players) {
     const c = p.character || {};
-    const prog = Math.max(0, Math.min(4, Number(c.storyProgress || 0)));
+    const prog = Math.max(0, Math.min(STORY_STAGES.length, Number(c.storyProgress || 0)));
     progressCounts[prog] += 1;
     const m = Number(c.m || 0);
     mSum += m;
