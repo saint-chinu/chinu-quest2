@@ -3434,6 +3434,25 @@ html, body {
   display: none;
 }
 
+#spell-effect-modal.spell-effect-cast {
+  font-size: 22px;
+  letter-spacing: 0.08em;
+  border: 1px solid rgba(232, 220, 255, 0.9);
+  animation: spell-cast-glow 0.6s ease-in-out infinite alternate;
+}
+
+#spell-effect-modal.spell-effect-result {
+  max-width: min(72vw, 620px);
+  text-align: center;
+  font-size: 17px;
+  background: rgba(35, 29, 66, 0.94);
+}
+
+@keyframes spell-cast-glow {
+  from { box-shadow: 0 0 14px rgba(173, 130, 255, 0.55), 0 8px 24px rgba(0, 0, 0, 0.5); }
+  to { box-shadow: 0 0 38px rgba(226, 211, 255, 0.95), 0 0 70px rgba(132, 79, 255, 0.5), 0 8px 24px rgba(0, 0, 0, 0.5); }
+}
+
 #discard-box {
   background: #22223b;
   border-radius: 12px;

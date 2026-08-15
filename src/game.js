@@ -512,7 +512,13 @@ export class Game {
     this.onLog(`${player.name}は「${card.name}」を使用した (-${card.cost || 0}G)`);
     this._notifyState();
 
-    await this.onSpellUse(card);
+    const casterTile = this.tiles[player.tileId];
+    await this.onSpellUse({
+      card,
+      casterPosition: casterTile?.position
+        ? { x: casterTile.position.x, z: casterTile.position.z }
+        : null,
+    });
     await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast, card));
     const endedTurn = await this._applySpellEffect(player, card, cast);
     await this.onSpellComplete();
@@ -4902,7 +4908,7 @@ export class Game {
       targetTileId: cast.targetTileId ?? null,
       targetPosition: targetPosition ? { x: targetPosition.x, z: targetPosition.z } : null,
       effectMessage: card
-        ? `${card.name}：${card.effectDescription || '効果が発動した'}`
+        ? (card.effectDescription || '効果が発動した')
         : '効果が発動した',
     };
   }
@@ -4922,7 +4928,13 @@ export class Game {
     player.spellUsedThisTurn = true;
     this.onLog(`${player.name}は「${card.name}」を使用した (-${card.cost || 0}G)`);
     this._notifyState();
-    await this.onSpellUse(card);
+    const casterTile = this.tiles[player.tileId];
+    await this.onSpellUse({
+      card,
+      casterPosition: casterTile?.position
+        ? { x: casterTile.position.x, z: casterTile.position.z }
+        : null,
+    });
     await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast, card));
     const endedTurn = await this._applySpellEffect(player, card, cast);
     await this.onSpellComplete();

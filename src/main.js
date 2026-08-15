@@ -1378,17 +1378,22 @@ function promptPickLevelUp({ currentLevel, options }) {
   });
 }
 
-/** Placeholder for spell resolution - actual effects land with battle design in phase 2. */
-function promptSpellUse(card) {
-  return new Promise((resolve) => {
-    setSpellPresentationActive(true);
-    spellEffectText.textContent = `『${card.name}』発動！`;
-    spellEffectModal.classList.remove('hidden');
-    setTimeout(() => {
-      spellEffectModal.classList.add('hidden');
-      resolve();
-    }, SPELL_EFFECT_MS);
-  });
+/** 第1段階: スペル名だけを表示し、キャスター位置の光のオーラを同時再生する。 */
+async function promptSpellUse(payload) {
+  // 古いリレー要求が残っていても表示できるよう、従来のcard単体も受け付ける。
+  const card = payload?.card ?? payload;
+  const casterPosition = payload?.casterPosition ?? null;
+  setSpellPresentationActive(true);
+  spellEffectModal.classList.remove('spell-effect-result');
+  spellEffectModal.classList.add('spell-effect-cast');
+  spellEffectText.textContent = card?.name || 'スペル';
+  spellEffectModal.classList.remove('hidden');
+  await Promise.all([
+    new Promise((resolve) => setTimeout(resolve, SPELL_EFFECT_MS)),
+    casterPosition && scene ? scene.playSpellAura(casterPosition) : Promise.resolve(),
+  ]);
+  spellEffectModal.classList.add('hidden');
+  spellEffectModal.classList.remove('spell-effect-cast');
 }
 
 /** ゲスト側のプレイヤー駒スプライトを探す（pvpPieces、ホスト/ローカルではgame.players[].meshを使うのでここは通らない）。 */
@@ -1422,13 +1427,21 @@ async function showTargetEffectMessage(position, message, holdMs = 1800, variant
   el.remove();
 }
 
-async function promptSpellCastEffect({ casterPosition, targetPlayerId, targetTileId, targetPosition, effectMessage }) {
-  if (!scene || !casterPosition) return;
+async function showCentralSpellEffectMessage(message, holdMs = 1800) {
+  if (!message) return;
+  spellEffectModal.classList.remove('spell-effect-cast');
+  spellEffectModal.classList.add('spell-effect-result');
+  spellEffectText.textContent = message;
+  spellEffectModal.classList.remove('hidden');
+  await new Promise((resolve) => setTimeout(resolve, holdMs));
+  spellEffectModal.classList.add('hidden');
+  spellEffectModal.classList.remove('spell-effect-result');
+}
+
+async function promptSpellCastEffect({ targetPlayerId, targetTileId, targetPosition, effectMessage }) {
+  if (!scene) return;
   const savedFocus = { x: scene.focus.x, z: scene.focus.z };
   const isPvpGuest = pvpMatch && !pvpMatch.isHost;
-
-  await scene.focusAndZoom(casterPosition.x, casterPosition.z);
-  await scene.playSpellAura(casterPosition);
 
   if (targetPosition) {
     await scene.focusAndZoom(targetPosition.x, targetPosition.z);
@@ -1443,6 +1456,8 @@ async function promptSpellCastEffect({ casterPosition, targetPlayerId, targetTil
     } else {
       await new Promise((resolve) => setTimeout(resolve, 350));
     }
+  } else {
+    await showCentralSpellEffectMessage(effectMessage);
   }
 
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1);
