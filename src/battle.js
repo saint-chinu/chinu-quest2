@@ -176,7 +176,11 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
   if (reduction.triggeredMessage) log.push(reduction.triggeredMessage);
   // ATKダウンの呪い（静電気野郎）が重なって0未満になっても、マイナスダメージ
   // （＝相手を回復させてしまう）にはならないようクランプする。
-  const damage = Math.max(0, Math.round(atkStats.atk * multiplier));
+  const damageCut = defenderUnit.def.effect?.type === 'nonNeutralDamageCut'
+    && attackerUnit.def.element !== 'neutral'
+    ? Number(defenderUnit.def.effect.damage || 0)
+    : 0;
+  const damage = Math.max(0, Math.round(atkStats.atk * multiplier) - damageCut);
 
   // 貫通(pierce): 反射・無効化系（ナンカのお守り/くねくね/ハリネズミの服）を
   // 全て無視して素通りする。同属性ボーナス（土地レベルのHP加算）を無視する
@@ -203,7 +207,7 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
   }
 
   defenderUnit.currentHp -= damage;
-  let message = `${attackerUnit.def.name} → ${defenderUnit.def.name} に${damage}ダメージ（倍率${multiplier}）`;
+  let message = `${attackerUnit.def.name} → ${defenderUnit.def.name} に${damage}ダメージ（倍率${multiplier}${damageCut ? `・軽減${damageCut}` : ''}）`;
 
   // ライフジャケット(surviveLethalDamage): 致死ダメージでもHP1で踏みとどまる
   // （1戦闘1回のみ - アイテム本体にconsumedを立てて再発動を防ぐ）。

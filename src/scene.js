@@ -11,6 +11,7 @@ const TILE_COLOR = {
   [TileType.SHOP]: 0x2ec4b6,
   [TileType.SHRINE]: 0xc1440e,
   [TileType.WARP]: 0x5e60ce,
+  [TileType.RUNAWAY]: 0xe53935,
 };
 
 /**
@@ -565,6 +566,7 @@ export class GameScene {
     else if (tile.type === TileType.EVENT) label = `CP${tile.checkpointNumber}`;
     else if (tile.type === TileType.SHRINE) label = 'ほこら';
     else if (tile.type === TileType.WARP) label = 'ワープ';
+    else if (tile.type === TileType.RUNAWAY) label = '暴走';
     else if (tile.type === TileType.SHOP) label = 'ショップ';
     if (!label) return;
 

@@ -753,6 +753,36 @@ export const CHARACTER_DECKS = {
       ],
     },
   },
+  q: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.battleTrain, count: 4 },
+        { def: MONSTER_CATALOG.sacrificeCar, count: 4 },
+        { def: MONSTER_CATALOG.hatsudenNezumi, count: 3 },
+        { def: MONSTER_CATALOG.tetsuo, count: 2 },
+        { def: MONSTER_CATALOG.ironWool, count: 2 },
+        { def: MONSTER_CATALOG.mechanicMaso, count: 2 },
+        { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 },
+        { def: MONSTER_CATALOG.raiun, count: 1 },
+        { def: MONSTER_CATALOG.erekiKagayaki, count: 1 },
+        { def: MONSTER_CATALOG.gandamu, count: 1 },
+        { def: MONSTER_CATALOG.raijin, count: 1 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.tetsuPipe, count: 1 },
+        { def: ITEM_CATALOG.boudanChokki, count: 1 },
+        { def: ITEM_CATALOG.lifeJacket, count: 1 },
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 1 },
+        { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.diceOne, count: 3 },
+        { def: SPELL_CATALOG.diceThree, count: 3 },
+        { def: SPELL_CATALOG.diceSix, count: 3 },
+        { def: SPELL_CATALOG.sideIncome, count: 3 },
+      ],
+    },
+  },
   danball: {
     composition: {
       monsters: [

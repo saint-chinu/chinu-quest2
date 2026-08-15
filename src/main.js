@@ -197,7 +197,7 @@ const battleMessageText = document.getElementById('battle-message-text');
 
 const BLINK_MS = 600;
 
-const TILE_TYPE_LABEL = { start: 'ゴール', land: '土地', event: 'チェックポイント', shop: 'ショップ', shrine: 'ほこら', warp: 'ワープ' };
+const TILE_TYPE_LABEL = { start: 'ゴール', land: '土地', event: 'チェックポイント', shop: 'ショップ', shrine: 'ほこら', warp: 'ワープ', runaway: '暴走' };
 
 function tileSummaryText(tile) {
   const lines = [`【${TILE_TYPE_LABEL[tile.type]}】`];
@@ -1157,7 +1157,9 @@ function renderCardEl(el, card, { showMonsterStats = false } = {}) {
 
   const typeIcon = document.createElement('span');
   typeIcon.className = 'card-type-icon';
-  typeIcon.textContent = TYPE_ICON[card.type] || '';
+  typeIcon.textContent = card.dualUseItem
+    ? `${TYPE_ICON[CardType.MONSTER]}${TYPE_ICON[CardType.GEAR]}`
+    : (TYPE_ICON[card.type] || '');
 
   const name = document.createElement('span');
   name.className = 'card-name-text';
@@ -1953,8 +1955,30 @@ async function promptBattleAttack({ side, item, message, damage = 0, element, at
     await new Promise((resolve) => setTimeout(resolve, BATTLE_ACTION_GAP_MS));
 }
 
-async function promptBattleEquip({ side, item, unitName, baseAtk, baseHp, existingAtkBonus = 0, existingHpBonus = 0 }) {
+async function promptBattleEquip({ side, item, unitName, baseAtk, baseHp, existingAtkBonus = 0, existingHpBonus = 0, fusionCard = null }) {
   const sideEls = battleSide[side];
+  if (fusionCard) {
+    renderCardEl(sideEls.card, fusionCard);
+    sideEls.item.replaceChildren();
+    sideEls.item.classList.add('hidden');
+    sideEls.atk.textContent = String(baseAtk);
+    sideEls.hp.textContent = String(baseHp);
+    sideEls.atkBonus.classList.add('hidden');
+    sideEls.hpBonus.classList.add('hidden');
+    sideEls.atkFill.style.width = `${Math.min(100, (baseAtk / 150) * 100)}%`;
+    sideEls.hp.dataset.current = String(baseHp);
+    sideEls.hp.dataset.max = String(baseHp);
+    sideEls.hpFill.style.width = '100%';
+    battleMessageText.textContent = `${item.name}と合体！\n${unitName}に変身した`;
+    battleMessageText.classList.add('special');
+    battleMessageText.classList.remove('hidden');
+    sideEls.el.classList.add('battle-special-glow');
+    await new Promise((resolve) => setTimeout(resolve, 1800));
+    sideEls.el.classList.remove('battle-special-glow');
+    battleMessageText.classList.add('hidden');
+    battleMessageText.classList.remove('special');
+    return;
+  }
   const card = document.createElement('div');
   card.className = 'card';
   renderCardEl(card, item);

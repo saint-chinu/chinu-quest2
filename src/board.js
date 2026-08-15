@@ -8,6 +8,7 @@ export const TileType = {
   SHOP: 'shop',
   SHRINE: 'shrine',
   WARP: 'warp',
+  RUNAWAY: 'runaway',
 };
 
 const SPACING = 3.2;
@@ -18,6 +19,7 @@ const TILE_TYPE_COLOR = {
   [TileType.SHOP]: '#2ec4b6',
   [TileType.SHRINE]: '#c1440e',
   [TileType.WARP]: '#5e60ce',
+  [TileType.RUNAWAY]: '#e53935',
 };
 
 /**
@@ -89,7 +91,19 @@ const BUDOU_ROWS = [
   '...PMMP....',
 ];
 
-// ④ダンボール男戦（ラスボス）のマップ - ユーザー指定のレイアウト。11×11。
+// ④Q戦。電車の車両を思わせる横長の外周ループで、両端と中央を巡る構成。
+const Q_TRAIN_ROWS = [
+  'CFW..MTC',
+  'F.WGMT.F',
+  'WMT..FWM',
+  '.B....T.',
+  '.F....B.',
+  'WMT..FWM',
+  'T.FWNM.T',
+  'CFW..MTC',
+];
+
+// ⑤ダンボール男戦のマップ - ユーザー指定のレイアウト。11×11。
 // 外周ループ＋「田」字型に4分割する十字の通路、四隅寄りにチェックポイント
 // 4つ（C×4、うち1つは盤面中央）、右辺中央に3連続のほこら（H×3、縦一列）。
 // 最終決戦にふさわしく、チェックポイント数もほこらの密度も他マップより多い。
@@ -124,7 +138,8 @@ export const MAPS = [
   { id: 'hitode', name: '① ヒトデの縄張り', rows: HITODE_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage1.png') },
   { id: 'madai', name: '② マダイの岩礁', rows: MADAI_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage2.jpg'), spacing: 2.8 },
   { id: 'budou', name: '③ 決闘の浜辺', rows: BUDOU_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage3.png'), spacing: 2.8 },
-  { id: 'danball', name: '④ 暗転した世界', rows: DANBALL_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage4.png'), spacing: 2.8 },
+  { id: 'q-train', name: '④ 暴走列車Q号', rows: Q_TRAIN_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage-q-train.png'), spacing: 2.8 },
+  { id: 'danball', name: '⑤ 暗転した世界', rows: DANBALL_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage4.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {
@@ -171,6 +186,7 @@ function typeForCode(code) {
   if (code === 'C') return TileType.EVENT;
   if (code === 'S') return TileType.SHOP;
   if (code === 'H') return TileType.SHRINE;
+  if (code === 'B') return TileType.RUNAWAY;
   // V/Pは共に「ちょうど止まったらワープする」マス(TileType.WARP)。
   // V=ワープ1（1マスだけ）、P=ワープ2（複数マスありうる）- 区別は型では
   // なく、createBoard末尾のリンク付けでtile.warpTargetIdに焼き込む。
@@ -262,6 +278,14 @@ export function createBoard(mapId) {
   if (warpOut.length === 1 && warpIn.length > 0) {
     warpOut[0].warpTargetId = warpIn[0].id;
     for (const t of warpIn) t.warpTargetId = warpOut[0].id;
+  }
+
+
+  // Qステージの暴走マスは必ず2枚一組。停止時の飛び先を相互に設定する。
+  const runawayTiles = tiles.filter((t) => t.type === TileType.RUNAWAY);
+  if (runawayTiles.length === 2) {
+    runawayTiles[0].runawayTargetId = runawayTiles[1].id;
+    runawayTiles[1].runawayTargetId = runawayTiles[0].id;
   }
 
   return tiles;

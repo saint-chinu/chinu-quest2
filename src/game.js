@@ -6,7 +6,13 @@ import { createFieldUnit, resolveBattle, equipItem, applyCurse, applyPoison, Gol
 import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay, getWaitCutRate } from './utils.js';
 import { DENCHU_FIELD_MONSTER } from './thunderMonsters.js';
-import { GASHAAN_FIELD_MONSTER } from './neutralMonsters.js';
+import {
+  GASHAAN_FIELD_MONSTER,
+  BATTLE_TRAIN_ID,
+  SACRIFICE_CAR_ID,
+  Q_LINER_FIELD_MONSTER,
+  Q_TRAIN_FIELD_MONSTER,
+} from './neutralMonsters.js';
 import { resolveAiProfile } from './aiProfiles.js';
 
 const SHOP_OPTION_COUNT = 3;
@@ -32,6 +38,8 @@ const LAND_BONUS_RATE_MULTI = 80;
 
 const STARTING_HAND_SIZE = 4;
 const HAND_LIMIT = 6;
+
+const isBattleItemCard = (card) => card?.type === CardType.GEAR || card?.dualUseItem === true;
 
 // CPUの捨て札AI（_cpuChooseDiscard）が目指す手札構成。所持土地数6以上で
 // アイテム偏重に切り替わる（土地が多い＝守りを固めたい局面という想定）。
@@ -1400,6 +1408,7 @@ export class Game {
    */
   async _movePlayer(player, steps) {
     this._turnPathIds = [];
+    const triggeredRunawayTiles = new Set();
     const destinationIds = this._forwardDestinationIds(player, steps);
     if (destinationIds.length) this.onMoveDestination({ tileIds: destinationIds, active: true });
     for (let i = 0; i < steps; i++) {
@@ -1465,6 +1474,20 @@ export class Game {
       if (toTile.type === TileType.START && i < steps - 1) {
         await this._grantGoalBonus(player);
         if (this.storyEnded) break;
+      }
+
+      // 暴走マスを「通過」した場合だけ残り歩数を2～3追加する。追加後も通常の
+      // 分岐選択を通るため、プレイヤーは進行方向を選べる。同じ暴走マスを
+      // 1ターン中に周回して再通過しても無限加速しないよう1回限りにする。
+      if (toTile.type === TileType.RUNAWAY && i < steps - 1 && !triggeredRunawayTiles.has(toTile.id)) {
+        triggeredRunawayTiles.add(toTile.id);
+        const bonusSteps = 2 + Math.floor(Math.random() * 2);
+        steps += bonusSteps;
+        this.onLog(`${player.name}は暴走マスを通過！ さらに${bonusSteps}マス進む！`);
+        this.onMoveDestination({ tileIds: destinationIds, active: false });
+        const updatedIds = this._forwardDestinationIds(player, steps - i - 1);
+        if (updatedIds.length) this.onMoveDestination({ tileIds: updatedIds, active: true });
+        destinationIds.splice(0, destinationIds.length, ...updatedIds);
       }
 
       // 強制停止の呪い（ほこら効果「右の頬をシバかれたら～」）: 自分の土地・
@@ -1942,6 +1965,8 @@ export class Game {
       await this._resolveShrineTile(player);
     } else if (tile.type === TileType.WARP) {
       await this._resolveWarpTile(player);
+    } else if (tile.type === TileType.RUNAWAY) {
+      await this._resolveRunawayTile(player);
     }
 
     if (tile.type === TileType.START || tile.type === TileType.EVENT) {
@@ -2369,6 +2394,30 @@ export class Game {
     return tile.price + (LEVEL_INVESTMENT[tile.level] || 0);
   }
 
+  /** 暴走マスにちょうど停止: もう一方へ飛ばし、次のサイコロを2倍にする。 */
+  async _resolveRunawayTile(player) {
+    const tile = this.tiles[player.tileId];
+    const targetTile = this.tiles.find((candidate) => candidate.id === tile.runawayTargetId);
+    if (!targetTile) return;
+    await this.onWarpEffect({
+      playerId: player.id,
+      playerName: player.name,
+      sourcePosition: tile.position,
+      targetPosition: targetTile.position,
+    });
+    player.previousTileId = null;
+    player.tileId = targetTile.id;
+    if (player.mesh) player.mesh.position.set(targetTile.position.x, PIECE_REST_Y, targetTile.position.z);
+    player.diceCurse = { type: 'double' };
+    this.onLog(`${player.name}は暴走して反対側へ飛ばされ、「アイキャンフライ」の呪いがかかった！`);
+    await this.onTargetEffect?.({
+      tileId: targetTile.id,
+      position: targetTile.position,
+      message: 'アイキャンフライ\n次のサイコロの出目が2倍！',
+    });
+    this._notifyState();
+  }
+
   /** 地価 = (基本地価 + 累計レベルアップ投資額) × 連鎖倍率。 */
   _landValueOfTile(tile) {
     return Math.round(this._baseLandValueOfTile(tile) * this._chainMultiplier(tile.owner, tile.element));
@@ -2386,6 +2435,8 @@ export class Game {
         * this._chainMultiplier(tile.owner, tile.element)
         * TOLL_RATE[tile.level],
     );
+    const monsterTollMultiplier = Number(tile.unit?.def?.effect?.tollMultiplier || 1);
+    if (monsterTollMultiplier !== 1) toll = Math.round(toll * monsterTollMultiplier);
     // 増税通知: 通行料を割合で恒久的に減らす呪い（表示にも反映される安定した値、
     // 追徴課税の1回限り倍率とは別枠 - こちらは_settleLandingToll側で扱う）。
     if (tile.tollReductionRatio) toll = Math.round(toll * (1 - tile.tollReductionRatio));
@@ -3724,15 +3775,23 @@ export class Game {
   }
 
   /** 手札の中から一番強いGEARカードを選ぶ（無ければnull）。 */
-  _bestBattleItemFromHand(hand) {
-    const gear = hand.filter((c) => c.type === CardType.GEAR);
+  _bestBattleItemFromHand(hand, unit = null) {
+    const gear = hand.filter(isBattleItemCard);
     if (gear.length === 0) return null;
+    const monsterId = catalogIdOf(unit?.def);
+    const fusionPartnerId = monsterId === BATTLE_TRAIN_ID
+      ? SACRIFICE_CAR_ID
+      : monsterId === SACRIFICE_CAR_ID ? BATTLE_TRAIN_ID : null;
+    if (fusionPartnerId) {
+      const fusionPartner = gear.find((card) => catalogIdOf(card) === fusionPartnerId);
+      if (fusionPartner) return fusionPartner;
+    }
     return gear.reduce((best, c) => (this._itemPowerScore(c) > this._itemPowerScore(best) ? c : best));
   }
 
   /** CPUの実際のバトルアイテム選択。シミュレーション（_estimateWinProbability）と同じ_bestBattleItemFromHandを使うので、事前に見積もった勝率と実際の挙動がずれない。 */
-  _cpuPickBattleItem(player) {
-    return this._bestBattleItemFromHand(player.hand);
+  _cpuPickBattleItem(player, unit) {
+    return this._bestBattleItemFromHand(player.hand, unit);
   }
 
   /** シミュレーション専用: 本物のユニットには一切触れず、items/cursesだけ独立コピーした複製を作る（resolveBattleは渡された引数を直接書き換えるため、実物を渡すと本当に装備/呪いが消し飛んでしまう）。 */
@@ -3767,8 +3826,12 @@ export class Game {
         const attackerUnit = createFieldUnit(attackerDef, attackerOwnerId);
         const defenderUnit = this._cloneFieldUnitForSim(defenderTile.unit);
         if (useItem) {
-          const item = this._bestBattleItemFromHand(attackerHand);
-          if (item) equipItem(attackerUnit, item);
+          const item = this._bestBattleItemFromHand(attackerHand, attackerUnit);
+          if (item) {
+            const fusionDef = this._trainFusionDef(attackerUnit, item);
+            if (fusionDef) attackerUnit.def = fusionDef;
+            else equipItem(attackerUnit, item);
+          }
         }
         const attackerBonus = this._battleBonus(attackerUnit, null, defenderTile);
         const defenderBonus = this._battleBonus(defenderUnit, defenderTile, defenderTile);
@@ -3796,6 +3859,27 @@ export class Game {
     return equipped;
   }
 
+  /** 列車2種は相方を装備した時点で、確認なしに恒久的な合体形態へ置換する。 */
+  _applyTrainFusion(unit, equippedItem) {
+    const monsterId = catalogIdOf(unit?.def);
+    const fusionDef = this._trainFusionDef(unit, equippedItem);
+    if (!fusionDef) return null;
+    const previousMaxHp = Number(unit.def.hp || 0);
+    unit.def = fusionDef;
+    unit.currentHp = Math.min(fusionDef.hp, Math.max(1, unit.currentHp + fusionDef.hp - previousMaxHp));
+    unit.items = [];
+    this.onLog(`${monsterId === BATTLE_TRAIN_ID ? '戦闘列車' : '供物車両'}は${fusionDef.name}に合体した！`);
+    return fusionDef;
+  }
+
+  _trainFusionDef(unit, item) {
+    const monsterId = catalogIdOf(unit?.def);
+    const itemId = catalogIdOf(item);
+    if (monsterId === BATTLE_TRAIN_ID && itemId === SACRIFICE_CAR_ID) return Q_LINER_FIELD_MONSTER;
+    if (monsterId === SACRIFICE_CAR_ID && itemId === BATTLE_TRAIN_ID) return Q_TRAIN_FIELD_MONSTER;
+    return null;
+  }
+
   /**
    * Full battle-scene choreography, shared by both invasion entry points
    * (landing-invasion via _runInvasion, and the 移動 command's invasion
@@ -3809,8 +3893,8 @@ export class Game {
    * (that part differs between straight invasion and move-invasion).
    */
   async _runBattleScene(attackerUnit, attackerPlayer, defenderUnit, defenderPlayer, attackerPositionTile, battleTile) {
-    const attackerBase = this._baseStats(attackerUnit);
-    const defenderBase = this._baseStats(defenderUnit);
+    let attackerBase = this._baseStats(attackerUnit);
+    let defenderBase = this._baseStats(defenderUnit);
     const attackerBonus = this._battleBonus(attackerUnit, attackerPositionTile, battleTile);
     const defenderBonus = this._battleBonus(defenderUnit, battleTile, battleTile);
     this._applyEffectBonus(attackerUnit, defenderUnit, attackerBonus);
@@ -3855,11 +3939,11 @@ export class Game {
     // "後" にまとめて再生する - 選択中に相手の装備が画面上に見えることは
     // ない。
     const attackerItem = attackerPlayer.isCPU
-      ? this._cpuPickBattleItem(attackerPlayer)
+      ? this._cpuPickBattleItem(attackerPlayer, attackerUnit)
       : await this.onPickBattleItem(
           {
-            hand: attackerPlayer.hand.filter((c) => c.type === CardType.GEAR),
-            opponentHand: defenderPlayer.hand.filter((c) => c.type === CardType.GEAR),
+            hand: attackerPlayer.hand.filter(isBattleItemCard),
+            opponentHand: defenderPlayer.hand.filter(isBattleItemCard),
             side: 'attacker',
             ownerName: attackerPlayer.name,
             opponentName: defenderPlayer.name,
@@ -3868,11 +3952,11 @@ export class Game {
           attackerPlayer.id,
         );
     const defenderItem = defenderPlayer.isCPU
-      ? this._cpuPickBattleItem(defenderPlayer)
+      ? this._cpuPickBattleItem(defenderPlayer, defenderUnit)
       : await this.onPickBattleItem(
           {
-            hand: defenderPlayer.hand.filter((c) => c.type === CardType.GEAR),
-            opponentHand: attackerPlayer.hand.filter((c) => c.type === CardType.GEAR),
+            hand: defenderPlayer.hand.filter(isBattleItemCard),
+            opponentHand: attackerPlayer.hand.filter(isBattleItemCard),
             side: 'defender',
             ownerName: defenderPlayer.name,
             opponentName: attackerPlayer.name,
@@ -3884,11 +3968,16 @@ export class Game {
 
     const equippedAttackerItem = this._consumeBattleItem(attackerPlayer, attackerUnit, attackerItem);
     const equippedDefenderItem = this._consumeBattleItem(defenderPlayer, defenderUnit, defenderItem);
+    const attackerFusion = this._applyTrainFusion(attackerUnit, equippedAttackerItem);
+    const defenderFusion = this._applyTrainFusion(defenderUnit, equippedDefenderItem);
+    if (attackerFusion) attackerBase = this._baseStats(attackerUnit);
+    if (defenderFusion) defenderBase = this._baseStats(defenderUnit);
     if (equippedAttackerItem) {
       await this.onBattleEquip({
         side: 'attacker', item: equippedAttackerItem, unitName: attackerUnit.def.name,
         baseAtk: attackerBase.atk, baseHp: attackerBase.hp,
         existingAtkBonus: attackerBonus.atk, existingHpBonus: attackerBonus.hp,
+        fusionCard: attackerFusion,
       });
       if (this._isCancelled) return null;
     }
@@ -3897,6 +3986,7 @@ export class Game {
         side: 'defender', item: equippedDefenderItem, unitName: defenderUnit.def.name,
         baseAtk: defenderBase.atk, baseHp: defenderBase.hp,
         existingAtkBonus: defenderBonus.atk, existingHpBonus: defenderBonus.hp,
+        fusionCard: defenderFusion,
       });
       if (this._isCancelled) return null;
     }

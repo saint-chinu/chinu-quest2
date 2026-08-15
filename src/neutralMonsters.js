@@ -17,7 +17,31 @@ const neutralMonster = (id, name, rarity, hp, atk, options = {}) => ({
   ...(options.traits ? { traits: options.traits } : {}),
   ...(options.effect ? { effect: options.effect } : {}),
   ...(options.effectDescription ? { effectDescription: options.effectDescription } : {}),
+  ...(options.dualUseItem ? {
+    dualUseItem: true,
+    atkBonus: options.atkBonus || 0,
+    hpBonus: options.hpBonus || 0,
+  } : {}),
   imageDataUrl: options.imageDataUrl ?? assetUrl(`/images/card-art/${id}.jpg`),
+});
+
+export const BATTLE_TRAIN_ID = 'battleTrain';
+export const SACRIFICE_CAR_ID = 'sacrificeCar';
+
+/** 戦闘列車と供物車両を互いに装備した時だけ盤面上で生まれる合体形態。 */
+export const Q_LINER_FIELD_MONSTER = neutralMonster('qLiner', '超特急・Qライナー', Rarity.EX, 60, 50, {
+  cost: 110,
+  traits: ['firstStrike', 'pierce'],
+  effect: { type: 'fusionForm', tollMultiplier: 1.5 },
+  effectDescription: '先制・貫通。このカードが配置された土地の通行料は1.5倍',
+  imageDataUrl: assetUrl('/images/card-art/qLiner.png'),
+});
+
+export const Q_TRAIN_FIELD_MONSTER = neutralMonster('qTrain', '鉄壁環状・Qトレイン', Rarity.EX, 70, 30, {
+  cost: 110,
+  effect: { type: 'nonNeutralDamageCut', damage: 30, tollMultiplier: 1.5 },
+  effectDescription: '無属性以外のモンスターから受ける攻撃ダメージを30軽減。このカードが配置された土地の通行料は1.5倍',
+  imageDataUrl: assetUrl('/images/card-art/qTrain.png'),
 });
 
 /**
@@ -44,8 +68,24 @@ export const GASHAAN_FIELD_MONSTER = {
   imageDataUrl: assetUrl('/images/card-art/gasya-n.png'),
 };
 
-/** 無属性モンスター20種。画像未指定時はcardArt.jsの無属性共通画像を使う。 */
+/** 無属性モンスター一覧。画像未指定時はcardArt.jsの無属性共通画像を使う。 */
 export const NEUTRAL_MONSTER_CATALOG = {
+  battleTrain: neutralMonster(BATTLE_TRAIN_ID, '戦闘列車', Rarity.S, 20, 30, {
+    cost: 70,
+    dualUseItem: true,
+    atkBonus: 30,
+    hpBonus: 20,
+    effectDescription: '装備アイテムとしても使える。供物車両を装備すると合体する。',
+    imageDataUrl: assetUrl('/images/card-art/battleTrain.png'),
+  }),
+  sacrificeCar: neutralMonster(SACRIFICE_CAR_ID, '供物車両', Rarity.S, 40, 10, {
+    cost: 60,
+    dualUseItem: true,
+    atkBonus: 10,
+    hpBonus: 40,
+    effectDescription: '装備アイテムとしても使える。戦闘列車を装備すると合体する。',
+    imageDataUrl: assetUrl('/images/card-art/sacrificeCar.png'),
+  }),
   sekizou: neutralMonster('sekizou', '石像', Rarity.N, 30, 10, { cost: 0 }),
   netBenkei: neutralMonster('netBenkei', 'ネット弁慶', Rarity.N, 50, 50, {
     effect: { type: 'statOverrideInBattle', hp: 20, atk: 20 },
