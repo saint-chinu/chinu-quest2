@@ -1727,7 +1727,8 @@ export class Game {
     // マダイはステージ2の周回進行を最優先する。高額空地へ寄り道させると
     // 左右の環状路のCP付近を循環し続けることがあるため、未通過CP→ゴール
     // の順を常に目標にする。他CPUの「高額空地優先」は維持する。
-    const prioritizesLapRoute = player.name === '暴君マダイ';
+    const isDanball = this._isDanballBoss(player);
+    const prioritizesLapRoute = player.name === '暴君マダイ' || isDanball;
     const valuableEmpty = prioritizesLapRoute ? [] : this._cpuHighValueEmptyLands();
     const target = valuableEmpty.length > 0
       ? valuableEmpty.reduce((best, tile) => {
@@ -1744,6 +1745,20 @@ export class Game {
       // 選択後の進行方向を含む状態で距離を測る。
       const distance = target == null ? 0 : this._forwardTileDistance(id, player.tileId, target);
       let score = -distance;
+      if (isDanball) {
+        // CP→ゴールへの距離は絶対優先。同じ最短距離の方向だけで、ギアを
+        // 置ける空地、その次に通常モンスターを置ける空地をタイブレークに使う。
+        if (tile.type === TileType.LAND && tile.owner == null) {
+          const hasGear = player.hand.some((card) =>
+            card.type === CardType.MONSTER
+            && ['kodaiNoGearA', 'kodaiNoGearB', 'kodaiNoGearC'].includes(catalogIdOf(card))
+            && player.currency >= (card.cost || 0));
+          const hasMonster = player.hand.some((card) => card.type === CardType.MONSTER && player.currency >= (card.cost || 0));
+          if (hasGear) score += 0.2;
+          else if (hasMonster) score += 0.1;
+        }
+        return score;
+      }
       if (leadingOniku && onikuLands.length > 0) {
         const onikuDistance = Math.min(...onikuLands.map((land) => this._forwardTileDistance(id, player.tileId, land.id)));
         if (Number.isFinite(onikuDistance)) score += Math.max(0, 4 - onikuDistance * 0.5);
@@ -3414,10 +3429,9 @@ export class Game {
 
   /**
    * ダンボール男専用の召喚カード選択（合体ロボ・ガシャーン＝3種のギアを揃えるのが狙い）。
-   * ①止まった空き地の属性にマッチするモンスターをレアリティの高い順に召喚
-   * ②マッチしない場合は古代のギアA/B/Cを優先召喚
-   * ④⑤⑥既に自分の土地にあるギアと別種のギアを優先（3種そろえて合体を狙う）
-   * （③の「未知との遭遇」優先使用はスペルフェーズの_cpuMaybeUseEncounterSpellで処理）
+   * ①古代のギアA/B/C（未配置の種類を優先）
+   * ②ギアが無い時だけ、土地属性に合う通常モンスターをレアリティ順に召喚。
+   * 「未知との遭遇」はスペルフェーズの_cpuMaybeUseEncounterSpellで処理する。
    */
   _cpuChooseSummonCardForDanball(options, tile, player) {
     const GEAR_IDS = ['kodaiNoGearA', 'kodaiNoGearB', 'kodaiNoGearC'];
@@ -3437,8 +3451,11 @@ export class Game {
     };
     const gears = options.filter(isGear);
 
-    // ① 止まった空き地の属性を活かせるモンスターをレアリティの高い順に【最優先】。
-    // 属性マッチのカードが手札にあれば必ずこれを召喚する。
+    // 合体ロボ成立を通常召喚より優先。未配置の種類から置き、3種目なら
+    // その召喚直後にガシャーンへ合体する。
+    if (gears.length > 0) return pickGear(gears);
+
+    // ギアが無い場合だけ、通常モンスターを土地属性・レアリティ順で選ぶ。
     // レインボーカメレオンは有属性土地でここに含まれ、無色地では含まれない。
     {
       const matching = options.filter((c) => this._cardBenefitsFromLandElement(c, tile));
@@ -3451,11 +3468,6 @@ export class Game {
         return top[0];
       }
     }
-
-    // ②④⑤⑥ 属性マッチのカードが手札に無い空き地でのみ、合体（ガシャーン）を狙って
-    // ギアを優先召喚する。pickGearが「まだ自分の土地に無い種類」を優先するので、
-    // 合体条件を前進させるギアから置いていく。
-    if (gears.length > 0) return pickGear(gears);
 
     // フォールバック: 土地を活かせるカード優先でレアリティの高い順（ギアが無い時のレインボー等）。
     const fallbackMatching = options.filter((c) => this._cardBenefitsFromLandElement(c, tile));
