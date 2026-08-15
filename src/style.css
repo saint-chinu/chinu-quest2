@@ -2662,20 +2662,45 @@ html, body {
 .card-hand-monster-stats {
   position: absolute;
   left: 3px;
-  right: 3px;
   bottom: 3px;
   display: flex;
-  justify-content: space-between;
-  gap: 2px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
   padding: 2px 3px;
   border-radius: 4px;
   background: rgba(0, 0, 0, 0.68);
   color: #fff;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 800;
   line-height: 1;
   text-shadow: 0 1px 2px #000;
 }
+
+.card-monster-traits {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+  color: #fff3a8;
+  font-size: 8px;
+  font-weight: 900;
+  line-height: 1;
+  text-shadow: 0 1px 2px #000, 0 0 3px #000;
+}
+
+.card-monster-traits span {
+  padding: 1px 3px;
+  border-radius: 3px;
+  background: rgba(30, 19, 5, 0.78);
+}
+
+.card-large .card-hand-monster-stats { font-size: 15px; padding: 4px 6px; gap: 3px; }
+.card-large .card-monster-traits { font-size: 13px; gap: 3px; }
+.card-large .card-monster-traits span { padding: 2px 5px; }
 
 .card-large .card-rarity {
   font-size: 23px;

@@ -1136,7 +1136,16 @@ deckRatioModal.addEventListener('click', (event) => {
   if (event.target === deckRatioModal) deckRatioModal.classList.add('hidden');
 });
 
-/** Rarity badge (top-left) + type icon (top-right) + name, over the element/type background color. */
+// ショップの属性パックとモンスターカードで同じ絵文字を共有する。
+const ELEMENT_EMOJI = Object.freeze({
+  [Element.FIRE]: '🔥',
+  [Element.FOREST]: '🌿',
+  [Element.WATER]: '💧',
+  [Element.THUNDER]: '⚡',
+  [Element.NEUTRAL]: '⚪',
+});
+
+/** レア度・属性/種類・名前・モンスター基礎値/戦闘特性をカード上へ描画する。 */
 function renderCardEl(el, card, { showMonsterStats = false } = {}) {
   const artUrl = card.imageDataUrl || defaultCardArtUrl(card);
   if (artUrl) {
@@ -1157,8 +1166,10 @@ function renderCardEl(el, card, { showMonsterStats = false } = {}) {
 
   const typeIcon = document.createElement('span');
   typeIcon.className = 'card-type-icon';
-  typeIcon.textContent = card.dualUseItem
-    ? `${TYPE_ICON[CardType.MONSTER]}${TYPE_ICON[CardType.GEAR]}`
+  // モンスターは従来の種類アイコンを廃止し、右上を属性表示に統一する。
+  // モンスター兼アイテムも盤面へ召喚できるカードなので属性を優先する。
+  typeIcon.textContent = card.type === CardType.MONSTER
+    ? (ELEMENT_EMOJI[card.element] || ELEMENT_EMOJI[Element.NEUTRAL])
     : (TYPE_ICON[card.type] || '');
 
   const name = document.createElement('span');
@@ -1166,11 +1177,31 @@ function renderCardEl(el, card, { showMonsterStats = false } = {}) {
   name.textContent = card.name;
 
   el.append(rarity, typeIcon, name);
-  if (showMonsterStats && card.type === CardType.MONSTER) {
+  if (card.type === CardType.MONSTER) {
     const stats = document.createElement('span');
     stats.className = 'card-hand-monster-stats';
-    stats.innerHTML = `<span>❤️${card.hp ?? 0}</span><span>⚔️${card.atk ?? 0}</span>`;
+    const hp = document.createElement('span');
+    hp.textContent = `❤️${card.hp ?? 0}`;
+    const atk = document.createElement('span');
+    atk.textContent = `⚔️${card.atk ?? 0}`;
+    stats.append(hp, atk);
     el.appendChild(stats);
+
+    const visibleTraits = [
+      ['firstStrike', '先制'],
+      ['lastStrike', '後攻'],
+      ['pierce', '貫通'],
+    ].filter(([id]) => card.traits?.includes(id));
+    if (visibleTraits.length > 0) {
+      const traits = document.createElement('span');
+      traits.className = 'card-monster-traits';
+      for (const [, label] of visibleTraits) {
+        const badge = document.createElement('span');
+        badge.textContent = label;
+        traits.appendChild(badge);
+      }
+      el.appendChild(traits);
+    }
   }
 }
 
@@ -5279,11 +5310,11 @@ function openShopSellConfirm() {
 }
 
 const SHOP_PACK_ICONS = Object.freeze({
-  fire: '🔥',
-  forest: '🌿',
-  water: '💧',
-  thunder: '⚡',
-  neutral: '⚪',
+  fire: ELEMENT_EMOJI[Element.FIRE],
+  forest: ELEMENT_EMOJI[Element.FOREST],
+  water: ELEMENT_EMOJI[Element.WATER],
+  thunder: ELEMENT_EMOJI[Element.THUNDER],
+  neutral: ELEMENT_EMOJI[Element.NEUTRAL],
   item: '⚔️',
   spell: '📖',
 });
