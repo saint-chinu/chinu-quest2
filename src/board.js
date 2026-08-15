@@ -140,9 +140,7 @@ export const MAPS = [
   { id: 'budou', name: '③ 決闘の浜辺', rows: BUDOU_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage3.png'), spacing: 2.8 },
   { id: 'q-train', name: '④ 暴走列車Q号', rows: Q_TRAIN_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage-q-train.png'), spacing: 2.8 },
   { id: 'danball', name: '⑤ 暗転した世界', rows: DANBALL_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage4.png'), spacing: 2.8 },
-  // ⑥は「彼」が創造した暗黒世界。専用背景が用意されるまでは、物語上
-  // 連続している⑤の暗転世界を使い、最終決戦用の同一盤面として扱う。
-  { id: 'kare', name: '⑥ 創造主の世界', rows: DANBALL_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage4.png'), spacing: 2.8 },
+  { id: 'kare', name: '⑥ 創造主の世界', rows: DANBALL_ROWS, requireAllCheckpoints: true, background: assetUrl('/images/stage/stage6-cyberspace.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {
