@@ -24,16 +24,40 @@ export function getWaitCutRate() {
   return speedState.waitCutRate;
 }
 
-/** Resolves after `durationMs`（速度倍率で短縮）, calling onUpdate(t) once per animation frame with t in [0,1]. */
+/**
+ * Resolves after `durationMs`（速度倍率で短縮）, calling onUpdate(t) once per
+ * animation frame with t in [0,1].
+ *
+ * requestAnimationFrameはタブが非アクティブ（バックグラウンド化・画面回転・
+ * 別アプリ切替など）になると完全に停止する。それだけに頼ると、演出の最中に
+ * 画面が隠れた瞬間tweenのPromiseが永久に解決されず、召喚後のカメラ戻し等で
+ * 「行動終了と共にフリーズ」してターンが進まなくなる。setTimeoutは背景でも
+ * （間引かれはするが）必ず発火するので、所要時間＋余裕の保険タイマーで必ず
+ * 最終状態へスナップして解決させる。通常時はrAF側が先に完走し保険は解除される。
+ */
 export function tween(durationMs, onUpdate) {
   return new Promise((resolve) => {
     const scaledDuration = durationMs / speedState.multiplier;
     const start = performance.now();
+    let settled = false;
+    let watchdog = null;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (watchdog !== null) clearTimeout(watchdog);
+      onUpdate(1);
+      resolve();
+    };
+    watchdog = setTimeout(finish, scaledDuration + 500);
     function step(now) {
+      if (settled) return;
       const t = scaledDuration <= 0 ? 1 : Math.min(1, (now - start) / scaledDuration);
-      onUpdate(t);
-      if (t < 1) requestAnimationFrame(step);
-      else resolve();
+      if (t < 1) {
+        onUpdate(t);
+        requestAnimationFrame(step);
+      } else {
+        finish();
+      }
     }
     requestAnimationFrame(step);
   });
