@@ -6,7 +6,7 @@ import { assetUrl } from './assetUrl.js';
 
 export const NPC_PORTRAIT_URL = {
   '「彼」': assetUrl('/images/npc-portraits/kare.png'),
-  Q: assetUrl('/images/npc-portraits/q.png'),
+  Q: assetUrl('/images/npc-portraits/q.png?v=2'),
   'ダンボール男': assetUrl('/images/npc-portraits/danballman.png'),
   '暴君マダイ': assetUrl('/images/npc-portraits/madai.png'),
   'お肉': assetUrl('/images/npc-portraits/nikuchan.png'),
@@ -20,7 +20,7 @@ export const NPC_PORTRAIT_URL = {
 // 前提とする1.6×1.6の正方形スプライトにそのまま合う）。
 export const NPC_TOKEN_URL = {
   '「彼」': assetUrl('/images/npc-tokens/kare.png'),
-  Q: assetUrl('/images/npc-tokens/q.png'),
+  Q: assetUrl('/images/npc-tokens/q.png?v=2'),
   'ダンボール男': assetUrl('/images/npc-tokens/danballman.png'),
   '暴君マダイ': assetUrl('/images/npc-tokens/madai.png'),
   'お肉': assetUrl('/images/npc-tokens/nikuchan.png'),
@@ -40,6 +40,7 @@ export function loadNpcTokenImage(name) {
 
   const promise = new Promise((resolve) => {
     const img = new Image();
+    let retried = false;
     img.onload = () => {
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth;
@@ -47,7 +48,18 @@ export function loadNpcTokenImage(name) {
       canvas.getContext('2d').drawImage(img, 0, 0);
       resolve(canvas);
     };
-    img.onerror = () => resolve(null);
+    // 通信瞬断やCDNの古い404を一度引いただけで、解決済みnullのPromiseを
+    // セッション中ずっと使い回さない。失敗キャッシュを捨て、次回の盤面開始で
+    // 再取得できるようにする（Qの駒が色付き丸へ戻る現象の対策）。
+    img.onerror = () => {
+      if (!retried) {
+        retried = true;
+        img.src = `${url}${url.includes('?') ? '&' : '?'}retry=${Date.now()}`;
+        return;
+      }
+      tokenImageCache.delete(url);
+      resolve(null);
+    };
     img.src = url;
   });
   tokenImageCache.set(url, promise);
