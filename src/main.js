@@ -2151,8 +2151,27 @@ function showBattleDamageNumber(targetCard, damage) {
     el.style.left = `${rect.left + rect.width / 2 - layerRect.left}px`;
     el.style.top = `${rect.top + rect.height * 0.35 - layerRect.top}px`;
     fxLayer.appendChild(el);
-    el.addEventListener('animationend', () => { el.remove(); resolve(); }, { once: true });
+    waitForVisualAnimation(el, resolve, 1800);
   });
+}
+
+/**
+ * 画面回転・バックグラウンド復帰などで animationend が欠落しても、
+ * ゲーム進行を永久に止めないための共通フォールバック。
+ */
+function waitForVisualAnimation(el, resolve, timeoutMs) {
+  let settled = false;
+  let watchdog = null;
+  const finish = () => {
+    if (settled) return;
+    settled = true;
+    if (watchdog !== null) clearTimeout(watchdog);
+    el.removeEventListener('animationend', finish);
+    el.remove();
+    resolve();
+  };
+  el.addEventListener('animationend', finish, { once: true });
+  watchdog = setTimeout(finish, timeoutMs);
 }
 
 function animateBattleHp(targetEls, targetHp) {
@@ -2161,17 +2180,27 @@ function animateBattleHp(targetEls, targetHp) {
   return new Promise((resolve) => {
     const started = performance.now();
     const duration = 650;
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(watchdog);
+      targetEls.hp.textContent = String(targetHp);
+      targetEls.hp.dataset.current = String(targetHp);
+      const maxHp = Number(targetEls.hp.dataset.max) || Math.max(from, 1);
+      targetEls.hpFill.style.width = `${Math.max(0, Math.min(100, (targetHp / maxHp) * 100))}%`;
+      resolve();
+    };
+    const watchdog = setTimeout(finish, duration + 500);
     function frame(now) {
+      if (settled) return;
       const t = Math.min(1, (now - started) / duration);
       const value = Math.round(from + (targetHp - from) * t);
       targetEls.hp.textContent = String(value);
       const maxHp = Number(targetEls.hp.dataset.max) || Math.max(from, 1);
       targetEls.hpFill.style.width = `${Math.max(0, Math.min(100, (value / maxHp) * 100))}%`;
       if (t < 1) requestAnimationFrame(frame);
-      else {
-        targetEls.hp.dataset.current = String(targetHp);
-        resolve();
-      }
+      else finish();
     }
     requestAnimationFrame(frame);
   });
@@ -2216,14 +2245,7 @@ function showDamageNumber(tile, damage) {
     el.style.left = `${pos.x}px`;
     el.style.top = `${pos.y}px`;
     fxLayer.appendChild(el);
-    el.addEventListener(
-      'animationend',
-      () => {
-        el.remove();
-        resolve();
-      },
-      { once: true },
-    );
+    waitForVisualAnimation(el, resolve, 1800);
   });
 }
 
