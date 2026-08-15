@@ -8,12 +8,20 @@ export function easeInOutQuad(t) {
  * これを参照して所要時間を短縮する。main.jsのsetTimeout/setIntervalも
  * これを参照するローカルシャドウ経由で同じ倍率がかかる（main.js側参照）。
  */
-export const speedState = { multiplier: 1 };
+export const speedState = { multiplier: 1, waitCutRate: 0 };
 export function setSpeedMultiplier(value) {
   speedState.multiplier = value > 0 ? value : 1;
 }
 export function getSpeedMultiplier() {
   return speedState.multiplier;
+}
+
+/** 対人戦専用の固定待機カット率（0〜0.7）。移動tweenには適用しない。 */
+export function setWaitCutRate(value) {
+  speedState.waitCutRate = Math.min(0.7, Math.max(0, Number(value) || 0));
+}
+export function getWaitCutRate() {
+  return speedState.waitCutRate;
 }
 
 /** Resolves after `durationMs`（速度倍率で短縮）, calling onUpdate(t) once per animation frame with t in [0,1]. */
@@ -32,7 +40,7 @@ export function tween(durationMs, onUpdate) {
 }
 
 export function delay(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms / speedState.multiplier));
+  return new Promise((resolve) => setTimeout(resolve, (ms * (1 - speedState.waitCutRate)) / speedState.multiplier));
 }
 
 export function randomInt(min, max) {

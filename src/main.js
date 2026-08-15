@@ -47,7 +47,7 @@ import {
   beginPvpMatch,
 } from './pvp.js';
 import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted, playSfx } from './audio.js';
-import { getSpeedMultiplier, setSpeedMultiplier } from './utils.js';
+import { getSpeedMultiplier, setSpeedMultiplier, getWaitCutRate, setWaitCutRate } from './utils.js';
 
 // 盤面メニューの速度調整（1倍/1.5倍/2倍/3倍）: game.js/scene.jsはtween/delay
 // （utils.js）経由で既に倍率がかかるが、main.js自身のメッセージ表示・演出待ちは
@@ -55,8 +55,9 @@ import { getSpeedMultiplier, setSpeedMultiplier } from './utils.js';
 // 同じ倍率を一括適用する（各呼び出し箇所を個別に書き換えずに済ませるため）。
 // Firestoreフェッチのタイムアウトガードのような「演出ではない」待ちは
 // window.setTimeoutを明示して意図的にこの対象から外す（該当箇所参照）。
-const setTimeout = (handler, timeoutMs, ...args) => window.setTimeout(handler, (timeoutMs ?? 0) / getSpeedMultiplier(), ...args);
-const setInterval = (handler, timeoutMs, ...args) => window.setInterval(handler, (timeoutMs ?? 0) / getSpeedMultiplier(), ...args);
+const scaledWaitMs = (timeoutMs) => ((timeoutMs ?? 0) * (1 - getWaitCutRate())) / getSpeedMultiplier();
+const setTimeout = (handler, timeoutMs, ...args) => window.setTimeout(handler, scaledWaitMs(timeoutMs), ...args);
+const setInterval = (handler, timeoutMs, ...args) => window.setInterval(handler, scaledWaitMs(timeoutMs), ...args);
 
 const canvas = document.getElementById('game-canvas');
 const fxLayer = document.getElementById('fx-layer');
@@ -2568,6 +2569,8 @@ function animate() {
  * CPU, Gameコンストラクタ側のフォールバックが組む)。
  */
 function startBattle(character, storyOptions = {}) {
+  // 待機カットは対人戦だけ。CPU戦・ストーリー開始時には必ず無効化する。
+  setWaitCutRate(pvpMatch ? selectedPvpWaitCutRate : 0);
   currentMapId = storyOptions.mapId ?? null;
   applyMapBackground(currentMapId);
   // 目標G表示（2026-08-12実装）: ストーリーの各ステージが持つgoalCurrency
@@ -2707,6 +2710,7 @@ const landInfoButton = document.getElementById('land-info-button');
 const gameMenuModal = document.getElementById('game-menu-modal');
 const gameMenuMute = document.getElementById('game-menu-mute');
 const gameMenuSpeed = document.getElementById('game-menu-speed');
+const gameMenuPvpWait = document.getElementById('game-menu-pvp-wait');
 const gameMenuHelp = document.getElementById('game-menu-help');
 const gameMenuBan = document.getElementById('game-menu-ban');
 const gameMenuExit = document.getElementById('game-menu-exit');
@@ -2741,11 +2745,30 @@ gameMenuSpeed.addEventListener('click', () => {
   syncSpeedButtonLabel();
 });
 
+// 対人戦専用: 固定待機時間を何%削るかを選ぶ。0%は従来どおり。
+const PVP_WAIT_CUT_CYCLE = [0, 0.3, 0.5, 0.7];
+let selectedPvpWaitCutRate = 0;
+function syncPvpWaitButtonLabel() {
+  gameMenuPvpWait.textContent = `⏱ 待機カット: ${Math.round(selectedPvpWaitCutRate * 100)}%`;
+}
+syncPvpWaitButtonLabel();
+gameMenuPvpWait.addEventListener('click', () => {
+  if (!pvpMatch?.isHost) return;
+  const currentIndex = PVP_WAIT_CUT_CYCLE.indexOf(selectedPvpWaitCutRate);
+  selectedPvpWaitCutRate = PVP_WAIT_CUT_CYCLE[(currentIndex + 1) % PVP_WAIT_CUT_CYCLE.length];
+  setWaitCutRate(pvpMatch ? selectedPvpWaitCutRate : 0);
+  syncPvpWaitButtonLabel();
+  game?._notifyState?.();
+});
+
 menuButton.addEventListener('click', () => {
   // サイコロ回転中にメニューを開いたら回転を止める（確定前の中断）。
   if (diceState === 'spinning') resetDice();
   gameMenuModal.classList.remove('hidden');
   gameMenuBan.classList.toggle('hidden', !(pvpMatch?.isHost && game));
+  // 進行速度の混線を避けるため変更権限はホストだけ。参加者へは公開状態で
+  // 同じ率を同期し、全端末の表示待ちを揃える。
+  gameMenuPvpWait.classList.toggle('hidden', !pvpMatch?.isHost);
 });
 
 gameMenuBan.addEventListener('click', () => {
@@ -6158,6 +6181,11 @@ function applyPvpBoardState(publicState) {
 function applyPvpPublicState(publicState) {
   if (!publicState || !pvpMatch) return;
   pvpMatch.latestPublicState = publicState;
+  if (!pvpMatch.isHost && publicState.waitCutRate != null) {
+    selectedPvpWaitCutRate = publicState.waitCutRate;
+    setWaitCutRate(selectedPvpWaitCutRate);
+    syncPvpWaitButtonLabel();
+  }
   const isMyTurn = publicState.currentPlayerId === pvpMatch.localPlayerId;
   const showCenter = publicState.awaitingRoll && !publicState.isBusy;
 
@@ -6231,6 +6259,7 @@ async function startPvpGuestBattle() {
   appEl.classList.remove('hidden');
 
   clearPvpPieces();
+  setWaitCutRate(selectedPvpWaitCutRate);
   currentMapId = pvpLastRoom?.mapId ?? null;
   applyMapBackground(currentMapId);
   scene = new GameScene(canvas);
@@ -6264,6 +6293,7 @@ async function startPvpGuestBattle() {
       pvpMatch?.listener?.destroy();
       pvpMatch?.actionSender?.destroy();
       clearPvpPieces();
+      setWaitCutRate(0);
       pvpMatch = null;
       stopMusic();
       appEl.classList.add('hidden');
@@ -6465,6 +6495,7 @@ async function handlePvpBattleEnd(result = {}) {
     console.error('対人戦の終了通知に失敗しました', error);
   });
   clearPvpPieces();
+  setWaitCutRate(0);
   pvpMatch = null;
   game = undefined;
   stopMusic();
@@ -6576,6 +6607,7 @@ gameMenuExit.addEventListener('click', async () => {
   }
   pvpMatch = null;
   game = undefined;
+  setWaitCutRate(0);
   stopMusic();
   appEl.classList.add('hidden');
   preGame.classList.remove('hidden');
@@ -6620,6 +6652,7 @@ function forceTerminateBoardSession() {
   }
   pvpMatch = null;
   game = undefined;
+  setWaitCutRate(0);
   scene = undefined;
   tiles = undefined;
   currentMapId = null;

@@ -4,7 +4,7 @@ import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity } from './ca
 import { buildStarterCardList, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf } from './battleCards.js';
 import { createFieldUnit, resolveBattle, equipItem, applyCurse, applyPoison, GoldLedger, hasTrait, strikeOrderScore } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
-import { tween, easeInOutQuad, delay } from './utils.js';
+import { tween, easeInOutQuad, delay, getWaitCutRate } from './utils.js';
 import { DENCHU_FIELD_MONSTER } from './thunderMonsters.js';
 import { GASHAAN_FIELD_MONSTER } from './neutralMonsters.js';
 import { resolveAiProfile } from './aiProfiles.js';
@@ -5085,6 +5085,7 @@ export class Game {
       isBusy: this.isBusy,
       spellUsedThisTurn: this.currentPlayer.spellUsedThisTurn,
       fixedDiceValue: this.currentPlayer.diceCurse?.type === 'fixed' ? this.currentPlayer.diceCurse.value : null,
+      waitCutRate: getWaitCutRate(),
       turnHand: this.awaitingRoll && !this.isBusy ? this.currentPlayer.hand : [],
       checkpointNumbers: this.checkpointNumbers,
       players: playersPayload,
