@@ -111,14 +111,40 @@ function getEffect(unit, type) {
   return item ? item.effect : null;
 }
 
-/** Call once right before a battle to lock in this fight's max HP. */
+/** 素の最大HP（呪い・アイテム・属性地などの一時加算を一切含まない、def由来の
+ *  HP）。盤面に居る間の「持ち越しダメージ」はこのスケールで測る。ネット弁慶の
+ *  statOverrideInBattleだけは素のHP自体を固定値に差し替えるので考慮する。 */
+function baseMaxHp(unit) {
+  return unit.def.effect?.type === 'statOverrideInBattle' ? unit.def.effect.hp : unit.def.hp;
+}
+
+/**
+ * Call once right before a battle to lock in this fight's max HP.
+ * 盤面に配置されている間に受けたダメージ（素の最大HPに対する不足分）は戦闘へ
+ * 持ち越す（毎戦闘フル回復しない）。属性地・アイテム・呪いによるHP上乗せは
+ * この戦闘限りの"シールド"として満タン側から乗る（＝持ち越しダメージを引いた
+ * 上で戦闘用の最大HPになる）。手札に戻ったカードは新規インスタンス化される
+ * ので、その時点で自動的に全快扱いに戻る（resolveBattle末尾の再格納も参照）。
+ */
 export function prepareForBattle(unit, bonus = {}) {
+  const battleMax = statTotals(unit, bonus).maxHp;
+  const carriedDamage = Math.max(0, baseMaxHp(unit) - unit.currentHp);
   // マイナスHPアイテム（諸刃の剣-20/鉄パイプ-5）やアイテム効果2倍(Ninja)・
   // ステータス上書き(ネット弁慶)の組み合わせで最大HPが0以下になると、
   // resolveBattleの攻撃ループが「currentHp > 0」ガードで全ての一撃をスキップし、
   // 演出もダメージも撃破も出ないまま戦闘が無音で終わってしまう。最低でも1は
   // 残し、必ず一度は戦えるようにする（諸刃の剣の"大振りできるが脆い"性質は維持）。
-  unit.currentHp = Math.max(1, statTotals(unit, bonus).maxHp);
+  unit.currentHp = Math.max(1, battleMax - carriedDamage);
+  unit._battleMaxHp = battleMax;
+}
+
+/** 戦闘後、盤面に生き残ったユニットのcurrentHpを「素のHPスケール」へ戻す。
+ *  戦闘中の一時シールド分を剥がし、受けた総ダメージだけを盤面の状態として残す
+ *  ことで、次の戦闘までダメージが持ち越され、盤面表示(def.hp基準)とも一致する。 */
+function restoreOnBoardHp(unit) {
+  const battleMax = unit._battleMaxHp ?? baseMaxHp(unit);
+  const damage = Math.max(0, battleMax - unit.currentHp);
+  return Math.max(1, baseMaxHp(unit) - damage);
 }
 
 /** Traits may come from the monster itself, its one-use item, or a persistent spell curse. */
@@ -660,6 +686,11 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   defender.items = [];
   if (!finalAttackerSurvived) attacker.curses = [];
   if (!finalDefenderSurvived) defender.curses = [];
+
+  // 生き残った側は素のHPスケールへ戻し、受けたダメージを盤面に持ち越す。
+  // 倒された側は盤面から消える/手札に戻る際に新規化されるので触らない。
+  if (finalAttackerSurvived) attacker.currentHp = restoreOnBoardHp(attacker);
+  if (finalDefenderSurvived) defender.currentHp = restoreOnBoardHp(defender);
 
   return { log, dmgToAttacker, dmgToDefender, attackerSurvived: finalAttackerSurvived, defenderSurvived: finalDefenderSurvived, exchanges, itemSteals, itemDestructions };
 }
