@@ -2953,6 +2953,7 @@ const deckComposition = document.getElementById('deck-composition');
 const deckCatalogList = document.getElementById('deck-catalog-list');
 const deckCategoryTabs = document.getElementById('deck-category-tabs');
 const deckRarityFilters = document.getElementById('deck-rarity-filters');
+const deckCurrentTabs = document.getElementById('deck-current-tabs');
 const deckCurrentList = document.getElementById('deck-current-list');
 const deckSave = document.getElementById('deck-save');
 const deckBack = document.getElementById('deck-back');
@@ -4711,6 +4712,7 @@ function effectiveCatalog() {
 let deckWorkingCounts = null;
 let editingDeckIndex = 0;
 let deckActiveCategory = 'fire';
+let deckCurrentCategory = 'monster';
 const deckHiddenRarities = new Set();
 
 const DECK_CATEGORY_TABS = [
@@ -4733,10 +4735,16 @@ function currentDeckCategoryRank(card) {
       [Element.THUNDER]: 4,
     }[card.element] ?? 4;
   }
-  if (card.type === CardType.SPELL) return 5;
-  if (card.type === CardType.GEAR) return 6;
+  if (card.type === CardType.GEAR) return 5;
+  if (card.type === CardType.SPELL) return 6;
   return 7;
 }
+
+const DECK_CURRENT_TABS = [
+  { id: 'monster', label: 'モンスター', test: (card) => card.type === CardType.MONSTER },
+  { id: 'gear', label: 'アイテム', test: (card) => card.type === CardType.GEAR },
+  { id: 'spell', label: 'スペル', test: (card) => card.type === CardType.SPELL },
+];
 
 function deckTotal() {
   let total = 0;
@@ -4868,6 +4876,16 @@ function showDeckScreen() {
       const copyCap = Math.min(MAX_COPIES_PER_CARD, owned);
       const row = document.createElement('div');
       row.className = 'deck-row deck-add-row';
+      const minusBtn = document.createElement('button');
+      minusBtn.className = 'deck-add-button deck-add-minus';
+      minusBtn.textContent = '−';
+      minusBtn.disabled = count <= 0;
+      minusBtn.addEventListener('click', () => {
+        const next = Math.max(0, count - 1);
+        if (next) deckWorkingCounts.set(key, next);
+        else deckWorkingCounts.delete(key);
+        renderEditor();
+      });
       const plusBtn = document.createElement('button');
       plusBtn.className = 'deck-add-button';
       plusBtn.textContent = '＋';
@@ -4879,14 +4897,28 @@ function showDeckScreen() {
       const addedCount = document.createElement('strong');
       addedCount.className = 'deck-add-count';
       addedCount.textContent = `×${count}`;
-      row.append(makeInfo(def), addedCount, plusBtn);
+      row.append(makeInfo(def), minusBtn, addedCount, plusBtn);
       deckCatalogList.appendChild(row);
     }
 
+    deckCurrentTabs.replaceChildren();
+    for (const tabDef of DECK_CURRENT_TABS) {
+      const tab = document.createElement('button');
+      tab.type = 'button';
+      tab.className = `deck-current-tab${tabDef.id === deckCurrentCategory ? ' selected' : ''}`;
+      tab.textContent = tabDef.label;
+      tab.addEventListener('click', () => {
+        deckCurrentCategory = tabDef.id;
+        renderEditor();
+      });
+      deckCurrentTabs.appendChild(tab);
+    }
+
     deckCurrentList.replaceChildren();
+    const currentCategory = DECK_CURRENT_TABS.find((item) => item.id === deckCurrentCategory) || DECK_CURRENT_TABS[0];
     const currentEntries = [...deckWorkingCounts.entries()]
       .map(([key, count]) => ({ key, count, def: catalogByKey.get(key) }))
-      .filter(({ count, def }) => count > 0 && def)
+      .filter(({ count, def }) => count > 0 && def && currentCategory.test(def))
       .sort((a, b) => currentDeckCategoryRank(a.def) - currentDeckCategoryRank(b.def)
         || a.def.name.localeCompare(b.def.name, 'ja'));
     for (const { key, count, def } of currentEntries) {

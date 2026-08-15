@@ -1061,7 +1061,8 @@ html, body {
 
 #deck-editor-workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 250px;
+  /* 右ペインを約5mm広げ、候補リストとの境界を左へ移動する。 */
+  grid-template-columns: minmax(0, 1fr) calc(250px + 5mm);
   gap: 14px;
   width: min(980px, 96vw);
   min-height: 300px;
@@ -1077,7 +1078,8 @@ html, body {
 }
 
 #deck-category-tabs,
-#catalog-category-tabs {
+#catalog-category-tabs,
+#deck-current-tabs {
   display: flex;
   gap: 5px;
   overflow-x: auto;
@@ -1140,7 +1142,7 @@ html, body {
 
 .deck-add-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 32px 32px;
+  grid-template-columns: minmax(0, 1fr) 32px 32px 32px;
   align-items: center;
 }
 
@@ -1163,6 +1165,7 @@ html, body {
 }
 
 .deck-add-button:disabled { opacity: 0.3; }
+.deck-add-minus { background: #8b4652; }
 .deck-add-count { color: #ffd166; font-size: 12px; text-align: center; }
 .deck-card-detail-link { padding: 0; border: 0; background: none; color: #fff; text-align: left; }
 .card-summary-heading { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.35; }
@@ -1200,7 +1203,7 @@ html, body {
 .deck-current-row > button:disabled { opacity: 0.3; }
 
 @media (max-width: 760px) {
-  #deck-editor-workspace { grid-template-columns: minmax(0, 1fr) 210px; gap: 8px; }
+  #deck-editor-workspace { grid-template-columns: minmax(0, 1fr) calc(210px + 5mm); gap: 8px; }
   #deck-add-pane, #deck-current-pane { padding: 7px; }
   .deck-category-tab { padding: 6px 8px; font-size: 11px; }
 }
@@ -1615,6 +1618,25 @@ html, body {
   bottom: 17mm;
   width: 53.04vw;
   max-width: 468px;
+}
+
+#deck-current-tabs { padding-bottom: 7px; }
+
+.deck-current-tab {
+  flex: 0 0 auto;
+  padding: 6px 8px;
+  border: 1px solid #4a536b;
+  border-radius: 8px;
+  background: #242a3d;
+  color: #c8ccda;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.deck-current-tab.selected {
+  border-color: #ffd166;
+  background: #625126;
+  color: #fff;
 }
 
 .shop-sell-header {
