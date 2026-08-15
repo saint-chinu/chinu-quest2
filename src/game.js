@@ -2067,35 +2067,19 @@ export class Game {
     const landingOwner = tile.owner != null ? this.players.find((candidate) => candidate.id === tile.owner) : null;
     const isAlliedLand = landingOwner?.allianceId != null && landingOwner.allianceId === player.allianceId;
     const owesTollUnlessConquered = tile.type === TileType.LAND && tile.owner != null && tile.owner !== player.id && !isAlliedLand;
-    if (tile.type !== TileType.LAND && !isAdmin) return;
+    const accessibleOwnedTiles = isAdmin
+      ? this._ownedTiles(player)
+      : [...new Set(this._turnPathIds)]
+        .map((id) => this.tiles[id])
+        .filter((candidate) => candidate?.type === TileType.LAND && candidate.owner === player.id);
+    if (tile.type !== TileType.LAND && !isAdmin && accessibleOwnedTiles.length === 0) return;
 
     if (player.isCPU) {
-      if (tile.type === TileType.LAND && !isAdmin) {
+      if (tile.type === TileType.LAND && tile.owner !== player.id && !isAlliedLand) {
         await this._cpuLandCommand(player, tile);
-      } else if (isAdmin) {
-        // ゴール/CPにちょうど止まった時は全所有地から、通常の着地時は
-        // 現在地を含む操作可能地から、CPUが最も価値の高い投資先を選ぶ。
-        // 空き地への召喚や敵地への侵略が可能な通常LANDでは従来フローを
-        // 優先し、全土地アクセス権だけを理由に別の土地へ投資はしない。
-        const candidates = this._ownedTiles(player);
-        let usedAcquisitionAbility = false;
-        for (const ownedTile of candidates) {
-          if (await this._cpuMaybeMoveToHighValueLand(player, ownedTile)) {
-            usedAcquisitionAbility = true;
-            break;
-          }
-        }
-        for (const ownedTile of candidates) {
-          if (usedAcquisitionAbility) break;
-          if (await this._cpuMaybeAcquireHighValueLandByAbility(player, ownedTile)) {
-            usedAcquisitionAbility = true;
-            break;
-          }
-        }
-        if (!usedAcquisitionAbility) {
-          const target = this._cpuChooseLevelUpTile(player, candidates);
-          if (target) await this._cpuMaybeLevelUp(player, target);
-        }
+      } else {
+        // 人間と同じ権限範囲だけから、能力・移動・レベルアップを1つ選ぶ。
+        await this._cpuUseAccessibleLandCommand(player, accessibleOwnedTiles);
       }
       await this._settleLandingToll(player, tile, owesTollUnlessConquered);
       return;
@@ -3111,6 +3095,127 @@ export class Game {
   }
 
   /**
+   * CPU共通の土地コマンド判断。候補は呼び出し元が人間と同じ権限
+   * （今ターンに通過した所有地／ゴール・CP停止時は全所有地）へ絞る。
+   * スペルと同様に、効果を使う価値があるものを優先順に1件だけ実行する。
+   */
+  async _cpuUseAccessibleLandCommand(player, candidates) {
+    const accessible = candidates.filter((tile) => tile?.owner === player.id && tile.unit);
+    if (accessible.length === 0) return false;
+
+    // 固有AIも権限候補を必ず受け取り、盤面上の任意のガシャーンを直接
+    // 動かすことは禁止する。
+    if (await this._cpuMaybeUseGashaanTactics(player, accessible.map((tile) => tile.id))) return true;
+
+    for (const tile of accessible) {
+      if (await this._cpuMaybeUseDamageAbility(player, tile)) return true;
+    }
+    for (const tile of accessible) {
+      if (await this._cpuMaybeUseUtilityLandAbility(player, tile)) return true;
+    }
+    for (const tile of accessible) {
+      if (await this._cpuMaybeAcquireHighValueLandByAbility(player, tile)) return true;
+    }
+    for (const tile of accessible) {
+      if (await this._cpuMaybeMoveToHighValueLand(player, tile)) return true;
+    }
+
+    const levelTarget = this._cpuChooseLevelUpTile(player, candidates);
+    if (levelTarget && await this._cpuMaybeLevelUp(player, levelTarget)) return true;
+    return false;
+  }
+
+  /** 回復・ドロー・防御・属性調整など、即時に有益な土地能力のCPU判断。 */
+  async _cpuMaybeUseUtilityLandAbility(player, tile) {
+    const unitDef = tile.unit?.def;
+    const ability = unitDef?.ability;
+    const cost = unitDef?.commandCost ?? 0;
+    if (!ability || player.currency < cost) return false;
+    const spend = () => { player.currency -= cost; };
+
+    if (ability.type === 'healAllOwnedAndCleanse') {
+      const ownedUnits = this._ownedTiles(player).filter((candidate) => candidate.unit);
+      const needsHealing = ownedUnits.some((candidate) => {
+        const maxHp = this._baseStats(candidate.unit).hp + this._elementHpBonus(candidate.unit, candidate);
+        return candidate.unit.currentHp < maxHp || (candidate.unit.curses?.length || 0) > 0;
+      });
+      if (!needsHealing) return false;
+      spend();
+      for (const candidate of ownedUnits) {
+        candidate.unit.curses = [];
+        candidate.unit.currentHp = this._baseStats(candidate.unit).hp + this._elementHpBonus(candidate.unit, candidate);
+      }
+      this.onLog(`${player.name}の${unitDef.name}が味方全体を回復し、呪いを解除した (-${cost}G)`);
+      this._notifyState();
+      return true;
+    }
+
+    if (ability.type === 'drawCard') {
+      if (player.hand.length >= HAND_LIMIT) return false;
+      const types = [CardType.MONSTER, CardType.GEAR, CardType.SPELL]
+        .sort((a, b) => player.hand.filter((card) => card.type === a).length - player.hand.filter((card) => card.type === b).length);
+      let drawn = null;
+      for (const type of types) {
+        drawn = this._drawCardOfType(player, type);
+        if (drawn) break;
+      }
+      if (!drawn) return false;
+      spend();
+      player.hand.push(drawn);
+      this.onLog(`${player.name}の${unitDef.name}が「${drawn.name}」を引いた (-${cost}G)`);
+      this._notifyState();
+      return true;
+    }
+
+    if (ability.type === 'curseTransparency') {
+      if (tile.transparentCursed || tile.level < 3) return false;
+      spend();
+      tile.transparentCursed = true;
+      this.onLog(`${player.name}の${unitDef.name}が透過の呪いで土地を守った (-${cost}G)`);
+      this._notifyState();
+      return true;
+    }
+
+    if (ability.type === 'changeOwnLandElement') {
+      const target = this._ownedTiles(player).find((candidate) =>
+        candidate.unit?.def?.element != null
+        && candidate.unit.def.element !== Element.NEUTRAL
+        && candidate.element !== candidate.unit.def.element);
+      if (!target) return false;
+      spend();
+      target.element = target.unit.def.element;
+      this._repaintTileToElement(target);
+      this.onLog(`${player.name}の${unitDef.name}が土地を${ELEMENT_LABEL[target.element]}属性に変更した (-${cost}G)`);
+      this._notifyState();
+      return true;
+    }
+
+    if (ability.type === 'grantItem') {
+      if (player.hand.length >= HAND_LIMIT || !ITEM_CATALOG[ability.itemId]) return false;
+      spend();
+      const card = { ...ITEM_CATALOG[ability.itemId], id: `cpu-granted-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+      player.hand.push(card);
+      this.onLog(`${player.name}の${unitDef.name}が「${card.name}」を入手した (-${cost}G)`);
+      this._notifyState();
+      return true;
+    }
+
+    if (ability.type === 'cursePlayerHaste') {
+      const target = this.players
+        .filter((candidate) => !candidate.defeated && !this._isAllyOf(candidate, player))
+        .sort((a, b) => this._totalAssetsOf(b) - this._totalAssetsOf(a))[0];
+      if (!target) return false;
+      spend();
+      target.hasteTurnsRemaining = (target.hasteTurnsRemaining || 0) + ability.turns;
+      this.onLog(`${player.name}の${unitDef.name}が${target.name}に高速化の呪いをかけた (-${cost}G)`);
+      this._notifyState();
+      return true;
+    }
+
+    return false;
+  }
+
+  /**
    * CPUの投資先を優先順位順に選ぶ。無属性土地はレベルアップしない。
    * ①2連鎖以上かつ土地と同属性のモンスター、②同属性モンスターがいる
    * Lv1土地、③そのほかの同属性配置、④そのほかの有属性土地の順。
@@ -3184,8 +3289,9 @@ export class Game {
     const cost = unitDef?.commandCost ?? 0;
     if (!ability || player.currency < cost) return false;
 
-    if (ability.type === 'warpToEmptyElementLand') {
-      const target = this._cpuHighValueEmptyLands().find((land) => land.element === ability.element && land.id !== tile.id);
+    if (ability.type === 'warpToEmptyElementLand' || ability.type === 'warpToAnyEmptyLand') {
+      const target = this._cpuHighValueEmptyLands().find((land) =>
+        land.id !== tile.id && (ability.type === 'warpToAnyEmptyLand' || land.element === ability.element));
       if (!target) return false;
       player.currency -= cost;
       const unit = tile.unit;
@@ -4195,10 +4301,13 @@ export class Game {
    * 固有土地コマンドで先回りする。どちらも土地コマンド1回分として
    * そのターンを終了する。
    */
-  async _cpuMaybeUseGashaanTactics(player) {
+  async _cpuMaybeUseGashaanTactics(player, accessibleTileIds = []) {
     if (!this._isDanballBoss(player)) return false;
+    const accessibleSet = new Set(accessibleTileIds);
     const source = this.tiles.find(
-      (tile) => tile.unit?.ownerId === player.id && catalogIdOf(tile.unit.def) === 'gashaan-field',
+      (tile) => accessibleSet.has(tile.id)
+        && tile.unit?.ownerId === player.id
+        && catalogIdOf(tile.unit.def) === 'gashaan-field',
     );
     if (!source) return false;
 
@@ -4299,15 +4408,6 @@ export class Game {
   async _runCPUTurn() {
     await delay(CPU_PRE_ROLL_MS);
     if (!this.currentPlayer.isCPU) return;
-    if (await this._cpuMaybeUseGashaanTactics(this.currentPlayer)) {
-      await delay(400);
-      for (const candidate of this.players) await this._resolveNegativeCurrency(candidate);
-      if (!this.storyEnded) {
-        this._nextTurn();
-        await this._beginTurn();
-      }
-      return;
-    }
     // ダンボール男は③手札の「未知との遭遇」を最優先で使う（無属性モンスター＝ギアを
     // 引き寄せてガシャーン合体を狙う）。1ターン1スペルなので他スペルより先に判定。
     await this._cpuMaybeUseEncounterSpell(this.currentPlayer);
