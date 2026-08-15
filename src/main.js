@@ -2495,6 +2495,13 @@ function cpuRollDice(forcedValue = null) {
     const finalValue = Math.floor(Math.random() * 6) + 1;
     startDiceSpin();
     settleDiceSpin(finalValue).then((result) => {
+      // settleDiceSpinはdiceStateを'settled'のまま残す（連打対策）。人間の
+      // クリックはこの直後beginDiceMoveへ自動で進んで'moving'に上書きされる
+      // が、CPUはbeginDiceMoveを経由しないため、ここで明示的に'idle'へ戻さ
+      // ないと次に人間の番が来た時（表示中のcenterパネルがCPUの番から
+      // そのまま続いていてresetDice()が呼ばれない場合）、ダイスボタンの
+      // クリックハンドラがどの分岐にも一致せず反応しなくなる（フリーズ）。
+      diceState = 'idle';
       diceMoving = true;
       syncCenterVisibility();
       resolve(result);

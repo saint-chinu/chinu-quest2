@@ -976,3 +976,9 @@ cards/{cardId}/
 - **デッキ作成時の無属性モンスター重複を修正**: `battleCards.js`の`MONSTER_CATALOG`は既に`NEUTRAL_MONSTER_CATALOG`を内包しているのに、`cardCatalog.js`の`getCardCatalog()`とmain.jsの`BASE_CARD_CATALOG`（お知らせ添付カード選択用）がそれぞれ`NEUTRAL_MONSTER_CATALOG`を別枠でも足していたため、無属性モンスター20種が2重に一覧へ出ていた。両箇所の重複スプレッドを削除。
 - **ブリードモンスターの装着パーツが対戦に反映されない不具合を修正**: 保存済み`deckList`内のブリードモンスター枠は、デッキ編集画面で「保存」を押した瞬間にだけ`effectiveCatalog()`経由で最新化される仕組みだった。ブリード画面でパーツを装着しても、デッキを保存し直すまでは対戦・デッキ選択確認画面のどちらも古いステータスのままだった。`resolveBreedCardInList()`を新設し、`promptDeckSelection()`の確定直前（＝対戦・PvP全経路が共通で通る箇所）でbreedMonster枠だけ`currentCharacter.breedMonster`から毎回ライブに再計算する（保存データ自体は書き換えない）。
 - **盤面メニューに速度調整を追加**: 「⏩ 速度」ボタンで通常(1倍)→1.5倍→2倍→3倍→通常…と巡回する。`utils.js`の`tween`/`delay`（game.js・scene.jsの移動・演出タイミングが最終的にどちらかを経由する）に共有の`speedState.multiplier`を組み込み、main.js自身のメッセージ表示・アイテム点滅等の生の`setTimeout`/`setInterval`は、ファイル冒頭で同じ倍率を参照するローカルシャドウ関数に差し替えて一括対応した（お知らせ取得の8秒タイムアウトガードのような演出ではない待ちだけは`window.setTimeout`を明示して対象外にした）。
+
+### 「CPUがサイコロでフリーズする」不具合の調査・修正（2026-08-15）
+
+- **原因を特定**: `Game._notifyState()`（game.js）が`const human = this.players.find((p) => !p.isCPU); ... hand: human.hand`と無条件に人間プレイヤーを探して`.hand`を読んでいた。対局中に人間が1人もいなくなる状況（PvPで通信切断時に`main.js`が自動でその参加者を`isCPU=true`へ切り替える処理、またはホストの「BAN（AIへ切替）」）では`human`が`undefined`になり、次の`_notifyState()`呼び出しで例外が発生する。`_beginTurn`はこれをawaitしていないため例外は誰にも捕捉されず、以後`_notifyState`が二度と成功しなくなり、ターン進行が静かに完全停止する（画面はCPUの手番のまま何も起きなくなる＝「サイコロでフリーズ」に見える）。ブラウザ上でGameクラスを直接動かし、修正前は永久に停止・修正後はターンが正常に進行することを実測で確認済み。
+- **修正**: `hand: human.hand` → `hand: human?.hand ?? []`（該当箇所のみ、null安全化）。
+- あわせて見つけた副次的な不具合として、`main.js`の`cpuRollDice`（CPU側のダイス）は出目確定後`diceState`を`'settled'`のまま残し、`'idle'`へ戻していなかった（人間側は`beginDiceMove`経由で必ず`'moving'`へ上書きされるため気づかれにくい）。通常は次のターン開始時の`resetDice()`で復旧するが、念のため人間側の強制ダイス分岐と同様に`cpuRollDice`側でも明示的に`'idle'`へ戻すよう修正した。

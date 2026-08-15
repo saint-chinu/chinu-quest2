@@ -4975,6 +4975,10 @@ export class Game {
   _notifyState() {
     this._syncUnitIcons();
     this._syncPieceRenderOrder();
+    // 通信切断時のCPU自動引き継ぎ（main.js）やBANで、対局中に人間プレイヤーが
+    // 1人もいなくなることがある。その場合にhuman.handでクラッシュしてこの
+    // 通知自体が失敗すると、以後_beginTurn等の非同期チェーンが誰にも気づかれず
+    // 停止する（フリーズの原因になる）ため、人間がいない時は空の手札を返す。
     const human = this.players.find((p) => !p.isCPU);
     const showCenter = this.awaitingRoll && !this.isBusy;
     const playersPayload = this.players.map((p) => ({
@@ -5004,7 +5008,7 @@ export class Game {
       canRoll: showCenter && !this.currentPlayer.isCPU,
       checkpointNumbers: this.checkpointNumbers,
       players: playersPayload,
-      hand: human.hand,
+      hand: human?.hand ?? [],
       showCenter,
       centerHand: this.currentPlayer.hand,
       currentPlayerIsCPU: this.currentPlayer.isCPU,
