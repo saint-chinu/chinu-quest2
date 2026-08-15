@@ -5,7 +5,6 @@ import { createBoard, MAPS, TileType, createMapThumbnailCanvas, getMapBackground
 import { Game } from './game.js';
 import { CardType, CARD_COLOR, ELEMENT_LABEL, Element, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
 import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, buildCharacterDeckList, MONSTER_CATALOG, ITEM_CATALOG, SPELL_CATALOG } from './battleCards.js';
-import { NEUTRAL_MONSTER_CATALOG } from './neutralMonsters.js';
 import { loginOrRegister, saveCharacter } from './auth.js';
 import { getCardCatalog, isLegacyPlaceholderCardName } from './cardCatalog.js';
 import { PACKS, drawPack } from './shopPacks.js';
@@ -48,6 +47,16 @@ import {
   beginPvpMatch,
 } from './pvp.js';
 import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted, playSfx } from './audio.js';
+import { getSpeedMultiplier, setSpeedMultiplier } from './utils.js';
+
+// 盤面メニューの速度調整（1倍/1.5倍/2倍/3倍）: game.js/scene.jsはtween/delay
+// （utils.js）経由で既に倍率がかかるが、main.js自身のメッセージ表示・演出待ちは
+// 生のsetTimeout/setIntervalなので、このファイル全体で識別子をシャドウして
+// 同じ倍率を一括適用する（各呼び出し箇所を個別に書き換えずに済ませるため）。
+// Firestoreフェッチのタイムアウトガードのような「演出ではない」待ちは
+// window.setTimeoutを明示して意図的にこの対象から外す（該当箇所参照）。
+const setTimeout = (handler, timeoutMs, ...args) => window.setTimeout(handler, (timeoutMs ?? 0) / getSpeedMultiplier(), ...args);
+const setInterval = (handler, timeoutMs, ...args) => window.setInterval(handler, (timeoutMs ?? 0) / getSpeedMultiplier(), ...args);
 
 const canvas = document.getElementById('game-canvas');
 const fxLayer = document.getElementById('fx-layer');
@@ -2529,6 +2538,7 @@ const menuButton = document.getElementById('menu-button');
 const landInfoButton = document.getElementById('land-info-button');
 const gameMenuModal = document.getElementById('game-menu-modal');
 const gameMenuMute = document.getElementById('game-menu-mute');
+const gameMenuSpeed = document.getElementById('game-menu-speed');
 const gameMenuHelp = document.getElementById('game-menu-help');
 const gameMenuBan = document.getElementById('game-menu-ban');
 const gameMenuExit = document.getElementById('game-menu-exit');
@@ -2544,6 +2554,23 @@ syncMuteButtonLabel();
 gameMenuMute.addEventListener('click', () => {
   toggleMuted();
   syncMuteButtonLabel();
+});
+
+// 盤面の速度調整: 通常(1倍)→1.5倍→2倍→3倍→通常…と巡回する1ボタン方式。
+// キャラの移動・スペル/戦闘演出はscene.js/game.jsのtween・delay（utils.js）
+// 経由、メッセージ表示等main.js自身の待ちはこのファイル冒頭のsetTimeout/
+// setIntervalシャドウ経由で、どちらも同じgetSpeedMultiplier()を参照する。
+const SPEED_CYCLE = [1, 1.5, 2, 3];
+const SPEED_LABEL = { 1: '通常', 1.5: '1.5倍', 2: '2倍', 3: '3倍' };
+function syncSpeedButtonLabel() {
+  gameMenuSpeed.textContent = `⏩ 速度: ${SPEED_LABEL[getSpeedMultiplier()] ?? '通常'}`;
+}
+syncSpeedButtonLabel();
+gameMenuSpeed.addEventListener('click', () => {
+  const currentIndex = SPEED_CYCLE.indexOf(getSpeedMultiplier());
+  const next = SPEED_CYCLE[(currentIndex + 1) % SPEED_CYCLE.length] ?? SPEED_CYCLE[0];
+  setSpeedMultiplier(next);
+  syncSpeedButtonLabel();
 });
 
 menuButton.addEventListener('click', () => {
@@ -4258,6 +4285,23 @@ function cardKey(card) {
   return card.catalogId === 'breedMonster' ? 'breedMonster' : card.name;
 }
 
+/**
+ * 保存済みdeckListのブリードモンスター枠は、ブリード画面でパーツを装着した
+ * 時点では更新されない（デッキ編集画面で「保存」を押した時にだけ
+ * effectiveCatalog()経由で書き直される - deckSave参照）。そのため装着直後に
+ * 対戦へ入ると古いステータスのまま戦ってしまう。対戦に使う直前（デッキ選択）
+ * でこの関数を通し、breedMonster枠だけ常に現在の装着状況からライブに
+ * 再計算したものへ差し替える（保存データ自体は書き換えない）。
+ */
+function resolveBreedCardInList(deckList) {
+  if (!Array.isArray(deckList) || !currentCharacter?.breedMonster) return deckList;
+  return deckList.map((card) => (
+    card?.catalogId === 'breedMonster'
+      ? { ...buildBreedCardDef(currentCharacter), id: card.id }
+      : card
+  ));
+}
+
 /** 段ボール男クリア報酬「未知との遭遇」を所持カードへ一度だけ付与する（受領フラグ付き）。 */
 function grantEncounterReward() {
   if (!currentCharacter || currentCharacter.receivedEncounterReward) return;
@@ -4276,9 +4320,10 @@ function grantEncounterReward() {
 //   read: 全ログインユーザー / create: 管理者のみ（firestore.rules参照）。
 // 既読・カード受領はプレイヤーの character.inboxSeenIds（配列）で管理する。
 // characterはsaveCharacterでFirestoreにミラーされるので端末間でも整合する。
+// MONSTER_CATALOG（battleCards.js）は既にNEUTRAL_MONSTER_CATALOGを内包
+// しているため、ここで別途スプレッドすると無属性モンスターが重複していた。
 const BASE_CARD_CATALOG = [
   ...Object.values(MONSTER_CATALOG),
-  ...Object.values(NEUTRAL_MONSTER_CATALOG),
   ...Object.values(ITEM_CATALOG),
   ...Object.values(SPELL_CATALOG),
 ];
@@ -4289,8 +4334,10 @@ async function loadAnnouncements(force = false) {
   if (cachedAnnouncements && !force) return cachedAnnouncements;
   try {
     // オフライン等でserver取得がハングしてもUIを固めないよう、8秒でタイムアウト。
+    // 演出ではないネットワークタイムアウトなので、盤面の速度調整の対象外
+    // (window.setTimeoutを明示して倍率シャドウを迂回する)。
     const fetchPromise = fsGetDocs(fsQuery(collection(db, 'announcements'), fsOrderBy('createdAt', 'desc')));
-    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000));
+    const timeout = new Promise((_, reject) => window.setTimeout(() => reject(new Error('timeout')), 8000));
     const snap = await Promise.race([fetchPromise, timeout]);
     cachedAnnouncements = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
   } catch (error) {
@@ -4792,11 +4839,14 @@ function promptDeckSelection({ onCancel = null } = {}) {
     }
 
     function showConfirm(deck) {
-      pendingDeck = deck;
+      // ブリードモンスターのステータスは保存データではなく現在の装着状況から
+      // 毎回ライブに再計算する（resolveBreedCardInList参照）。以後この
+      // resolvedDeckで統一し、確定時もこちらを渡す。
+      pendingDeck = { ...deck, deckList: resolveBreedCardInList(deck.deckList) };
       deckSelectConfirmText.textContent = `「${deck.name}」にしますか？`;
 
       const counts = new Map(); // key -> { def, count }
-      for (const card of deck.deckList) {
+      for (const card of pendingDeck.deckList) {
         if (!card?.name) continue; // 壊れた保存データ（デッキ編成画面を開けば自動で除去される）は表示しない
         const key = cardKey(card);
         if (!counts.has(key)) counts.set(key, { def: card, count: 0 });

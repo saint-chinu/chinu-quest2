@@ -33,6 +33,25 @@ const audioEls = {}; // track -> HTMLAudioElement（遅延生成、以後使い�
 let unlockAttempted = false;
 let pageExited = false;
 
+// iOS Safariの既知の挙動対策: Web Audio API（playSfxが使うAudioContext）で
+// 鳴らす音は、マナーモード（サイレントスイッチ）が入っていても関係なく
+// 鳴ってしまう（<audio>要素の再生は正しくスイッチに従うのに対し、Web Audio
+// はページの音声セッションが「メディア再生中」扱いになっていない限りこれを
+// 無視する）。完全無音の<audio>要素を最初のユーザー操作から鳴らしっぱなしに
+// しておくと音声セッションがメディア再生中として扱われ、Web Audio側の音も
+// 正しくスイッチに従うようになる。BGM要素（audioEls）はミュート/曲切替の
+// たびに一時停止するので、それとは別にこの専用要素を用意し、一度鳴らしたら
+// 止めない（0.1秒の無音を無限ループ）。
+const SILENT_ANCHOR_SRC = 'data:audio/wav;base64,UklGRkQDAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YSADAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA==';
+let silentAnchorEl = null;
+function startSilentAnchor() {
+  if (silentAnchorEl) return;
+  silentAnchorEl = new Audio(SILENT_ANCHOR_SRC);
+  silentAnchorEl.loop = true;
+  silentAnchorEl.volume = 0;
+  silentAnchorEl.play().catch(() => {});
+}
+
 function getAudioEl(track) {
   if (!audioEls[track]) {
     const el = new Audio(TRACK_SRC[track]);
@@ -52,6 +71,7 @@ function getAudioEl(track) {
 function unlockAudioElements() {
   if (unlockAttempted) return;
   unlockAttempted = true;
+  startSilentAnchor();
   for (const track of Object.keys(TRACK_SRC)) {
     const el = getAudioEl(track);
     el.volume = 0;
