@@ -108,6 +108,7 @@ export class Game {
     onPickCardType,
     onShowTileInfo,
     onChooseBranch,
+    onBranchUndo,
     onPickMoveDirection,
     onPickElement,
     onShopPurchase,
@@ -177,6 +178,7 @@ export class Game {
     this.onPickCardType = onPickCardType;
     this.onShowTileInfo = onShowTileInfo;
     this.onChooseBranch = onChooseBranch;
+    this.onBranchUndo = onBranchUndo || (() => {});
     this.onPickMoveDirection = onPickMoveDirection;
     this.onPickElement = onPickElement;
     this.onShopPurchase = onShopPurchase;
@@ -1412,6 +1414,18 @@ export class Game {
         destinationIds.splice(0, destinationIds.length, ...narrowedIds);
       }
       const toTile = this.tiles[nextId];
+      const canUndoBranch = options.length > 1 && !player.isCPU;
+      const branchPreviousTileId = player.previousTileId;
+      const branchPathLength = this._turnPathIds.length;
+      const branchHistory = canUndoBranch ? [...player.tileHistory] : null;
+      let branchUndoRequested = false;
+      if (canUndoBranch) {
+        this.onBranchUndo({
+          active: true,
+          playerId: player.id,
+          onUndo: () => { branchUndoRequested = true; },
+        });
+      }
       player.previousTileId = player.tileId;
       player.tileId = nextId;
       this._turnPathIds.push(nextId);
@@ -1419,6 +1433,26 @@ export class Game {
       player.tileHistory.unshift(nextId);
       if (player.tileHistory.length > 20) player.tileHistory.length = 20;
       await this._stepWithCamera(player, fromTile.position, toTile.position);
+
+      // 分岐直後の移動中と着地後の短い猶予だけ、選択を取り消せる。
+      // CP・ゴール・土地効果より前に戻すため、報酬などの副作用は発生しない。
+      if (canUndoBranch) {
+        await delay(600);
+        this.onBranchUndo({ active: false, playerId: player.id });
+        if (branchUndoRequested) {
+          await this._stepWithCamera(player, toTile.position, fromTile.position);
+          player.tileId = fromTile.id;
+          player.previousTileId = branchPreviousTileId;
+          this._turnPathIds.length = branchPathLength;
+          player.tileHistory = branchHistory;
+          this.onMoveDestination({ tileIds: destinationIds, active: false });
+          const restoredIds = this._forwardDestinationIds(player, steps - i);
+          if (restoredIds.length) this.onMoveDestination({ tileIds: restoredIds, active: true });
+          destinationIds.splice(0, destinationIds.length, ...restoredIds);
+          i -= 1;
+          continue;
+        }
+      }
 
       if (toTile.type === TileType.EVENT) await this._visitCheckpoint(player, toTile);
 
@@ -1435,6 +1469,7 @@ export class Game {
         break;
       }
     }
+    this.onBranchUndo({ active: false, playerId: player.id });
     if (destinationIds.length) this.onMoveDestination({ tileIds: destinationIds, active: false });
   }
 

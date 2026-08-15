@@ -79,6 +79,7 @@ const dirArrowUpleft = document.getElementById('dir-arrow-upleft');
 const dirArrowUpright = document.getElementById('dir-arrow-upright');
 const dirArrowDownleft = document.getElementById('dir-arrow-downleft');
 const dirArrowDownright = document.getElementById('dir-arrow-downright');
+const branchUndoButton = document.getElementById('branch-undo-button');
 const landCommandModal = document.getElementById('land-command-modal');
 const landCommandTitle = document.getElementById('land-command-title');
 const landCommandSummon = document.getElementById('land-command-summon');
@@ -338,17 +339,19 @@ function promptDirectionArrows(options, { noBack = false, confirmOnSecondTap = f
 
 /**
  * マスの分岐: 進める候補マス（分岐の各方向の次マス）を盤面上で白く点滅させ、
- * 直接タップして選ぶ（矢印UIは使わない）。1回タップでそのマスが高速点滅
- * （選択状態）になり、高速点滅中のマスをもう一度タップすると確定して進む。
- * 別の候補マスをタップすると選択が移る。分岐は必須選択なので「戻る」は無い。
+ * 直接1回タップして選ぶ（矢印UIは使わない）。選択後の最初の移動中だけ
+ * 画面右の「分岐に戻る」で取り消せる。分岐選択そのものは必須なので、
+ * 選択前の「戻る」は無い。
  * 盤面が見切れている時はカメラのパン矢印（cam-arrow-*）で寄せられる。
  */
+let branchChoiceActive = false;
+
 function promptChooseBranch(options) {
   return new Promise((resolve) => {
+    branchChoiceActive = true;
     const camSnap = beginCameraWork();
     const candidateIds = options.map((o) => o.tileId).filter((id) => tiles[id]?.mesh);
     const candidateSet = new Set(candidateIds);
-    let selectedTileId = null;
 
     // 分岐中は移動先ハイライトを一旦消して候補マスだけに集中させる
     // （分岐確定後に_movePlayerが改めてonMoveDestinationで点け直す）。
@@ -364,12 +367,11 @@ function promptChooseBranch(options) {
     let raf = requestAnimationFrame(function frame(now) {
       const t = (now - start) / 1000;
       const slow = 0.35 + 0.25 * Math.sin(t * 2.4);
-      const fast = 0.55 + 0.4 * Math.sin(t * 9);
       for (const id of candidateIds) {
         const mesh = tiles[id]?.mesh;
         if (!mesh) continue;
         mesh.material.emissive.setHex(0xffffff);
-        mesh.material.emissiveIntensity = id === selectedTileId ? fast : slow;
+        mesh.material.emissiveIntensity = slow;
       }
       raf = requestAnimationFrame(frame);
     });
@@ -381,17 +383,16 @@ function promptChooseBranch(options) {
       if (scene.panDidMove) return; // 直前がドラッグ/ピンチなら選択しない
       const tile = scene.pickTileAt(ndcX, ndcY, tiles);
       if (!tile || !candidateSet.has(tile.id)) return;
-      if (selectedTileId === tile.id) {
-        finish(tile.id); // 高速点滅中のマスを再タップ → 確定して進む
-      } else {
-        selectedTileId = tile.id; // 1回目のタップ → 高速点滅で選択
-      }
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      finish(tile.id);
     }
     function onUp() { scene.panByDirection('up'); }
     function onDown() { scene.panByDirection('down'); }
     function onLeft() { scene.panByDirection('left'); }
     function onRight() { scene.panByDirection('right'); }
     function finish(result) {
+      branchChoiceActive = false;
       cancelAnimationFrame(raf);
       for (const id of candidateIds) {
         const mesh = tiles[id]?.mesh;
@@ -423,6 +424,21 @@ function promptChooseBranch(options) {
 }
 
 /** 土地コマンドの「移動」: same diagonal-arrow chooser, but cancellable (the player already has a monster placed - trying doesn't have to commit). */
+function setBranchUndoControl({ active, playerId, onUndo } = {}) {
+  branchUndoButton.onclick = null;
+  const localPlayerId = pvpMatch?.localPlayerId ?? game?.players.find((player) => !player.isCPU)?.id;
+  if (!active || playerId !== localPlayerId) {
+    branchUndoButton.classList.add('hidden');
+    return;
+  }
+  branchUndoButton.classList.remove('hidden');
+  branchUndoButton.onclick = () => {
+    branchUndoButton.classList.add('hidden');
+    branchUndoButton.onclick = null;
+    onUndo?.();
+  };
+}
+
 function promptMoveDirection(options) {
   return promptDirectionArrows(options);
 }
@@ -2620,6 +2636,7 @@ function startBattle(character, storyOptions = {}) {
     onPickCardType: relayable('pickCardType', promptPickCardType),
     onShowTileInfo: relayable('showTileInfo', promptShowTileInfo),
     onChooseBranch: relayable('chooseBranch', promptChooseBranch),
+    onBranchUndo: setBranchUndoControl,
     onPickMoveDirection: relayable('pickMoveDirection', promptMoveDirection),
     onPickElement: relayable('pickElement', promptPickElement),
     onShopPurchase: relayable('shopPurchase', promptShopPurchase),
@@ -2819,7 +2836,7 @@ helpClose.addEventListener('click', () => {
  * 切り替え、盤面上の任意の土地を直接タップして何度でも詳細を確認できる。
  */
 function showLandInfoCamera() {
-  if (!scene || !tiles?.length || !cameraWorkOverlay.classList.contains('hidden')) return;
+  if (branchChoiceActive || !scene || !tiles?.length || !cameraWorkOverlay.classList.contains('hidden')) return;
   const camSnap = beginCameraWork();
   cameraWorkOverlay.classList.remove('hidden');
   landInfoButton.classList.add('active');
