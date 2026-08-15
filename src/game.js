@@ -1760,7 +1760,7 @@ export class Game {
     // 左右の環状路のCP付近を循環し続けることがあるため、未通過CP→ゴール
     // の順を常に目標にする。他CPUの「高額空地優先」は維持する。
     const isDanball = this._isDanballBoss(player);
-    const prioritizesLapRoute = player.name === '暴君マダイ' || isDanball;
+    const prioritizesLapRoute = player.name === '暴君マダイ' || player.name === 'Q' || isDanball;
     const valuableEmpty = prioritizesLapRoute ? [] : this._cpuHighValueEmptyLands();
     const target = valuableEmpty.length > 0
       ? valuableEmpty.reduce((best, tile) => {
@@ -3156,7 +3156,9 @@ export class Game {
     if (tile.owner == null) {
       const card = this._isDanballBoss(player)
         ? this._cpuChooseSummonCardForDanball(options, tile, player)
-        : this._cpuChooseSummonCard(options, tile, profile, player);
+        : player.name === 'Q'
+          ? this._cpuChooseSummonCardForQ(options, tile, profile, player)
+          : this._cpuChooseSummonCard(options, tile, profile, player);
       player.hand = player.hand.filter((c) => c.id !== card.id);
       player.deck.discard(card);
       player.currency -= card.cost;
@@ -3490,6 +3492,21 @@ export class Game {
     return this._strongestCard(pool);
   }
 
+  /** Q専用: 合体素材になる列車2種を通常の雷モンスターより優先して配置する。 */
+  _cpuChooseSummonCardForQ(options, tile, profile, player) {
+    const trainIds = [BATTLE_TRAIN_ID, SACRIFICE_CAR_ID];
+    const trains = options.filter((card) => trainIds.includes(catalogIdOf(card)));
+    if (trains.length > 0) {
+      const placedCount = (id) => this.tiles.filter(
+        (candidate) => candidate.unit?.ownerId === player.id && catalogIdOf(candidate.unit.def) === id,
+      ).length;
+      return trains.reduce((best, card) => (
+        placedCount(catalogIdOf(card)) < placedCount(catalogIdOf(best)) ? card : best
+      ));
+    }
+    return this._cpuChooseSummonCard(options, tile, profile, player);
+  }
+
   /**
    * 古代のギアA/B/Cのうち、手札にあり、かつ自分の盤面に残り2種類が既に
    * 揃っている（＝これを召喚すればガシャーンに合体する）ものを最優先で
@@ -3775,9 +3792,17 @@ export class Game {
   }
 
   /** 手札の中から一番強いGEARカードを選ぶ（無ければnull）。 */
-  _bestBattleItemFromHand(hand, unit = null) {
+  _bestBattleItemFromHand(hand, unit = null, { preferStandardItems = false } = {}) {
     const gear = hand.filter(isBattleItemCard);
     if (gear.length === 0) return null;
+    if (preferStandardItems) {
+      const standardItems = gear.filter((card) => card.type === CardType.GEAR);
+      if (standardItems.length > 0) {
+        return standardItems.reduce((best, card) => (
+          this._itemPowerScore(card) > this._itemPowerScore(best) ? card : best
+        ));
+      }
+    }
     const monsterId = catalogIdOf(unit?.def);
     const fusionPartnerId = monsterId === BATTLE_TRAIN_ID
       ? SACRIFICE_CAR_ID
@@ -3791,7 +3816,7 @@ export class Game {
 
   /** CPUの実際のバトルアイテム選択。シミュレーション（_estimateWinProbability）と同じ_bestBattleItemFromHandを使うので、事前に見積もった勝率と実際の挙動がずれない。 */
   _cpuPickBattleItem(player, unit) {
-    return this._bestBattleItemFromHand(player.hand, unit);
+    return this._bestBattleItemFromHand(player.hand, unit, { preferStandardItems: player.name === 'Q' });
   }
 
   /** シミュレーション専用: 本物のユニットには一切触れず、items/cursesだけ独立コピーした複製を作る（resolveBattleは渡された引数を直接書き換えるため、実物を渡すと本当に装備/呪いが消し飛んでしまう）。 */
@@ -3826,7 +3851,10 @@ export class Game {
         const attackerUnit = createFieldUnit(attackerDef, attackerOwnerId);
         const defenderUnit = this._cloneFieldUnitForSim(defenderTile.unit);
         if (useItem) {
-          const item = this._bestBattleItemFromHand(attackerHand, attackerUnit);
+          const attackerPlayer = this.players.find((candidate) => candidate.id === attackerOwnerId);
+          const item = this._bestBattleItemFromHand(attackerHand, attackerUnit, {
+            preferStandardItems: attackerPlayer?.name === 'Q',
+          });
           if (item) {
             const fusionDef = this._trainFusionDef(attackerUnit, item);
             if (fusionDef) attackerUnit.def = fusionDef;

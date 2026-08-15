@@ -78,6 +78,13 @@ export const AI_PROFILES = {
     itemGambleChance: 0.65,
     highValueAvoidance: 0.3,
   },
+  Q: {
+    offElementSummonChance: 0.8,
+    levelUpReserve: 300,
+    minWinProbabilityToInvade: 0.45,
+    itemGambleChance: 0.8,
+    highValueAvoidance: 0.7,
+  },
   // ダンボール男: ラスボス格。ほぼ手加減なし、勝算が少しでもあれば仕掛け、土地には惜しみなく投資する。
   ダンボール男: {
     offElementSummonChance: 0.1,
