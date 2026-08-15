@@ -1475,6 +1475,11 @@ export class Game {
    * 同士の同レアリティはATKが低い方（＝残したいのはATKが高い方）を選ぶ。
    */
   _cpuChooseDiscard(player) {
+    // 不死鳥の剣は使うと手札に戻る＝1枚あれば十分。手札に2枚以上ある時は、
+    // ダブりを最優先で1枚だけ捨てる（2枚持ち続けても腐るため。1枚は残す）。
+    const fenixSwords = player.hand.filter((c) => catalogIdOf(c) === 'fushichoNoKen');
+    if (fenixSwords.length >= 2) return fenixSwords[0];
+
     const landCount = this._summonCountOf(player.id);
     const target = landCount >= DISCARD_TARGET_LAND_THRESHOLD
       ? DISCARD_TARGET_COMPOSITION_LAND_HEAVY
@@ -4063,7 +4068,11 @@ export class Game {
 
   /** 列車2種は相方を装備した時点で、確認なしに恒久的な合体形態へ置換する。 */
   _applyTrainFusion(unit, equippedItem) {
-    const monsterId = catalogIdOf(unit?.def);
+    // アイテムを装備しなかった側は equippedItem が null。その場合は合体判定を
+    // 行わない（_trainFusionDef内の catalogIdOf(null) で例外→戦闘フリーズになる
+    // ため、ここで必ず打ち切る）。
+    if (!equippedItem || !unit?.def) return null;
+    const monsterId = catalogIdOf(unit.def);
     const fusionDef = this._trainFusionDef(unit, equippedItem);
     if (!fusionDef) return null;
     const previousMaxHp = Number(unit.def.hp || 0);
@@ -4075,7 +4084,8 @@ export class Game {
   }
 
   _trainFusionDef(unit, item) {
-    const monsterId = catalogIdOf(unit?.def);
+    if (!item || !unit?.def) return null; // アイテム未装備なら合体なし（catalogIdOf(null)対策）
+    const monsterId = catalogIdOf(unit.def);
     const itemId = catalogIdOf(item);
     if (monsterId === BATTLE_TRAIN_ID && itemId === SACRIFICE_CAR_ID) return Q_LINER_FIELD_MONSTER;
     if (monsterId === SACRIFICE_CAR_ID && itemId === BATTLE_TRAIN_ID) return Q_TRAIN_FIELD_MONSTER;
