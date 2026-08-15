@@ -114,6 +114,7 @@ export class Game {
     onBattleSceneEnter,
     onPickBattleItem,
     onBattleEquip,
+    onBattleItemDestroy,
     onBattleItemSteal,
     onBattleTraitReveal,
     onBattleAttack,
@@ -183,6 +184,7 @@ export class Game {
     this.onPickBattleItem = onPickBattleItem;
     this.onBattleAttack = onBattleAttack;
     this.onBattleEquip = onBattleEquip || (() => Promise.resolve());
+    this.onBattleItemDestroy = onBattleItemDestroy || (() => Promise.resolve());
     this.onBattleItemSteal = onBattleItemSteal || (() => Promise.resolve());
     this.onBattleTraitReveal = onBattleTraitReveal || (() => Promise.resolve());
     this.onBattleRetreat = onBattleRetreat;
@@ -3710,6 +3712,13 @@ export class Game {
 
     const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, battleDefenderBonus);
     result.log.forEach((line) => this.onLog(line));
+
+    // ステゴロ/海賊Sの破壊は真剣白刃取りと同じ攻撃開始前。装備公開後、
+    // 実際の攻撃演出へ入る前に対象アイテムを砕いて消す。
+    for (const destruction of result.itemDestructions || []) {
+      await this.onBattleItemDestroy(destruction);
+      if (this._isCancelled) return null;
+    }
 
     // 真剣白刃取りはresolveBattle内で攻撃開始前に相手の装備を移し替える。
     // 計算結果と同じ順序で、公開済みの装備画像も相手側から使用者側へ移動させる。

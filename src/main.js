@@ -1953,6 +1953,53 @@ async function promptBattleEquip({ side, item, unitName, baseAtk, baseHp, existi
   battleMessageText.classList.add('hidden');
 }
 
+/** ステゴロ/海賊S: 攻撃開始前に対象の装備画像を砕いて消す。 */
+async function promptBattleItemDestroy({ targetSide, sourceName = 'アイテム破壊', items = [] }) {
+  const targetEls = battleSide[targetSide];
+  if (!targetEls || items.length === 0) return;
+  const item = items[items.length - 1];
+  const rect = targetEls.item.getBoundingClientRect();
+
+  battleMessageText.textContent = `${sourceName}が発動！\n${item.name}は破壊された`;
+  battleMessageText.classList.add('special');
+  battleMessageText.classList.remove('hidden');
+  targetEls.item.classList.add('battle-item-breaking');
+
+  const shatter = document.createElement('div');
+  shatter.className = 'battle-item-shatter';
+  shatter.style.left = `${rect.left + rect.width / 2}px`;
+  shatter.style.top = `${rect.top + rect.height / 2}px`;
+  const pieces = [
+    ['piece-tl', '-42px', '-48px', '-24deg'],
+    ['piece-tr', '45px', '-42px', '28deg'],
+    ['piece-bl', '-38px', '52px', '-18deg'],
+    ['piece-br', '43px', '55px', '32deg'],
+  ];
+  for (const [className, dx, dy, rot] of pieces) {
+    const piece = document.createElement('div');
+    piece.className = `battle-item-shard ${className}`;
+    piece.style.setProperty('--shard-x', dx);
+    piece.style.setProperty('--shard-y', dy);
+    piece.style.setProperty('--shard-r', rot);
+    const card = document.createElement('div');
+    card.className = 'card';
+    renderCardEl(card, item);
+    piece.appendChild(card);
+    shatter.appendChild(piece);
+  }
+  document.body.appendChild(shatter);
+  requestAnimationFrame(() => shatter.classList.add('shattering'));
+  await new Promise((resolve) => setTimeout(resolve, 850));
+
+  targetEls.item.classList.remove('battle-item-breaking', 'equip-show');
+  targetEls.item.classList.add('hidden');
+  targetEls.item.replaceChildren();
+  shatter.remove();
+  await new Promise((resolve) => setTimeout(resolve, 650));
+  battleMessageText.classList.add('hidden');
+  battleMessageText.classList.remove('special');
+}
+
 /** 真剣白刃取り: 奪われた装備カードを相手側から使用者側へ飛ばして移動させる。 */
 async function promptBattleItemSteal({ fromSide, toSide, items = [] }) {
   const fromEls = battleSide[fromSide];
@@ -2571,6 +2618,7 @@ function startBattle(character, storyOptions = {}) {
     onBattleSceneEnter: relayable('battleSceneEnter', promptBattleSceneEnter, { broadcast: true }),
     onPickBattleItem: relayable('pickBattleItem', promptPickBattleItem),
     onBattleEquip: relayable('battleEquip', promptBattleEquip, { broadcast: true }),
+    onBattleItemDestroy: relayable('battleItemDestroy', promptBattleItemDestroy, { broadcast: true }),
     onBattleItemSteal: relayable('battleItemSteal', promptBattleItemSteal, { broadcast: true }),
     onBattleTraitReveal: relayable('battleTraitReveal', promptBattleTraitReveal, { broadcast: true }),
     onBattleAttack: relayable('battleAttack', promptBattleAttack, { broadcast: true }),
@@ -5793,6 +5841,7 @@ const pvpGuestHandlers = {
   battleSceneEnter: promptBattleSceneEnter,
   pickBattleItem: promptPickBattleItem,
   battleEquip: promptBattleEquip,
+  battleItemDestroy: promptBattleItemDestroy,
   battleItemSteal: promptBattleItemSteal,
   battleTraitReveal: promptBattleTraitReveal,
   battleAttack: promptBattleAttack,
