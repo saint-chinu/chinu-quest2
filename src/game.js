@@ -114,6 +114,7 @@ export class Game {
     onPickBrowseTile,
     onLandSubmenu,
     onPickAbilityTarget,
+    onPickTransformTarget,
     onPickCardType,
     onShowTileInfo,
     onChooseBranch,
@@ -187,6 +188,7 @@ export class Game {
     this.onPickBrowseTile = onPickBrowseTile;
     this.onLandSubmenu = onLandSubmenu;
     this.onPickAbilityTarget = onPickAbilityTarget;
+    this.onPickTransformTarget = onPickTransformTarget || onPickMonsterCard;
     this.onPickCardType = onPickCardType;
     this.onShowTileInfo = onShowTileInfo;
     this.onChooseBranch = onChooseBranch;
@@ -2576,15 +2578,27 @@ export class Game {
     const targets = this.tiles.filter((t) => t.unit && t !== tile);
     if (targets.length === 0) return;
 
-    const targetId = await this.onPickAbilityTarget(
-      targets.map((t) => ({ ...this._browseTileSummary(t, player), label: `${t.unit.def.name}に変身` })),
-      player.id,
-    );
-    if (targetId == null) return;
-    const targetTile = this.tiles.find((t) => t.id === targetId);
-    if (!targetTile?.unit) return;
+    // 盤面のモンスターをクリックさせるのではなく、変身先を「カード一覧」で
+    // 提示して選ばせる（HP/ATK/先制等はrenderCardElがそのまま表示する）。
+    // 同じモンスターが複数体いても基礎値コピーなので一覧では1件に統合する。
+    const seen = new Set();
+    const options = [];
+    for (const t of targets) {
+      const def = t.unit.def;
+      const catId = catalogIdOf(def);
+      if (seen.has(catId)) continue;
+      seen.add(catId);
+      options.push({ ...def, catalogId: catId, id: `metamorph-${catId}` });
+    }
 
-    const newDef = { ...targetTile.unit.def, id: tile.unit.def.id, catalogId: catalogIdOf(targetTile.unit.def) };
+    const picked = await this.onPickTransformTarget(options, player.id);
+    if (!picked) return;
+    const chosen = options.find((o) => o.id === picked.id) || picked;
+    const chosenCatId = chosen.catalogId ?? catalogIdOf(chosen);
+
+    // 基礎値のみコピー: メタ〇ンのインスタンスidは保持し、図鑑ID・各ステータス
+    // ・特性（先制/貫通など）を変身先へ差し替える。現在HPも新しい基礎HPへ。
+    const newDef = { ...chosen, id: tile.unit.def.id, catalogId: chosenCatId };
     tile.unit.def = newDef;
     tile.unit.currentHp = newDef.hp;
     this.onLog(`${player.name}のモンスターが${newDef.name}に変身した！`);

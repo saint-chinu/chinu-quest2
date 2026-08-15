@@ -105,6 +105,8 @@ const abilityTargetCancel = document.getElementById('ability-target-cancel');
 const monsterPickerModal = document.getElementById('monster-picker-modal');
 const monsterPickerChoices = document.getElementById('monster-picker-choices');
 const monsterPickerCancel = document.getElementById('monster-picker-cancel');
+const monsterPickerTitle = document.getElementById('monster-picker-title');
+const MONSTER_PICKER_DEFAULT_TITLE = monsterPickerTitle?.textContent ?? 'モンスターカードを選んでください';
 const shopTileModal = document.getElementById('shop-tile-modal');
 const shopTileChoices = document.getElementById('shop-tile-choices');
 const shopTileCancel = document.getElementById('shop-tile-cancel');
@@ -723,6 +725,46 @@ function promptPickMonsterCard(options) {
   return new Promise((resolve) => {
     function cleanup(result) {
       monsterPickerModal.classList.add('hidden');
+      monsterPickerCancel.removeEventListener('click', onCancel);
+      unregisterPromptCanceller(cancelSelf);
+      resolve(result);
+    }
+    function onCancel() {
+      cleanup(null);
+    }
+    function cancelSelf() {
+      cleanup(null);
+    }
+
+    monsterPickerChoices.replaceChildren();
+    for (const card of options) {
+      const el = document.createElement('div');
+      el.className = 'card';
+      renderCardEl(el, card);
+      el.addEventListener('click', () => {
+        el.classList.add('blinking');
+        setTimeout(() => cleanup(card), BLINK_MS);
+      });
+      monsterPickerChoices.appendChild(el);
+    }
+    monsterPickerModal.classList.remove('hidden');
+    monsterPickerCancel.addEventListener('click', onCancel);
+    registerPromptCanceller(cancelSelf);
+  });
+}
+
+/**
+ * メタ〇ン（copyOnSummon）の変身先選択。盤面のモンスターをクリックさせる
+ * 代わりに、変身候補をカード一覧で表示して選ばせる（renderCardElがHP/ATK/
+ * 先制などをそのまま見せる）。モンスターピッカーのモーダルを見出しだけ
+ * 差し替えて流用する。
+ */
+function promptPickTransformTarget(options) {
+  return new Promise((resolve) => {
+    if (monsterPickerTitle) monsterPickerTitle.textContent = '変身先を選んでください';
+    function cleanup(result) {
+      monsterPickerModal.classList.add('hidden');
+      if (monsterPickerTitle) monsterPickerTitle.textContent = MONSTER_PICKER_DEFAULT_TITLE;
       monsterPickerCancel.removeEventListener('click', onCancel);
       unregisterPromptCanceller(cancelSelf);
       resolve(result);
@@ -2861,6 +2903,7 @@ function startBattle(character, storyOptions = {}) {
     onPickBrowseTile: relayable('pickBrowseTile', promptPickBrowseTile),
     onLandSubmenu: relayable('landSubmenu', promptLandSubmenu),
     onPickAbilityTarget: relayable('pickAbilityTarget', promptPickAbilityTarget),
+    onPickTransformTarget: relayable('pickTransformTarget', promptPickTransformTarget),
     onPickCardType: relayable('pickCardType', promptPickCardType),
     onShowTileInfo: relayable('showTileInfo', promptShowTileInfo),
     onChooseBranch: relayable('chooseBranch', promptChooseBranch),
@@ -6302,6 +6345,7 @@ const pvpGuestHandlers = {
   pickBrowseTile: promptPickBrowseTile,
   landSubmenu: promptLandSubmenu,
   pickAbilityTarget: promptPickAbilityTarget,
+  pickTransformTarget: promptPickTransformTarget,
   pickCardType: promptPickCardType,
   showTileInfo: promptShowTileInfo,
   chooseBranch: promptChooseBranch,
