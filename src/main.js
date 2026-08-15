@@ -5676,6 +5676,9 @@ battleCpuButton.addEventListener('click', async () => {
 let pvpUnsubscribe = null;
 let pvpMatch = null;
 let pvpSession = null; // { roomCode, uid, isHost }
+// Firestoreのfinished通知や決着コールバックが重複しても、報酬付与と
+// メニュー復帰を各端末で一度だけ実行するためのガード。
+let pvpBattleEndHandled = false;
 
 function stopPvpRoomListener() {
   if (pvpUnsubscribe) {
@@ -5709,6 +5712,7 @@ function enterPvpRoomScreen(session) {
   pvpRoomSettings.textContent = session.goalCurrency ? `目標G: ${Number(session.goalCurrency).toLocaleString('ja-JP')}G` : '';
   pvpRoomStart.classList.add('hidden');
   pvpGuestBattleStarted = false;
+  pvpBattleEndHandled = false;
   showScreen(pvpRoomScreen);
 
   // ゲスト側は入室した瞬間から「ホストからの質問」を受け取れるようにして
@@ -6211,6 +6215,8 @@ async function startPvpGuestBattle() {
 
   pvpMatch.stopPublicListener = listenToRoom(pvpMatch.roomCode, (room) => {
     if (!room || room.status === 'finished') {
+      if (pvpBattleEndHandled) return;
+      pvpBattleEndHandled = true;
       // ホストが退出した（部屋を消した/finishedにした） - こちらも対戦を終える。
       // ホストの退出はgameMenuExit経由の報酬確認を通らないため、ここで
       // 代わりに直近のpublicStateから自分の取り分を換算して付与する
@@ -6225,7 +6231,7 @@ async function startPvpGuestBattle() {
       stopMusic();
       appEl.classList.add('hidden');
       preGame.classList.remove('hidden');
-      window.alert(`ホストが対戦を終了しました。獲得報酬：${earnedM}M`);
+      window.alert(`対戦が終了しました。獲得報酬：${earnedM}M`);
       showHubScreen();
       return;
     }
@@ -6240,6 +6246,7 @@ async function startPvpGuestBattle() {
 pvpRoomStart.addEventListener('click', async () => {
   if (!pvpSession?.isHost || (!pvpLastRoom?.guestUid && !(pvpLastRoom?.cpuNames?.length))) return;
   pvpRoomStart.disabled = true;
+  pvpBattleEndHandled = false;
   const hostDeck = await promptDeckSelection();
   await confirmLandscapeReady();
 
@@ -6330,6 +6337,9 @@ pvpRoomStart.addEventListener('click', async () => {
     mapId: pvpLastRoom.mapId,
     goalCurrency: pvpLastRoom.goalCurrency || 5000,
     playerConfigs,
+    // 対人戦も目標総資産到達＋ゴール、または生存陣営確定で決着させる。
+    storyMode: true,
+    onStoryBattleEnd: handlePvpBattleEnd,
   });
   pvpRoomStart.disabled = false;
 });
@@ -6372,6 +6382,59 @@ function grantExitReward(endingAssetsShare, rewardRateOverride = null) {
   currentCharacter.m += result.earnedM;
   saveCharacter(currentUserId, currentCharacter);
   return result;
+}
+
+/**
+ * 対人戦の正式決着。ホスト自身の報酬を保存してから最終公開状態を残したまま
+ * 部屋をfinishedにし、ゲスト側はその通知を受けて各自の資産から報酬を得る。
+ * 退出ボタンとは異なり正規決着なので最低ターン数による報酬制限は掛けない。
+ */
+async function handlePvpBattleEnd(result = {}) {
+  if (!pvpMatch?.isHost || pvpBattleEndHandled) return;
+  pvpBattleEndHandled = true;
+
+  const hostPlayer = game?.players?.find((player) => player.id === pvpMatch.localPlayerId)
+    ?? game?.players?.find((player) => !player.isCPU);
+  const allianceSize = hostPlayer?.allianceId != null
+    ? game.players.filter((player) => player.allianceId === hostPlayer.allianceId).length
+    : 1;
+  const endingAssetsShare = hostPlayer && game
+    ? game._totalAssetsOf(hostPlayer) / Math.max(allianceSize, 1)
+    : 0;
+  const { earnedM } = grantExitReward(endingAssetsShare);
+  const winnerIds = result.winnerPlayerId != null
+    ? [result.winnerPlayerId]
+    : (result.alivePlayerIds || []);
+  const won = winnerIds.some((playerId) => {
+    const winner = game?.players?.find((player) => player.id === playerId);
+    return winner && hostPlayer
+      && (winner.id === hostPlayer.id
+        || (hostPlayer.allianceId != null && winner.allianceId === hostPlayer.allianceId));
+  });
+
+  const roomCode = pvpMatch.roomCode;
+  game?.cancel?.();
+  cancelActiveBattleItemPicker?.();
+  cancelActiveBattleItemPicker = null;
+  battleSceneModal.classList.add('hidden');
+  battleItemPickerBox.classList.add('hidden');
+  battleMessageText.classList.add('hidden');
+  pvpMatch.relay?.destroy?.();
+  pvpMatch.participantActionListener?.destroy?.();
+  pvpMatch.presenceMonitor?.destroy?.();
+  try {
+    await finishPvpRoom(roomCode);
+  } catch (error) {
+    console.error('対人戦の終了通知に失敗しました', error);
+  }
+
+  pvpMatch = null;
+  game = undefined;
+  stopMusic();
+  appEl.classList.add('hidden');
+  preGame.classList.remove('hidden');
+  showHubScreen();
+  showToast(`${won ? '勝利！🎉' : '敗北…'}　対戦報酬として${earnedM}M獲得しました`, 3200);
 }
 
 /**
