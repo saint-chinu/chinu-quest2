@@ -1617,6 +1617,89 @@ html, body {
   max-width: 468px;
 }
 
+.shop-sell-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: min(600px, 90vw);
+}
+
+.shop-sell-header .pg-subtitle { margin: 0; }
+.shop-sell-header .pg-button { margin: 0; min-width: 132px; }
+
+.shop-sell-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.shop-sell-quantity {
+  min-width: 42px;
+  color: #ffd866;
+  text-align: center;
+  font-weight: 800;
+}
+
+.shop-sell-step {
+  width: 38px;
+  height: 38px;
+  border: 0;
+  border-radius: 9px;
+  background: #284b5c;
+  color: #fff;
+  font-size: 22px;
+  font-weight: 800;
+}
+
+.shop-sell-step:disabled { opacity: 0.35; }
+.shop-sell-selected { outline: 1px solid rgba(255, 216, 102, 0.75); }
+
+#shop-sell-confirm {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(4, 7, 16, 0.88);
+}
+
+#shop-sell-confirm.hidden { display: none; }
+
+.shop-sell-confirm-box {
+  width: min(520px, 92vw);
+  max-height: 86vh;
+  overflow: hidden;
+  padding: 22px;
+  border: 1px solid rgba(117, 224, 226, 0.55);
+  border-radius: 16px;
+  background: #171a2c;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+}
+
+#shop-sell-confirm-list {
+  max-height: 48vh;
+  overflow-y: auto;
+  margin: 12px 0;
+  padding: 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.shop-sell-confirm-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 4px;
+  color: #fff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.shop-sell-confirm-total { color: #ffd866; font-size: 18px; font-weight: 800; }
+.shop-sell-confirm-actions { display: flex; justify-content: center; gap: 12px; }
+
 #story-overlay-dialogue[data-stage="budou"] .story-overlay-portrait[data-character="ウサギン"] {
   left: 2vw;
   bottom: calc(57px + 3mm);

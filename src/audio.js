@@ -56,6 +56,7 @@ function getAudioEl(track) {
   if (!audioEls[track]) {
     const el = new Audio(TRACK_SRC[track]);
     el.loop = true;
+    el.muted = muted;
     el.volume = muted ? 0 : VOLUME;
     audioEls[track] = el;
   }
@@ -74,6 +75,9 @@ function unlockAudioElements() {
   startSilentAnchor();
   for (const track of Object.keys(TRACK_SRC)) {
     const el = getAudioEl(track);
+    // iOS Safariではvolume=0が即時反映されず、一瞬だけ実音が出る場合がある。
+    // 要素自体もmutedにしてから事前再生し、停止後にだけ通常状態へ戻す。
+    el.muted = true;
     el.volume = 0;
     el.play()
       .then(() => {
@@ -81,9 +85,11 @@ function unlockAudioElements() {
           el.pause();
           if (currentTrack !== track) el.currentTime = 0;
         }
+        el.muted = muted;
         el.volume = muted ? 0 : VOLUME;
       })
       .catch(() => {
+        el.muted = muted;
         el.volume = muted ? 0 : VOLUME;
       });
   }
@@ -96,6 +102,7 @@ window.addEventListener('keydown', unlockAudioElements, { once: true, capture: t
 export function setMuted(value) {
   muted = value;
   for (const el of Object.values(audioEls)) {
+    el.muted = muted;
     el.volume = muted ? 0 : VOLUME;
     if (muted) el.pause();
   }
@@ -119,6 +126,8 @@ function playTrack(track) {
     return;
   }
   const el = getAudioEl(track);
+  el.muted = false;
+  el.volume = VOLUME;
   // 以前のplay()が自動再生制限などで失敗して停止中なら、同じテーマでも
   // 「切替済み」とみなして黙ってreturnせず再試行する。
   if (currentTrack === track) {

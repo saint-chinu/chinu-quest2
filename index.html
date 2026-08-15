@@ -265,8 +265,24 @@
           <div id="shop-parts-list"></div>
         </div>
         <div id="shop-sell-view" class="shop-subview hidden">
-          <h3 class="pg-subtitle">カード売却</h3>
+          <div class="shop-sell-header">
+            <h3 class="pg-subtitle">カード売却</h3>
+            <button id="shop-bulk-sell" class="pg-button" disabled>一括売却</button>
+          </div>
+          <p id="shop-sell-summary" class="pg-label">売却するカードを選択してください</p>
           <div id="shop-list"></div>
+        </div>
+        <div id="shop-sell-confirm" class="hidden" role="dialog" aria-modal="true" aria-labelledby="shop-sell-confirm-title">
+          <div class="shop-sell-confirm-box">
+            <h3 id="shop-sell-confirm-title" class="pg-subtitle">売却確認</h3>
+            <div id="shop-sell-confirm-list"></div>
+            <p id="shop-sell-confirm-total" class="shop-sell-confirm-total"></p>
+            <p class="pg-label">上記のカードを売却しますか？</p>
+            <div class="shop-sell-confirm-actions">
+              <button id="shop-sell-confirm-yes" class="pg-button">はい</button>
+              <button id="shop-sell-confirm-no" class="pg-button pg-button-secondary">いいえ</button>
+            </div>
+          </div>
         </div>
         <div id="shop-pack-result" class="hidden">
           <h3 class="pg-subtitle">獲得結果</h3>

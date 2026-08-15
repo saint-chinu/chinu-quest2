@@ -2972,6 +2972,13 @@ const shopPackResult = document.getElementById('shop-pack-result');
 const shopPackCards = document.getElementById('shop-pack-cards');
 const shopPackResultClose = document.getElementById('shop-pack-result-close');
 const shopList = document.getElementById('shop-list');
+const shopBulkSell = document.getElementById('shop-bulk-sell');
+const shopSellSummary = document.getElementById('shop-sell-summary');
+const shopSellConfirm = document.getElementById('shop-sell-confirm');
+const shopSellConfirmList = document.getElementById('shop-sell-confirm-list');
+const shopSellConfirmTotal = document.getElementById('shop-sell-confirm-total');
+const shopSellConfirmYes = document.getElementById('shop-sell-confirm-yes');
+const shopSellConfirmNo = document.getElementById('shop-sell-confirm-no');
 const shopPartsList = document.getElementById('shop-parts-list');
 const shopBackButton = document.getElementById('shop-back');
 const shopMainMenu = document.getElementById('shop-main-menu');
@@ -5047,6 +5054,48 @@ function promptDeckSelection({ onCancel = null } = {}) {
 }
 
 let shopActiveMode = null;
+const shopSellSelections = new Map();
+
+function getShopSellEntries() {
+  const catalog = getCardCatalog(currentUserId);
+  const byKey = new Map(catalog.map((def) => [cardKey(def), def]));
+  const entries = [];
+  for (const [key, requested] of shopSellSelections) {
+    const def = byKey.get(key);
+    const price = def ? RARITY_SELL_PRICE[def.rarity] : null;
+    const owned = currentCharacter.ownedCards?.[key] || 0;
+    const surplus = Math.max(0, owned - inDeckCountOf(key));
+    const count = Math.min(Math.max(0, requested), surplus);
+    if (def && price != null && count > 0) entries.push({ key, def, count, price });
+  }
+  return entries;
+}
+
+function closeShopSellConfirm() {
+  shopSellConfirm.classList.add('hidden');
+}
+
+function openShopSellConfirm() {
+  const entries = getShopSellEntries();
+  if (!entries.length) return;
+  shopSellConfirmList.replaceChildren();
+  let totalCount = 0;
+  let totalPrice = 0;
+  for (const entry of entries) {
+    totalCount += entry.count;
+    totalPrice += entry.count * entry.price;
+    const row = document.createElement('div');
+    row.className = 'shop-sell-confirm-row';
+    const name = document.createElement('span');
+    name.textContent = `${entry.def.name} ×${entry.count}`;
+    const value = document.createElement('strong');
+    value.textContent = `${entry.count * entry.price}M`;
+    row.append(name, value);
+    shopSellConfirmList.appendChild(row);
+  }
+  shopSellConfirmTotal.textContent = `合計 ${totalCount}枚 ／ ${totalPrice}M`;
+  shopSellConfirm.classList.remove('hidden');
+}
 
 const SHOP_PACK_ICONS = Object.freeze({
   fire: '🔥',
@@ -5059,6 +5108,7 @@ const SHOP_PACK_ICONS = Object.freeze({
 });
 
 function setShopMode(mode) {
+  if (mode !== 'sell') closeShopSellConfirm();
   shopActiveMode = mode;
   shopMainMenu.classList.toggle('hidden', mode != null);
   shopCardView.classList.toggle('hidden', mode !== 'cards');
@@ -5181,20 +5231,51 @@ function showShopScreen(mode = null) {
       : `所持${owned} / ${def.rarity}は売却不可`;
     info.append(nameEl, meta);
 
-    const sellBtn = document.createElement('button');
-    sellBtn.className = 'deck-row-sell';
-    sellBtn.textContent = '売る';
-    sellBtn.disabled = price == null || surplus <= 0;
-    sellBtn.addEventListener('click', () => {
-      currentCharacter.ownedCards[key] -= 1;
-      currentCharacter.m += price;
-      saveCharacter(currentUserId, currentCharacter);
+    const selected = Math.min(shopSellSelections.get(key) || 0, Math.max(surplus, 0));
+    if (selected > 0) shopSellSelections.set(key, selected);
+    else shopSellSelections.delete(key);
+    const controls = document.createElement('div');
+    controls.className = 'shop-sell-controls';
+    const minus = document.createElement('button');
+    minus.type = 'button';
+    minus.className = 'shop-sell-step';
+    minus.textContent = '−';
+    minus.setAttribute('aria-label', `${def.name}の売却枚数を減らす`);
+    minus.disabled = selected <= 0;
+    const quantity = document.createElement('span');
+    quantity.className = 'shop-sell-quantity';
+    quantity.textContent = `×${selected}`;
+    const plus = document.createElement('button');
+    plus.type = 'button';
+    plus.className = 'shop-sell-step';
+    plus.textContent = '＋';
+    plus.setAttribute('aria-label', `${def.name}の売却枚数を増やす`);
+    plus.disabled = price == null || selected >= surplus;
+    minus.addEventListener('click', () => {
+      const next = Math.max(0, (shopSellSelections.get(key) || 0) - 1);
+      if (next) shopSellSelections.set(key, next);
+      else shopSellSelections.delete(key);
       showShopScreen('sell');
     });
+    plus.addEventListener('click', () => {
+      const next = Math.min(surplus, (shopSellSelections.get(key) || 0) + 1);
+      if (next > 0) shopSellSelections.set(key, next);
+      showShopScreen('sell');
+    });
+    controls.append(minus, quantity, plus);
+    if (selected > 0) row.classList.add('shop-sell-selected');
 
-    row.append(swatch, info, sellBtn);
+    row.append(swatch, info, controls);
     shopList.appendChild(row);
   }
+  const sellEntries = getShopSellEntries();
+  const sellCount = sellEntries.reduce((sum, entry) => sum + entry.count, 0);
+  const sellTotal = sellEntries.reduce((sum, entry) => sum + entry.count * entry.price, 0);
+  shopBulkSell.disabled = sellCount === 0;
+  shopBulkSell.textContent = sellCount ? `一括売却（${sellCount}枚）` : '一括売却';
+  shopSellSummary.textContent = sellCount
+    ? `選択中：${sellCount}枚 ／ 売却額 ${sellTotal}M`
+    : '売却するカードを選択してください';
   showScreen(shopScreen);
 }
 
@@ -5243,8 +5324,32 @@ shopPackResultClose.addEventListener('click', () => {
 
 shopMenuCards.addEventListener('click', () => setShopMode('cards'));
 shopMenuParts.addEventListener('click', () => setShopMode('parts'));
-shopMenuSell.addEventListener('click', () => setShopMode('sell'));
+shopMenuSell.addEventListener('click', () => {
+  shopSellSelections.clear();
+  showShopScreen('sell');
+});
 shopSectionBack.addEventListener('click', () => setShopMode(null));
+
+shopBulkSell.addEventListener('click', openShopSellConfirm);
+shopSellConfirmNo.addEventListener('click', closeShopSellConfirm);
+shopSellConfirmYes.addEventListener('click', () => {
+  const entries = getShopSellEntries();
+  if (!entries.length) {
+    closeShopSellConfirm();
+    showShopScreen('sell');
+    return;
+  }
+  let totalPrice = 0;
+  for (const entry of entries) {
+    currentCharacter.ownedCards[entry.key] -= entry.count;
+    totalPrice += entry.count * entry.price;
+  }
+  currentCharacter.m += totalPrice;
+  saveCharacter(currentUserId, currentCharacter);
+  shopSellSelections.clear();
+  closeShopSellConfirm();
+  showShopScreen('sell');
+});
 
 shopBackButton.addEventListener('click', showHubScreen);
 
