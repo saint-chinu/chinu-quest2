@@ -85,7 +85,7 @@ export const AI_PROFILES = {
     itemGambleChance: 0.8,
     highValueAvoidance: 0.7,
   },
-  '彼': {
+  '「彼」': {
     offElementSummonChance: 0.05,
     levelUpReserve: 300,
     minWinProbabilityToInvade: 0.55,

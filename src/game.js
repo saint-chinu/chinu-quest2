@@ -1859,7 +1859,7 @@ export class Game {
     // 左右の環状路のCP付近を循環し続けることがあるため、未通過CP→ゴール
     // の順を常に目標にする。他CPUの「高額空地優先」は維持する。
     const isDanball = this._isDanballBoss(player);
-    const prioritizesLapRoute = ['暴君マダイ', 'Q', '彼'].includes(player.name) || isDanball;
+    const prioritizesLapRoute = ['暴君マダイ', 'Q', '「彼」'].includes(player.name) || isDanball;
     const valuableEmpty = prioritizesLapRoute ? [] : this._cpuHighValueEmptyLands();
     const target = valuableEmpty.length > 0
       ? valuableEmpty.reduce((best, tile) => {
@@ -1895,7 +1895,7 @@ export class Game {
         if (Number.isFinite(onikuDistance)) score += Math.max(0, 4 - onikuDistance * 0.5);
         if (tile.owner === leadingOniku.id) score += 10;
       }
-      if (player.name === '彼' && tile.type === TileType.LAND && tile.owner == null) {
+      if (player.name === '「彼」' && tile.type === TileType.LAND && tile.owner == null) {
         const preferredGodId = tile.element === Element.WATER ? 'suijin' : tile.element === Element.FOREST ? 'yamagami' : null;
         if (preferredGodId && player.hand.some((card) => catalogIdOf(card) === preferredGodId)) score += 0.25;
       }
@@ -3281,7 +3281,7 @@ export class Game {
         ? this._cpuChooseSummonCardForDanball(options, tile, player)
         : player.name === 'Q'
           ? this._cpuChooseSummonCardForQ(options, tile, profile, player)
-          : player.name === '彼'
+          : player.name === '「彼」'
             ? this._cpuChooseSummonCardForKare(options, tile, profile, player)
             : this._cpuChooseSummonCard(options, tile, profile, player);
       player.hand = player.hand.filter((c) => c.id !== card.id);
@@ -4740,9 +4740,9 @@ export class Game {
     return null;
   }
 
-  /** 「彼」専用: 開示請求はモンスター優先、その中でEX→R→S→Nの順に奪う。 */
+  /** 「彼」・段ボール男共通: 開示請求はモンスター優先、その中でEX→R→S→Nの順に奪う。 */
   async _cpuMaybeUseDisclosureRequest(player) {
-    if (player.name !== '彼' || player.spellUsedThisTurn) return;
+    if ((player.name !== '「彼」' && !this._isDanballBoss(player)) || player.spellUsedThisTurn) return;
     const disclosure = player.hand.find((card) => card.type === CardType.SPELL && card.effect?.type === 'disclosureRequest');
     if (!disclosure || player.currency < (disclosure.cost || 0)) return;
     const rarityRank = { [Rarity.N]: 0, [Rarity.S]: 1, [Rarity.R]: 2, [Rarity.EX]: 3 };
