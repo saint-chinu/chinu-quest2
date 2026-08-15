@@ -14,7 +14,9 @@ const TRACK_SRC = {
   battle: assetUrl('/audio/battle-theme.mp3'),
   madai: assetUrl('/audio/stage2-theme.mp3'), // ②マダイの岩礁
   budou: assetUrl('/audio/stage3-theme.mp3'), // ③決闘の浜辺
-  boss: assetUrl('/audio/boss-theme.mp3'), // ④暗転した世界（ラスボス）
+  qTrain: assetUrl('/audio/stage4-theme.mp3'), // ④暴走列車Q号
+  boss: assetUrl('/audio/boss-theme.mp3'), // ⑤暗転した世界
+  kare: assetUrl('/audio/stage6-theme.mp3'), // ⑥創造主の世界
 };
 
 // mapId(board.jsのMAPS)→専用トラック。無いキーはplayMapTheme側でboardに
@@ -22,7 +24,9 @@ const TRACK_SRC = {
 const MAP_TRACK = {
   madai: 'madai',
   budou: 'budou',
+  'q-train': 'qTrain',
   danball: 'boss',
+  kare: 'kare',
 };
 
 const VOLUME = 0.5;
