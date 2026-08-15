@@ -47,7 +47,7 @@ import {
   beginPvpMatch,
 } from './pvp.js';
 import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted, playSfx } from './audio.js';
-import { getSpeedMultiplier, setSpeedMultiplier, getWaitCutRate, setWaitCutRate } from './utils.js';
+import { getSpeedMultiplier, setSpeedMultiplier, getWaitCutRate, setWaitCutRate, tween, easeInOutQuad } from './utils.js';
 
 // 盤面メニューの速度調整（1倍/1.5倍/2倍/3倍）: game.js/scene.jsはtween/delay
 // （utils.js）経由で既に倍率がかかるが、main.js自身のメッセージ表示・演出待ちは
@@ -2842,6 +2842,7 @@ function startBattle(character, storyOptions = {}) {
     onTurnFocus: relayable('turnFocus', promptTurnFocus, { broadcast: true }),
     onTollPayment: relayable('tollPayment', promptTollPayment, { broadcast: true }),
     onMoveDestination: relayable('moveDestination', promptMoveDestination, { broadcast: true }),
+    onPieceMove: relayable('pieceMove', promptPieceMove, { broadcast: true }),
     onLandLoss: relayable('landLoss', promptLandLoss, { broadcast: true }),
     onLandChain: relayable('landChain', promptLandChain, { broadcast: true }),
     onLandLevelUp: relayable('landLevelUp', promptLandLevelUp, { broadcast: true }),
@@ -6320,6 +6321,7 @@ const pvpGuestHandlers = {
   damageEffect: serializedCamera(promptDamageEffect),
   tollPayment: serializedCamera(promptTollPayment),
   moveDestination: promptMoveDestination,
+  pieceMove: promptPieceMove,
   landLoss: serializedCamera(promptLandLoss),
   landChain: serializedCamera(promptLandChain),
   landLevelUp: serializedCamera(promptLandLevelUp),
@@ -6329,6 +6331,13 @@ const pvpGuestHandlers = {
 };
 
 const pvpPieces = new Map(); // playerId -> billboard sprite (ゲスト側のローカル駒キャッシュ)
+// ゲスト側でアニメーション中の駒。applyPvpBoardStateのスナップを抑止し、
+// 後追いのpublicStateで移動中の駒がワープ（瞬間移動）しないようにする。
+const movingGuestPieces = new Set();
+// 同じプレイヤーの移動が重なった時、古いアニメーションを打ち切るための世代番号。
+const pieceMoveGen = new Map();
+const GUEST_STEP_DURATION_MS = 300; // game.jsのSTEP_DURATION_MS相当（未export）
+const GUEST_STEP_HOP = 0.55;
 
 /** 対戦をまたいで前のThree.jsシーンの駒を再利用しないよう、ゲスト駒を破棄する。 */
 function clearPvpPieces() {
@@ -6338,6 +6347,44 @@ function clearPvpPieces() {
     piece?.material?.dispose?.();
   }
   pvpPieces.clear();
+  movingGuestPieces.clear();
+  pieceMoveGen.clear();
+}
+
+/**
+ * ゲスト側専用: ホストが配信した1ターン分の移動経路（from + 各マス座標）を
+ * 受け取り、駒を1マスずつ（軽いホップ付きで）動かす。アニメ中はその駒の
+ * publicStateスナップを抑止する（movingGuestPieces）。ホスト/ローカルでは
+ * 何もしない（駒はgame.jsが直接動かしている）。
+ */
+async function promptPieceMove({ playerId, from, path }) {
+  if (!(pvpMatch && !pvpMatch.isHost)) return;
+  if (!scene || !Array.isArray(path) || path.length === 0) return;
+  const piece = pvpPieces.get(playerId);
+  if (!piece) return; // まだ駒が生成されていなければ次のスナップに任せる
+  const points = (from ? [from, ...path] : path).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.z));
+  if (points.length < 2) return;
+
+  const myGen = (pieceMoveGen.get(playerId) || 0) + 1;
+  pieceMoveGen.set(playerId, myGen);
+  movingGuestPieces.add(playerId);
+  try {
+    for (let i = 1; i < points.length; i++) {
+      if (pieceMoveGen.get(playerId) !== myGen) return; // 新しい移動に上書きされた
+      const a = points[i - 1];
+      const b = points[i];
+      await tween(GUEST_STEP_DURATION_MS, (t) => {
+        const e = easeInOutQuad(t);
+        const hop = Math.sin(Math.PI * t) * GUEST_STEP_HOP;
+        piece.position.set(a.x + (b.x - a.x) * e, PIECE_REST_Y + hop, a.z + (b.z - a.z) * e);
+      });
+    }
+    const last = points[points.length - 1];
+    piece.position.set(last.x, PIECE_REST_Y, last.z);
+  } finally {
+    // 自分が最新世代のときだけ移動中フラグを解除（後発アニメを邪魔しない）。
+    if (pieceMoveGen.get(playerId) === myGen) movingGuestPieces.delete(playerId);
+  }
 }
 
 /** ゲスト側専用: publicStateの土地(所有者/レベル/属性/配置モンスター)と各プレイヤーの駒位置をローカルのtiles/sceneへそのまま反映する。ホストのように1マスずつアニメーションはしない（毎回のsync時点の最終状態へスナップするだけ）。 */
@@ -6410,7 +6457,10 @@ function applyPvpBoardState(publicState) {
         : scene.createPiece(p.color, tile.position);
       pvpPieces.set(p.id, piece);
     }
-    piece.position.set(tile.position.x, PIECE_REST_Y, tile.position.z);
+    // 移動アニメーション中の駒は、後追いのpublicStateで終点へワープさせない。
+    if (!movingGuestPieces.has(p.id)) {
+      piece.position.set(tile.position.x, PIECE_REST_Y, tile.position.z);
+    }
   }
 }
 

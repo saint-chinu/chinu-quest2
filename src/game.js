@@ -103,6 +103,7 @@ export class Game {
     onGoalAchieved,
     onCpuRoll,
     onMoveComplete,
+    onPieceMove,
     onLandCommand,
     onPickMonsterCard,
     onConfirmAction,
@@ -171,6 +172,7 @@ export class Game {
     this.onGoalAchieved = onGoalAchieved || (() => Promise.resolve());
     this.onCpuRoll = onCpuRoll;
     this.onMoveComplete = onMoveComplete;
+    this.onPieceMove = onPieceMove || (() => {});
     this.onLandCommand = onLandCommand;
     this.onPickMonsterCard = onPickMonsterCard;
     this.onConfirmAction = onConfirmAction;
@@ -1589,6 +1591,7 @@ export class Game {
    */
   async _movePlayer(player, steps) {
     this._turnPathIds = [];
+    const originTileId = player.tileId;
     const triggeredRunawayTiles = new Set();
     const destinationIds = this._forwardDestinationIds(player, steps);
     if (destinationIds.length) this.onMoveDestination({ tileIds: destinationIds, active: true });
@@ -1684,6 +1687,26 @@ export class Game {
     }
     this.onBranchUndo({ active: false, playerId: player.id });
     if (destinationIds.length) this.onMoveDestination({ tileIds: destinationIds, active: false });
+    this._broadcastPieceMove(player, originTileId);
+  }
+
+  /**
+   * 対人戦のゲスト側は publicState のスナップでしか駒位置を知れず、移動が
+   * 「ワープ」に見える。そこで確定した1ターン分の経路（_turnPathIds）を
+   * まとめて1イベントで配信し、ゲスト側で駒を1マスずつ動かせるようにする。
+   * ローカルプレイ・ホスト自身では onPieceMove は実質no-op（relayable参照）。
+   */
+  _broadcastPieceMove(player, originTileId) {
+    const path = this._turnPathIds;
+    if (!path || path.length === 0) return;
+    const posOf = (id) => {
+      const t = this.tiles[id];
+      return t ? { x: t.position.x, z: t.position.z } : null;
+    };
+    const from = posOf(originTileId);
+    const points = path.map(posOf).filter(Boolean);
+    if (!from || points.length === 0) return;
+    this.onPieceMove({ playerId: player.id, from, path: points });
   }
 
   /** 分岐をまだ選ばない状態で、残り歩数から到達し得る全タイルを列挙する。 */
@@ -1723,6 +1746,7 @@ export class Game {
    */
   async _movePlayerBackward(player, steps) {
     this._turnPathIds = [];
+    const originTileId = player.tileId;
     const plannedPath = [];
     for (const tileId of player.tileHistory.slice(1, steps + 1)) {
       plannedPath.push(tileId);
@@ -1755,6 +1779,7 @@ export class Game {
     // 次のサイコロから通常どおりゴール方向へ進み直せるようにする。
     player.previousTileId = player.tileHistory[1] ?? null;
     if (destinationId != null) this.onMoveDestination({ tileId: destinationId, active: false });
+    this._broadcastPieceMove(player, originTileId);
   }
 
   /**
