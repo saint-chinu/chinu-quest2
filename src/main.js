@@ -211,7 +211,10 @@ const BLINK_MS = 600;
 const TILE_TYPE_LABEL = { start: 'ゴール', land: '土地', event: 'チェックポイント', shop: 'ショップ', shrine: 'ほこら', warp: 'ワープ', runaway: '暴走', defamation: '誹謗中傷' };
 
 function tileSummaryText(tile) {
-  const lines = [`【${TILE_TYPE_LABEL[tile.type]}】`];
+  const typeLabel = tile.type === 'warp' && tile.warpKind === 'wormhole'
+    ? 'ワームホール'
+    : TILE_TYPE_LABEL[tile.type];
+  const lines = [`【${typeLabel}】`];
   if (tile.type === 'land') {
     lines.push(`属性: ${ELEMENT_LABEL[tile.element]} / Lv${tile.level}`);
     lines.push(tile.ownerName ? `所有者: ${tile.ownerName}` : '所有者: なし');
@@ -1631,7 +1634,7 @@ async function promptShrineEffect({ position, title, message }) {
 }
 
 /** ワープ停止時: 発動地点へ寄り、駒を飛ばしながらカメラで追って結果を表示する。 */
-async function promptWarpEffect({ playerId, sourcePosition, targetPosition }) {
+async function promptWarpEffect({ playerId, sourcePosition, targetPosition, label = 'ワープ' }) {
   if (!scene || !sourcePosition || !targetPosition) return;
   const isPvpGuest = pvpMatch && !pvpMatch.isHost;
   const sprite = isPvpGuest
@@ -1645,7 +1648,7 @@ async function promptWarpEffect({ playerId, sourcePosition, targetPosition }) {
   await scene.flyPieceTo(sprite, targetPosition);
   await Promise.all([
     scene.playSummonBurst(targetPosition),
-    showTargetEffectMessage(targetPosition, 'ワープした', 1400),
+    showTargetEffectMessage(targetPosition, `${label}で転移した`, 1400),
   ]);
   await scene.focusAndZoom(targetPosition.x, targetPosition.z, 1, 320);
 }
@@ -4060,6 +4063,7 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
       allianceId: heroAllianceId,
       deckList: heroDeckList,
       iconImage,
+      startGoalIndex: stage.heroStartGoalIndex,
     },
   ];
   for (const allyDef of [ally, variant.extraAlly].filter(Boolean)) {
@@ -4071,6 +4075,7 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
       deckList: allyDef.deckKey ? buildCharacterDeckList(allyDef.deckKey) : buildThemedDeckList(allyDef.theme),
       iconImage: await loadNpcTokenImage(allyDef.name),
       elements: allyDef.theme.elements,
+      startGoalIndex: allyDef.startGoalIndex,
     });
   }
   for (const opponent of opponents) {
@@ -4084,6 +4089,7 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
         : opponent.deckKey ? buildCharacterDeckList(opponent.deckKey) : buildThemedDeckList(opponent.theme),
       iconImage: await loadNpcTokenImage(opponent.name),
       elements: opponent.theme.elements,
+      startGoalIndex: opponent.startGoalIndex,
     });
   }
   return configs;

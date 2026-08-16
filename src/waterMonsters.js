@@ -18,6 +18,7 @@ const waterMonster = (id, name, rarity, hp, atk, options = {}) => ({
   ...(options.effect ? { effect: options.effect } : {}),
   ...(options.effectDescription ? { effectDescription: options.effectDescription } : {}),
   ...(options.npcExclusive ? { npcExclusive: true } : {}),
+  ...(options.exclusiveOwnerName ? { exclusiveOwnerName: options.exclusiveOwnerName } : {}),
   imageDataUrl: options.imageDataUrl ?? assetUrl(`/images/card-art/${id}.jpg`),
 });
 
@@ -34,6 +35,7 @@ export const WATER_MONSTER_CATALOG = {
   su: waterMonster('su', '酢', Rarity.EX, 60, 60, {
     cost: 300,
     npcExclusive: true,
+    exclusiveOwnerName: '朕',
     traits: ['pierce', 'twoStepMove'],
     effectDescription: '貫通。土地コマンドの移動で最大2マス移動でき、特殊マス1つを飛び越えられる（特殊マスには着地不可）',
     imageDataUrl: assetUrl('/images/card-art/su.png'),

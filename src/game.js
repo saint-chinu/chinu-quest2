@@ -1,4 +1,4 @@
-import { TileType, mapRequiresAllCheckpoints, mapCheckpointBonus } from './board.js';
+import { TileType, mapRequiresAllCheckpoints, mapCheckpointBonus, mapUsesAlternateGoalStarts } from './board.js';
 import { PIECE_REST_Y, UNIT_ICON_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity } from './cards.js';
 import { buildStarterCardList, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf } from './battleCards.js';
@@ -151,6 +151,7 @@ export class Game {
     goalCurrency = null,
   }) {
     this.tiles = tiles;
+    this.mapId = mapId;
     this.requireAllCheckpoints = mapRequiresAllCheckpoints(mapId);
     this.checkpointBonus = mapCheckpointBonus(mapId);
     // このマップに実在するチェックポイント番号一覧（board.jsが生成順に
@@ -273,7 +274,13 @@ export class Game {
     // when picking the next step at a branch (see _movePlayer) - null at
     // game start, when every neighbor of the start tile is a fair option.
     this.players = resolvedConfigs.map((cfg, id) => {
-      const deck = Deck.fromCardList(cfg.deckList ?? buildStarterCardList(cfg.deckVariant));
+      // NPC専用カードは指定された所有者のデッキでのみ有効。過去の同期不具合や
+      // 保存データに混入していても、別プレイヤー/CPUへ引き継がせない。
+      const sourceDeckList = cfg.deckList ?? buildStarterCardList(cfg.deckVariant);
+      const permittedDeckList = sourceDeckList.filter((card) => (
+        !card.npcExclusive || !card.exclusiveOwnerName || card.exclusiveOwnerName === cfg.name
+      ));
+      const deck = Deck.fromCardList(permittedDeckList);
       // 「未知との遭遇」用: このデッキにセットされている無属性モンスターの種類
       // （catalogId）一覧。開始時は全40枚がdrawPileにあるのでここから拾える。
       const deckNeutralMonsterIds = new Set(
@@ -287,6 +294,7 @@ export class Game {
       isCPU: !!cfg.isCPU,
       currency: 500,
       tileId: startingTileId,
+      homeGoalTileId: startingTileId,
       previousTileId: null,
       color: cfg.color,
       // 「未知との遭遇」判定用: この盤面でこれまでにドローしたカードのcatalogId。
@@ -347,6 +355,7 @@ export class Game {
     // 盤面開始時に一度だけ先攻を抽選し、以後はこの順番を固定する。
     // プレイヤーIDや同盟順は変えず、ホスト／ゲストの同期も壊さない。
     this.currentPlayerIndex = Math.floor(Math.random() * this.players.length);
+    this._assignGoalStarts(resolvedConfigs);
     this.isBusy = false;
     this.tilesSincePan = 0;
     // Tile ids stepped onto during the current dice roll (landing tile
@@ -366,6 +375,23 @@ export class Game {
 
   get currentPlayer() {
     return this.players[this.currentPlayerIndex];
+  }
+
+  /** ステージ8は先攻順で左/右Gへ交互配置。ストーリー側の明示指定を優先する。 */
+  _assignGoalStarts(resolvedConfigs) {
+    const goals = this.tiles.filter((tile) => tile.type === TileType.START);
+    if (goals.length < 2 || !mapUsesAlternateGoalStarts(this.mapId)) return;
+    const turnOrder = Array.from({ length: this.players.length }, (_, offset) => (
+      (this.currentPlayerIndex + offset) % this.players.length
+    ));
+    for (let order = 0; order < turnOrder.length; order++) {
+      const playerIndex = turnOrder[order];
+      const explicit = resolvedConfigs[playerIndex]?.startGoalIndex;
+      const goalIndex = Number.isInteger(explicit) ? explicit : order % goals.length;
+      const goal = goals[Math.max(0, Math.min(goalIndex, goals.length - 1))];
+      this.players[playerIndex].tileId = goal.id;
+      this.players[playerIndex].homeGoalTileId = goal.id;
+    }
   }
 
   /** 呼び出し元（main.jsの「退出」）がこのGameを見限る時に呼ぶ。以後、進行中のターン/戦闘シーンの続きは主要な再開ポイントで早期returnし、次に始まる別セッションのUIを巻き込まない。 */
@@ -1294,7 +1320,8 @@ export class Game {
    * ボーナスを追加する（未通過なら250Gのみ）。 */
   async _spellReturnPlayerToStart(player, reward = 250) {
     if (!player) return;
-    const startTile = this.tiles.find((t) => t.type === TileType.START);
+    const startTile = this.tiles[player.homeGoalTileId]
+      ?? this.tiles.find((t) => t.type === TileType.START);
     if (!startTile) return;
     player.previousTileId = null;
     player.tileId = startTile.id;
@@ -1659,6 +1686,7 @@ export class Game {
   async _movePlayer(player, steps) {
     this._turnPathIds = [];
     const originTileId = player.tileId;
+    let movementSegmentOriginTileId = originTileId;
     const triggeredRunawayTiles = new Set();
     const destinationIds = this._forwardDestinationIds(player, steps);
     if (destinationIds.length) this.onMoveDestination({ tileIds: destinationIds, active: true });
@@ -1727,6 +1755,26 @@ export class Game {
         if (this.storyEnded) break;
       }
 
+
+      // ⑧のKは通過した瞬間に対のKへ強制ワープする。最後の1歩でKへ
+      // ちょうど止まった時だけ、転移後に次のサイコロ2倍を付与する。
+      if (toTile.type === TileType.WARP && toTile.warpOnPass) {
+        const exactStop = i === steps - 1;
+        // 対人ゲストには「ここまで歩く→ワープ→残りを歩く」の順で配信する。
+        // 先にwarpEffectだけ流すと、その後届く一括歩行で駒が入口へ戻ってしまう。
+        this._broadcastPieceMove(player, movementSegmentOriginTileId);
+        this._turnPathIds = [];
+        await this._resolveWarpTile(player, toTile, { doubleNextDice: exactStop });
+        movementSegmentOriginTileId = player.tileId;
+        player.skipWarpResolveTileId = player.tileId;
+        if (!exactStop) {
+          this.onMoveDestination({ tileIds: destinationIds, active: false });
+          const updatedIds = this._forwardDestinationIds(player, steps - i - 1);
+          if (updatedIds.length) this.onMoveDestination({ tileIds: updatedIds, active: true });
+          destinationIds.splice(0, destinationIds.length, ...updatedIds);
+        }
+      }
+
       // 暴走マスを「通過」した場合だけ残り歩数を2～3追加する。追加後も通常の
       // 分岐選択を通るため、プレイヤーは進行方向を選べる。同じ暴走マスを
       // 1ターン中に周回して再通過しても無限加速しないよう1回限りにする。
@@ -1754,7 +1802,7 @@ export class Game {
     }
     this.onBranchUndo({ active: false, playerId: player.id });
     if (destinationIds.length) this.onMoveDestination({ tileIds: destinationIds, active: false });
-    this._broadcastPieceMove(player, originTileId);
+    this._broadcastPieceMove(player, movementSegmentOriginTileId);
   }
 
   /**
@@ -2137,8 +2185,15 @@ export class Game {
         return best.id;
       }
     }
-    const startTile = this.tiles.find((t) => t.type === TileType.START);
-    return startTile ? startTile.id : null;
+    const goals = this.tiles.filter((t) => t.type === TileType.START);
+    if (goals.length === 0) return null;
+    let best = goals[0];
+    let bestDist = this._forwardTileDistance(player.tileId, player.previousTileId, best.id);
+    for (const goal of goals.slice(1)) {
+      const distance = this._forwardTileDistance(player.tileId, player.previousTileId, goal.id);
+      if (distance < bestDist) { best = goal; bestDist = distance; }
+    }
+    return best.id;
   }
 
   /** 未通過CPのうち、現在の進行状態から最短のもの。無ければnull。 */
@@ -2328,7 +2383,8 @@ export class Game {
     } else if (tile.type === TileType.SHRINE) {
       await this._resolveShrineTile(player);
     } else if (tile.type === TileType.WARP) {
-      await this._resolveWarpTile(player);
+      if (player.skipWarpResolveTileId === tile.id) player.skipWarpResolveTileId = null;
+      else await this._resolveWarpTile(player);
     } else if (tile.type === TileType.RUNAWAY) {
       await this._resolveRunawayTile(player);
     } else if (tile.type === TileType.DEFAMATION) {
@@ -2463,8 +2519,8 @@ export class Game {
    * 無くなるのでpreviousTileIdをリセットし、次の分岐では全方向が候補
    * になる。
    */
-  async _resolveWarpTile(player) {
-    const tile = this.tiles[player.tileId];
+  async _resolveWarpTile(player, sourceTile = null, { doubleNextDice = false } = {}) {
+    const tile = sourceTile ?? this.tiles[player.tileId];
     const targetTile = this.tiles.find((t) => t.id === tile.warpTargetId);
     if (!targetTile) return;
     await this.onWarpEffect({
@@ -2472,11 +2528,17 @@ export class Game {
       playerName: player.name,
       sourcePosition: tile.position,
       targetPosition: targetTile.position,
+      label: tile.warpKind === 'wormhole' ? 'ワームホール' : 'ワープ',
     });
     player.previousTileId = null;
     player.tileId = targetTile.id;
     if (player.mesh) player.mesh.position.set(targetTile.position.x, PIECE_REST_Y, targetTile.position.z);
-    this.onLog(`${player.name}はワープした！`);
+    const warpLabel = tile.warpKind === 'wormhole' ? 'ワームホール' : 'ワープ';
+    this.onLog(`${player.name}は${warpLabel}で転移した！`);
+    if (doubleNextDice) {
+      player.diceCurse = { type: 'double' };
+      this.onLog(`${player.name}はワームホールにちょうど停止！ 次のサイコロの出目が2倍になる！`);
+    }
     this._notifyState();
   }
 
@@ -3205,7 +3267,8 @@ export class Game {
    * 通常=500Gでゴールから再スタート）を行う。
    */
   async _triggerBankruptcy(player) {
-    const startTile = this.tiles.find((t) => t.type === TileType.START);
+    const startTile = this.tiles[player.homeGoalTileId]
+      ?? this.tiles.find((t) => t.type === TileType.START);
     await this.onBankruptcy({
       playerId: player.id,
       playerName: player.name,
@@ -3251,7 +3314,11 @@ export class Game {
       distance += 1;
       const next = [];
       for (const id of frontier) {
-        for (const neighborId of this.tiles[id].neighbors) {
+        for (const rawNeighborId of this.tiles[id].neighbors) {
+          const entered = this.tiles[rawNeighborId];
+          const neighborId = entered?.warpOnPass && entered.warpTargetId != null
+            ? entered.warpTargetId
+            : rawNeighborId;
           if (visited.has(neighborId)) continue;
           if (neighborId === toId) return distance;
           visited.add(neighborId);
@@ -3277,12 +3344,18 @@ export class Game {
         const tile = this.tiles[state.currentId];
         const forward = tile.neighbors.filter((id) => id !== state.previousId);
         const options = forward.length > 0 ? forward : tile.neighbors;
-        for (const neighborId of options) {
+        for (const rawNeighborId of options) {
+          const entered = this.tiles[rawNeighborId];
+          const neighborId = entered?.warpOnPass && entered.warpTargetId != null
+            ? entered.warpTargetId
+            : rawNeighborId;
           if (neighborId === targetId) return distance;
-          const key = keyOf(neighborId, state.currentId);
+          // 強制ワープ後は来た道という概念を失う（実移動の_resolveWarpTileと同じ）。
+          const nextPreviousId = entered?.warpOnPass ? null : state.currentId;
+          const key = keyOf(neighborId, nextPreviousId);
           if (visited.has(key)) continue;
           visited.add(key);
-          next.push({ currentId: neighborId, previousId: state.currentId });
+          next.push({ currentId: neighborId, previousId: nextPreviousId });
         }
       }
       frontier = next;
@@ -5079,6 +5152,7 @@ export class Game {
     return {
       id: tile.id,
       type: tile.type,
+      warpKind: tile.warpKind ?? null,
       element: tile.element,
       level: isLand ? tile.level : null,
       landValue: isLand ? this._landValueOfTile(tile) : null,

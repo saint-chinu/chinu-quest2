@@ -161,6 +161,22 @@ const FINAL_ALLIANCE_ROWS = [
   'KNFMWTNHDNL',
 ];
 
+// ⑧朕と酢の港。左右2本の縦路はK同士の強制ワープでのみ接続される。
+// Kは通過した時点で対岸へ飛び、ちょうど停止した場合は次のダイスが2倍になる。
+const CHIN_HARBOR_ROWS = [
+  'G....K',
+  'T....F',
+  'T....F',
+  'W....M',
+  'W....M',
+  'M....T',
+  'M....T',
+  'F....W',
+  'F....W',
+  'C....N',
+  'K....G',
+];
+
 // 対人戦のマップ選択・ストーリーモードの各ステージ盤面として使う一覧。
 // idはstory.jsの各ステージ`key`と揃えてある - ストーリーモードは自ステージ
 // のkeyをそのままmapIdとしてcreateBoard()へ渡すだけで対応する専用マップに
@@ -182,6 +198,7 @@ export const MAPS = [
   { id: 'danball', name: '⑤ 暗転した世界', rows: DANBALL_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage4.png'), spacing: 2.8 },
   { id: 'kare', name: '⑥ 創造主の世界', rows: KARE_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage6-cyberspace.png'), spacing: 2.8 },
   { id: 'final-alliance', name: '⑦ 支配の終焉', rows: FINAL_ALLIANCE_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage7-court.png'), spacing: 2.8 },
+  { id: 'chin-harbor', name: '⑧ 朕と酢の花火港', rows: CHIN_HARBOR_ROWS, requireAllCheckpoints: true, checkpointBonus: 250, alternateGoalStarts: true, background: assetUrl('/images/stage/stage8-fireworks-harbor.gif'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {
@@ -218,6 +235,11 @@ export function mapRequiresAllCheckpoints(mapId) {
 /** チェックポイント通過ボーナス（G）。マップ未指定なら100。④⑤⑥は150。 */
 export function mapCheckpointBonus(mapId) {
   return getMap(mapId).checkpointBonus ?? 100;
+}
+
+/** 対人戦の行動順に従い、複数ゴールへ交互配置するマップか。 */
+export function mapUsesAlternateGoalStarts(mapId) {
+  return !!getMap(mapId).alternateGoalStarts;
 }
 
 const LAND_ELEMENT_BY_CODE = {
@@ -336,6 +358,19 @@ export function createBoard(mapId) {
     if (!mainWarp || !lineWarp) continue;
     mainWarp.warpTargetId = lineWarp.id;
     lineWarp.warpTargetId = mainWarp.id;
+  }
+
+  // ステージ8のKは同じ記号2枚を相互接続し、停止時だけでなく通過時にも発動する。
+  if (map.id === 'chin-harbor') {
+    const harborWarps = tiles.filter((t) => rows[t.gridZ][t.gridX] === 'K');
+    if (harborWarps.length === 2) {
+      harborWarps[0].warpTargetId = harborWarps[1].id;
+      harborWarps[1].warpTargetId = harborWarps[0].id;
+      for (const tile of harborWarps) {
+        tile.warpOnPass = true;
+        tile.warpKind = 'wormhole';
+      }
+    }
   }
 
 

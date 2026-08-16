@@ -18,6 +18,7 @@ const TRACK_SRC = {
   boss: assetUrl('/audio/boss-theme.mp3'), // ⑤暗転した世界
   kare: assetUrl('/audio/stage6-theme.mp3'), // ⑥創造主の世界
   finalAlliance: assetUrl('/audio/stage7bgm.mp3'), // ⑦支配の終焉「創造主への異議」
+  chinHarbor: assetUrl('/audio/stage8bgm.mp3'), // ⑧朕と酢の花火港
 };
 
 // mapId(board.jsのMAPS)→専用トラック。無いキーはplayMapTheme側でboardに
@@ -29,6 +30,7 @@ const MAP_TRACK = {
   danball: 'boss',
   kare: 'kare',
   'final-alliance': 'finalAlliance',
+  'chin-harbor': 'chinHarbor',
 };
 
 const VOLUME = 0.5;

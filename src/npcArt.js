@@ -11,7 +11,7 @@ export const NPC_PORTRAIT_URL = {
   Q: assetUrl('/images/npc-portraits/q.png?v=2'),
   'ダンボール男': assetUrl('/images/npc-portraits/danballman.png'),
   '暴君マダイ': assetUrl('/images/npc-portraits/madai.png'),
-  'お肉': assetUrl('/images/npc-portraits/nikuchan.png'),
+  'お肉': assetUrl('/images/npc-portraits/nikuchan-mosaic.png?v=2'),
   '紫の魔女ホフク': assetUrl('/images/npc-portraits/hofuku.png'),
   '少女A': assetUrl('/images/npc-portraits/wonderland-girl.png'),
   'ウサギン': assetUrl('/images/npc-portraits/usagin.webp'),
@@ -24,9 +24,9 @@ export const NPC_TOKEN_URL = {
   朕: assetUrl('/images/npc-portraits/chin-su.png'),
   '「彼」': assetUrl('/images/npc-tokens/kare.png'),
   Q: assetUrl('/images/npc-tokens/q.png?v=2'),
-  'ダンボール男': assetUrl('/images/npc-tokens/danballman.png'),
+  'ダンボール男': assetUrl('/images/npc-tokens/danballman.png?v=2'),
   '暴君マダイ': assetUrl('/images/npc-tokens/madai.png'),
-  'お肉': assetUrl('/images/npc-tokens/nikuchan.png'),
+  'お肉': assetUrl('/images/npc-tokens/nikuchan-mosaic.png?v=2'),
   '紫の魔女ホフク': assetUrl('/images/npc-tokens/hofuku.png'),
   '少女A': assetUrl('/images/npc-tokens/wonderland-girl.png'),
   'ウサギン': assetUrl('/images/npc-tokens/usagin.webp'),
@@ -37,7 +37,10 @@ const tokenImageCache = new Map();
 
 /** 盤面駒用画像をcanvasとして読み込む（GameScene.createPieceFromImageがTHREE.CanvasTextureへそのまま渡す形 - iconSheet.jsのプレイヤーアイコンと同じ形に揃えてある）。無ければnullを返す。 */
 export function loadNpcTokenImage(name) {
-  const url = NPC_TOKEN_URL[name];
+  // 復活・支配状態など表示名に補足が付いた段ボール男も、同じ盤面駒を使う。
+  // 既存ステージ⑤だけでなく乱入する⑥・同盟戦の⑦でも丸い代替駒へ落ちない。
+  const canonicalName = String(name || '').includes('段ボール男') ? 'ダンボール男' : name;
+  const url = NPC_TOKEN_URL[canonicalName];
   if (!url) return Promise.resolve(null);
   if (tokenImageCache.has(url)) return tokenImageCache.get(url);
 

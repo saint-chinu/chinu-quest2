@@ -30,6 +30,7 @@ const BOARD_MARKERS = {
 const WARP_MARKERS = {
   entrance: { url: assetUrl('/images/board-markers/wa-pu1.png'), aspect: 1 },
   return: { url: assetUrl('/images/board-markers/wa-pu2.png'), aspect: 1024 / 1536 },
+  wormhole: { url: assetUrl('/images/board-markers/wormhole.png'), aspect: 1 },
 };
 const boardMarkerTextureLoader = new THREE.TextureLoader();
 const boardMarkerTextureCache = new Map();
@@ -629,7 +630,7 @@ export class GameScene {
     if (tile.type === TileType.START) label = 'ゴール';
     else if (tile.type === TileType.EVENT) label = `CP${tile.checkpointNumber}`;
     else if (tile.type === TileType.SHRINE) label = 'ほこら';
-    else if (tile.type === TileType.WARP) label = 'ワープ';
+    else if (tile.type === TileType.WARP) label = tile.warpKind === 'wormhole' ? 'ワームホール' : 'ワープ';
     else if (tile.type === TileType.SHOP) label = 'ショップ';
     else if (tile.type === TileType.DEFAMATION) label = '誹謗中傷';
     if (!label) return;
