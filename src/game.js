@@ -648,7 +648,7 @@ export class Game {
 
   /** 元デッキ外から一時生成されたカードは、使用・破棄後に捨て札へ混ぜず消滅させる。 */
   _discardUsedCard(player, card) {
-    if (!card || card.generatedOutsideDeck || catalogIdOf(card) === 'encounterUnknown') return;
+    if (!card || card.generatedOutsideDeck) return;
     player.deck.discard(card);
   }
 
@@ -984,27 +984,28 @@ export class Game {
         // ここで捨て札へ入れると再シャッフル後に使用者が再ドローできてしまうため、
         // モンスターは盤面へ移し、スペルはその場で使い切るだけにする。
 
+        const stolenCard = { ...stolen, generatedOutsideDeck: true };
         let endedTurn = false;
-        if (stolen.type === CardType.MONSTER) {
+        if (stolenCard.type === CardType.MONSTER) {
           const emptyLands = this.tiles.filter((tile) => tile.type === TileType.LAND && tile.owner == null);
-          const matching = emptyLands.filter((tile) => tile.element === stolen.element);
+          const matching = emptyLands.filter((tile) => tile.element === stolenCard.element);
           const pool = matching.length > 0 ? matching : emptyLands;
           if (pool.length === 0) return false;
           const summonTile = pool[Math.floor(Math.random() * pool.length)];
           const chainGain = this._captureLandGain(player, summonTile);
-          this._placeUnit(summonTile, player, stolen);
-          this.onLog(`${player.name}は開示された「${stolen.name}」を${ELEMENT_LABEL[summonTile.element]}属性の空き地へ召喚した (-${extraCost}G)`);
-          await this.onSummonEffect?.({ tileId: summonTile.id, unitName: stolen.name });
+          this._placeUnit(summonTile, player, stolenCard);
+          this.onLog(`${player.name}は開示された「${stolenCard.name}」を${ELEMENT_LABEL[summonTile.element]}属性の空き地へ召喚した (-${extraCost}G)`);
+          await this.onSummonEffect?.({ tileId: summonTile.id, unitName: stolenCard.name });
           await this._presentLandGain(chainGain);
         } else {
           const casterTile = this.tiles[player.tileId];
-          this.onLog(`${player.name}は開示された「${stolen.name}」を自分の詠唱として使用した (-${extraCost}G)`);
+          this.onLog(`${player.name}は開示された「${stolenCard.name}」を自分の詠唱として使用した (-${extraCost}G)`);
           await this.onSpellUse({
-            card: stolen,
+            card: stolenCard,
             casterPosition: casterTile?.position ? { x: casterTile.position.x, z: casterTile.position.z } : null,
           });
-          await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast.nestedCast || {}, stolen));
-          endedTurn = await this._applySpellEffect(player, stolen, cast.nestedCast || {});
+          await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast.nestedCast || {}, stolenCard));
+          endedTurn = await this._applySpellEffect(player, stolenCard, cast.nestedCast || {});
         }
 
         const replacement = targetPlayer.deck.draw();
@@ -1700,7 +1701,9 @@ export class Game {
       }
       if (this._isCancelled || !discarded) return;
       player.hand = player.hand.filter((c) => c.id !== discarded.id);
-      this._discardUsedCard(player, discarded);
+      // 未知との遭遇は手札上限で捨てた時だけ消滅する。詠唱時は通常どおり
+      // 捨て札へ入り、効果処理がそこから回収して手札へ戻す。
+      if (catalogIdOf(discarded) !== 'encounterUnknown') this._discardUsedCard(player, discarded);
       if (player.isCPU) this.onLog(`${player.name}は手札を1枚捨てた`);
       this._notifyState();
     }
@@ -2525,7 +2528,11 @@ export class Game {
       return;
     }
     player.currency -= card.cost;
-    player.hand.push({ ...card, id: `shop-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}` });
+    player.hand.push({
+      ...card,
+      id: `shop-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      generatedOutsideDeck: true,
+    });
     this.onLog(`${player.name}はショップで「${card.name}」を購入した (-${card.cost}G)`);
     this._notifyState();
     await this._enforceHandLimit(player);
@@ -2818,6 +2825,9 @@ export class Game {
 
     // 基礎値のみコピー: めたんまんのインスタンスidは保持し、図鑑ID・各ステータス
     // ・特性（先制/貫通など）を変身先へ差し替える。現在HPも新しい基礎HPへ。
+    // 入れ替え等で手札へ戻る時は、変身先ではなく元のめたんまんへ戻す。
+    // 召喚時に捨て札へ入ったカードも元カードなので、その参照を保持する。
+    tile.unit.originalDef ||= tile.unit.def;
     const newDef = { ...chosen, id: tile.unit.def.id, catalogId: chosenCatId };
     tile.unit.def = newDef;
     tile.unit.currentHp = newDef.hp;
@@ -3041,8 +3051,10 @@ export class Game {
 
     if (actionType === 'summon' || actionType === 'swap') {
       if (actionType === 'swap' && tile.unit) {
+        const returnedDef = tile.unit.originalDef || tile.unit.def;
+        this._reclaimCardFromDeck(player, catalogIdOf(returnedDef));
         player.hand.push({
-          ...tile.unit.def,
+          ...returnedDef,
           id: `swap-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         });
       }
@@ -3696,7 +3708,11 @@ export class Game {
       if (!(await confirmAndSpend())) return false;
 
       const itemDef = ITEM_CATALOG[ability.itemId];
-      const card = { ...itemDef, id: `granted-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+      const card = {
+        ...itemDef,
+        id: `granted-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        generatedOutsideDeck: true,
+      };
       player.hand.push(card);
       this.onLog(`${player.name}の${unitDef.name}が「${card.name}」を入手した`);
       this._notifyState();
@@ -3942,7 +3958,11 @@ export class Game {
     if (ability.type === 'grantItem') {
       if (player.hand.length >= HAND_LIMIT || !ITEM_CATALOG[ability.itemId]) return false;
       spend();
-      const card = { ...ITEM_CATALOG[ability.itemId], id: `cpu-granted-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+      const card = {
+        ...ITEM_CATALOG[ability.itemId],
+        id: `cpu-granted-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        generatedOutsideDeck: true,
+      };
       player.hand.push(card);
       this.onLog(`${player.name}の${unitDef.name}が「${card.name}」を入手した (-${cost}G)`);
       this._notifyState();
@@ -4825,13 +4845,10 @@ export class Game {
     // 狂戦士などの固有ステータス倍率は実ダメージだけでなく、攻撃開始前に
     // 大きな文字でも明示する。これで通常の応援加算との区別がつく。
     const multiplierLabels = (unit, bonus) => {
-      if (!bonus.atkMultiplier || bonus.atkMultiplier === 1) return bonus.effectLabels || [];
+      if (!bonus.atkMultiplier || bonus.atkMultiplier === 1) return [];
       const before = statTotals(unit, { ...bonus, atkMultiplier: 1 }).atk;
       const after = statTotals(unit, bonus).atk;
-      return [
-        ...(bonus.effectLabels || []),
-        `${unit.def.name}：最終ATK${bonus.atkMultiplier}倍（${before}→${after}）`,
-      ];
+      return [`${unit.def.name}：最終ATK${bonus.atkMultiplier}倍（${before}→${after}）`];
     };
     const effectRevealSides = [
       { side: 'attacker', labels: multiplierLabels(attackerUnit, attackerBonus) },
@@ -5237,7 +5254,11 @@ export class Game {
     const rarity = roll < 0.1 ? Rarity.R : roll < 0.3 ? Rarity.S : Rarity.N;
     const tier = byRarity[rarity].length ? byRarity[rarity] : byRarity[Rarity.N].length ? byRarity[Rarity.N] : pool;
     const picked = tier[Math.floor(Math.random() * tier.length)];
-    return { ...picked, id: `item-summon-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+    return {
+      ...picked,
+      id: `item-summon-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      generatedOutsideDeck: true,
+    };
   }
 
   _goldAdapter() {
