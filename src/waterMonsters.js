@@ -36,7 +36,7 @@ export const WATER_MONSTER_CATALOG = {
     npcExclusive: true,
     traits: ['pierce', 'twoStepMove'],
     effectDescription: '貫通。土地コマンドの移動で最大2マス移動でき、特殊マス1つを飛び越えられる（特殊マスには着地不可）',
-    imageDataUrl: assetUrl('/images/npc-portraits/chin-su.png'),
+    imageDataUrl: assetUrl('/images/card-art/su.png'),
   }),
   minatoJoshi: waterMonster('minatoJoshi', '港〇女子', Rarity.N, 30, 30, {
     effect: { type: 'stealGoldOnHit', amount: 30 },
