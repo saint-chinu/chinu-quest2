@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v34`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v52`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## ⚠️ 並行開発 (Codex) — 必ず守る
@@ -43,7 +43,7 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 - `src/board.js` — マップ定義。`TileType`は文字列('land','start','runaway'等)。
   `MAPS`の`requireAllCheckpoints`。stage.key = mapId。
 - `src/story.js` — `STORY_STAGES` [0]hitode [1]madai [2]budou [3]q-train
-  [4]danball(段ボール男/ラスボス) [5]kare(「彼」)。
+  [4]danball(段ボール男) [5]kare(「彼」との邂逅) [6]final-alliance(⑦支配の終焉)。
 - `src/breedParts.js` — ブリードモンスター(`breedMonster`, 既定属性NEUTRAL)。
 - `src/scene.js` — Three.js。`tween`(utils)ベースのカメラ演出。
 
@@ -73,15 +73,63 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 - **占術(divination)** N40G(Codex追加): モンスター/アイテム/スペルから1種選び、
   デッキ内の該当をランダム1枚手札へ。
 - **キャンセルカルチャー** Nスペル: 敵の手札のスペル/アイテム1枚を捨てさせる。
+- **魔力抽出(extractManaFromHandCard)** S100G: 自分含む手札のある1人を選び、その手札を
+  見て1枚捨てさせ、**捨てられた本人が+200G**。target=`anyPlayerHandCard`。詠唱中の
+  魔力抽出自身は候補外。CPUは所持G≤400なら自分のN/Sを換金、>400なら敵のR/EXを潰す。
+- **帰巣本能(returnPlayerToStart)** S50G ※仕様変更: target=`anyPlayer`。選んだプレイヤー
+  をゴールへ戻し**+250G**、その後`_grantGoalBonus`を通す＝**全CP通過済みの時だけ**周回
+  ボーナスも入る(未通過なら250Gのみ・CP記録は保持)。旧`returnToStartDoubleBonus`は廃止。
+- **メタ〇ン(copyOnSummon)**: 変身先は**盤面に実在するモンスターのみ**をカード一覧
+  (`onPickTransformTarget`)で選ぶ。catalogIdで重複排除。CPUはHP+ATK最大を自動選択。
+  CPUの空き地召喚経路(`_cpuLandCommand`)でも発動する。
+- **属性武器 ※仕様変更**: 旧`elementDamageBonus`(相手属性で1.5倍)→
+  `wielderElementAtkBonus`(**装備した自分のモンスターの属性**が一致で+30固定)。
+  火炎放射器=火 / 雷神剣=雷 / ゴムゴ〇のピストル=森 / アイ〇ラッガー=水。
+  `equipItem`が装備コピーのatkBonusへ加算するので実ダメージ・演出・勝率シミュが一致。
+  `_itemPowerScore(item, unit)`もunitを受け取るようになった。
+- **不死鳥の盾** R90G ARMOR(ATK+10/HP+20, `returnsToHandIfUsed`)。剣と同じく戦闘後に手札へ。
+- **NPC専用カード**: `npcExclusive: true`を付けると`getCardCatalog`が図鑑・デッキ編集から
+  除外する（酢が該当）。
+- **twoStepMove特性**(酢のみ): 土地コマンドの移動が最大2マス。経路の特殊マスを1つだけ
+  飛び越え可（特殊マスには着地不可）。判定は`_moveCommandCandidates(tile, player)`に集約
+  され、人間移動・サイコキネシス・CPU移動が全部これを通る。2マス移動時のUIは方向選択
+  ではなく`onPickAbilityTarget`のリスト（「Nマス先・◯属性の土地」）。
+- **ステージ7の左右固定ワープ**: マップ記号`I/J`(卍側=entrance)と`K/L`(下段直線側=return)。
+  I↔K・J↔Lで左右を保ったまま相互転移。`createBoard`末尾でリンク付け。
 - 新モンスター効果(Codex): `selfDamageRatioAfterAttack`(反動), `chanceDestroyItemBeforeAttack`(予報でアイテム無効化)等。
 
+## ストーリー⑦「支配の終焉」(final-alliance)
+- **2vs2同盟戦**。紅組=主人公＋**朕**(味方CPU, deckKey `chin`)、白組=「彼」＋段ボール男。
+  goalCurrency 15000。BGMは`stage7bgm.mp3`(`MAP_TRACK['final-alliance']`)。
+- 盤面`FINAL_ALLIANCE_ROWS`: 上=中央ゴールから腕が伸びる卍型、下=独立した直線。
+  全40マス(土地27/CP4/ほこら3/ワープ4/START/誹謗中傷1)。
+- 新キャラ**朕**(一人称かつ名前)＋騎乗する象魚**酢**。立ち絵/駒は`chin-su.png`共用。
+- 酢: 水EX 300G HP60/ATK60、`pierce`+`twoStepMove`、`npcExclusive`。
+- ⑤の再戦は`replay.copyHeroDeck: true`＝**段ボール男が主人公のデッキを丸ごとコピー**
+  (`buildBattlePlayerConfigs`が`heroDeckList`をそのまま渡す)。
+- 演出: セリフ行に`action: 'verticalExit'`を付けると立ち絵が垂直跳びで画面外へ
+  (`.story-portrait-vertical-exit`, style.css)。
+
 ## AI (game.js)
-- **ダンボール男(ラスボス, stage5)** `_isDanballBoss`: 召喚は
+- **ダンボール男(stage5)** `_isDanballBoss`: 召喚は
   `_cpuChooseSummonCardForDanball`でギア最優先(合体狙い)。分岐は未回収CP絶対優先(×10000)、
   同点タイブレークで「ギアを置ける空き地」(`_nearestGearPlaceableEmptyLandTileId`, 次点×10)
-  へ誘導。`_cpuMaybeUseGashaanTactics`(ガシャーン移動侵略), `_cpuMaybeUseEncounterSpell` 等。
+  へ誘導。`_cpuMaybeUseAssassinTactics`(ガシャーン移動侵略), `_cpuMaybeUseEncounterSpell` 等。
+- **「彼」(stage6)** `_cpuChooseSummonCardForKare`: 未知の侵略者は守備召喚せず、敵Lv3+隣接
+  時のみ前線配置。`_cpuMaybeUseAssassinTactics`がガシャーン/未知の侵略者を共通で運用
+  （隣接なら移動侵略、離れていれば敵地の横へワープ／commandCost消費）。
+- **朕(stage7)**: `_cpuMaybeUsePsychokinesisSpell`(敵の高Lv土地から守備を引き剥がし別所有者へ
+  強制侵略。移動先は`destinationTileId`でcastに指定)、酢の2マス移動を侵略に優先使用
+  (`_cpuUseAccessibleLandCommand`内、accessible制約は人間と同じ)。
+- **帰巣本能の共通CPU判断** `_cpuMaybeUseHomingInstinctSpell`(`_runCPUTurn`の最初): ①敵が
+  最後の未通過CPの1マス手前なら妨害で敵に使う ②自分の所持G≤300なら自分に使う(ただし
+  未通過CPが残り1つの時は温存)。使ったらそのターンは終了。
+- **開示請求は同盟者に絶対撃たない**: `_disclosureEligibleCards`の入口で自分/同盟者を
+  空配列にする二重ガード。
 - レインボーカメレオン(`elementHpBonusIgnoreElement`)は属性地に積極召喚(無色地は避ける)。
 - CPU捨て札: 不死鳥の剣が2枚なら1枚優先で捨てる。
+- `AI_PROFILES`に`朕`(offElement 0.2 / levelUpReserve 300 / minWinProbabilityToInvade 0.25 /
+  itemGamble 0.85 / highValueAvoidance 0.15 = 攻撃的)。
 
 ## 演出 (main.js)
 - `showTargetEffectMessage`: 複数行(タイトル\n説明)は**逐次表示**（タイトル→消える→
