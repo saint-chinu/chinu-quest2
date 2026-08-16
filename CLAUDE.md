@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v61`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v63`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## ⚠️ 並行開発 (Codex) — 必ず守る
@@ -137,6 +137,19 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
     まとめて送るとゲスト側で駒がワープ入口へ戻ってしまうため分割が必要。
 - **NPC専用カードの所有者ロック**: `exclusiveOwnerName`（酢=朕）。Game構築時に
   デッキから除外されるので、他プレイヤーへ混入しない。
+
+## チュートリアル (Codex追加)
+- ログイン前のタイトルからも遊べるデモ。`mapId: 'tutorial'`（3×3外周の8マス、
+  G/CP/土地6。`getMap`がMAPS外の`TUTORIAL_MAP`を返す＝対人マップ一覧には出ない）。
+- `Game`の`tutorialMode`系オプション: `tutorialOpeningCardIds`（初期手札の指定）、
+  `tutorialDiceQueues`（人間/CPUの固定サイコロ台本）、`onTutorialEvent`
+  （召喚/戦闘/通行料等をmain.jsのチェックリストへ通知）。
+- ⚠️ **チュートリアル用デッキは`duplicateForDeck`を通らない**ので、
+  `tutorialCopies`が自前で`catalogId: def.id`を付ける。`Deck.fromCardList`が
+  `id`を`card-N`へ振り直すため、これが無いと`catalogIdOf()`が`card-N`を返し、
+  catalogIdで引く処理（初期手札指定など）が全て不発になる。
+- 台本を使い切った後は`_tutorialDiceValue()`がnullを返して通常抽選へ戻る
+  （固定値を返し続けると、表示されるダイスと実際の移動量が食い違う）。
 
 ## AI (game.js)
 - **ダンボール男(stage5)** `_isDanballBoss`: 召喚は

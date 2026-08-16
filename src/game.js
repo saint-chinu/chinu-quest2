@@ -477,10 +477,15 @@ export class Game {
     this._notifyState();
   }
 
+  /**
+   * チュートリアルの固定サイコロ（次に出る目）。台本を使い切ったらnullを返して
+   * 通常の抽選へ戻す - ここで1を返すと、rollDice側はキューが空なので実際の
+   * 出目で動くのに、画面には「1で固定」のダイスが出続けて食い違う。
+   */
   _tutorialDiceValue() {
     if (!this.tutorialMode) return null;
     const key = this.currentPlayer.isCPU ? 'cpu' : 'human';
-    return this.tutorialDiceQueues?.[key]?.[0] ?? 1;
+    return this.tutorialDiceQueues?.[key]?.[0] ?? null;
   }
 
   /** ストーリー途中再開用。Three.jsの参照を除き、ゲーム進行に必要な純データだけを書き出す。 */

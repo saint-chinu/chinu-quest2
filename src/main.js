@@ -3500,7 +3500,11 @@ const TUTORIAL_CHECK_LABELS = {
 };
 
 function tutorialCopies(def, count) {
-  return Array.from({ length: count }, () => ({ ...def }));
+  // Deck.fromCardListがidを`card-N`へ振り直すため、通常デッキ(duplicateForDeck)と
+  // 同じくcatalogIdを持たせておく。これが無いとcatalogIdOf()が`card-N`を返し、
+  // catalogIdで引く処理（初期手札の指定＝_prepareTutorialOpeningHand等）が
+  // 一切マッチしなくなる。
+  return Array.from({ length: count }, () => ({ ...def, catalogId: def.id }));
 }
 
 function buildTutorialPlayerDeck() {
