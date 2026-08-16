@@ -3252,6 +3252,13 @@ const hubWelcome = document.getElementById('hub-welcome');
 const hubAdminTile = document.getElementById('hub-admin-tile');
 const hubMailButton = document.getElementById('hub-mail-button');
 const hubMailBadge = document.getElementById('hub-mail-badge');
+const characterIconScreen = document.getElementById('character-icon-screen');
+const characterIconChoices = document.getElementById('character-icon-choices');
+const characterIconUpload = document.getElementById('character-icon-upload');
+const characterIconPreview = document.getElementById('character-icon-preview');
+const characterIconError = document.getElementById('character-icon-error');
+const characterIconSave = document.getElementById('character-icon-save');
+const characterIconBack = document.getElementById('character-icon-back');
 const mailModal = document.getElementById('mail-modal');
 const mailList = document.getElementById('mail-list');
 const mailClose = document.getElementById('mail-close');
@@ -3416,7 +3423,7 @@ const storyOverlaySpeaker = document.getElementById('story-overlay-speaker');
 const storyOverlayText = document.getElementById('story-overlay-text');
 const storyOverlaySkip = document.getElementById('story-overlay-skip');
 
-const ALL_PG_SCREENS = [loginScreen, charmakeScreen, hubScreen, adminScreen, catalogScreen, cardEditorScreen, deckScreen, deckSelectScreen, shopScreen, battleMenuScreen, breedScreen, stubScreen, storyScreen, storyDialogueScreen, pvpMenuScreen, pvpRoomScreen, pvpMapSelectScreen];
+const ALL_PG_SCREENS = [loginScreen, charmakeScreen, characterIconScreen, hubScreen, adminScreen, catalogScreen, cardEditorScreen, deckScreen, deckSelectScreen, shopScreen, battleMenuScreen, breedScreen, stubScreen, storyScreen, storyDialogueScreen, pvpMenuScreen, pvpRoomScreen, pvpMapSelectScreen];
 function showScreen(el) {
   ALL_PG_SCREENS.forEach((s) => s.classList.toggle('hidden', s !== el));
 }
@@ -3438,6 +3445,7 @@ const CARD_EDITOR_HASH = '#card-editor';
 let currentUserId = null;
 let currentCharacter = null;
 let selectedCharacterIcon = null;
+let pendingCharacterIcon = null;
 let selectedDeckVariant = null;
 let activeTutorialSession = null;
 
@@ -3698,6 +3706,82 @@ charmakeIconUpload.addEventListener('change', async () => {
   }
   updateCharmakeValidity();
 });
+
+async function showCharacterIconScreen() {
+  if (!currentCharacter) return;
+  pendingCharacterIcon = {
+    preset: currentCharacter.iconPreset || '',
+    dataUrl: currentCharacter.iconImageDataUrl || '',
+    color: currentCharacter.color || ICON_COLORS[0],
+  };
+  characterIconUpload.value = '';
+  characterIconError.classList.add('hidden');
+  characterIconPreview.classList.add('hidden');
+  characterIconChoices.replaceChildren();
+
+  const icons = await loadCharacterIconPresets();
+  icons.forEach((icon, index) => {
+    const el = document.createElement('img');
+    el.className = 'pg-icon-choice';
+    el.src = icon.dataUrl;
+    el.alt = icon.name;
+    el.title = icon.name;
+    if (currentCharacter.iconPreset === icon.id && !currentCharacter.iconImageDataUrl) el.classList.add('selected');
+    el.addEventListener('click', () => {
+      pendingCharacterIcon = { preset: icon.id, dataUrl: '', color: ICON_COLORS[index] || ICON_COLORS[0] };
+      [...characterIconChoices.children].forEach((child) => child.classList.remove('selected'));
+      characterIconPreview.classList.remove('selected');
+      el.classList.add('selected');
+      characterIconSave.disabled = false;
+    });
+    characterIconChoices.appendChild(el);
+  });
+
+  if (currentCharacter.iconImageDataUrl) {
+    characterIconPreview.src = currentCharacter.iconImageDataUrl;
+    characterIconPreview.classList.remove('hidden');
+    characterIconPreview.classList.add('selected');
+  }
+  characterIconSave.disabled = !pendingCharacterIcon?.preset && !pendingCharacterIcon?.dataUrl;
+  showScreen(characterIconScreen);
+}
+
+characterIconUpload.addEventListener('change', async () => {
+  const file = characterIconUpload.files?.[0];
+  if (!file) return;
+  try {
+    const icon = await fileToCharacterIcon(file);
+    pendingCharacterIcon = {
+      preset: '',
+      dataUrl: icon.dataUrl,
+      color: currentCharacter?.color || ICON_COLORS[0],
+    };
+    [...characterIconChoices.children].forEach((child) => child.classList.remove('selected'));
+    characterIconPreview.src = icon.dataUrl;
+    characterIconPreview.classList.remove('hidden');
+    characterIconPreview.classList.add('selected');
+    characterIconError.classList.add('hidden');
+    characterIconSave.disabled = false;
+  } catch (error) {
+    pendingCharacterIcon = null;
+    characterIconPreview.classList.add('hidden');
+    characterIconError.textContent = error.message;
+    characterIconError.classList.remove('hidden');
+    characterIconSave.disabled = true;
+  }
+});
+
+characterIconSave.addEventListener('click', () => {
+  if (!currentCharacter || !pendingCharacterIcon || characterIconSave.disabled) return;
+  currentCharacter.iconPreset = pendingCharacterIcon.preset || null;
+  currentCharacter.iconImageDataUrl = pendingCharacterIcon.dataUrl || '';
+  currentCharacter.color = pendingCharacterIcon.color || currentCharacter.color || ICON_COLORS[0];
+  saveCharacter(currentUserId, currentCharacter);
+  showHubScreen();
+  showToast('キャラ画像を変更しました', 2200);
+});
+
+characterIconBack.addEventListener('click', showHubScreen);
 
 function showHubScreen() {
   hubWelcome.textContent = `ようこそ、${currentCharacter.name}（所持M: ${currentCharacter.m}）`;
@@ -4513,6 +4597,8 @@ document.querySelectorAll('.hub-tile').forEach((tile) => {
       showShopScreen();
     } else if (mode === 'breed') {
       showBreedScreen();
+    } else if (mode === 'character-icon') {
+      showCharacterIconScreen();
     } else if (mode === 'admin') {
       showAdminDashboard();
     } else {

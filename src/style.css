@@ -977,6 +977,7 @@ html, body {
 .hub-tile[data-mode="catalog"] { --tile-accent: #d498ff; }
 .hub-tile[data-mode="shop"] { --tile-accent: #f4ca68; }
 .hub-tile[data-mode="breed"] { --tile-accent: #73e69c; }
+.hub-tile[data-mode="character-icon"] { --tile-accent: #63d9e8; }
 .hub-tile[data-mode="card-editor"] { --tile-accent: #ff93c4; }
 
 /* ===== 運営メール（お知らせ）: ハブ右上のメールボタン ===== */

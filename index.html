@@ -118,6 +118,7 @@
           <input id="charmake-icon-upload" type="file" accept="image/*" />
         </div>
         <p class="upload-policy-note">自分に使用権限のある画像だけを登録してください。他人の顔、既存キャラクター、企業ロゴ、権利侵害・公序良俗に反する画像は禁止です。</p>
+        <p class="upload-policy-note">使用画像は背景透過処理をおすすめします。</p>
         <p id="charmake-icon-error" class="pg-error hidden"></p>
         <img id="charmake-icon-preview" class="pg-icon-choice hidden" alt="アップロード画像のプレビュー" />
         <div class="pg-field">
@@ -171,12 +172,35 @@
               <span class="hub-tile-copy"><strong>ブリード</strong><small>新たな力を生み出す</small></span>
               <span class="hub-tile-arrow" aria-hidden="true">›</span>
             </button>
+            <button class="hub-tile" data-mode="character-icon">
+              <span class="hub-tile-icon" aria-hidden="true">◉</span>
+              <span class="hub-tile-copy"><strong>キャラ画像変更</strong><small>プレイヤーアイコンを変更</small></span>
+              <span class="hub-tile-arrow" aria-hidden="true">›</span>
+            </button>
             <button class="hub-tile" data-mode="admin" id="hub-admin-tile" hidden>
               <span class="hub-tile-icon" aria-hidden="true">🛡</span>
               <span class="hub-tile-copy"><strong>管理ダッシュボード</strong><small>登録者と進捗の集計</small></span>
               <span class="hub-tile-arrow" aria-hidden="true">›</span>
             </button>
           </div>
+        </div>
+      </div>
+
+      <div id="character-icon-screen" class="pg-screen hidden">
+        <h2 class="pg-title">キャラ画像変更</h2>
+        <p class="pg-label">画像を選んでください</p>
+        <div id="character-icon-choices" class="pg-choice-row"></div>
+        <div class="pg-field charmake-upload-field">
+          <label for="character-icon-upload">または任意画像</label>
+          <input id="character-icon-upload" type="file" accept="image/*" />
+        </div>
+        <p class="upload-policy-note">自分に使用権限のある画像だけを登録してください。他人の顔、既存キャラクター、企業ロゴ、権利侵害・公序良俗に反する画像は禁止です。</p>
+        <p class="upload-policy-note">使用画像は背景透過処理をおすすめします。</p>
+        <p id="character-icon-error" class="pg-error hidden"></p>
+        <img id="character-icon-preview" class="pg-icon-choice hidden" alt="変更画像のプレビュー" />
+        <div class="pg-actions-row">
+          <button id="character-icon-save" class="pg-button" type="button" disabled>変更を保存</button>
+          <button id="character-icon-back" class="pg-button pg-button-secondary" type="button">メニューに戻る</button>
         </div>
       </div>
 
