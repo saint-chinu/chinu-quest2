@@ -120,20 +120,20 @@ export const ITEM_CATALOG = {
   }),
 
   kaenHoushakiki: item('kaenHoushakiki', '火炎放射器', Rarity.R, ItemType.WEAPON, 80, 20, 0, {
-    effect: { type: 'elementDamageBonus', targetElement: Element.FOREST, multiplier: 1.5 },
-    effectDescription: '相手が森属性の場合ATK1.5倍',
+    effect: { type: 'wielderElementAtkBonus', wielderElement: Element.FIRE, atkBonus: 30 },
+    effectDescription: '火属性モンスターが使用するとATKがさらに30上昇',
   }),
   raijinKen: item('raijinKen', '雷神剣', Rarity.R, ItemType.WEAPON, 80, 20, 0, {
-    effect: { type: 'elementDamageBonus', targetElement: Element.WATER, multiplier: 1.5 },
-    effectDescription: '相手が水属性の場合ATK1.5倍',
+    effect: { type: 'wielderElementAtkBonus', wielderElement: Element.THUNDER, atkBonus: 30 },
+    effectDescription: '雷属性モンスターが使用するとATKがさらに30上昇',
   }),
   gomuGoNoPistol: item('gomuGoNoPistol', 'ゴムゴ〇のピストル', Rarity.R, ItemType.WEAPON, 80, 20, 0, {
-    effect: { type: 'elementDamageBonus', targetElement: Element.THUNDER, multiplier: 1.5 },
-    effectDescription: '相手が雷属性の場合ATK1.5倍',
+    effect: { type: 'wielderElementAtkBonus', wielderElement: Element.FOREST, atkBonus: 30 },
+    effectDescription: '森属性モンスターが使用するとATKがさらに30上昇',
   }),
   iceSlugger: item('iceSlugger', 'アイ〇ラッガー', Rarity.R, ItemType.WEAPON, 80, 20, 0, {
-    effect: { type: 'elementDamageBonus', targetElement: Element.FIRE, multiplier: 1.5 },
-    effectDescription: '相手が火属性の場合ATK1.5倍',
+    effect: { type: 'wielderElementAtkBonus', wielderElement: Element.WATER, atkBonus: 30 },
+    effectDescription: '水属性モンスターが使用するとATKがさらに30上昇',
   }),
   fushichoNoKen: item('fushichoNoKen', '不死鳥の剣', Rarity.R, ItemType.WEAPON, 80, 20, 10, {
     returnsToHandIfUsed: true,

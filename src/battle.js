@@ -28,6 +28,13 @@ export function equipItem(unit, itemDef) {
     return equipped;
   }
   const equipped = { ...itemDef };
+  // 属性特効武器は「相手の属性」ではなく「装備するモンスターの属性」が
+  // 一致した時に固定ATKを追加する。装備コピーのatkBonusへ反映しておけば、
+  // 実ダメージ・装備演出のゲージ・戦闘シミュレーションが同じ値を使える。
+  if (equipped.effect?.type === 'wielderElementAtkBonus'
+      && unit.def.element === equipped.effect.wielderElement) {
+    equipped.atkBonus = (equipped.atkBonus || 0) + (equipped.effect.atkBonus || 0);
+  }
   unit.items.push(equipped);
   return equipped;
 }

@@ -4281,8 +4281,12 @@ export class Game {
   }
 
   /** 装備アイテムとしての強さを大まかに数値化する（CPUの実際の選択と、侵略前のシミュレーションの両方から使う - 同じ基準で選ぶことで「シミュレーションで想定した通りに実際も動く」を保証する）。 */
-  _itemPowerScore(item) {
+  _itemPowerScore(item, unit = null) {
     let score = (item.atkBonus || 0) + (item.hpBonus || 0);
+    if (item.effect?.type === 'wielderElementAtkBonus'
+        && unit?.def?.element === item.effect.wielderElement) {
+      score += item.effect.atkBonus || 0;
+    }
     if (item.effect) score += 15;
     if (item.traits?.includes('firstStrike')) score += 10;
     if (item.traits?.includes('pierce')) score += 10;
@@ -4298,7 +4302,7 @@ export class Game {
       const standardItems = gear.filter((card) => card.type === CardType.GEAR);
       if (standardItems.length > 0) {
         return standardItems.reduce((best, card) => (
-          this._itemPowerScore(card) > this._itemPowerScore(best) ? card : best
+          this._itemPowerScore(card, unit) > this._itemPowerScore(best, unit) ? card : best
         ));
       }
     }
@@ -4310,7 +4314,7 @@ export class Game {
       const fusionPartner = gear.find((card) => catalogIdOf(card) === fusionPartnerId);
       if (fusionPartner) return fusionPartner;
     }
-    return gear.reduce((best, c) => (this._itemPowerScore(c) > this._itemPowerScore(best) ? c : best));
+    return gear.reduce((best, c) => (this._itemPowerScore(c, unit) > this._itemPowerScore(best, unit) ? c : best));
   }
 
   /** CPUの実際のバトルアイテム選択。シミュレーション（_estimateWinProbability）と同じ_bestBattleItemFromHandを使うので、事前に見積もった勝率と実際の挙動がずれない。 */
