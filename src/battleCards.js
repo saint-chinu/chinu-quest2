@@ -803,7 +803,8 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 }, { def: ITEM_CATALOG.fushichoNoKen, count: 2 },
       ],
       spells: [
-        { def: SPELL_CATALOG.heal, count: 2 }, { def: SPELL_CATALOG.curseCleanse, count: 2 },
+        { def: SPELL_CATALOG.realEstateAppraiser, count: 1 }, { def: SPELL_CATALOG.manaExtraction, count: 1 },
+        { def: SPELL_CATALOG.curseCleanse, count: 2 },
         { def: SPELL_CATALOG.taxEvasion, count: 1 }, { def: SPELL_CATALOG.splitEvenly, count: 1 },
         { def: SPELL_CATALOG.poisonMist, count: 1 }, { def: SPELL_CATALOG.specialAudit, count: 1 },
         { def: SPELL_CATALOG.electrify, count: 3 },
