@@ -189,11 +189,6 @@ export const NEUTRAL_MONSTER_CATALOG = {
       ability: { type: 'warpToAnyEmptyLand' },
       effectDescription: '貫通。土地コマンド（30G）: 任意の空き地へ移動する',
     }),
-    // 専用イラスト未用意。neutralMonster()の既定URL（/images/card-art/
-    // mysteriousInvader.jpg）は実在せず、読み込みに失敗した壊れた画像は
-    // 盤面アイコン描画（scene.jsのdrawUnitCard→ctx.drawImage）を
-    // InvalidStateErrorで止めて盤面をフリーズさせる。nullにして無属性共通の
-    // プレースホルダー（cardArt.js）へ落とす。
-    imageDataUrl: null,
+    imageDataUrl: assetUrl('images/card-art/mysteriousInvader.png'),
   },
 };

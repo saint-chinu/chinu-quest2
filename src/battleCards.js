@@ -288,7 +288,7 @@ export const SPELL_CATALOG = {
       { type: 'extractManaFromHandCard', reward: 200 },
       '自分を含む全プレイヤーから手札のあるプレイヤー1人を選び、その手札を見て1枚捨てさせる。捨てさせた代わりに、そのプレイヤーは200Gを得る',
     ),
-    imageDataUrl: null,
+    imageDataUrl: assetUrl('images/card-art/manaExtraction.png'),
   },
 
   // ── 攻撃系 ──

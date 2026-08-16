@@ -3875,16 +3875,25 @@ function playDialogueLines(lines) {
     function finish() {
       if (settled) return;
       settled = true;
+      storyDialoguePortrait.classList.remove('story-portrait-vertical-exit');
       storyDialogueNext.removeEventListener('click', onNext);
       storyDialogueSkip.removeEventListener('click', onSkip);
       resolve();
     }
     function showLine() {
-      storyDialogueSpeaker.textContent = lines[i].speaker;
-      storyDialogueText.textContent = lines[i].text;
-      const portraitUrl = NPC_PORTRAIT_URL[lines[i].speaker];
+      const line = lines[i];
+      storyDialoguePortrait.classList.remove('story-portrait-vertical-exit');
+      storyDialogueSpeaker.textContent = line.speaker;
+      storyDialogueText.textContent = line.text;
+      const portraitUrl = NPC_PORTRAIT_URL[line.speaker];
       storyDialoguePortrait.classList.toggle('hidden', !portraitUrl);
-      if (portraitUrl) storyDialoguePortrait.src = portraitUrl;
+      if (portraitUrl) {
+        storyDialoguePortrait.src = portraitUrl;
+        if (line.action === 'verticalExit') {
+          void storyDialoguePortrait.offsetWidth;
+          storyDialoguePortrait.classList.add('story-portrait-vertical-exit');
+        }
+      }
     }
     function onNext() {
       i += 1;
@@ -4070,7 +4079,9 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
       isCPU: true,
       color: opponent.color,
       allianceId: enemyAllianceId,
-      deckList: opponent.deckKey ? buildCharacterDeckList(opponent.deckKey) : buildThemedDeckList(opponent.theme),
+      deckList: variant.copyHeroDeck
+        ? heroDeckList
+        : opponent.deckKey ? buildCharacterDeckList(opponent.deckKey) : buildThemedDeckList(opponent.theme),
       iconImage: await loadNpcTokenImage(opponent.name),
       elements: opponent.theme.elements,
     });

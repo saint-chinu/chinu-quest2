@@ -1836,6 +1836,16 @@ html, body {
   display: none;
 }
 
+#story-dialogue-portrait.story-portrait-vertical-exit {
+  animation: story-portrait-vertical-exit 1.15s cubic-bezier(0.3, 0.75, 0.25, 1) forwards;
+}
+
+@keyframes story-portrait-vertical-exit {
+  0% { transform: translateY(0) scale(1); opacity: 1; }
+  18% { transform: translateY(10px) scale(1.03); opacity: 1; }
+  100% { transform: translateY(-125vh) scale(0.72); opacity: 0; }
+}
+
 #story-dialogue-box {
   width: min(600px, 90vw);
   min-height: 140px;
