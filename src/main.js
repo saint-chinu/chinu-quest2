@@ -56,7 +56,7 @@ import {
   sendPvpInvite,
   updatePvpPresence,
 } from './pvpFriends.js';
-import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted, playSfx } from './audio.js';
+import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted, playSfx, allowMusicPlayback, blockMusicPlayback } from './audio.js';
 import { getSpeedMultiplier, setSpeedMultiplier, getWaitCutRate, setWaitCutRate, tween, easeInOutQuad } from './utils.js';
 
 // 盤面メニューの速度調整（1倍/1.5倍/2倍/3倍）: game.js/scene.jsはtween/delay
@@ -2961,6 +2961,7 @@ function startBattle(character, storyOptions = {}) {
   });
 
   if (!storyOptions.deferInit) game.init(storyOptions.resumeState || null);
+  allowMusicPlayback();
   playMapTheme(currentMapId);
   requestAnimationFrame(animate);
 }
@@ -3445,6 +3446,9 @@ const storyOverlaySkip = document.getElementById('story-overlay-skip');
 
 const ALL_PG_SCREENS = [loginScreen, charmakeScreen, characterIconScreen, hubScreen, adminScreen, catalogScreen, cardEditorScreen, deckScreen, deckSelectScreen, shopScreen, battleMenuScreen, breedScreen, stubScreen, storyScreen, storyDialogueScreen, pvpMenuScreen, pvpRoomScreen, pvpMapSelectScreen];
 function showScreen(el) {
+  // showScreenで表示するのは全てログイン／メニュー系の盤面外画面。
+  // 古い戦闘演出の遅延コールバックが残っていてもBGMを再開させない。
+  blockMusicPlayback();
   ALL_PG_SCREENS.forEach((s) => s.classList.toggle('hidden', s !== el));
 }
 
@@ -7160,6 +7164,7 @@ async function startPvpGuestBattle() {
     }
   }
   requestAnimationFrame(animate);
+  allowMusicPlayback();
   playMapTheme(currentMapId);
 
   pvpMatch.stopPublicListener = listenToRoom(pvpMatch.roomCode, (room) => {

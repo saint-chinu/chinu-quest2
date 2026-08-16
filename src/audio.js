@@ -41,6 +41,9 @@ let currentTrack = null; // TRACK_SRCのキー | null
 const audioEls = {}; // track -> HTMLAudioElement（遅延生成、以後使い回す）
 let unlockAttempted = false;
 let pageExited = false;
+// BGMは盤面内だけ許可する。ログイン／メニューへ戻った後に古い戦闘演出の
+// setTimeoutが完了してplayMapThemeを呼んでも再生を復活させないための門番。
+let musicPlaybackAllowed = false;
 
 // iOS Safariの既知の挙動対策: Web Audio API（playSfxが使うAudioContext）で
 // 鳴らす音は、マナーモード（サイレントスイッチ）が入っていても関係なく
@@ -128,7 +131,7 @@ export function toggleMuted() {
 
 function playTrack(track) {
   // pagehide後に古い戦闘演出Promiseが完了してplayMapThemeを呼んでも再生しない。
-  if (pageExited) return;
+  if (pageExited || !musicPlaybackAllowed) return;
   if (muted) {
     if (currentTrack && currentTrack !== track) getAudioEl(currentTrack).pause();
     currentTrack = track;
@@ -164,6 +167,17 @@ export function stopMusic() {
     el.currentTime = 0;
   }
   currentTrack = null;
+}
+
+/** 盤面へ入る直前にだけBGM再生を許可する。 */
+export function allowMusicPlayback() {
+  musicPlaybackAllowed = true;
+}
+
+/** ログイン・メニュー画面用。停止後の遅延コールバックによる再開も遮断する。 */
+export function blockMusicPlayback() {
+  musicPlaybackAllowed = false;
+  stopMusic();
 }
 
 window.addEventListener('pagehide', () => {
