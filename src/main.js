@@ -2823,6 +2823,9 @@ function animate() {
  * CPU, Gameコンストラクタ側のフォールバックが組む)。
  */
 function startBattle(character, storyOptions = {}) {
+  // ストーリー／CPU戦を含む盤面中は、対人招待の通知や参加操作を出さない。
+  // 招待データ自体は残し、盤面終了後にハブへ戻った時点で再表示する。
+  hidePvpInviteNoticeDuringActivity();
   // 待機カットは対人戦だけ。CPU戦・ストーリー開始時には必ず無効化する。
   setWaitCutRate(pvpMatch ? selectedPvpWaitCutRate : 0);
   currentMapId = storyOptions.mapId ?? null;
@@ -3808,6 +3811,7 @@ function showHubScreen() {
   }
   showScreen(hubScreen);
   startPvpSocialFeatures();
+  showNewestPvpInvite(pvpReceivedInvites);
   refreshMailBadge();
 }
 
@@ -6341,6 +6345,7 @@ let pvpPresenceTimer = null;
 let pvpPresenceUnsubscribes = [];
 let pvpSocialUid = null;
 let pendingPvpInvite = null;
+let pvpReceivedInvites = [];
 // 招待済みの相手uid。renderPvpFriendListsは在席が変わるたびに行を作り直すため、
 // ボタン自身のdisabled/ラベルに状態を持たせると数十秒で「招待」に戻り、
 // ホストが気づかず重複送信してしまう。描画のたびにここから復元する。
@@ -6355,6 +6360,10 @@ async function clearSentPvpInvites() {
   pvpSentInviteIds.clear();
   pvpInvitedUids.clear();
   await Promise.all(ids.map((id) => dismissPvpInvite(id).catch(() => {})));
+}
+
+function hidePvpInviteNoticeDuringActivity() {
+  pvpInviteNotice?.classList.add('hidden');
 }
 
 function renderPvpFriendLists() {
@@ -6436,11 +6445,14 @@ function rebuildPvpPresenceListeners() {
 }
 
 function showNewestPvpInvite(invites) {
+  pvpReceivedInvites = Array.isArray(invites) ? invites : [];
   const fresh = invites.find((invite) => Date.now() - (invite.createdAt?.toMillis?.() || Date.now()) < 10 * 60 * 1000);
   // 対戦中(pvpMatch)だけでなく、部屋で待機中(pvpSession)も出さない。待機中に
   // 受諾すると、元の部屋に自分の参加エントリを残したまま別部屋へ移ってしまう。
-  if (!fresh || pvpMatch || pvpSession) {
-    if (!fresh) { pendingPvpInvite = null; pvpInviteNotice.classList.add('hidden'); }
+  const boardIsActive = !appEl.classList.contains('hidden');
+  if (!fresh || pvpMatch || pvpSession || boardIsActive) {
+    pvpInviteNotice.classList.add('hidden');
+    if (!fresh) pendingPvpInvite = null;
     return;
   }
   pendingPvpInvite = fresh;
@@ -6460,6 +6472,7 @@ function startPvpSocialFeatures() {
   pvpFriends = [];
   pvpInvitedUids.clear();
   pvpSentInviteIds.clear();
+  pvpReceivedInvites = [];
   pendingPvpInvite = null;
   pvpInviteNotice.classList.add('hidden');
   rebuildPvpPresenceListeners();
@@ -6531,6 +6544,7 @@ let pvpGuestBattleStarted = false; // enterPvpRoomScreenのたびリセット。
 
 function enterPvpRoomScreen(session) {
   pvpSession = session;
+  hidePvpInviteNoticeDuringActivity();
   pvpRoomCode.textContent = `部屋コード: ${session.roomCode}`;
   pvpRoomStatus.textContent = session.isHost ? '対戦相手を待っています…' : 'ホストの開始を待っています…';
   pvpRoomSettings.textContent = session.goalCurrency ? `目標G: ${Number(session.goalCurrency).toLocaleString('ja-JP')}G` : '';
@@ -7069,6 +7083,7 @@ function applyPvpPublicState(publicState) {
       pvpMatch.listener?.destroy();
       pvpMatch.actionSender?.destroy();
       pvpMatch = null;
+      pvpSession = null;
       game = undefined;
       appEl.classList.add('hidden');
       preGame.classList.remove('hidden');
@@ -7158,6 +7173,7 @@ async function startPvpGuestBattle() {
       clearPvpPieces();
       setWaitCutRate(0);
       pvpMatch = null;
+      pvpSession = null;
       stopMusic();
       appEl.classList.add('hidden');
       preGame.classList.remove('hidden');
@@ -7363,6 +7379,7 @@ async function handlePvpBattleEnd(result = {}) {
   clearPvpPieces();
   setWaitCutRate(0);
   pvpMatch = null;
+  pvpSession = null;
   game = undefined;
   stopMusic();
   appEl.classList.add('hidden');
