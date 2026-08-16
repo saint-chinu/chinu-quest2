@@ -174,7 +174,7 @@
             </button>
             <button class="hub-tile" data-mode="character-icon">
               <span class="hub-tile-icon" aria-hidden="true">◉</span>
-              <span class="hub-tile-copy"><strong>キャラ画像変更</strong><small>プレイヤーアイコンを変更</small></span>
+              <span class="hub-tile-copy"><strong>キャラ情報変更</strong><small>名前・プレイヤーアイコンを変更</small></span>
               <span class="hub-tile-arrow" aria-hidden="true">›</span>
             </button>
             <button class="hub-tile" data-mode="admin" id="hub-admin-tile" hidden>
@@ -187,7 +187,11 @@
       </div>
 
       <div id="character-icon-screen" class="pg-screen hidden">
-        <h2 class="pg-title">キャラ画像変更</h2>
+        <h2 class="pg-title">キャラ情報変更</h2>
+        <div class="pg-field">
+          <label for="character-name-input">キャラ名</label>
+          <input id="character-name-input" type="text" maxlength="10" />
+        </div>
         <p class="pg-label">画像を選んでください</p>
         <div id="character-icon-choices" class="pg-choice-row"></div>
         <div class="pg-field charmake-upload-field">

@@ -71,6 +71,7 @@ export const THUNDER_MONSTER_CATALOG = {
     commandCost: 80,
     ability: { type: 'cursePlayerHaste', turns: 2 },
     effectDescription: '土地コマンド（80G）: 選んだプレイヤーに高速化の呪いをかける（2ターン継続。サイコロ・スペルフェーズがスキップされ、代わりに6マス固定で移動する）',
+    imageDataUrl: assetUrl('/images/card-art/sonicMove.png'),
   }),
   juudenGireRobot: thunderMonster('juudenGireRobot', '充電切れロボ', Rarity.N, 20, 35, {
     cost: 30,

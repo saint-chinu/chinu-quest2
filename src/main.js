@@ -3267,6 +3267,7 @@ const hubAdminTile = document.getElementById('hub-admin-tile');
 const hubMailButton = document.getElementById('hub-mail-button');
 const hubMailBadge = document.getElementById('hub-mail-badge');
 const characterIconScreen = document.getElementById('character-icon-screen');
+const characterNameInput = document.getElementById('character-name-input');
 const characterIconChoices = document.getElementById('character-icon-choices');
 const characterIconUpload = document.getElementById('character-icon-upload');
 const characterIconPreview = document.getElementById('character-icon-preview');
@@ -3738,6 +3739,7 @@ async function showCharacterIconScreen() {
     dataUrl: currentCharacter.iconImageDataUrl || '',
     color: currentCharacter.color || ICON_COLORS[0],
   };
+  characterNameInput.value = currentCharacter.name || '';
   characterIconUpload.value = '';
   characterIconError.classList.add('hidden');
   characterIconPreview.classList.add('hidden');
@@ -3756,7 +3758,7 @@ async function showCharacterIconScreen() {
       [...characterIconChoices.children].forEach((child) => child.classList.remove('selected'));
       characterIconPreview.classList.remove('selected');
       el.classList.add('selected');
-      characterIconSave.disabled = false;
+      characterIconSave.disabled = !characterNameInput.value.trim();
     });
     characterIconChoices.appendChild(el);
   });
@@ -3766,9 +3768,13 @@ async function showCharacterIconScreen() {
     characterIconPreview.classList.remove('hidden');
     characterIconPreview.classList.add('selected');
   }
-  characterIconSave.disabled = !pendingCharacterIcon?.preset && !pendingCharacterIcon?.dataUrl;
+  characterIconSave.disabled = !characterNameInput.value.trim();
   showScreen(characterIconScreen);
 }
+
+characterNameInput.addEventListener('input', () => {
+  characterIconSave.disabled = !characterNameInput.value.trim();
+});
 
 characterIconUpload.addEventListener('change', async () => {
   const file = characterIconUpload.files?.[0];
@@ -3785,7 +3791,7 @@ characterIconUpload.addEventListener('change', async () => {
     characterIconPreview.classList.remove('hidden');
     characterIconPreview.classList.add('selected');
     characterIconError.classList.add('hidden');
-    characterIconSave.disabled = false;
+    characterIconSave.disabled = !characterNameInput.value.trim();
   } catch (error) {
     pendingCharacterIcon = null;
     characterIconPreview.classList.add('hidden');
@@ -3796,13 +3802,17 @@ characterIconUpload.addEventListener('change', async () => {
 });
 
 characterIconSave.addEventListener('click', () => {
-  if (!currentCharacter || !pendingCharacterIcon || characterIconSave.disabled) return;
-  currentCharacter.iconPreset = pendingCharacterIcon.preset || null;
-  currentCharacter.iconImageDataUrl = pendingCharacterIcon.dataUrl || '';
-  currentCharacter.color = pendingCharacterIcon.color || currentCharacter.color || ICON_COLORS[0];
+  const nextName = characterNameInput.value.trim();
+  if (!currentCharacter || !nextName || characterIconSave.disabled) return;
+  currentCharacter.name = nextName;
+  if (pendingCharacterIcon) {
+    currentCharacter.iconPreset = pendingCharacterIcon.preset || null;
+    currentCharacter.iconImageDataUrl = pendingCharacterIcon.dataUrl || '';
+    currentCharacter.color = pendingCharacterIcon.color || currentCharacter.color || ICON_COLORS[0];
+  }
   saveCharacter(currentUserId, currentCharacter);
   showHubScreen();
-  showToast('キャラ画像を変更しました', 2200);
+  showToast('キャラ情報を変更しました', 2200);
 });
 
 characterIconBack.addEventListener('click', showHubScreen);
