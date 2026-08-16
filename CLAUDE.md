@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v66`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v69`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## ⚠️ 並行開発 (Codex) — 必ず守る
@@ -67,7 +67,10 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   `_cpuChooseNextTile`は「最寄り未通過CP→全通過後ゴール」への距離を×10000で絶対優先。
 - **同盟(alliance)**: `player.allianceId`。両者non-null&同値で味方。妨害スペルは非味方へ、
   強化/連鎖/応援/通行料免除は味方も対象。
-- **破産**: 隠し正味財産(通貨+清算価値)。
+- **破産 ※仕様変更(cb14266)**: 判定は隠し正味財産(通貨+清算価値)。処理は
+  **全モード共通**になった—ストーリーでも脱落せず(`defeated=false`)、残存土地を
+  全清算（モンスター消滅・**土地Lvも1へ**）→500Gを受け取り**自分のhomeGoal**から
+  再スタート。破産では`_checkStoryWinCondition`は呼ばれない。
 - **未知との遭遇(encounterUnknown)** EXスペル: デッキ内の未ドロー無属性モンスターを
   1体**手札へ移動**(複製ではない—`_reclaimCardFromDeck`でデッキから除去)。ギア
   (`fusionSummon`)とガシャーンは候補除外。全種遭遇済みなら200G+2ドロー。
@@ -77,6 +80,12 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 - **魔力抽出(extractManaFromHandCard)** S100G: 自分含む手札のある1人を選び、その手札を
   見て1枚捨てさせ、**捨てられた本人が+200G**。target=`anyPlayerHandCard`。詠唱中の
   魔力抽出自身は候補外。CPUは所持G≤400なら自分のN/Sを換金、>400なら敵のR/EXを潰す。
+- **ブルーオーシャン(warpToNearbyEmptyLand)** ※ターン送りの作法: 効果関数は
+  ターンを自分で送らず`true`（endedTurn）を返すだけ。人間は`useSpell`の
+  endedTurn分岐、CPUは`_runCPUTurn`の`_cpuMaybeWarpToHighValueLand`成功分岐が、
+  **スペル演出を完全に閉じた後に一度だけ**ターンを送る。効果関数内で送ると
+  onSpellCompleteが次プレイヤーのUIを消し、操作不能・二重ターン送りになる
+  （ターンを終えるスペルを追加する時はこのパターンに従うこと）。
 - **帰巣本能(returnPlayerToStart)** S50G ※仕様変更: target=`anyPlayer`。選んだプレイヤー
   をゴールへ戻し**+250G**、その後`_grantGoalBonus`を通す＝**全CP通過済みの時だけ**周回
   ボーナスも入る(未通過なら250Gのみ・CP記録は保持)。旧`returnToStartDoubleBonus`は廃止。
@@ -165,8 +174,13 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   `isWaitingRoom()`のままなので3〜4人戦の入室は従来どおり動く。
 - 在席判定は`lastSeenAt`の鮮度(120秒)。**相手の強制終了・回線断では書き込みが起きず
   スナップショットも来ない**ので、`listenToPvpPresence`が20秒ごとに自力で再評価する。
-- 検証: Firestoreエミュレータ＋`@firebase/rules-unit-testing`で
-  `npx firebase emulators:start --only firestore` を立てて実際の許可/拒否を確認できる。
+- **招待通知はハブ画面でのみ表示**(6feecc6): 盤面中（ストーリー/CPU戦含む、
+  判定は`!appEl.classList.contains('hidden')`）と部屋待機中・対戦中は隠す。
+  受信データは`pvpReceivedInvites`に保持し、`showHubScreen`で再表示する。
+  `pvpSession`はゲスト側の対戦終了・エラー経路でも必ずnullへ戻す。
+- 検証: ルールテストが`tests/firestore.rules.test.mjs`に恒久化された。
+  **`npm run test:rules`**（firebase emulators:exec + node --test）で実行できる。
+  フレンド/招待/プレゼンス/部屋可視性のケースを含む。ルール変更時は必ず回すこと。
 
 ## AI (game.js)
 - **ダンボール男(stage5)** `_isDanballBoss`: 召喚は
