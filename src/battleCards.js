@@ -664,7 +664,6 @@ export const CHARACTER_DECKS = {
       // マウントゴリラ(手持ちG優位でATK2倍)は副業収入との相性が良い。
       monsters: [
         // 安価で効率のよい主力（50G中心・低い連鎖条件）。
-        { def: MONSTER_CATALOG.aoriika, count: 2 },
         { def: MONSTER_CATALOG.kunekune, count: 3 },
         { def: MONSTER_CATALOG.uminoieTencho, count: 3 },
         { def: MONSTER_CATALOG.jukaiNoOnryou, count: 4 },
@@ -698,6 +697,7 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.disclosureRequest, count: 1 },
         { def: SPELL_CATALOG.senbonZakura, count: 1 },
         { def: SPELL_CATALOG.blueOcean, count: 1 },
+        { def: SPELL_CATALOG.manaExtraction, count: 2 },
       ],
     },
   },
