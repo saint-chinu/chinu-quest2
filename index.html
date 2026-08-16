@@ -23,16 +23,33 @@
           <button id="install-app-button" class="pg-button" type="button">ホーム画面に追加</button>
         </div>
 
-        <div class="pg-field">
-          <label for="login-id">ID</label>
-          <input id="login-id" type="text" autocomplete="username" />
-        </div>
-        <div class="pg-field">
-          <label for="login-password">パスワード</label>
-          <input id="login-password" type="password" autocomplete="current-password" />
-        </div>
-        <p id="login-error" class="pg-error hidden"></p>
-        <button id="login-submit" class="pg-button">ログイン／新規登録</button>
+        <section class="title-public-summary" aria-labelledby="public-summary-title">
+          <p class="title-intro-kicker">BOARD GAME × CARD BATTLE</p>
+          <h2 id="public-summary-title">チヌクエスト2とは</h2>
+          <p>サイコロで盤面を巡り、モンスターを召喚して土地を奪い合う、無料のブラウザ向けボード＆カードゲームです。カード40枚でデッキを組み、土地の連鎖・レベルアップ、スペル、装備、モンスター能力を組み合わせて目標総資産を目指します。</p>
+          <ul>
+            <li>全8ステージのストーリーと、クリア後の再戦・周回要素</li>
+            <li>2～4人のオンライン対戦、CPU参加、4人同盟戦</li>
+            <li>カード収集、デッキ編集、図鑑、ブリードモンスター育成</li>
+          </ul>
+          <p class="title-play-note"><strong>推奨：</strong>スマートフォンはホーム画面へ追加し、横持ちでプレイしてください。PCも横長画面を推奨します。オンライン対戦には安定した通信環境が必要です。</p>
+        </section>
+
+        <section class="login-panel" aria-labelledby="login-panel-title">
+          <h2 id="login-panel-title">ログイン／新規登録</h2>
+          <p class="login-panel-note">初めて入力したIDは新規登録されます。ID・パスワードを忘れないよう保管してください。</p>
+          <div class="pg-field">
+            <label for="login-id">ID</label>
+            <input id="login-id" type="text" autocomplete="username" />
+          </div>
+          <div class="pg-field">
+            <label for="login-password">パスワード</label>
+            <input id="login-password" type="password" autocomplete="current-password" />
+          </div>
+          <p id="login-error" class="pg-error hidden"></p>
+          <label class="login-consent"><input id="login-consent" type="checkbox" /> <span>下記の免責事項・禁止事項を確認し、同意します。</span></label>
+          <button id="login-submit" class="pg-button">ログイン／新規登録</button>
+        </section>
 
         <div id="title-intro">
           <div class="title-intro-block">
@@ -42,7 +59,7 @@
           </div>
           <div class="title-intro-block">
             <h3>ストーリーモード＆対人戦</h3>
-            <p>個性豊かなキャラクター達との対決が続くストーリーモードでは、会話シーンを挟みながら全4ステージを攻略。クリア済みのステージにはいつでも再挑戦でき、初回とは違う顔ぶれ・違うルールで再戦できます。招待コード制のオンライン対戦は2〜4人に対応し、CPU参加や4人同盟戦も選べます。</p>
+            <p>個性豊かなキャラクター達との対決が続くストーリーモードでは、会話シーンを挟みながら全8ステージを攻略。クリア済みのステージにはいつでも再挑戦でき、初回とは違う顔ぶれ・違うルールで再戦できます。ルームコード制のオンライン対戦は2〜4人に対応し、CPU参加や4人同盟戦も選べます。</p>
           </div>
           <div class="title-intro-block">
             <h3>キャラメイク</h3>
@@ -52,6 +69,28 @@
             <h3>カード収集でやりこみ</h3>
             <p>対戦の報酬やショップのパック購入でカードを集め、40枚のデッキを自由に編成。レアリティはN・S・R・EXの4段階で、集めたカードは図鑑でいつでも見返せます。ログイン中のキャラクター・所持M・カード・デッキ・ブリード・作成カードはクラウドにも保存されます。</p>
           </div>
+          <details class="title-policy-block" open>
+            <summary>免責事項・作品について</summary>
+            <ul>
+              <li>本作は個人制作の非公式オマージュゲームです。元となった作品、企業、商品、団体および各権利者とは関係ありません。</li>
+              <li>作中の名称・人物・出来事はフィクションまたはパロディ表現です。実在の個人・団体を中傷、攻撃、推奨する意図はありません。</li>
+              <li>本サービスは現状有姿で提供され、継続提供、完全な動作、通信品質、データの永続保存を保証しません。障害、仕様変更、サービス終了、端末操作などによるデータ消失や損害について、運営者は法令上許される範囲で責任を負いません。</li>
+              <li>対戦・演出・カード性能は予告なく調整される場合があります。ゲーム内通貨M・Gやカード等に現金価値、換金性、所有権はありません。</li>
+              <li>ID、プレイデータ、アップロード画像等はゲーム提供・クラウド保存・不正対策のために処理されます。パスワードや個人情報をID・名前・カード名へ入力しないでください。</li>
+            </ul>
+          </details>
+          <details class="title-policy-block" open>
+            <summary>禁止事項</summary>
+            <ul>
+              <li>チート、データ改ざん、不正な通貨・カード取得、脆弱性の悪用、認証回避、他人のアカウントへのアクセス。</li>
+              <li>通信妨害、サーバーへの過剰な負荷、自動操作による乱用、対戦進行の故意な妨害。</li>
+              <li>他者への嫌がらせ、差別、脅迫、なりすまし、個人情報の掲載・収集・拡散。</li>
+              <li>キャラメイク、ブリード等への、著作権・商標権・肖像権・プライバシーその他の第三者の権利を侵害する画像や名称の登録。本人の許可がない顔写真、既存作品のキャラクター、企業ロゴ等を含みます。</li>
+              <li>わいせつ、残虐、差別、誹謗中傷、個人情報、犯罪を助長する内容など、公序良俗や法令に反する画像・名称・カードの登録や公開。</li>
+              <li>公序良俗や法令に反する内容の投稿、本作またはゲーム内データの無断販売・換金・商用再配布。</li>
+            </ul>
+            <p>違反や安全上の問題が確認された場合、予告なくデータ削除、機能制限、利用停止などを行う場合があります。</p>
+          </details>
         </div>
       </div>
 
@@ -63,6 +102,7 @@
           <label for="charmake-icon-upload">または任意画像</label>
           <input id="charmake-icon-upload" type="file" accept="image/*" />
         </div>
+        <p class="upload-policy-note">自分に使用権限のある画像だけを登録してください。他人の顔、既存キャラクター、企業ロゴ、権利侵害・公序良俗に反する画像は禁止です。</p>
         <p id="charmake-icon-error" class="pg-error hidden"></p>
         <img id="charmake-icon-preview" class="pg-icon-choice hidden" alt="アップロード画像のプレビュー" />
         <div class="pg-field">
@@ -369,6 +409,7 @@
           <label for="breed-image">画像</label>
           <input id="breed-image" type="file" accept="image/*" />
         </div>
+        <p class="upload-policy-note">自分に使用権限のある画像だけを登録してください。他人の顔、既存キャラクター、企業ロゴ、権利侵害・公序良俗に反する画像は禁止です。</p>
         <button id="breed-image-reset" class="pg-button pg-button-secondary" type="button">初期画像に戻す</button>
         <img id="breed-image-preview" class="hidden" alt="ブリードモンスター画像プレビュー" />
         <p id="breed-stats" class="pg-label"></p>
@@ -384,6 +425,7 @@
           <p>ブリードモンスターは、入手したパーツを装着してATK・HP・属性・召喚コスト・特殊能力を自由に組み合わせられる自分専用のモンスターです。</p>
           <p>パーツは種類ではなく、重複分も数えて合計8個まで装着できます。装着と取り外しはいつでも無料です。ATKとHPは各70、召喚コストは200Gが上限です。</p>
           <p>名前と画像は能力に影響しません。画像をアップロードした場合はその画像が優先され、「初期画像に戻す」で元に戻せます。</p>
+          <p>登録できるのは、自分で作成した画像など使用権限のあるものに限ります。第三者の著作権・商標権・肖像権・プライバシーを侵害するもの、わいせつ・残虐・差別・誹謗中傷・個人情報など公序良俗や法令に反するものは禁止です。</p>
           <button id="breed-help-close" class="pg-button pg-button-secondary" type="button">閉じる</button>
         </div>
       </div>

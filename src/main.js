@@ -3223,6 +3223,7 @@ const loginId = document.getElementById('login-id');
 const loginPassword = document.getElementById('login-password');
 const loginError = document.getElementById('login-error');
 const loginSubmit = document.getElementById('login-submit');
+const loginConsent = document.getElementById('login-consent');
 const charmakeScreen = document.getElementById('charmake-screen');
 const charmakeIcons = document.getElementById('charmake-icons');
 const charmakeIconUpload = document.getElementById('charmake-icon-upload');
@@ -3727,6 +3728,12 @@ function ensureBreedFields(character) {
 
 loginSubmit.addEventListener('click', async () => {
   if (loginSubmit.disabled) return;
+  if (!loginConsent?.checked) {
+    loginError.textContent = '免責事項・禁止事項を確認し、同意欄にチェックしてください。';
+    loginError.classList.remove('hidden');
+    loginConsent?.focus();
+    return;
+  }
   loginSubmit.disabled = true;
   const originalLabel = loginSubmit.textContent;
   loginSubmit.textContent = 'ログイン中…';

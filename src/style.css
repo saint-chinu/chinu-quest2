@@ -523,6 +523,99 @@ html, body {
   margin: 0;
 }
 
+.title-public-summary,
+.login-panel {
+  width: min(640px, 92vw);
+  box-sizing: border-box;
+  padding: 18px 20px;
+  border: 1px solid rgba(110, 231, 217, 0.38);
+  border-radius: 14px;
+  background: rgba(10, 18, 31, 0.9);
+  color: #e8f7f5;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.38);
+}
+
+.title-public-summary h2,
+.login-panel h2 {
+  margin: 2px 0 10px;
+  color: #fff;
+  font-size: 20px;
+}
+
+.title-public-summary p,
+.title-public-summary li,
+.login-panel-note {
+  font-size: 13px;
+  line-height: 1.65;
+}
+
+.title-public-summary ul {
+  margin: 10px 0;
+  padding-left: 1.4em;
+}
+
+.title-intro-kicker {
+  margin: 0;
+  color: #f3c969;
+  font-size: 11px !important;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+}
+
+.title-play-note {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(243, 201, 105, 0.12);
+  color: #fff7dd;
+}
+
+.login-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.login-panel-note {
+  margin: 0;
+  color: #cfcfe0;
+  text-align: center;
+}
+
+.login-consent {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  max-width: 500px;
+  color: #f5f5fb;
+  font-size: 13px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.login-consent input {
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  flex: 0 0 auto;
+  accent-color: #35c8b9;
+}
+
+.upload-policy-note {
+  width: min(520px, 90vw);
+  box-sizing: border-box;
+  margin: -4px 0 2px;
+  padding: 8px 10px;
+  border-left: 3px solid #f3c969;
+  border-radius: 4px;
+  background: rgba(243, 201, 105, 0.1);
+  color: #fff2c9;
+  font-size: 11px;
+  line-height: 1.55;
+  text-align: left;
+}
+
 #title-intro {
   display: flex;
   flex-direction: column;
@@ -548,6 +641,35 @@ html, body {
   color: #e4e4f0;
   font-size: 12.5px;
   line-height: 1.6;
+}
+
+.title-policy-block {
+  border: 1px solid rgba(243, 201, 105, 0.32);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: rgba(16, 16, 24, 0.76);
+  color: #e4e4f0;
+  text-align: left;
+}
+
+.title-policy-block summary {
+  color: #f3c969;
+  font-size: 14px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.title-policy-block ul {
+  margin: 10px 0 6px;
+  padding-left: 1.45em;
+}
+
+.title-policy-block li,
+.title-policy-block p {
+  margin: 5px 0;
+  color: #e4e4f0;
+  font-size: 12px;
+  line-height: 1.65;
 }
 
 #title-screenshot {
