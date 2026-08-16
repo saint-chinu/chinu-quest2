@@ -405,6 +405,11 @@
         </div>
         <button id="pvp-join-button" class="pg-button">部屋に入る</button>
         <p id="pvp-menu-error" class="pg-error hidden"></p>
+        <section class="pvp-friends-panel">
+          <h3>フレンド</h3>
+          <p class="pvp-friends-help">対人戦で遊んだ相手が自動で追加されます。</p>
+          <div id="pvp-friend-list" class="pvp-friend-list"></div>
+        </section>
         <button id="pvp-menu-back" class="pg-button pg-button-secondary">戻る</button>
       </div>
 
@@ -415,8 +420,20 @@
           <p id="pvp-room-status" class="pg-label"></p>
           <p id="pvp-room-settings" class="pg-label"></p>
           <p id="pvp-room-teams" class="pg-label"></p>
+          <section id="pvp-room-friends" class="pvp-friends-panel hidden">
+            <h3>オンラインのフレンドを招待</h3>
+            <div id="pvp-room-friend-list" class="pvp-friend-list"></div>
+          </section>
           <button id="pvp-room-start" class="pg-button hidden">対戦開始</button>
           <button id="pvp-room-leave" class="pg-button pg-button-secondary">やめる</button>
+        </div>
+      </div>
+
+      <div id="pvp-invite-notice" class="hidden" role="dialog" aria-live="assertive">
+        <p id="pvp-invite-message"></p>
+        <div>
+          <button id="pvp-invite-accept" class="pg-button">参加する</button>
+          <button id="pvp-invite-decline" class="pg-button pg-button-secondary">断る</button>
         </div>
       </div>
 

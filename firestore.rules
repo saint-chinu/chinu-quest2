@@ -44,6 +44,34 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // 対戦相手のフレンド一覧。相互登録は各端末が「自分の一覧」だけへ書く。
+    match /pvpFriends/{uid}/entries/{friendUid} {
+      allow read, create, update, delete: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // オンライン判定用の短周期ハートビート。書込は本人のみ、閲覧はログイン済みのみ。
+    match /pvpPresence/{uid} {
+      allow read: if request.auth != null;
+      allow create, update: if request.auth != null && request.auth.uid == uid
+        && request.resource.data.uid == uid
+        && request.resource.data.keys().hasOnly(['uid', 'name', 'online', 'lastSeenAt']);
+      allow delete: if false;
+    }
+
+    // ルーム招待。送信者だけが作成でき、受信者だけが受取・破棄できる。
+    match /pvpInvites/{inviteId} {
+      allow create: if request.auth != null
+        && request.resource.data.inviterUid == request.auth.uid
+        && request.resource.data.recipientUid is string
+        && request.resource.data.recipientUid != request.auth.uid
+        && exists(/databases/$(database)/documents/pvpFriends/$(request.auth.uid)/entries/$(request.resource.data.recipientUid))
+        && request.resource.data.roomCode is string
+        && request.resource.data.roomCode.size() == 3
+        && request.resource.data.keys().hasOnly(['inviterUid', 'inviterName', 'recipientUid', 'roomCode', 'createdAt']);
+      allow read, delete: if request.auth != null && resource.data.recipientUid == request.auth.uid;
+      allow update: if false;
+    }
+
     match /pvpRooms/{roomCode} {
       function signedIn() {
         return request.auth != null;
@@ -55,12 +83,13 @@ service cloud.firestore {
       }
 
       function isWaitingRoom() {
-        return resource.data.status == 'waiting' && resource.data.guestUid == null;
+        return resource.data.status == 'waiting';
       }
 
       function isValidJoin() {
         return signedIn() &&
           isWaitingRoom() &&
+          resource.data.guestUid == null &&
           request.resource.data.hostUid == resource.data.hostUid &&
           request.resource.data.guestUid == request.auth.uid &&
           request.resource.data.status == 'active' &&

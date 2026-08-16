@@ -46,6 +46,16 @@ import {
   finishPvpRoom,
   beginPvpMatch,
 } from './pvp.js';
+import {
+  dismissPvpInvite,
+  listenToPvpFriends,
+  listenToPvpInvites,
+  listenToPvpPresence,
+  registerPvpFriends,
+  removePvpFriend,
+  sendPvpInvite,
+  updatePvpPresence,
+} from './pvpFriends.js';
 import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted, playSfx } from './audio.js';
 import { getSpeedMultiplier, setSpeedMultiplier, getWaitCutRate, setWaitCutRate, tween, easeInOutQuad } from './utils.js';
 
@@ -3377,6 +3387,13 @@ const pvpRoomSettings = document.getElementById('pvp-room-settings');
 const pvpRoomTeams = document.getElementById('pvp-room-teams');
 const pvpRoomStart = document.getElementById('pvp-room-start');
 const pvpRoomLeave = document.getElementById('pvp-room-leave');
+const pvpFriendList = document.getElementById('pvp-friend-list');
+const pvpRoomFriends = document.getElementById('pvp-room-friends');
+const pvpRoomFriendList = document.getElementById('pvp-room-friend-list');
+const pvpInviteNotice = document.getElementById('pvp-invite-notice');
+const pvpInviteMessage = document.getElementById('pvp-invite-message');
+const pvpInviteAccept = document.getElementById('pvp-invite-accept');
+const pvpInviteDecline = document.getElementById('pvp-invite-decline');
 const pvpMapSelectScreen = document.getElementById('pvp-map-select-screen');
 const pvpMapList = document.getElementById('pvp-map-list');
 const pvpMapSelectBack = document.getElementById('pvp-map-select-back');
@@ -3790,6 +3807,7 @@ function showHubScreen() {
     return;
   }
   showScreen(hubScreen);
+  startPvpSocialFeatures();
   refreshMailBadge();
 }
 
@@ -6315,6 +6333,143 @@ let pvpSession = null; // { roomCode, uid, isHost }
 // Firestoreのfinished通知や決着コールバックが重複しても、報酬付与と
 // メニュー復帰を各端末で一度だけ実行するためのガード。
 let pvpBattleEndHandled = false;
+let pvpFriends = [];
+let pvpOnlineByUid = new Map();
+let pvpFriendsUnsubscribe = null;
+let pvpInviteUnsubscribe = null;
+let pvpPresenceTimer = null;
+let pvpPresenceUnsubscribes = [];
+let pvpSocialUid = null;
+let pendingPvpInvite = null;
+
+function renderPvpFriendLists() {
+  const makeEmpty = (text) => {
+    const p = document.createElement('p');
+    p.className = 'pvp-friend-empty';
+    p.textContent = text;
+    return p;
+  };
+  pvpFriendList.replaceChildren();
+  if (!pvpFriends.length) pvpFriendList.appendChild(makeEmpty('まだフレンドはいません'));
+  for (const friend of pvpFriends) {
+    const row = document.createElement('div');
+    row.className = 'pvp-friend-row';
+    const name = document.createElement('span');
+    name.className = 'pvp-friend-name';
+    name.textContent = friend.name || 'プレイヤー';
+    const online = Boolean(pvpOnlineByUid.get(friend.uid));
+    const status = document.createElement('span');
+    status.className = `pvp-friend-status${online ? ' online' : ''}`;
+    status.textContent = online ? '● オンライン' : '● オフライン';
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'pg-button pg-button-secondary';
+    remove.textContent = '削除';
+    remove.addEventListener('click', async () => {
+      if (!await confirmYesNo(`${friend.name || 'このフレンド'}をフレンドリストから削除しますか？`)) return;
+      await removePvpFriend(currentUserId, friend.uid);
+    });
+    row.append(name, status, remove);
+    pvpFriendList.appendChild(row);
+  }
+
+  pvpRoomFriendList.replaceChildren();
+  const onlineFriends = pvpFriends.filter((friend) => pvpOnlineByUid.get(friend.uid));
+  if (!onlineFriends.length) pvpRoomFriendList.appendChild(makeEmpty('現在オンラインのフレンドはいません'));
+  for (const friend of onlineFriends) {
+    const row = document.createElement('div');
+    row.className = 'pvp-friend-row';
+    const name = document.createElement('span');
+    name.className = 'pvp-friend-name';
+    name.textContent = friend.name || 'プレイヤー';
+    const invite = document.createElement('button');
+    invite.type = 'button';
+    invite.className = 'pg-button';
+    invite.textContent = '招待';
+    invite.addEventListener('click', async () => {
+      if (!pvpSession?.isHost) return;
+      invite.disabled = true;
+      try {
+        await sendPvpInvite({ recipientUid: friend.uid, roomCode: pvpSession.roomCode, hostName: currentCharacter.name });
+        invite.textContent = '送信済み';
+      } catch (error) {
+        invite.disabled = false;
+        showToast(`招待を送れませんでした：${error?.message || '通信エラー'}`, 2500);
+      }
+    });
+    row.append(name, invite);
+    pvpRoomFriendList.appendChild(row);
+  }
+}
+
+function rebuildPvpPresenceListeners() {
+  pvpPresenceUnsubscribes.forEach((stop) => stop());
+  pvpPresenceUnsubscribes = [];
+  pvpOnlineByUid = new Map();
+  for (const friend of pvpFriends) {
+    pvpPresenceUnsubscribes.push(listenToPvpPresence(friend.uid, (online) => {
+      pvpOnlineByUid.set(friend.uid, online);
+      renderPvpFriendLists();
+    }));
+  }
+  renderPvpFriendLists();
+}
+
+function showNewestPvpInvite(invites) {
+  const fresh = invites.find((invite) => Date.now() - (invite.createdAt?.toMillis?.() || Date.now()) < 10 * 60 * 1000);
+  if (!fresh || pvpMatch) return;
+  pendingPvpInvite = fresh;
+  pvpInviteMessage.textContent = `${fresh.inviterName || 'フレンド'}から対戦招待が届きました`;
+  pvpInviteNotice.classList.remove('hidden');
+}
+
+function startPvpSocialFeatures() {
+  if (!firebaseReady || !currentUserId || !currentCharacter) return;
+  updatePvpPresence(currentUserId, currentCharacter.name, true).catch(console.warn);
+  if (pvpSocialUid === currentUserId) return;
+  pvpSocialUid = currentUserId;
+  pvpFriendsUnsubscribe?.();
+  pvpInviteUnsubscribe?.();
+  if (pvpPresenceTimer) window.clearInterval(pvpPresenceTimer);
+  pvpFriendsUnsubscribe = listenToPvpFriends(currentUserId, (friends) => {
+    pvpFriends = friends;
+    rebuildPvpPresenceListeners();
+  });
+  pvpInviteUnsubscribe = listenToPvpInvites(currentUserId, showNewestPvpInvite);
+  pvpPresenceTimer = window.setInterval(() => {
+    if (!document.hidden) updatePvpPresence(currentUserId, currentCharacter?.name, true).catch(console.warn);
+  }, 45000);
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (!currentUserId || !currentCharacter || !firebaseReady) return;
+  updatePvpPresence(currentUserId, currentCharacter.name, !document.hidden).catch(console.warn);
+});
+
+pvpInviteDecline.addEventListener('click', async () => {
+  const invite = pendingPvpInvite;
+  pendingPvpInvite = null;
+  pvpInviteNotice.classList.add('hidden');
+  if (invite) await dismissPvpInvite(invite.id).catch(console.warn);
+});
+
+pvpInviteAccept.addEventListener('click', async () => {
+  const invite = pendingPvpInvite;
+  if (!invite) return;
+  pvpInviteAccept.disabled = true;
+  // デッキ選択画面より前面に招待通知が残ると操作を塞ぐため、参加処理中は隠す。
+  pvpInviteNotice.classList.add('hidden');
+  try {
+    await joinPvpRoomByCode(invite.roomCode);
+    await dismissPvpInvite(invite.id);
+    pendingPvpInvite = null;
+  } catch (error) {
+    showToast(error?.message || '招待された部屋に参加できませんでした', 2800);
+    if (pendingPvpInvite?.id === invite.id) pvpInviteNotice.classList.remove('hidden');
+  } finally {
+    pvpInviteAccept.disabled = false;
+  }
+});
 
 function stopPvpRoomListener() {
   if (pvpUnsubscribe) {
@@ -6332,6 +6487,7 @@ function showPvpMenuScreen() {
     pvpMenuError.textContent = '対人戦は準備中です（サーバー未設定）';
     pvpMenuError.classList.remove('hidden');
   }
+  renderPvpFriendLists();
   showScreen(pvpMenuScreen);
 }
 
@@ -6347,6 +6503,8 @@ function enterPvpRoomScreen(session) {
   pvpRoomStatus.textContent = session.isHost ? '対戦相手を待っています…' : 'ホストの開始を待っています…';
   pvpRoomSettings.textContent = session.goalCurrency ? `目標G: ${Number(session.goalCurrency).toLocaleString('ja-JP')}G` : '';
   pvpRoomStart.classList.add('hidden');
+  pvpRoomFriends.classList.toggle('hidden', !session.isHost);
+  renderPvpFriendLists();
   pvpGuestBattleStarted = false;
   pvpBattleEndHandled = false;
   showScreen(pvpRoomScreen);
@@ -6385,6 +6543,10 @@ function enterPvpRoomScreen(session) {
       return;
     }
     if (room.status === 'battling') {
+      if (!session.friendshipsRegistered) {
+        session.friendshipsRegistered = true;
+        registerPvpFriends(room).catch((error) => console.warn('フレンド自動登録に失敗しました', error));
+      }
       if (!session.isHost && !pvpGuestBattleStarted) {
         pvpGuestBattleStarted = true;
         startPvpGuestBattle();
@@ -6483,23 +6645,23 @@ function showPvpMapConfirm(map) {
 pvpMapSelectBack.addEventListener('click', () => showScreen(pvpMenuScreen));
 pvpCreateButton.addEventListener('click', showPvpMapSelectScreen);
 
-pvpJoinButton.addEventListener('click', async () => {
-  const code = pvpJoinCode.value.trim();
+async function joinPvpRoomByCode(codeInput) {
+  const code = String(codeInput || '').trim();
   if (!/^\d{3}$/.test(code)) {
-    pvpMenuError.textContent = '部屋コードは3桁の数字で入力してください';
-    pvpMenuError.classList.remove('hidden');
-    return;
+    throw new Error('部屋コードは3桁の数字で入力してください');
   }
+  const chosenDeck = await promptDeckSelection();
+  const characterIcon = await resolveCharacterIcon(currentCharacter);
+  const iconDataUrl = compactCharacterIconDataUrl(characterIcon);
+  const session = await joinPvpRoom(code, { name: currentCharacter.name, color: currentCharacter.color, iconDataUrl, deckList: chosenDeck.deckList });
+  enterPvpRoomScreen(session);
+}
+
+pvpJoinButton.addEventListener('click', async () => {
   pvpMenuError.classList.add('hidden');
   pvpJoinButton.disabled = true;
   try {
-    // 招待コード制の合言葉どおり: コードを入れたら先にデッキを選んでから
-    // 入室する（入室後は部屋の相手待ち画面に直行、デッキ選択で止まらない）。
-    const chosenDeck = await promptDeckSelection();
-    const characterIcon = await resolveCharacterIcon(currentCharacter);
-    const iconDataUrl = compactCharacterIconDataUrl(characterIcon);
-    const session = await joinPvpRoom(code, { name: currentCharacter.name, color: currentCharacter.color, iconDataUrl, deckList: chosenDeck.deckList });
-    enterPvpRoomScreen(session);
+    await joinPvpRoomByCode(pvpJoinCode.value);
   } catch (error) {
     pvpMenuError.textContent = error.message || '入室できませんでした';
     pvpMenuError.classList.remove('hidden');
@@ -7017,6 +7179,7 @@ pvpRoomStart.addEventListener('click', async () => {
 
   // status:'battling'への更新がゲスト側のroomリスナーに届き、それを合図に
   // ゲストもstartPvpGuestBattle()で盤面構築を始める（enterPvpRoomScreen参照）。
+  await registerPvpFriends(pvpLastRoom).catch((error) => console.warn('フレンド自動登録に失敗しました', error));
   await beginPvpMatch(pvpSession.roomCode);
 
   stopPvpRoomListener();

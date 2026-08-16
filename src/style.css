@@ -3456,6 +3456,33 @@ html, body {
 #pvp-room-popup .pg-label { color: #eef5ff; text-align: center; }
 #pvp-room-code { color: #ffd166 !important; font-size: 25px; font-weight: 900; letter-spacing: 0.16em; }
 
+.pvp-friends-panel {
+  margin: 14px 0;
+  padding: 12px;
+  border: 1px solid rgba(126, 211, 255, 0.4);
+  border-radius: 12px;
+  background: rgba(8, 18, 38, 0.72);
+}
+.pvp-friends-panel h3 { margin: 0 0 6px; color: #eaf7ff; }
+.pvp-friends-help, .pvp-friend-empty { margin: 4px 0 8px; color: #aebfd4; font-size: 13px; }
+.pvp-friend-list { display: grid; gap: 7px; max-height: 190px; overflow-y: auto; }
+.pvp-friend-row { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border-radius: 8px; background: rgba(255,255,255,0.07); }
+.pvp-friend-name { flex: 1; min-width: 0; color: #fff; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pvp-friend-status { font-size: 12px; color: #8392a8; }
+.pvp-friend-status.online { color: #79ef9b; }
+.pvp-friend-row button { width: auto; min-width: 64px; margin: 0; padding: 6px 10px; font-size: 13px; }
+
+#pvp-invite-notice {
+  position: fixed; z-index: 10050; top: 16px; left: 50%; transform: translateX(-50%);
+  width: min(420px, calc(100vw - 24px)); padding: 14px;
+  border: 2px solid #ffd166; border-radius: 14px;
+  background: rgba(9, 18, 38, 0.97); box-shadow: 0 10px 36px rgba(0,0,0,.55); color: #fff;
+}
+#pvp-invite-notice.hidden { display: none; }
+#pvp-invite-notice p { margin: 0 0 10px; text-align: center; font-weight: 800; }
+#pvp-invite-notice > div { display: flex; gap: 8px; }
+#pvp-invite-notice button { margin: 0; }
+
 #branch-undo-button {
   position: fixed;
   right: 18px;
