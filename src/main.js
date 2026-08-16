@@ -5920,10 +5920,16 @@ function showShopScreen(mode = null) {
   partPackRow.append(partPackInfo, partPackButton);
   shopPartsList.appendChild(partPackRow);
 
-  for (const [key, owned] of Object.entries(currentCharacter.ownedCards || {})) {
-    if (owned <= 0) continue;
-    const def = byKey.get(key);
-    if (!def) continue;
+  const sellCards = Object.entries(currentCharacter.ownedCards || {})
+    .map(([key, owned]) => ({ key, owned, def: byKey.get(key) }))
+    .filter(({ owned, def }) => owned > 0 && def)
+    .sort((a, b) =>
+      b.owned - a.owned
+      || (RARITY_ORDER[a.def.rarity] ?? 99) - (RARITY_ORDER[b.def.rarity] ?? 99)
+      || String(a.def.name).localeCompare(String(b.def.name), 'ja'),
+    );
+
+  for (const { key, owned, def } of sellCards) {
     const surplus = owned - inDeckCountOf(key);
     const price = RARITY_SELL_PRICE[def.rarity];
 
