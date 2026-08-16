@@ -12,6 +12,8 @@ import {
 } from 'firebase/firestore';
 
 const ONLINE_WINDOW_MS = 120000;
+// 期限切れを自力で検出するための再評価間隔（スナップショットは来ないため）。
+const PRESENCE_RECHECK_MS = 20000;
 
 const friendRef = (uid, friendUid) => doc(db, 'pvpFriends', uid, 'entries', friendUid);
 const presenceRef = (uid) => doc(db, 'pvpPresence', uid);
@@ -49,12 +51,32 @@ export function updatePvpPresence(uid, name, online = true) {
   }, { merge: true });
 }
 
+/**
+ * フレンド1人の在席を購読する。オンライン判定はlastSeenAtの鮮度で行うため、
+ * スナップショット受信時だけ評価すると「相手がブラウザを強制終了した／回線が
+ * 切れた」ケースでは書き込みが発生せず、いつまでもオンライン表示のまま固まる。
+ * 最後に受け取ったデータを保持して定期的に再評価し、期限切れを自力で検出する。
+ * 値が変わった時だけ通知するので、再描画は増えない。
+ */
 export function listenToPvpPresence(uid, onChange) {
-  return onSnapshot(presenceRef(uid), (snapshot) => {
-    const data = snapshot.data();
-    const lastSeenMs = data?.lastSeenAt?.toMillis?.() || 0;
-    onChange(Boolean(data?.online && Date.now() - lastSeenMs <= ONLINE_WINDOW_MS));
-  }, () => onChange(false));
+  let latest = null;
+  let lastReported = null;
+  const evaluate = () => {
+    const lastSeenMs = latest?.lastSeenAt?.toMillis?.() || 0;
+    const online = Boolean(latest?.online && Date.now() - lastSeenMs <= ONLINE_WINDOW_MS);
+    if (online === lastReported) return;
+    lastReported = online;
+    onChange(online);
+  };
+  const stopSnapshot = onSnapshot(presenceRef(uid), (snapshot) => {
+    latest = snapshot.data() ?? null;
+    evaluate();
+  }, () => { latest = null; evaluate(); });
+  const timer = setInterval(evaluate, PRESENCE_RECHECK_MS);
+  return () => {
+    clearInterval(timer);
+    stopSnapshot();
+  };
 }
 
 export async function sendPvpInvite({ recipientUid, roomCode, hostName }) {

@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v63`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v66`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## ⚠️ 並行開発 (Codex) — 必ず守る
@@ -150,6 +150,23 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   catalogIdで引く処理（初期手札指定など）が全て不発になる。
 - 台本を使い切った後は`_tutorialDiceValue()`がnullを返して通常抽選へ戻る
   （固定値を返し続けると、表示されるダイスと実際の移動量が食い違う）。
+
+## PvPフレンド／招待 (Codex追加＋ハードニング)
+- `src/pvpFriends.js`。対戦開始時に`registerPvpFriends`が同席者を自分の一覧へ自動登録。
+- ⚠️ **`pvpFriends/{自分}`は自分で自由に書けるので、単独では認可の根拠にならない**。
+  招待作成は**相互フレンド**（相手の一覧にも自分がいること）を要求する。相手の一覧は
+  相手本人しか書けないため、これが唯一の偽装できない条件。
+- `pvpPresence`の読み取りは「本人」か「自分の一覧に入れている相手」のみ。全ログイン
+  ユーザーに開くと**絞り込み無しのlistでuid・名前を全件列挙できてしまう**（招待スパムの
+  宛先収集に直結）。この形なら1件ずつのgetだけが通る。
+- 部屋の`allow read`は`isJoinableWaitingRoom()`＝**待機中かつ参加枠が残っている**部屋だけ。
+  `status=='waiting'`だけにすると、満室の3〜4人部屋がコードを知る第三者に読まれ、
+  参加者名・uid・デッキ40枚・盤面が漏れる。入室判定(`isValidJoin`/`isValidRosterJoin`)は
+  `isWaitingRoom()`のままなので3〜4人戦の入室は従来どおり動く。
+- 在席判定は`lastSeenAt`の鮮度(120秒)。**相手の強制終了・回線断では書き込みが起きず
+  スナップショットも来ない**ので、`listenToPvpPresence`が20秒ごとに自力で再評価する。
+- 検証: Firestoreエミュレータ＋`@firebase/rules-unit-testing`で
+  `npx firebase emulators:start --only firestore` を立てて実際の許可/拒否を確認できる。
 
 ## AI (game.js)
 - **ダンボール男(stage5)** `_isDanballBoss`: 召喚は
