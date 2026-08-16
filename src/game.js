@@ -3001,7 +3001,9 @@ export class Game {
    */
   async _humanSummonFlow(player, tile) {
     const owner = tile.owner != null ? this.players.find((candidate) => candidate.id === tile.owner) : null;
-    if (owner?.allianceId != null && owner.allianceId === player.allianceId) {
+    // 自分の所有地は同じallianceIdを持つのが当然なので、同盟仲間として
+    // 拒否してはいけない。ここで自分まで弾くと同盟戦中だけ入れ替え不能になる。
+    if (owner?.id !== player.id && owner?.allianceId != null && owner.allianceId === player.allianceId) {
       this.onLog('同盟仲間の土地には侵略できません');
       return false;
     }

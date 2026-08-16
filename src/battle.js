@@ -205,6 +205,16 @@ function consumeDamageNegation(unit, log) {
   return message;
 }
 
+/** ライフジャケット: 通常攻撃だけでなく反射など、戦闘中の致死ダメージに共通適用する。 */
+function consumeLethalSurvival(unit) {
+  if (unit.currentHp > 0) return null;
+  const item = unit.items.find((i) => i.effect?.type === 'surviveLethalDamage' && !i.consumed);
+  if (!item) return null;
+  item.consumed = true;
+  unit.currentHp = 1;
+  return item;
+}
+
 function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
   const atkStats = statTotals(attackerUnit, attackerBonus);
   const reduction = damageReductionMultiplier(defenderUnit, attackerUnit);
@@ -237,7 +247,9 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
     const negatedMsg = consumeDamageNegation(attackerUnit, log);
     if (negatedMsg) return { damage: 0, message: negatedMsg };
     attackerUnit.currentHp -= damage;
-    const message = `${defenderUnit.def.name}が反射！ ${attackerUnit.def.name}に${damage}ダメージ`;
+    const lifeJacket = consumeLethalSurvival(attackerUnit);
+    const message = `${defenderUnit.def.name}が反射！ ${attackerUnit.def.name}に${damage}ダメージ`
+      + (lifeJacket ? `／${attackerUnit.def.name}は「${lifeJacket.name}」でHP1で踏みとどまった` : '');
     log.push(message);
     return { damage: 0, message, reflectedDamage: damage, reflectedTargetHp: attackerUnit.currentHp };
   }
@@ -247,14 +259,8 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
 
   // ライフジャケット(surviveLethalDamage): 致死ダメージでもHP1で踏みとどまる
   // （1戦闘1回のみ - アイテム本体にconsumedを立てて再発動を防ぐ）。
-  if (defenderUnit.currentHp <= 0) {
-    const lifeJacketItem = defenderUnit.items.find((i) => i.effect?.type === 'surviveLethalDamage' && !i.consumed);
-    if (lifeJacketItem) {
-      lifeJacketItem.consumed = true;
-      defenderUnit.currentHp = 1;
-      message += `／${defenderUnit.def.name}は「${lifeJacketItem.name}」でHP1で踏みとどまった`;
-    }
-  }
+  const lifeJacketItem = consumeLethalSurvival(defenderUnit);
+  if (lifeJacketItem) message += `／${defenderUnit.def.name}は「${lifeJacketItem.name}」でHP1で踏みとどまった`;
 
   // ハリネズミの服(reflectHalfDamage): くねくねと違い自分も普通にダメージを
   // 受けたうえで、その半分を追加で攻撃側にも返す。
@@ -271,6 +277,10 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
     } else {
       attackerUnit.currentHp -= reflected;
       message += `／${defenderUnit.def.name}が${reflected}ダメージを反射した`;
+      const reflectedLifeJacket = consumeLethalSurvival(attackerUnit);
+      if (reflectedLifeJacket) {
+        message += `／${attackerUnit.def.name}は「${reflectedLifeJacket.name}」でHP1で踏みとどまった`;
+      }
       resultReflectedDamage = reflected;
     }
   }
