@@ -181,11 +181,19 @@ export const NEUTRAL_MONSTER_CATALOG = {
   }),
   // 高ATK・低HPの貫通アサシン。守備には向かず、移動侵略で敵高レベル地を
   // 貫通で削り取るためのカード（「彼」の専用AIが移動侵略に活用する）。
-  mysteriousInvader: neutralMonster('mysteriousInvader', '未知の侵略者', Rarity.R, 10, 60, {
-    cost: 30,
-    traits: ['pierce'],
-    commandCost: 30,
-    ability: { type: 'warpToAnyEmptyLand' },
-    effectDescription: '貫通。土地コマンド（30G）: 任意の空き地へ移動する',
-  }),
+  mysteriousInvader: {
+    ...neutralMonster('mysteriousInvader', '未知の侵略者', Rarity.R, 10, 60, {
+      cost: 30,
+      traits: ['pierce'],
+      commandCost: 30,
+      ability: { type: 'warpToAnyEmptyLand' },
+      effectDescription: '貫通。土地コマンド（30G）: 任意の空き地へ移動する',
+    }),
+    // 専用イラスト未用意。neutralMonster()の既定URL（/images/card-art/
+    // mysteriousInvader.jpg）は実在せず、読み込みに失敗した壊れた画像は
+    // 盤面アイコン描画（scene.jsのdrawUnitCard→ctx.drawImage）を
+    // InvalidStateErrorで止めて盤面をフリーズさせる。nullにして無属性共通の
+    // プレースホルダー（cardArt.js）へ落とす。
+    imageDataUrl: null,
+  },
 };

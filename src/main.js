@@ -3109,7 +3109,7 @@ STARTマスを通過・着地すると「基本ボーナス＋領地ボーナス
 4人同盟戦は紅組・白組に分かれ、ホスト指定またはランダム同盟を選べます。ホストは盤面メニューのBANから参加者を退出させ、AI操作へ切り替えられます。通信が一定時間切断された参加者もAIへ切り替わります。
 
 【対戦報酬】
-勝敗にかかわらず終了時の総資産からMを獲得します（最低50M）。ストーリー本編・再戦は「7%＋相手プレイヤー1人につき3%」、対戦モードは1vs1が7%、相手が1人増えるごとに+3%、同盟戦は15%固定です。
+勝敗にかかわらず終了時の総資産からMを獲得します（最低50M）。ストーリー本編・再戦は「4%＋相手プレイヤー1人につき3%」、対戦モードは1vs1が4%、相手が1人増えるごとに+3%、同盟戦は15%固定です。
 
 【ログイン・クラウドセーブ】
 IDとパスワードでログインします。キャラクター、所持M、所持カード、デッキ、ブリード、ストーリー進行、作成カードは端末内に保存され、ログイン中はFirebaseにも同期されます。通信できない場合は端末内のデータで遊べます。`;
@@ -3411,6 +3411,9 @@ const ICON_COLORS = [0x2ec4b6, 0xe63946, 0xffd166, 0x8e5ce6, 0x4caf6e, 0x3a86e6]
 // by cashing out a battle's ending total assets at the mode-specific rate, min 50.
 const STARTING_M = 300;
 const M_CONVERSION_MIN = 50;
+// 終了時総資産→M変換の計算基礎（1vs1の基本レート）。相手が1人増えるごとに
+// +3%される。同盟戦は15%固定でこの基礎は使わない。
+const M_REWARD_BASE_RATE = 0.04;
 const CARD_EDITOR_HASH = '#card-editor';
 
 let currentUserId = null;
@@ -4154,7 +4157,7 @@ async function handleStoryReplayEnd(index, { won }, replayVariant) {
 async function handleStoryBattleEnd(index, { won }) {
   const stage = STORY_STAGES[index];
   clearStoryResume();
-  // ストーリー本編・再戦共通の「7%＋相手人数×3%」報酬を勝敗にかかわらず付与。
+  // ストーリー本編・再戦共通の「4%＋相手人数×3%」報酬を勝敗にかかわらず付与。
   const mReward = grantStoryBattleReward();
   // overlayNpc持ちのステージ（①②）の勝利時だけ、盤面をまだ隠さずに決着
   // 直後の会話をオーバーレイで見せる（startStoryBattleのintro演出と対に
@@ -6742,7 +6745,7 @@ pvpRoomStart.addEventListener('click', async () => {
   pvpRoomStart.disabled = false;
 });
 
-// ---- Leaving a battle: cash out ending total assets into persistent M (7%/10%/13%, alliance 15%; minimum 50) ----
+// ---- Leaving a battle: cash out ending total assets into persistent M (4%/7%/10%, alliance 15%; minimum 50) ----
 //
 // 同盟(2vs2)ではtotalAssetsがチーム合算値のため、そのまま使うとチーム全員が
 // 満額を個別に受け取れてしまう（実質的な二重取り）。呼び出し側は必ず
@@ -6767,7 +6770,7 @@ function computeExitRewardM(endingAssetsShare, rewardRateOverride = null) {
   const allianceMode = game
     ? Boolean(game.players.some((player) => player.allianceId != null))
     : pvpLastRoom?.allianceMode === true;
-  const rewardRate = rewardRateOverride ?? (allianceMode ? 0.15 : 0.07 + Math.max(0, playerCount - 2) * 0.03);
+  const rewardRate = rewardRateOverride ?? (allianceMode ? 0.15 : M_REWARD_BASE_RATE + Math.max(0, playerCount - 2) * 0.03);
   const assetCap = Math.max((game?.goalCurrency || pvpLastRoom?.goalCurrency || 5000) * 3, 5000);
   const cappedAssets = Math.min(Math.max(endingAssetsShare, 0), assetCap);
   const earnedM = Math.max(Math.round(cappedAssets * rewardRate), M_CONVERSION_MIN);
@@ -6838,11 +6841,11 @@ async function handlePvpBattleEnd(result = {}) {
 
 /**
  * ストーリー本編・再戦共通報酬。終了時総資産の本人取り分に対し、
- * 「7% + 相手プレイヤー数×3%」を勝敗にかかわらず付与する。
+ * 「M_REWARD_BASE_RATE(4%) + 相手プレイヤー数×3%」を勝敗にかかわらず付与する。
  */
 function grantStoryBattleReward() {
   const humanPlayer = game?.players?.find((player) => !player.isCPU);
-  if (!humanPlayer) return grantExitReward(0, 0.07);
+  if (!humanPlayer) return grantExitReward(0, M_REWARD_BASE_RATE);
   const allies = humanPlayer.allianceId != null
     ? game.players.filter((player) => player.allianceId === humanPlayer.allianceId)
     : [humanPlayer];
@@ -6850,7 +6853,7 @@ function grantStoryBattleReward() {
     player.id !== humanPlayer.id
       && (humanPlayer.allianceId == null || player.allianceId !== humanPlayer.allianceId)).length;
   const endingAssetsShare = game._totalAssetsOf(humanPlayer) / Math.max(allies.length, 1);
-  return grantExitReward(endingAssetsShare, 0.07 + opponentCount * 0.03);
+  return grantExitReward(endingAssetsShare, M_REWARD_BASE_RATE + opponentCount * 0.03);
 }
 
 /** 画面のどこでも使える簡易トースト（#app配下ではなくdocument.bodyに直接足すので、盤面を閉じた後のメニュー画面上でも問題なく出せる）。durationミリ秒後に自動で消える。 */

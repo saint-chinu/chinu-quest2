@@ -280,15 +280,30 @@ const UNIT_TRAIT_MARK = {
 
 const unitCardArtCache = new Map();
 /** 同じURLの実イラストは1度だけロードして使い回す（複数体を盤面に出しても再ダウンロードしない）。 */
+/**
+ * 盤面ユニットアイコンのイラストを読み込む。読み込み失敗（イラスト未用意の
+ * カード等で404）を必ず握り潰すのが要点: 失敗した<img>は`complete === true`
+ * かつ`naturalWidth === 0`の「壊れた画像」になり、これをそのまま
+ * ctx.drawImageへ渡すとブラウザがInvalidStateErrorを投げる。その例外は
+ * createUnitIcon→_syncUnitIcons→_notifyStateを経由して召喚処理のawait連鎖を
+ * 破壊し、isBusyがtrueのまま盤面が固まる（＝カード1枚の画像欠けだけで
+ * ゲーム全体がフリーズする）。失敗はキャッシュから外し、コールバックも
+ * 呼ばない＝イラスト無しで描画させる。
+ */
 function loadUnitCardArt(url, onLoad) {
+  const isUsable = (img) => img.complete && img.naturalWidth > 0;
   const cached = unitCardArtCache.get(url);
   if (cached) {
-    if (cached.complete) onLoad(cached);
-    else cached.addEventListener('load', () => onLoad(cached), { once: true });
+    if (cached.complete) {
+      if (isUsable(cached)) onLoad(cached);
+      return;
+    }
+    cached.addEventListener('load', () => { if (isUsable(cached)) onLoad(cached); }, { once: true });
     return;
   }
   const img = new Image();
-  img.addEventListener('load', () => onLoad(img), { once: true });
+  img.addEventListener('load', () => { if (isUsable(img)) onLoad(img); }, { once: true });
+  img.addEventListener('error', () => { unitCardArtCache.delete(url); }, { once: true });
   img.src = url;
   unitCardArtCache.set(url, img);
 }
@@ -323,14 +338,16 @@ function drawUnitCard(state) {
   ctx.strokeStyle = '#ffffff';
   ctx.stroke();
 
-  if (state.artImage) {
+  const imageW = state.artImage ? state.artImage.naturalWidth || state.artImage.width : 0;
+  const imageH = state.artImage ? state.artImage.naturalHeight || state.artImage.height : 0;
+  // 幅か高さが0の画像（＝読み込み失敗）は描かない。drawImageに渡すと
+  // InvalidStateErrorで盤面の描画・召喚処理ごと止まる（loadUnitCardArt参照）。
+  if (imageW > 0 && imageH > 0) {
     ctx.save();
     roundRectPath(ctx, 2, bodyY, w - 4, bodyH * 0.72, 10);
     ctx.clip();
     const areaW = w - 4;
     const areaH = bodyH * 0.72;
-    const imageW = state.artImage.naturalWidth || state.artImage.width;
-    const imageH = state.artImage.naturalHeight || state.artImage.height;
     const scale = Math.min(areaW / imageW, areaH / imageH);
     const drawW = imageW * scale;
     const drawH = imageH * scale;

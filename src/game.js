@@ -3823,16 +3823,23 @@ export class Game {
       if (!target) return false;
       player.currency -= cost;
       const unit = tile.unit;
+      // 他のワープ/移動処理と同じくアイコンも付け替える。付け替えないと元の
+      // マスに置き去りのアイコンが残り、_syncUnitIconsが破棄→再生成するため
+      // ホップ演出が出ずに瞬間移動して見える。
+      const mesh = tile.unitMesh;
       const sourceLandLoss = this._captureLandLoss(player, tile);
       const destinationLandGain = this._captureLandGain(player, target, { showAnyChange: true });
+      tile.unitMesh = null;
       target.unit = unit;
       target.owner = player.id;
+      target.unitMesh = mesh;
       this._paintTile(target, player.color);
       tile.unit = null;
       tile.owner = null;
       tile.transparentCursed = false;
       this._repaintTileToElement(tile);
       this.onLog(`${player.name}の${unitDef.name}が高額な空き地へワープした (-${cost}G)`);
+      await this._hopUnitIcon(mesh, tile.position, target.position);
       this._notifyState();
       await this.onTargetEffect?.({ tileId: target.id, position: target.position, message: `${unitDef.name}が高額空き地を確保！` });
       await this._presentLandLoss(sourceLandLoss);

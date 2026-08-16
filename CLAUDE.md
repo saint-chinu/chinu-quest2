@@ -90,6 +90,23 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 - `tween`(utils.js)は`setTimeout`ウォッチドッグ付き（rAF停止=バックグラウンド/画面回転
   でもフリーズしない）。
 
+## ⚠️ カード画像の欠け＝盤面フリーズ
+`neutralMonster()`等のファクトリは`imageDataUrl`を`/images/card-art/<id>.jpg`へ
+既定設定する。**実ファイルが無いと404 → `<img>`がbroken
+(`complete=true`/`naturalWidth=0`)になり、`ctx.drawImage`がInvalidStateErrorを
+投げる**。その例外は`createUnitIcon`→`_syncUnitIcons`→`_notifyState`と遡って
+召喚処理のawait連鎖を壊し、`isBusy=true`のまま盤面が固まる（＝未知の侵略者の
+フリーズ原因）。
+- 専用イラストが無いカードは`imageDataUrl: null`にして`cardArt.js`の
+  種別/属性別プレースホルダーへ落とす。
+- `scene.js`の`loadUnitCardArt`/`drawUnitCard`は失敗画像を弾くよう防御済み
+  （`error`リスナでキャッシュ破棄＋`naturalWidth>0`チェック）。
+- 新カード追加時は`public/images/card-art/<id>.*`の実在を必ず確認する。
+
+## 報酬M
+- 終了時総資産→M変換の計算基礎は`M_REWARD_BASE_RATE`(main.js, 現在**4%**)。
+  相手が1人増えるごとに+3%、同盟戦のみ15%固定、最低50M。
+
 ## ストーリー途中退室
 - **途中再開は廃止**（Setがシリアライズで壊れ再開時フリーズしていた）。退室時は
   `clearStoryResume()`で保存を消し、次回は必ず盤面リセットで最初から。
