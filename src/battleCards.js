@@ -666,7 +666,7 @@ export const CHARACTER_DECKS = {
         // 安価で効率のよい主力（50G中心・低い連鎖条件）。
         { def: MONSTER_CATALOG.kunekune, count: 3 },
         { def: MONSTER_CATALOG.uminoieTencho, count: 3 },
-        { def: MONSTER_CATALOG.jukaiNoOnryou, count: 4 },
+        { def: MONSTER_CATALOG.jukaiNoOnryou, count: 3 },
         { def: MONSTER_CATALOG.mountGorilla, count: 2 },
         { def: MONSTER_CATALOG.moriNoYousei, count: 2 },
         // 未知の侵略者（貫通アサシン、30G）。守備召喚はせず移動侵略で敵高レベル地を
@@ -681,6 +681,7 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.yamagami, count: 1 },
       ],
       items: [
+        { def: ITEM_CATALOG.fushichoNoTate, count: 1 },
         { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
         { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
         { def: ITEM_CATALOG.kaenHoushakiki, count: 1 },
