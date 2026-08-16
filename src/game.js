@@ -612,7 +612,7 @@ export class Game {
     }
 
     player.hand = player.hand.filter((c) => c.id !== card.id);
-    player.deck.discard(card);
+    this._discardUsedCard(player, card);
     player.currency -= card.cost || 0;
     player.spellUsedThisTurn = true;
     this.onLog(`${player.name}は「${card.name}」を使用した (-${card.cost || 0}G)`);
@@ -644,6 +644,12 @@ export class Game {
 
     this.isBusy = false;
     this._notifyState();
+  }
+
+  /** 元デッキ外から一時生成されたカードは、使用・破棄後に捨て札へ混ぜず消滅させる。 */
+  _discardUsedCard(player, card) {
+    if (!card || card.generatedOutsideDeck || catalogIdOf(card) === 'encounterUnknown') return;
+    player.deck.discard(card);
   }
 
   /**
@@ -931,7 +937,7 @@ export class Game {
           return false;
         }
         targetPlayer.hand = targetPlayer.hand.filter((c) => c.id !== cast.targetCardId);
-        targetPlayer.deck.discard(discarded);
+        this._discardUsedCard(targetPlayer, discarded);
         this.onLog(`${player.name}は「${card.name}」で${targetPlayer.name}の「${discarded.name}」を捨てさせた`);
         this._notifyState();
         return false;
@@ -948,7 +954,7 @@ export class Game {
         }
         const reward = effect.reward ?? 0;
         targetPlayer.hand = targetPlayer.hand.filter((c) => c.id !== cast.targetCardId);
-        targetPlayer.deck.discard(extracted);
+        this._discardUsedCard(targetPlayer, extracted);
         targetPlayer.currency += reward;
         this.onLog(
           targetPlayer.id === player.id
@@ -974,7 +980,9 @@ export class Game {
 
         targetPlayer.hand = targetPlayer.hand.filter((candidate) => candidate.id !== stolen.id);
         player.currency -= extraCost;
-        player.deck.discard(stolen);
+        // 開示請求で奪ったカードは使用者の元デッキには存在しない。
+        // ここで捨て札へ入れると再シャッフル後に使用者が再ドローできてしまうため、
+        // モンスターは盤面へ移し、スペルはその場で使い切るだけにする。
 
         let endedTurn = false;
         if (stolen.type === CardType.MONSTER) {
@@ -1692,8 +1700,7 @@ export class Game {
       }
       if (this._isCancelled || !discarded) return;
       player.hand = player.hand.filter((c) => c.id !== discarded.id);
-      // 「未知との遭遇」は捨てると消滅（捨札に残さない＝二度と引けない）。
-      if (catalogIdOf(discarded) !== 'encounterUnknown') player.deck.discard(discarded);
+      this._discardUsedCard(player, discarded);
       if (player.isCPU) this.onLog(`${player.name}は手札を1枚捨てた`);
       this._notifyState();
     }
@@ -2485,6 +2492,7 @@ export class Game {
     const card = {
       ...definition,
       id: `defamation-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      generatedOutsideDeck: true,
     };
     player.hand.push(card);
     this.onLog(`${player.name}は誹謗中傷を受け、「開示請求」を1枚手札に加えた！`);
@@ -2547,7 +2555,7 @@ export class Game {
   _shrineChaos(player) {
     const message = '「混沌を愛せ」\n手札をすべて捨て、5枚引き直した！';
     this.onLog(message.replace('\n', '……'));
-    for (const card of player.hand) player.deck.discard(card);
+    for (const card of player.hand) this._discardUsedCard(player, card);
     player.hand = [];
     player.deck.resetShuffle();
     for (let i = 0; i < 5; i++) {
@@ -3028,7 +3036,7 @@ export class Game {
     if (!confirmed) return false;
 
     player.hand = player.hand.filter((c) => c.id !== card.id);
-    player.deck.discard(card);
+    this._discardUsedCard(player, card);
     player.currency -= card.cost;
 
     if (actionType === 'summon' || actionType === 'swap') {
@@ -3793,7 +3801,7 @@ export class Game {
             ? this._cpuChooseSummonCardForKare(pool, tile, profile, player)
             : this._cpuChooseSummonCard(pool, tile, profile, player);
       player.hand = player.hand.filter((c) => c.id !== card.id);
-      player.deck.discard(card);
+      this._discardUsedCard(player, card);
       player.currency -= card.cost;
       const chainGain = this._captureLandGain(player, tile);
       this._placeUnit(tile, player, card);
@@ -3812,7 +3820,7 @@ export class Game {
     }
     const { card } = decision;
     player.hand = player.hand.filter((c) => c.id !== card.id);
-    player.deck.discard(card);
+    this._discardUsedCard(player, card);
     player.currency -= card.cost;
     await this._runInvasion(player, tile, card);
     this._notifyState();
@@ -4454,9 +4462,15 @@ export class Game {
         this.onLog(`${unit.def.name}は所持Gで上回りATKが2倍になった`);
       }
     } else if (effect.type === 'atkMultiplier') {
-      const atk = Math.round(unit.def.atk * (effect.multiplier - 1));
+      const baseAtk = this._baseStats(unit).atk;
+      const atk = Math.round(baseAtk * (effect.multiplier - 1));
       bonus.atk += atk;
-      if (atk !== 0) this.onLog(`${unit.def.name}は狂戦士の力でATK+${atk}`);
+      bonus.effectAtk = (bonus.effectAtk || 0) + atk;
+      bonus.effectLabels = [
+        ...(bonus.effectLabels || []),
+        `${unit.def.name}：ATK${effect.multiplier}倍（${baseAtk}→${baseAtk + atk}）`,
+      ];
+      if (atk !== 0) this.onLog(`${unit.def.name}のATK${effect.multiplier}倍が発動（${baseAtk}→${baseAtk + atk}）`);
     } else if (effect.type === 'statsPerTotalChain') {
       const totalChain = [Element.FIRE, Element.WATER, Element.THUNDER, Element.FOREST].reduce(
         (sum, el) => sum + this._chainCount(unit.ownerId, el),
@@ -4606,7 +4620,7 @@ export class Game {
     if (!item) return null;
     const equipped = equipItem(unit, item);
     player.hand = player.hand.filter((c) => c.id !== item.id);
-    player.deck.discard(item);
+    this._discardUsedCard(player, item);
     return equipped;
   }
 
@@ -4673,7 +4687,8 @@ export class Game {
         atk: attackerBase.atk,
         hp: attackerBase.hp,
         currentHp: Math.min(attackerUnit.currentHp, attackerBase.hp),
-        cheerAtk: attackerBonus.atk,
+        cheerAtk: attackerBonus.atk - (attackerBonus.effectAtk || 0),
+        effectAtk: attackerBonus.effectAtk || 0,
         elementHp: attackerBonus.hp,
         element: attackerPositionTile?.element ?? null,
         matchup: attackerMatchup,
@@ -4685,7 +4700,8 @@ export class Game {
         atk: defenderBase.atk,
         hp: defenderBase.hp,
         currentHp: Math.min(defenderUnit.currentHp, defenderBase.hp),
-        cheerAtk: defenderBonus.atk,
+        cheerAtk: defenderBonus.atk - (defenderBonus.effectAtk || 0),
+        effectAtk: defenderBonus.effectAtk || 0,
         elementHp: defenderBonus.hp,
         element: battleTile.element,
         matchup: defenderMatchup,
@@ -4815,6 +4831,18 @@ export class Game {
       if (this._isCancelled) return null;
     }
 
+    // 狂戦士などの固有ステータス倍率は実ダメージだけでなく、攻撃開始前に
+    // 大きな文字でも明示する。これで通常の応援加算との区別がつく。
+    const effectRevealSides = [
+      { side: 'attacker', labels: attackerBonus.effectLabels || [] },
+      { side: 'defender', labels: defenderBonus.effectLabels || [] },
+    ];
+    for (const reveal of effectRevealSides) {
+      if (reveal.labels.length === 0) continue;
+      await this.onBattleTraitReveal(reveal);
+      if (this._isCancelled) return null;
+    }
+
     // `exchanges` is already in the order strikes actually happened (先制
     // can flip it to defender-first) - just play them back in order.
     for (const exchange of result.exchanges) {
@@ -4924,7 +4952,11 @@ export class Game {
     const pool = Object.values(SPELL_CATALOG);
     if (pool.length === 0) return;
     const picked = pool[Math.floor(Math.random() * pool.length)];
-    const card = { ...picked, id: `spell-summon-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+    const card = {
+      ...picked,
+      id: `spell-summon-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      generatedOutsideDeck: true,
+    };
     player.hand.push(card);
     this.onLog(`${player.name}の${unit.def.name}が「${card.name}」を手に入れた`);
   }
@@ -6106,7 +6138,7 @@ export class Game {
    */
   async _cpuCastSpell(player, card, cast) {
     player.hand = player.hand.filter((c) => c.id !== card.id);
-    player.deck.discard(card);
+    this._discardUsedCard(player, card);
     player.currency -= card.cost || 0;
     player.spellUsedThisTurn = true;
     this.onLog(`${player.name}は「${card.name}」を使用した (-${card.cost || 0}G)`);
