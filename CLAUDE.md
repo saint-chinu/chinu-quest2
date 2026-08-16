@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v52`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v54`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## ⚠️ 並行開発 (Codex) — 必ず守る
@@ -141,8 +141,8 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 ## ⚠️ カード名とID・画像ファイル名は別物
 既存作品を想起させるカード名は表示名(`name`)を改名済み（人食い草/薄氷の剣/
 スイッチランド/炎のバクチ打ち/ヘチマ竜/鉄火の料理人/めたんまん/ロボ戦士/
-超電磁科学者）。ただし**`id`と画像ファイル名は旧名のまま**（`hezumaDragon`,
-`gandamu`, `gomuGoNoPistol` 等）。
+超電磁科学者/出張スーツ）。ただし**`id`と画像ファイル名は旧名のまま**
+（`hezumaDragon`, `gandamu`, `gomuGoNoPistol`, `mobileSuit` 等）。
 - `id`はビルド後のJSにそのまま載り、画像URLもブラウザがそのままリクエストする
   ので、DevToolsからは旧名が見える。
 - `id`を変えると**Firestoreに保存済みのデッキ・所持カード（`catalogId`参照）が

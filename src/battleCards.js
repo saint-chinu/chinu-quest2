@@ -80,7 +80,9 @@ export const ITEM_CATALOG = {
     effectDescription: '攻撃成功時、与えたダメージ×3Gを奪う',
   }),
   heikeNoYoroi: item('heikeNoYoroi', '平家の鎧', Rarity.N, ItemType.ARMOR, 40, 0, 40),
-  mobileSuit: item('mobileSuit', 'モバイルスーツ', Rarity.N, ItemType.ARMOR, 40, 10, 30),
+  // 画像は「スーツケースに収まった背広」＝持ち運べるスーツへ刷新済み。表示名も
+  // それに合わせる（idと画像ファイル名は保存デッキ互換のため据え置き）。
+  mobileSuit: item('mobileSuit', '出張スーツ', Rarity.N, ItemType.ARMOR, 40, 10, 30),
   nyoBou: item('nyoBou', 'にょ〇棒', Rarity.N, ItemType.WEAPON, 30, 10, 10, {
     traits: ['pierce'],
     effectDescription: '貫通（反射・無効化・土地レベルボーナスを無視する）',
