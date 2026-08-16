@@ -3582,6 +3582,8 @@ async function finishTutorial(completed = true) {
 
 async function startTutorialDemo() {
   if (activeTutorialSession) return;
+  const confirmed = await confirmYesNo('音量注意\nチュートリアルではBGM・効果音が流れます。音量を確認してから開始してください。\n\nチュートリアルを開始しますか？');
+  if (!confirmed) return;
   const savedCharacter = currentCharacter;
   const loggedIn = !!(currentUserId && currentCharacter);
   const presets = await loadCharacterIconPresets();
