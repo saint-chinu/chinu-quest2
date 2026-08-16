@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v60`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v61`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## ⚠️ 並行開発 (Codex) — 必ず守る
@@ -128,6 +128,13 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 - **`warpOnPass`を辿る必要がある経路計算**: `_forwardTileDistance`・`_tileDistance`・
   `_forwardDestinationIdsFrom`の3つ。入口ではなく出口idへ読み替え、転移後の
   previousIdはnullにする（新しい通過ワープを足す時はこの3つ全部を直すこと）。
+- **経路バッファは2本ある。混同しないこと**:
+  - `_turnPathIds` = **1ターン分を通しで**保持。土地コマンドの権限
+    （`_runLandCommand`が「このターンに通った自分の土地」を出す）に使う。
+    通過ワープを跨いでもリセットしない。
+  - `_segmentPathIds` = 対人戦の駒移動配信（`_broadcastPieceMove`）専用。
+    通過ワープのたびにリセットして「歩く→ワープ→歩く」を別イベントで送る。
+    まとめて送るとゲスト側で駒がワープ入口へ戻ってしまうため分割が必要。
 - **NPC専用カードの所有者ロック**: `exclusiveOwnerName`（酢=朕）。Game構築時に
   デッキから除外されるので、他プレイヤーへ混入しない。
 

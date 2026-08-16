@@ -363,6 +363,10 @@ export class Game {
     // _movePlayer call. Powers 土地コマンド's "土地" browse, which is
     // normally scoped to just this turn's path (see _runLandCommand).
     this._turnPathIds = [];
+    // 対人戦の駒移動配信（_broadcastPieceMove）専用の経路バッファ。通過ワープを
+    // 跨ぐたびにリセットされる「区間」単位で、1ターン分を通しで保持する
+    // _turnPathIds（土地コマンドの権限）とは寿命が違う。
+    this._segmentPathIds = [];
     // True from the moment a turn's draw finishes until the dice is
     // rolled - the window where the center hand+dice is shown and a
     // spell may be used.
@@ -1685,6 +1689,7 @@ export class Game {
    */
   async _movePlayer(player, steps) {
     this._turnPathIds = [];
+    this._segmentPathIds = [];
     const originTileId = player.tileId;
     let movementSegmentOriginTileId = originTileId;
     const triggeredRunawayTiles = new Set();
@@ -1711,6 +1716,7 @@ export class Game {
       const canUndoBranch = options.length > 1 && !player.isCPU;
       const branchPreviousTileId = player.previousTileId;
       const branchPathLength = this._turnPathIds.length;
+      const branchSegmentLength = this._segmentPathIds.length;
       const branchHistory = canUndoBranch ? [...player.tileHistory] : null;
       let branchUndoRequested = false;
       if (canUndoBranch) {
@@ -1723,6 +1729,7 @@ export class Game {
       player.previousTileId = player.tileId;
       player.tileId = nextId;
       this._turnPathIds.push(nextId);
+      this._segmentPathIds.push(nextId);
       // バックファイア用の着地履歴（直近20マスだけ保持すれば十分）。
       player.tileHistory.unshift(nextId);
       if (player.tileHistory.length > 20) player.tileHistory.length = 20;
@@ -1738,6 +1745,7 @@ export class Game {
           player.tileId = fromTile.id;
           player.previousTileId = branchPreviousTileId;
           this._turnPathIds.length = branchPathLength;
+          this._segmentPathIds.length = branchSegmentLength;
           player.tileHistory = branchHistory;
           this.onMoveDestination({ tileIds: destinationIds, active: false });
           const restoredIds = this._forwardDestinationIds(player, steps - i);
@@ -1762,8 +1770,11 @@ export class Game {
         const exactStop = i === steps - 1;
         // 対人ゲストには「ここまで歩く→ワープ→残りを歩く」の順で配信する。
         // 先にwarpEffectだけ流すと、その後届く一括歩行で駒が入口へ戻ってしまう。
+        // リセットするのは配信用のセグメント経路だけ。_turnPathIdsは土地コマンドの
+        // 権限（このターンに通った自分の土地）に使うので、ワープを跨いでも
+        // 通過済みの土地が対象から消えないよう1ターン分を保持し続ける。
         this._broadcastPieceMove(player, movementSegmentOriginTileId);
-        this._turnPathIds = [];
+        this._segmentPathIds = [];
         await this._resolveWarpTile(player, toTile, { doubleNextDice: exactStop });
         movementSegmentOriginTileId = player.tileId;
         player.skipWarpResolveTileId = player.tileId;
@@ -1807,12 +1818,15 @@ export class Game {
 
   /**
    * 対人戦のゲスト側は publicState のスナップでしか駒位置を知れず、移動が
-   * 「ワープ」に見える。そこで確定した1ターン分の経路（_turnPathIds）を
-   * まとめて1イベントで配信し、ゲスト側で駒を1マスずつ動かせるようにする。
+   * 「ワープ」に見える。そこで確定した経路をまとめて1イベントで配信し、
+   * ゲスト側で駒を1マスずつ動かせるようにする。通過ワープ（⑧のワームホール）
+   * を跨ぐと歩行が分断されるため、配信単位は`_segmentPathIds`（ワープごとに
+   * リセットされる区間）を使う - 土地コマンドの権限に使う`_turnPathIds`
+   * （1ターン分を通しで保持）とは別物なので混同しないこと。
    * ローカルプレイ・ホスト自身では onPieceMove は実質no-op（relayable参照）。
    */
   _broadcastPieceMove(player, originTileId) {
-    const path = this._turnPathIds;
+    const path = this._segmentPathIds;
     if (!path || path.length === 0) return;
     const posOf = (id) => {
       const t = this.tiles[id];
@@ -1869,6 +1883,7 @@ export class Game {
    */
   async _movePlayerBackward(player, steps) {
     this._turnPathIds = [];
+    this._segmentPathIds = [];
     const originTileId = player.tileId;
     const plannedPath = [];
     for (const tileId of player.tileHistory.slice(1, steps + 1)) {
@@ -1886,6 +1901,7 @@ export class Game {
       player.previousTileId = player.tileId;
       player.tileId = backId;
       this._turnPathIds.push(backId);
+      this._segmentPathIds.push(backId);
       await this._stepWithCamera(player, fromTile.position, toTile.position);
 
       if (toTile.type === TileType.EVENT) await this._visitCheckpoint(player, toTile);
