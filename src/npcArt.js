@@ -5,6 +5,8 @@
 import { assetUrl } from './assetUrl.js';
 
 export const NPC_PORTRAIT_URL = {
+  朕: assetUrl('/images/npc-portraits/chin-su.png'),
+  酢: assetUrl('/images/npc-portraits/chin-su.png'),
   '「彼」': assetUrl('/images/npc-portraits/kare.png'),
   Q: assetUrl('/images/npc-portraits/q.png?v=2'),
   'ダンボール男': assetUrl('/images/npc-portraits/danballman.png'),
@@ -19,6 +21,7 @@ export const NPC_PORTRAIT_URL = {
 // 盤面駒用は256×256の正方形に統一済み（GameScene.createPieceFromImageが
 // 前提とする1.6×1.6の正方形スプライトにそのまま合う）。
 export const NPC_TOKEN_URL = {
+  朕: assetUrl('/images/npc-portraits/chin-su.png'),
   '「彼」': assetUrl('/images/npc-tokens/kare.png'),
   Q: assetUrl('/images/npc-tokens/q.png?v=2'),
   'ダンボール男': assetUrl('/images/npc-tokens/danballman.png'),

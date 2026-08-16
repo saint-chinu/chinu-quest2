@@ -146,6 +146,21 @@ const KARE_ROWS = [
   '........D........',
 ];
 
+// ⑦同盟戦。「彼」の電脳空間が再構築された決戦盤面。
+const FINAL_ALLIANCE_ROWS = [
+  'CFFFTTTWWWC',
+  'M..M.N.F..N',
+  'MMMMNNFFFNN',
+  'M..M.N.F..N',
+  'W..F.N.M..T',
+  'WWWFNCGNNTT',
+  'W..F.N.M..T',
+  'T..T.N.T..W',
+  'TTTTNNNTNNW',
+  'T..T.N.T..W',
+  'CFFFWWWMMMC',
+];
+
 // 対人戦のマップ選択・ストーリーモードの各ステージ盤面として使う一覧。
 // idはstory.jsの各ステージ`key`と揃えてある - ストーリーモードは自ステージ
 // のkeyをそのままmapIdとしてcreateBoard()へ渡すだけで対応する専用マップに
@@ -166,6 +181,7 @@ export const MAPS = [
   { id: 'q-train', name: '④ 暴走列車Q号', rows: Q_TRAIN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage-q-train.png'), spacing: 2.8 },
   { id: 'danball', name: '⑤ 暗転した世界', rows: DANBALL_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage4.png'), spacing: 2.8 },
   { id: 'kare', name: '⑥ 創造主の世界', rows: KARE_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage6-cyberspace.png'), spacing: 2.8 },
+  { id: 'final-alliance', name: '⑦ 支配の終焉', rows: FINAL_ALLIANCE_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage7-court.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {

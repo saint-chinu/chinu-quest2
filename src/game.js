@@ -1100,7 +1100,7 @@ export class Game {
         return false;
 
       case 'forceRelocateOneStep':
-        await this._spellForceRelocateOneStep(player, targetTile);
+        await this._spellForceRelocateOneStep(player, targetTile, cast.destinationTileId);
         return false;
 
       case 'curseSanctuary':
@@ -1401,28 +1401,21 @@ export class Game {
    * 付き土地を除外 - 空き地はOK、敵地（同盟含まない）は強制戦闘）。
    * _humanMoveFlowの侵略分岐と同じ決着ロジックを踏襲する。
    */
-  async _spellForceRelocateOneStep(player, targetTile) {
+  async _spellForceRelocateOneStep(player, targetTile, preferredDestinationId = null) {
     if (!targetTile?.unit) {
       this.onLog('対象が既にいません');
       return;
     }
     const unit = targetTile.unit;
     const unitOwner = this.players.find((p) => p.id === unit.ownerId);
-    const candidates = targetTile.neighbors
-      .map((id) => this.tiles[id])
-      .filter((t) => t.type === TileType.LAND && !t.transparentCursed)
-      .filter((t) => {
-        if (t.owner == null) return true;
-        if (t.owner === unit.ownerId) return false;
-        const owner = this.players.find((p) => p.id === t.owner);
-        if (owner?.allianceId != null && owner.allianceId === unitOwner.allianceId) return false;
-        return true;
-      });
+    const candidates = this._moveCommandCandidates(targetTile, unitOwner).map(({ tile }) => tile);
     if (candidates.length === 0) {
       this.onLog('移動できるマスがありません');
       return;
     }
-    const destId = await this.onPickAbilityTarget(
+    const destId = preferredDestinationId != null && candidates.some((tile) => tile.id === preferredDestinationId)
+      ? preferredDestinationId
+      : await this.onPickAbilityTarget(
         candidates.map((t) => ({ ...this._browseTileSummary(t, player), label: `${ELEMENT_LABEL[t.element]}属性の土地へ強制移動` })),
       player.id,
     );
@@ -2637,8 +2630,8 @@ export class Game {
    * メタ〇ン: 盤面に存在するモンスターの中から1体を選んで変身する
    * （基礎値のみコピーし、バフ・デバフは引き継がない＝新しいdefへの
    * 差し替えなので既存のcurses/itemsはそのまま、currentHpだけ変身後の
-   * 素のHPにリセットする）。対象がいなければ何もしない。CPU（対人戦の
-   * 簡易AI）は変身させず素の姿のまま運用する。
+   * 素のHPにリセットする）。候補は手札・デッキ・図鑑ではなく、現在の盤面に
+   * 実際に召喚されているモンスターだけ。対象がいなければ何もしない。
    */
   async _maybeCopyOnSummon(tile, player) {
     const targets = this.tiles.filter((t) => t.unit && t !== tile);
@@ -2657,7 +2650,11 @@ export class Game {
       options.push({ ...def, catalogId: catId, id: `metamorph-${catId}` });
     }
 
-    const picked = await this.onPickTransformTarget(options, player.id);
+    // CPUは盤面上の候補から基礎HP+ATKが最も高い姿を選ぶ。人間と同様、
+    // 盤面外のカード定義を変身先に混ぜない。
+    const picked = player.isCPU
+      ? [...options].sort((a, b) => (b.hp + b.atk) - (a.hp + a.atk))[0]
+      : await this.onPickTransformTarget(options, player.id);
     if (!picked) return;
     const chosen = options.find((o) => o.id === picked.id) || picked;
     const chosenCatId = chosen.catalogId ?? catalogIdOf(chosen);
@@ -2984,14 +2981,45 @@ export class Game {
    * design). Always ends the turn once the player actually commits to a
    * move, win or lose.
    */
+  _moveCommandCandidates(tile, player) {
+    const maxDistance = tile.unit?.def?.traits?.includes('twoStepMove') ? 2 : 1;
+    const found = new Map();
+    const queue = [{ id: tile.id, distance: 0, specialCount: 0 }];
+    const visited = new Set([`${tile.id}:0`]);
+    while (queue.length > 0) {
+      const current = queue.shift();
+      if (current.distance >= maxDistance) continue;
+      for (const nextId of this.tiles[current.id].neighbors) {
+        const next = this.tiles[nextId];
+        if (!next) continue;
+        const specialCount = current.specialCount + (next.type === TileType.LAND ? 0 : 1);
+        // 酢だけは経路中の特殊マスを1つ飛び越えられる。ただし特殊マス自体は
+        // 移動先にできず、2つ以上の特殊マスをまたぐこともできない。
+        if (specialCount > (maxDistance === 2 ? 1 : 0)) continue;
+        const distance = current.distance + 1;
+        const stateKey = `${next.id}:${specialCount}`;
+        if (!visited.has(stateKey)) {
+          visited.add(stateKey);
+          queue.push({ id: next.id, distance, specialCount });
+        }
+        if (next.type !== TileType.LAND || next.transparentCursed) continue;
+        if (next.owner === player.id) continue;
+        const owner = next.owner != null ? this.players.find((p) => p.id === next.owner) : null;
+        if (owner?.allianceId != null && owner.allianceId === player.allianceId) continue;
+        const previous = found.get(next.id);
+        if (!previous || distance < previous.distance) found.set(next.id, { tile: next, distance });
+      }
+    }
+    return [...found.values()];
+  }
+
   async _humanMoveFlow(player, tile) {
     if (tile.unit?.def?.traits?.includes('immovableByMoveCommand')) {
       this.onLog(`${tile.unit.def.name}は通常の移動コマンドでは動かせません`);
       return false;
     }
-    const candidates = tile.neighbors
-      .map((id) => this.tiles[id])
-      .filter((t) => t.type === TileType.LAND && !t.transparentCursed && (t.owner == null || t.owner !== player.id));
+    const candidateEntries = this._moveCommandCandidates(tile, player);
+    const candidates = candidateEntries.map(({ tile: target }) => target);
     if (candidates.length === 0) {
       this.onLog('移動できる土地がありません');
       return false;
@@ -3003,7 +3031,16 @@ export class Game {
       const screenDir = dgx === 1 ? 'downright' : dgx === -1 ? 'upleft' : dgz === 1 ? 'downleft' : 'upright';
       return { tileId: t.id, screenDir };
     });
-    const targetId = await this.onPickMoveDirection(options, player.id);
+    const isTwoStep = tile.unit?.def?.traits?.includes('twoStepMove');
+    const targetId = isTwoStep
+      ? await this.onPickAbilityTarget(
+        candidateEntries.map(({ tile: target, distance }) => ({
+          ...this._browseTileSummary(target, player),
+          label: `${distance}マス先・${ELEMENT_LABEL[target.element]}属性の土地`,
+        })),
+        player.id,
+      )
+      : await this.onPickMoveDirection(options, player.id);
     if (targetId == null) return false;
     const targetTile = this.tiles.find((t) => t.id === targetId);
 
@@ -3601,6 +3638,7 @@ export class Game {
       this._notifyState();
       await this.onSummonEffect?.({ tileId: tile.id, unitName: card.name });
       await this._presentLandGain(chainGain);
+      if (card.effect?.type === 'copyOnSummon') await this._maybeCopyOnSummon(tile, player);
       return;
     }
 
@@ -3629,6 +3667,23 @@ export class Game {
     // アサシンユニット運用（ガシャーン／未知の侵略者）。固有AIも権限候補を必ず
     // 受け取り、盤面上の任意のユニットを直接動かすことは禁止する。
     if (await this._cpuMaybeUseAssassinTactics(player, accessible.map((tile) => tile.id))) return true;
+
+    // 朕は酢の2マス移動を侵略に優先使用する。土地コマンドを使えるタイミングと
+    // 候補範囲はaccessibleを通すため、人間側と同じ権限制約を外れない。
+    if (player.name === '朕') {
+      const source = accessible.find((tile) => catalogIdOf(tile.unit?.def) === 'su');
+      if (source) {
+        const targets = this._moveCommandCandidates(source, player)
+          .map(({ tile: target }) => target)
+          .filter((target) => target.owner != null && target.unit)
+          .sort((a, b) => b.level - a.level || this._landValueOfTile(b) - this._landValueOfTile(a));
+        if (targets.length > 0) {
+          this.onLog(`${player.name}は酢を移動させ、${targets[0].unit.def.name}へ侵略する！`);
+          await this._cpuMoveOwnedUnit(player, source, targets[0]);
+          return true;
+        }
+      }
+    }
 
     for (const tile of accessible) {
       if (await this._cpuMaybeUseDamageAbility(player, tile)) return true;
@@ -5202,6 +5257,7 @@ export class Game {
     await this._cpuMaybeUseMagicCircleSpell(this.currentPlayer);
     if (await this._cpuMaybeWarpToHighValueLand(this.currentPlayer)) return;
     await this._cpuMaybeFixLandElementSpell(this.currentPlayer);
+    await this._cpuMaybeUsePsychokinesisSpell(this.currentPlayer);
     await this._cpuMaybeUseDisruptionSpell(this.currentPlayer);
     await this._cpuMaybeUseDamageSpell(this.currentPlayer);
     await this._cpuMaybeUsePoisonSpell(this.currentPlayer);
@@ -5363,6 +5419,37 @@ export class Game {
    * 妨害スペルなので同盟戦では同盟仲間のモンスターは対象から除外し、同盟でない
    * 相手のモンスターだけを狙う。対象は_cpuPickDamageTargetで選ぶ。
    */
+  /** 朕のサイコキネシス: 敵の高レベル土地から守備モンスターを引き剥がし、
+   * 別所有者の配置モンスターへ強制侵略させる。酢なら固有の2マス移動も使う。 */
+  async _cpuMaybeUsePsychokinesisSpell(player) {
+    if (player.name !== '朕' || player.spellUsedThisTurn) return false;
+    const card = player.hand.find((candidate) => catalogIdOf(candidate) === 'psychokinesis');
+    if (!card || player.currency < (card.cost || 0)) return false;
+
+    const plans = [];
+    for (const source of this.tiles) {
+      if (!source.unit || source.owner == null || source.owner === player.id) continue;
+      const sourceOwner = this.players.find((candidate) => candidate.id === source.owner);
+      if (sourceOwner?.allianceId != null && sourceOwner.allianceId === player.allianceId) continue;
+      const destinations = this._moveCommandCandidates(source, sourceOwner)
+        .map(({ tile }) => tile)
+        .filter((target) => target.unit && target.owner != null && target.owner !== source.owner);
+      for (const destination of destinations) {
+        const defenderPower = (destination.unit.currentHp || 0) + (destination.unit.def.atk || 0)
+          + this._elementHpBonus(destination.unit, destination);
+        plans.push({ source, destination, score: source.level * 1000 + this._landValueOfTile(source) + defenderPower });
+      }
+    }
+    if (plans.length === 0) return false;
+    plans.sort((a, b) => b.score - a.score);
+    const plan = plans[0];
+    await this._cpuCastSpell(player, card, {
+      targetTileId: plan.source.id,
+      destinationTileId: plan.destination.id,
+    });
+    return true;
+  }
+
   async _cpuMaybeUseDamageSpell(player) {
     if (player.spellUsedThisTurn) return;
     const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'directDamage');

@@ -135,6 +135,11 @@ export const ITEM_CATALOG = {
     effect: { type: 'wielderElementAtkBonus', wielderElement: Element.WATER, atkBonus: 30 },
     effectDescription: '水属性モンスターが使用するとATKがさらに30上昇',
   }),
+  fushichoNoTate: item('fushichoNoTate', '不死鳥の盾', Rarity.R, ItemType.ARMOR, 90, 10, 20, {
+    returnsToHandIfUsed: true,
+    effectDescription: '戦闘終了後に手札へ戻る。HP+20、ATK+10',
+    imageDataUrl: assetUrl('/images/card-art/fushichoNoTate.png'),
+  }),
   fushichoNoKen: item('fushichoNoKen', '不死鳥の剣', Rarity.R, ItemType.WEAPON, 80, 20, 10, {
     returnsToHandIfUsed: true,
     effectDescription: '使用して効果を発動した場合のみ手札に戻る',
@@ -628,6 +633,30 @@ export function buildStarterDeckList(bookId = 'fireForest') {
  * buildThemedDeckList's themed-random deck (see main.js buildBattlePlayerConfigs).
  */
 export const CHARACTER_DECKS = {
+  chin: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.su, count: 2 }, { def: MONSTER_CATALOG.fireworksMaster, count: 3 },
+        { def: MONSTER_CATALOG.hangyojin, count: 2 }, { def: MONSTER_CATALOG.kaikyouSekishoKurage, count: 2 },
+        { def: MONSTER_CATALOG.mizuburoShugyoso, count: 2 }, { def: MONSTER_CATALOG.uminoieTencho, count: 2 },
+        { def: MONSTER_CATALOG.bigMermaid, count: 2 }, { def: MONSTER_CATALOG.kyousenshi, count: 1 },
+        { def: MONSTER_CATALOG.kontonNoAtama, count: 1 }, { def: MONSTER_CATALOG.metaOn, count: 1 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.fushichoNoTate, count: 1 }, { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
+        { def: ITEM_CATALOG.shinkenShirahadori, count: 1 }, { def: ITEM_CATALOG.lifeJacket, count: 1 },
+        { def: ITEM_CATALOG.iceSlugger, count: 1 }, { def: ITEM_CATALOG.osafune, count: 1 },
+        { def: ITEM_CATALOG.harinezumiNoFuku, count: 2 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.senbonZakura, count: 2 }, { def: SPELL_CATALOG.realEstateAppraiser, count: 2 },
+        { def: SPELL_CATALOG.blueOcean, count: 1 }, { def: SPELL_CATALOG.psychokinesis, count: 2 },
+        { def: SPELL_CATALOG.iCanFly, count: 2 }, { def: SPELL_CATALOG.sideIncome, count: 2 },
+        { def: SPELL_CATALOG.manaExtraction, count: 1 }, { def: SPELL_CATALOG.homingInstinct, count: 1 },
+        { def: SPELL_CATALOG.divination, count: 1 },
+      ],
+    },
+  },
   kare: {
     composition: {
       // 水・森の神テーマは残しつつ、破産対策で「安価で腐りにくい50G級Rを厚く／

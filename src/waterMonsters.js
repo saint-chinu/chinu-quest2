@@ -17,6 +17,7 @@ const waterMonster = (id, name, rarity, hp, atk, options = {}) => ({
   ...(options.traits ? { traits: options.traits } : {}),
   ...(options.effect ? { effect: options.effect } : {}),
   ...(options.effectDescription ? { effectDescription: options.effectDescription } : {}),
+  ...(options.npcExclusive ? { npcExclusive: true } : {}),
   imageDataUrl: options.imageDataUrl ?? assetUrl(`/images/card-art/${id}.jpg`),
 });
 
@@ -30,6 +31,13 @@ const waterMonster = (id, name, rarity, hp, atk, options = {}) => ({
  * テーマから参照されているので維持）。
  */
 export const WATER_MONSTER_CATALOG = {
+  su: waterMonster('su', '酢', Rarity.EX, 60, 60, {
+    cost: 300,
+    npcExclusive: true,
+    traits: ['pierce', 'twoStepMove'],
+    effectDescription: '貫通。土地コマンドの移動で最大2マス移動でき、特殊マス1つを飛び越えられる（特殊マスには着地不可）',
+    imageDataUrl: assetUrl('/images/npc-portraits/chin-su.png'),
+  }),
   minatoJoshi: waterMonster('minatoJoshi', '港〇女子', Rarity.N, 30, 30, {
     effect: { type: 'stealGoldOnHit', amount: 30 },
     effectDescription: '攻撃成功時、相手の手持ちGから30G消費させる',

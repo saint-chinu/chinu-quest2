@@ -27,6 +27,7 @@ const MAP_TRACK = {
   'q-train': 'qTrain',
   danball: 'boss',
   kare: 'kare',
+  'final-alliance': 'kare',
 };
 
 const VOLUME = 0.5;

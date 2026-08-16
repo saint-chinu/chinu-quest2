@@ -30,6 +30,13 @@ export const DEFAULT_AI_PROFILE = {
 
 /** キャラ名 → DEFAULT_AI_PROFILEからの上書き差分。story.jsのSTORY_STAGESに登場する名前と一致させる。 */
 export const AI_PROFILES = {
+  朕: {
+    offElementSummonChance: 0.2,
+    levelUpReserve: 300,
+    minWinProbabilityToInvade: 0.25,
+    itemGambleChance: 0.85,
+    highValueAvoidance: 0.15,
+  },
   // ①ヒトデの縄張り: チュートリアル格の相手なので、ほぼデフォルト通りのバランス型。
   ヒトデ: {
     offElementSummonChance: 0.15,

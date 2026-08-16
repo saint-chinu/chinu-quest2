@@ -17,7 +17,7 @@ let cached = null;
 export function getCardCatalog(userId) {
   if (cached) return [...cached, ...loadCustomCards(userId)];
   cached = [
-    ...Object.values(MONSTER_CATALOG),
+    ...Object.values(MONSTER_CATALOG).filter((card) => !card.npcExclusive),
     ...Object.values(ITEM_CATALOG),
     ...Object.values(SPELL_CATALOG),
   ];
