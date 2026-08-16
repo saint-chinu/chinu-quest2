@@ -79,12 +79,12 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 - **帰巣本能(returnPlayerToStart)** S50G ※仕様変更: target=`anyPlayer`。選んだプレイヤー
   をゴールへ戻し**+250G**、その後`_grantGoalBonus`を通す＝**全CP通過済みの時だけ**周回
   ボーナスも入る(未通過なら250Gのみ・CP記録は保持)。旧`returnToStartDoubleBonus`は廃止。
-- **メタ〇ン(copyOnSummon)**: 変身先は**盤面に実在するモンスターのみ**をカード一覧
+- **めたんまん(copyOnSummon)**: 変身先は**盤面に実在するモンスターのみ**をカード一覧
   (`onPickTransformTarget`)で選ぶ。catalogIdで重複排除。CPUはHP+ATK最大を自動選択。
   CPUの空き地召喚経路(`_cpuLandCommand`)でも発動する。
 - **属性武器 ※仕様変更**: 旧`elementDamageBonus`(相手属性で1.5倍)→
   `wielderElementAtkBonus`(**装備した自分のモンスターの属性**が一致で+30固定)。
-  火炎放射器=火 / 雷神剣=雷 / ゴムゴ〇のピストル=森 / アイ〇ラッガー=水。
+  火炎放射器=火 / 雷神剣=雷 / 人食い草=森 / 薄氷の剣=水。
   `equipItem`が装備コピーのatkBonusへ加算するので実ダメージ・演出・勝率シミュが一致。
   `_itemPowerScore(item, unit)`もunitを受け取るようになった。
 - **不死鳥の盾** R90G ARMOR(ATK+10/HP+20, `returnsToHandIfUsed`)。剣と同じく戦闘後に手札へ。
@@ -137,6 +137,17 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   `clamp(16px,2.5vw,26px)`。ほこら/スペルの説明見切れ対策。
 - `tween`(utils.js)は`setTimeout`ウォッチドッグ付き（rAF停止=バックグラウンド/画面回転
   でもフリーズしない）。
+
+## ⚠️ カード名とID・画像ファイル名は別物
+既存作品を想起させるカード名は表示名(`name`)を改名済み（人食い草/薄氷の剣/
+スイッチランド/炎のバクチ打ち/ヘチマ竜/鉄火の料理人/めたんまん/ロボ戦士/
+超電磁科学者）。ただし**`id`と画像ファイル名は旧名のまま**（`hezumaDragon`,
+`gandamu`, `gomuGoNoPistol` 等）。
+- `id`はビルド後のJSにそのまま載り、画像URLもブラウザがそのままリクエストする
+  ので、DevToolsからは旧名が見える。
+- `id`を変えると**Firestoreに保存済みのデッキ・所持カード（`catalogId`参照）が
+  壊れる**ので、変えるなら旧→新の読み替えマイグレーションが必須。
+- 画像ファイル名だけなら、リネーム＋`imageDataUrl`の参照更新で安全に変えられる。
 
 ## ⚠️ カード画像の欠け＝盤面フリーズ
 `neutralMonster()`等のファクトリは`imageDataUrl`を`/images/card-art/<id>.jpg`へ
