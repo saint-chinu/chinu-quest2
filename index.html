@@ -49,6 +49,7 @@
           <p id="login-error" class="pg-error hidden"></p>
           <label class="login-consent"><input id="login-consent" type="checkbox" /> <span>下記の免責事項・禁止事項を確認し、同意します。</span></label>
           <button id="login-submit" class="pg-button">ログイン／新規登録</button>
+          <button id="tutorial-demo-link" class="tutorial-demo-link" type="button">チュートリアルのデモプレイはこちら</button>
         </section>
 
         <div id="title-intro">
@@ -91,6 +92,20 @@
             </ul>
             <p>違反や安全上の問題が確認された場合、予告なくデータ削除、機能制限、利用停止などを行う場合があります。</p>
           </details>
+        </div>
+      </div>
+
+      <div id="tutorial-guide" class="hidden" aria-live="polite">
+        <div id="tutorial-guide-box">
+          <p id="tutorial-guide-progress"></p>
+          <h2 id="tutorial-guide-title">チュートリアル</h2>
+          <p id="tutorial-guide-text"></p>
+          <div id="tutorial-guide-checks"></div>
+          <div class="pg-actions-row">
+            <button id="tutorial-guide-prev" class="pg-button pg-button-secondary" type="button">前へ</button>
+            <button id="tutorial-guide-next" class="pg-button" type="button">次へ</button>
+            <button id="tutorial-guide-finish" class="pg-button hidden" type="button">完了</button>
+          </div>
         </div>
       </div>
 

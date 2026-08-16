@@ -24,6 +24,7 @@ const TRACK_SRC = {
 // mapId(board.jsのMAPS)→専用トラック。無いキーはplayMapTheme側でboardに
 // フォールバックする。
 const MAP_TRACK = {
+  tutorial: 'finalAlliance',
   madai: 'madai',
   budou: 'budou',
   'q-train': 'qTrain',

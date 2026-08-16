@@ -52,6 +52,14 @@ const HITODE_FIRST_ROWS = [
   'TMMMMC',
 ];
 
+// ログイン前から遊べる操作チュートリアル。3×3外周の8マスだけで構成し、
+// G=ゴール、C=チェックポイント、残り6マスで各属性と無属性を体験する。
+const TUTORIAL_ROWS = [
+  'GFC',
+  'T.M',
+  'NWF',
+];
+
 // ②暴君マダイ戦のマップ - ユーザー指定のレイアウト。15マス×5マスで、
 // 左右2つの縦長ループ（外周の上下段でつながる）を、中央のGを通る横一列
 // の通路が橋渡しする「めがね」型。四隅がH（ほこら）とC（チェックポイント）
@@ -209,6 +217,16 @@ const HITODE_FIRST_MAP = {
   background: assetUrl('/images/stage/stage1.png'),
 };
 
+const TUTORIAL_MAP = {
+  id: 'tutorial',
+  name: 'チュートリアル',
+  rows: TUTORIAL_ROWS,
+  requireAllCheckpoints: true,
+  checkpointBonus: 100,
+  background: assetUrl('/images/stage/stage1.png'),
+  spacing: 3.2,
+};
+
 // 対戦モードでは、ステージ1の短い初戦マップと長い再戦マップを別々に
 // 選べるようにする。ストーリー側が使うMAPSの意味は変えない。
 export const PVP_MAPS = [
@@ -218,6 +236,7 @@ export const PVP_MAPS = [
 ];
 
 function getMap(mapId) {
+  if (mapId === TUTORIAL_MAP.id) return TUTORIAL_MAP;
   if (mapId === HITODE_FIRST_MAP.id) return HITODE_FIRST_MAP;
   return MAPS.find((m) => m.id === mapId) ?? MAPS[0];
 }

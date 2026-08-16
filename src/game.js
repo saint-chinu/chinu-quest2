@@ -149,6 +149,10 @@ export class Game {
     humanPlayer,
     storyMode = false,
     goalCurrency = null,
+    tutorialMode = false,
+    tutorialOpeningCardIds = [],
+    tutorialDiceQueues = null,
+    onTutorialEvent = null,
   }) {
     this.tiles = tiles;
     this.mapId = mapId;
@@ -231,6 +235,10 @@ export class Game {
     // 対戦モードでは今まで通り500Gを渡されゴール地点から再スタートするだけ。
     this.storyMode = storyMode;
     this.goalCurrency = Number.isFinite(Number(goalCurrency)) ? Number(goalCurrency) : null;
+    this.tutorialMode = !!tutorialMode;
+    this.tutorialOpeningCardIds = tutorialOpeningCardIds;
+    this.tutorialDiceQueues = tutorialDiceQueues || { human: [1, 1, 2, 1, 3, 2], cpu: [2, 1, 2, 1, 2, 1] };
+    this.onTutorialEvent = onTutorialEvent || (() => {});
     this.storyEnded = false;
     // 経過ターン数（_beginTurnごとに+1）。退出報酬の最低ターン数判定に使う
     // （開始直後に退出して報酬を得る無限金策の防止）。
@@ -354,7 +362,9 @@ export class Game {
     });
     // 盤面開始時に一度だけ先攻を抽選し、以後はこの順番を固定する。
     // プレイヤーIDや同盟順は変えず、ホスト／ゲストの同期も壊さない。
-    this.currentPlayerIndex = Math.floor(Math.random() * this.players.length);
+    this.currentPlayerIndex = this.tutorialMode
+      ? Math.max(0, this.players.findIndex((player) => !player.isCPU))
+      : Math.floor(Math.random() * this.players.length);
     this._assignGoalStarts(resolvedConfigs);
     this.isBusy = false;
     this.tilesSincePan = 0;
@@ -427,14 +437,50 @@ export class Game {
       player.mesh = player.iconImage
         ? this.scene.createPieceFromImage(player.iconImage, pos)
         : this.scene.createPiece(player.color, pos);
+      if (this.tutorialMode && !player.isCPU) this._prepareTutorialOpeningHand(player);
       for (let i = 0; i < STARTING_HAND_SIZE; i++) {
         const card = player.deck.draw();
         if (card) { player.hand.push(card); this._recordDraw(player, card); }
       }
     }
+    if (this.tutorialMode) this._setupTutorialScenario();
     const startPos = this.tiles[this.currentPlayer.tileId].position;
     this.scene.setFocusImmediate(startPos.x, startPos.z);
     this._beginTurn();
+  }
+
+  _prepareTutorialOpeningHand(player) {
+    const selected = [];
+    for (const wantedId of this.tutorialOpeningCardIds) {
+      const index = player.deck.drawPile.findIndex((card) => catalogIdOf(card) === wantedId);
+      if (index >= 0) selected.push(player.deck.drawPile.splice(index, 1)[0]);
+    }
+    // Deck.draw()は末尾から取り出すので、指定順の逆順で末尾へ積む。
+    player.deck.drawPile.push(...selected.reverse());
+  }
+
+  _setupTutorialScenario() {
+    const human = this.players.find((player) => !player.isCPU);
+    const cpu = this.players.find((player) => player.isCPU);
+    if (!human || !cpu) return;
+    human.currency = 1000;
+    cpu.currency = 1000;
+    // 移動侵略・防衛・通行料をすぐ試せるよう、外周の離れた土地を1つずつ
+    // 初期配置済みにする。通常の召喚練習用空地は十分に残す。
+    const humanLand = this.tiles.find((tile) => tile.id === 3 && tile.type === TileType.LAND);
+    const cpuLand = this.tiles.find((tile) => tile.id === 7 && tile.type === TileType.LAND);
+    if (humanLand) this._placeUnit(humanLand, human, MONSTER_CATALOG.fireStarter);
+    if (cpuLand) {
+      this._placeUnit(cpuLand, cpu, MONSTER_CATALOG.salarymander);
+      cpuLand.level = 2;
+    }
+    this._notifyState();
+  }
+
+  _tutorialDiceValue() {
+    if (!this.tutorialMode) return null;
+    const key = this.currentPlayer.isCPU ? 'cpu' : 'human';
+    return this.tutorialDiceQueues?.[key]?.[0] ?? 1;
   }
 
   /** ストーリー途中再開用。Three.jsの参照を除き、ゲーム進行に必要な純データだけを書き出す。 */
@@ -577,6 +623,7 @@ export class Game {
     await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast, card));
     const endedTurn = await this._applySpellEffect(player, card, cast);
     await this.onSpellComplete();
+    this.onTutorialEvent('spell', { card });
     this._notifyState();
 
     if (endedTurn) {
@@ -1545,6 +1592,11 @@ export class Game {
     this._notifyState();
 
     const player = this.currentPlayer;
+    if (this.tutorialMode) {
+      const key = player.isCPU ? 'cpu' : 'human';
+      const fixed = this.tutorialDiceQueues?.[key]?.shift();
+      if (fixed != null) steps = fixed;
+    }
     // ダイス呪い（1のダイス/3のダイス/6のダイス/アイキャンフライ/バックファイア）:
     // 次の1回のロールだけ結果を書き換える一度きりの呪い。
     let reverse = false;
@@ -2680,6 +2732,7 @@ export class Game {
       amount: toll,
       position: this.tiles[player.tileId]?.position ?? null,
     });
+    this.onTutorialEvent('toll', { playerId: player.id, amount: toll });
   }
 
   /**
@@ -2984,6 +3037,7 @@ export class Game {
       this.onLog(`${player.name}は${card.name}を${actionType === 'summon' ? '召喚' : '入れ替え'}した (-${card.cost}G)`);
       this._notifyState();
       await this.onSummonEffect?.({ tileId: tile.id, unitName: card.name });
+      this.onTutorialEvent('summon', { playerId: player.id, tileId: tile.id, card });
       await this._presentLandGain(chainGain);
       if (card.effect?.type === 'copyOnSummon') {
         await this._maybeCopyOnSummon(tile, player);
@@ -3034,6 +3088,7 @@ export class Game {
       tollBefore,
       tollAfter: this._tollOfTile(tile),
     });
+    this.onTutorialEvent('levelUp', { playerId: player.id, tileId: tile.id, previousLevel, newLevel: tile.level });
     return true;
   }
 
@@ -3138,6 +3193,7 @@ export class Game {
 
     const confirmed = await this.onConfirmMove(this.getTileSummary(targetTile), player.id);
     if (!confirmed) return false;
+    this.onTutorialEvent('move', { playerId: player.id, fromTileId: tile.id, toTileId: targetTile.id, invasion: targetTile.owner != null });
 
     const attackerUnit = tile.unit;
     const attackerName = attackerUnit.def.name;
@@ -4870,6 +4926,7 @@ export class Game {
   }
 
   async _runInvasion(player, tile, card) {
+    this.onTutorialEvent('battle', { attackerId: player.id, defenderId: tile.owner });
     const currentOwner = tile.owner != null ? this.players.find((candidate) => candidate.id === tile.owner) : null;
     if (currentOwner?.allianceId != null && currentOwner.allianceId === player.allianceId) {
       this.onLog('同盟仲間の土地には侵略できません');
@@ -5380,7 +5437,9 @@ export class Game {
     await this._cpuMaybeUseDivinationSpell(this.currentPlayer);
     await this._cpuMaybeUseImmediateSpell(this.currentPlayer);
     await this._cpuMaybeUseDiceSpell(this.currentPlayer);
-    const fixedDiceValue = this.currentPlayer.diceCurse?.type === 'fixed' ? this.currentPlayer.diceCurse.value : null;
+    const fixedDiceValue = this.currentPlayer.diceCurse?.type === 'fixed'
+      ? this.currentPlayer.diceCurse.value
+      : this._tutorialDiceValue();
     const steps = await this.onCpuRoll(fixedDiceValue);
     this.rollDice(steps);
   }
@@ -6153,7 +6212,9 @@ export class Game {
       centerHand: this.currentPlayer.hand,
       currentPlayerIsCPU: this.currentPlayer.isCPU,
       spellUsedThisTurn: this.currentPlayer.spellUsedThisTurn,
-      fixedDiceValue: this.currentPlayer.diceCurse?.type === 'fixed' ? this.currentPlayer.diceCurse.value : null,
+      fixedDiceValue: this.currentPlayer.diceCurse?.type === 'fixed'
+        ? this.currentPlayer.diceCurse.value
+        : this._tutorialDiceValue(),
     });
     this.onPvpSync?.(this._pvpSnapshot(playersPayload));
   }

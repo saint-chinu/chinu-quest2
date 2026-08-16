@@ -2925,10 +2925,14 @@ function startBattle(character, storyOptions = {}) {
     onBattleRetreat: relayable('battleRetreat', promptBattleRetreat, { broadcast: true }),
     onBattleOutcome: relayable('battleOutcome', promptBattleOutcome, { broadcast: true }),
     onDamageEffect: relayable('damageEffect', promptDamageEffect, { broadcast: true }),
+    onTutorialEvent: storyOptions.onTutorialEvent,
     onStoryBattleEnd: storyOptions.onStoryBattleEnd,
     onPvpSync: handlePvpSync,
     storyMode: storyOptions.storyMode ?? false,
     goalCurrency: storyOptions.goalCurrency ?? null,
+    tutorialMode: storyOptions.tutorialMode ?? false,
+    tutorialOpeningCardIds: storyOptions.tutorialOpeningCardIds ?? [],
+    tutorialDiceQueues: storyOptions.tutorialDiceQueues ?? null,
     playerConfigs: storyOptions.playerConfigs,
     humanPlayer: storyOptions.playerConfigs
       ? undefined
@@ -3132,6 +3136,7 @@ helpClose.addEventListener('click', () => {
  */
 function showLandInfoCamera() {
   if (branchChoiceActive || boardMovementActive || !scene || !tiles?.length || !cameraWorkOverlay.classList.contains('hidden')) return;
+  recordTutorialEvent('landInfo');
   const camSnap = beginCameraWork();
   cameraWorkOverlay.classList.remove('hidden');
   landInfoButton.classList.add('active');
@@ -3184,6 +3189,7 @@ function showLandInfoCamera() {
     if (scene.panDidMove) return; // 直前がドラッグ/ピンチなら選択しない
     const tile = scene.pickTileAt(ndcX, ndcY, tiles);
     if (!tile || tile.type !== TileType.LAND) return;
+    recordTutorialEvent('landInfo');
     renderTileInfo(tileSummaryForInfo(tile));
     tileInfoModal.classList.remove('hidden');
   }
@@ -3224,6 +3230,15 @@ const loginPassword = document.getElementById('login-password');
 const loginError = document.getElementById('login-error');
 const loginSubmit = document.getElementById('login-submit');
 const loginConsent = document.getElementById('login-consent');
+const tutorialDemoLink = document.getElementById('tutorial-demo-link');
+const tutorialGuide = document.getElementById('tutorial-guide');
+const tutorialGuideProgress = document.getElementById('tutorial-guide-progress');
+const tutorialGuideTitle = document.getElementById('tutorial-guide-title');
+const tutorialGuideText = document.getElementById('tutorial-guide-text');
+const tutorialGuideChecks = document.getElementById('tutorial-guide-checks');
+const tutorialGuidePrev = document.getElementById('tutorial-guide-prev');
+const tutorialGuideNext = document.getElementById('tutorial-guide-next');
+const tutorialGuideFinish = document.getElementById('tutorial-guide-finish');
 const charmakeScreen = document.getElementById('charmake-screen');
 const charmakeIcons = document.getElementById('charmake-icons');
 const charmakeIconUpload = document.getElementById('charmake-icon-upload');
@@ -3424,6 +3439,191 @@ let currentUserId = null;
 let currentCharacter = null;
 let selectedCharacterIcon = null;
 let selectedDeckVariant = null;
+let activeTutorialSession = null;
+
+const TUTORIAL_LESSONS = [
+  {
+    title: '勝利条件と3つのお金',
+    text: '盤面右下の「目標G」は勝利に必要な総資産です。\n「手持ちG」はカード使用・召喚・土地強化に使える現金、「総資産」は手持ちGに所有土地の価値を加えた合計です。手持ちGだけが目標へ届いても勝利にはなりません。総資産が目標以上の状態でゴールすると勝利です。CPの全通過は勝利条件ではなく、周回ボーナスを受け取るための条件です。',
+  },
+  {
+    title: '盤面と土地情報',
+    text: 'この盤面はG（ゴール）1マス、CP1マス、土地6マスの全8マスです。右側の「土地情報」を押し、土地をタップしてください。属性・レベル・地価・通行料・所有者・配置モンスターのHPや能力を確認できます。',
+  },
+  {
+    title: '手札とスペル',
+    text: '自分の手札は左下に常時表示されます。自分のターンでスペルをタップし、詳細画面から使用します。「占術」や「1のダイス」を実際に使ってみましょう。スペル使用後もサイコロを振れます。',
+  },
+  {
+    title: '固定サイコロ・移動・CP',
+    text: 'チュートリアルのサイコロは説明イベントが起きるよう固定されています。画面のサイコロをタップすると、その目だけ進みます。未通過CPを通ると100Gを獲得し、全CP通過後はゴールで周回ボーナスを得られます。',
+  },
+  {
+    title: 'モンスター召喚',
+    text: '空地へ止まったら「召喚」を選び、モンスターカードをタップします。カード画像・HP・ATK・能力・コストを確認して「はい」を押すと召喚され、その土地が自分の領地になります。専用デッキには「くねくね」も1枚入っています。',
+  },
+  {
+    title: '土地レベルと強化効果',
+    text: '「土地」→自分の土地→「土地Lvアップ」で、予算内のレベルを選びます。支払ったGは土地価値へ移るため、連鎖なしなら総資産は基本的に減りません。レベルが上がると地価と通行料が増え、土地と同属性の防衛モンスターは戦闘時のHP加算も大きくなります。',
+  },
+  {
+    title: '通行料',
+    text: '敵の土地へ止まり、侵略しないか奪えなかった場合は通行料を支払います。通行料は土地レベルと同属性の連鎖数で上昇します。侵略に成功して土地を奪えば、その着地での通行料は不要です。',
+  },
+  {
+    title: '侵略戦闘',
+    text: '敵地で「侵略」を選び、攻めるモンスターを選択します。戦闘では攻撃側・防衛側がそれぞれアイテムを1枚選べます。ATK、HP、属性相性、土地HP加算、先制・後攻・貫通などを確認して戦いましょう。',
+  },
+  {
+    title: '防衛とアイテム',
+    text: '敵CPUが自分の土地へ侵略すると、今度は防衛側としてアイテムを選びます。鎧でHPを増やす、武器で反撃を強化するなど、相手の能力を見て選択します。何も使わず戦うこともできます。',
+  },
+  {
+    title: 'モンスター移動・移動侵略',
+    text: '土地コマンドで配置モンスターの「移動」を選ぶと隣接地へ移せます。空地なら領地を移し、敵地ならそのまま移動侵略になります。移動元の土地は空地になるため、連鎖や総資産が変化する点に注意してください。',
+  },
+  {
+    title: 'チュートリアル完了',
+    text: '説明は以上です。盤面では何度でも操作を試せます。「完了」を押すと終了します。ログイン中の初回完了時だけ、占術1枚と100Mを受け取れます。ログイン前のデモでは報酬や進行状況は保存されません。',
+  },
+];
+
+const TUTORIAL_CHECK_LABELS = {
+  landInfo: '土地情報',
+  spell: 'スペル',
+  summon: '召喚',
+  levelUp: '土地Lv',
+  toll: '通行料',
+  battle: '戦闘',
+  defense: '防衛',
+  move: '移動侵略',
+};
+
+function tutorialCopies(def, count) {
+  return Array.from({ length: count }, () => ({ ...def }));
+}
+
+function buildTutorialPlayerDeck() {
+  return [
+    ...tutorialCopies(MONSTER_CATALOG.salarymander, 5),
+    ...tutorialCopies(MONSTER_CATALOG.fireStarter, 5),
+    ...tutorialCopies(MONSTER_CATALOG.flameLizard, 5),
+    ...tutorialCopies(MONSTER_CATALOG.kunekune, 1),
+    ...tutorialCopies(MONSTER_CATALOG.sekizou, 4),
+    ...tutorialCopies(ITEM_CATALOG.knife, 5),
+    ...tutorialCopies(ITEM_CATALOG.potLid, 5),
+    ...tutorialCopies(SPELL_CATALOG.divination, 2),
+    ...tutorialCopies(SPELL_CATALOG.diceOne, 2),
+    ...tutorialCopies(SPELL_CATALOG.fireball, 2),
+    ...tutorialCopies(SPELL_CATALOG.heal, 2),
+    ...tutorialCopies(SPELL_CATALOG.sideIncome, 2),
+  ];
+}
+
+function renderTutorialGuide() {
+  if (!activeTutorialSession) return;
+  const lesson = TUTORIAL_LESSONS[activeTutorialSession.lessonIndex];
+  tutorialGuideProgress.textContent = `LESSON ${activeTutorialSession.lessonIndex + 1} / ${TUTORIAL_LESSONS.length}`;
+  tutorialGuideTitle.textContent = lesson.title;
+  tutorialGuideText.textContent = lesson.text;
+  tutorialGuideChecks.replaceChildren();
+  for (const [key, label] of Object.entries(TUTORIAL_CHECK_LABELS)) {
+    const badge = document.createElement('span');
+    badge.className = `tutorial-check${activeTutorialSession.done.has(key) ? ' done' : ''}`;
+    badge.textContent = `${activeTutorialSession.done.has(key) ? '✓' : '○'} ${label}`;
+    tutorialGuideChecks.appendChild(badge);
+  }
+  tutorialGuidePrev.disabled = activeTutorialSession.lessonIndex === 0;
+  const last = activeTutorialSession.lessonIndex === TUTORIAL_LESSONS.length - 1;
+  tutorialGuideNext.classList.toggle('hidden', last);
+  tutorialGuideFinish.classList.toggle('hidden', !last);
+}
+
+function recordTutorialEvent(type, payload = {}) {
+  if (!activeTutorialSession) return;
+  if (type === 'battle') {
+    const human = game?.players?.find((player) => !player.isCPU);
+    activeTutorialSession.done.add('battle');
+    if (human && payload.defenderId === human.id) activeTutorialSession.done.add('defense');
+  } else if (Object.hasOwn(TUTORIAL_CHECK_LABELS, type)) {
+    activeTutorialSession.done.add(type);
+  }
+  renderTutorialGuide();
+}
+
+async function finishTutorial(completed = true) {
+  if (!activeTutorialSession) return;
+  const session = activeTutorialSession;
+  activeTutorialSession = null;
+  tutorialGuide.classList.add('hidden');
+  game?.cancel?.();
+  game = undefined;
+  stopMusic();
+  appEl.classList.add('hidden');
+  preGame.classList.remove('hidden');
+
+  currentCharacter = session.savedCharacter;
+  if (completed && session.loggedIn && currentCharacter && !currentCharacter.receivedTutorialReward) {
+    currentCharacter.ownedCards ||= {};
+    const rewardKey = cardKey(SPELL_CATALOG.divination);
+    currentCharacter.ownedCards[rewardKey] = (currentCharacter.ownedCards[rewardKey] || 0) + 1;
+    currentCharacter.m = Number(currentCharacter.m || 0) + 100;
+    currentCharacter.receivedTutorialReward = true;
+    saveCharacter(currentUserId, currentCharacter);
+    showToast('チュートリアル初回報酬：占術1枚・100Mを獲得しました', 3000);
+  }
+  if (session.loggedIn) showStoryScreen();
+  else showScreen(loginScreen);
+}
+
+async function startTutorialDemo() {
+  if (activeTutorialSession) return;
+  const savedCharacter = currentCharacter;
+  const loggedIn = !!(currentUserId && currentCharacter);
+  const presets = await loadCharacterIconPresets();
+  const ikaPreset = presets.find((preset) => /ika|イカ/i.test(`${preset.id} ${preset.name}`)) || presets[0];
+  const ikaIcon = ikaPreset?.dataUrl ? await iconFromDataUrl(ikaPreset.dataUrl) : null;
+  const danballIcon = await loadNpcTokenImage('ダンボール男');
+  const playerDeck = buildTutorialPlayerDeck();
+  const cpuDeck = buildCharacterDeckList('hitode');
+
+  activeTutorialSession = {
+    loggedIn,
+    savedCharacter,
+    lessonIndex: 0,
+    done: new Set(),
+  };
+  await confirmLandscapeReady();
+  preGame.classList.add('hidden');
+  appEl.classList.remove('hidden');
+  startBattle({ name: 'プレイヤー', color: 0x2ec4b6 }, {
+    mapId: 'tutorial',
+    goalCurrency: 2000,
+    tutorialMode: true,
+    tutorialOpeningCardIds: ['divination', 'diceOne', 'fireStarter', 'knife', 'potLid', 'kunekune'],
+    tutorialDiceQueues: { human: [1, 1, 2, 1, 3, 2, 1, 2, 1], cpu: [2, 1, 2, 1, 2, 1, 3, 1] },
+    onTutorialEvent: recordTutorialEvent,
+    playerConfigs: [
+      { name: 'プレイヤー', isCPU: false, color: 0x2ec4b6, allianceId: null, deckList: playerDeck, iconImage: ikaIcon?.canvas ?? null },
+      { name: '敵CPU', isCPU: true, color: 0xe63946, allianceId: null, deckList: cpuDeck, iconImage: danballIcon },
+    ],
+  });
+  tutorialGuide.classList.remove('hidden');
+  renderTutorialGuide();
+}
+
+tutorialDemoLink.addEventListener('click', startTutorialDemo);
+tutorialGuidePrev.addEventListener('click', () => {
+  if (!activeTutorialSession) return;
+  activeTutorialSession.lessonIndex = Math.max(0, activeTutorialSession.lessonIndex - 1);
+  renderTutorialGuide();
+});
+tutorialGuideNext.addEventListener('click', () => {
+  if (!activeTutorialSession) return;
+  activeTutorialSession.lessonIndex = Math.min(TUTORIAL_LESSONS.length - 1, activeTutorialSession.lessonIndex + 1);
+  renderTutorialGuide();
+});
+tutorialGuideFinish.addEventListener('click', () => finishTutorial(true));
 
 function updateCharmakeValidity() {
   charmakeSubmit.disabled = !charmakeName.value.trim() || !selectedCharacterIcon || !selectedDeckVariant;
@@ -3846,6 +4046,22 @@ async function selectStoryStage(index, cleared, stage) {
 
 function showStoryScreen() {
   storyStageList.replaceChildren();
+  const tutorialRow = document.createElement('div');
+  tutorialRow.className = 'deck-row story-tutorial-row';
+  const tutorialInfo = document.createElement('div');
+  tutorialInfo.className = 'deck-row-info';
+  const tutorialName = document.createElement('div');
+  tutorialName.className = 'deck-row-name';
+  tutorialName.textContent = 'チュートリアル（何度でもプレイ可能）';
+  tutorialName.addEventListener('click', startTutorialDemo);
+  const tutorialMeta = document.createElement('div');
+  tutorialMeta.className = 'deck-row-meta';
+  tutorialMeta.textContent = currentCharacter.receivedTutorialReward
+    ? '報酬受取済み　固定デッキ・8マス操作練習'
+    : '初回完了報酬：占術1枚・100M　固定デッキ・8マス操作練習';
+  tutorialInfo.append(tutorialName, tutorialMeta);
+  tutorialRow.append(tutorialInfo);
+  storyStageList.appendChild(tutorialRow);
   STORY_STAGES.forEach((stage, index) => {
     const unlocked = isStageUnlocked(currentCharacter, index);
     const cleared = isStageCleared(currentCharacter, index);
@@ -6895,6 +7111,11 @@ function showToast(text, duration = 2000) {
 
 gameMenuExit.addEventListener('click', async () => {
   gameMenuModal.classList.add('hidden');
+  if (activeTutorialSession) {
+    const confirmed = await confirmYesNo('チュートリアルを終了しますか？\n途中終了では初回報酬を受け取れません。');
+    if (confirmed) await finishTutorial(false);
+    return;
+  }
   const isPvpGuest = pvpMatch && !pvpMatch.isHost;
   if (!game && !isPvpGuest) return;
 

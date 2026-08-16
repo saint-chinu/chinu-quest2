@@ -602,6 +602,64 @@ html, body {
   accent-color: #35c8b9;
 }
 
+.tutorial-demo-link {
+  border: 0;
+  border-bottom: 1px solid currentColor;
+  padding: 2px 0;
+  background: transparent;
+  color: #7ee7dc;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#tutorial-guide {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: max(10px, env(safe-area-inset-top));
+  pointer-events: none;
+}
+
+#tutorial-guide.hidden { display: none; }
+
+#tutorial-guide-box {
+  width: min(620px, 76vw);
+  max-height: 42vh;
+  overflow-y: auto;
+  box-sizing: border-box;
+  padding: 12px 16px;
+  border: 2px solid rgba(110, 231, 217, 0.75);
+  border-radius: 14px;
+  background: rgba(8, 18, 32, 0.96);
+  color: #fff;
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.58);
+  pointer-events: auto;
+}
+
+#tutorial-guide-progress {
+  margin: 0 0 3px;
+  color: #f3c969;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+
+#tutorial-guide-title { margin: 0 0 5px; font-size: 18px; }
+#tutorial-guide-text { margin: 0 0 8px; font-size: 12px; line-height: 1.6; white-space: pre-line; }
+#tutorial-guide-checks { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 8px; }
+.tutorial-check { padding: 3px 7px; border-radius: 999px; background: #30354a; color: #c9ccda; font-size: 10px; }
+.tutorial-check.done { background: #12695f; color: #eafffc; }
+
+@media (max-height: 500px) {
+  #tutorial-guide-box { width: min(700px, 70vw); max-height: 48vh; padding: 9px 12px; }
+  #tutorial-guide-title { font-size: 15px; }
+  #tutorial-guide-text { font-size: 10.5px; }
+}
+
 .upload-policy-note {
   width: min(520px, 90vw);
   box-sizing: border-box;
