@@ -2,7 +2,7 @@ import { TileType, mapRequiresAllCheckpoints, mapCheckpointBonus, mapUsesAlterna
 import { PIECE_REST_Y, UNIT_ICON_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity } from './cards.js';
 import { buildStarterCardList, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf } from './battleCards.js';
-import { createFieldUnit, resolveBattle, equipItem, applyCurse, applyPoison, GoldLedger, hasTrait, strikeOrderScore } from './battle.js';
+import { createFieldUnit, resolveBattle, equipItem, applyCurse, applyPoison, GoldLedger, hasTrait, strikeOrderScore, statTotals } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay, getWaitCutRate } from './utils.js';
 import { DENCHU_FIELD_MONSTER } from './thunderMonsters.js';
@@ -4462,15 +4462,8 @@ export class Game {
         this.onLog(`${unit.def.name}は所持Gで上回りATKが2倍になった`);
       }
     } else if (effect.type === 'atkMultiplier') {
-      const baseAtk = this._baseStats(unit).atk;
-      const atk = Math.round(baseAtk * (effect.multiplier - 1));
-      bonus.atk += atk;
-      bonus.effectAtk = (bonus.effectAtk || 0) + atk;
-      bonus.effectLabels = [
-        ...(bonus.effectLabels || []),
-        `${unit.def.name}：ATK${effect.multiplier}倍（${baseAtk}→${baseAtk + atk}）`,
-      ];
-      if (atk !== 0) this.onLog(`${unit.def.name}のATK${effect.multiplier}倍が発動（${baseAtk}→${baseAtk + atk}）`);
+      bonus.atkMultiplier = (bonus.atkMultiplier || 1) * effect.multiplier;
+      this.onLog(`${unit.def.name}の最終ATK${effect.multiplier}倍が発動`);
     } else if (effect.type === 'statsPerTotalChain') {
       const totalChain = [Element.FIRE, Element.WATER, Element.THUNDER, Element.FOREST].reduce(
         (sum, el) => sum + this._chainCount(unit.ownerId, el),
@@ -4687,8 +4680,7 @@ export class Game {
         atk: attackerBase.atk,
         hp: attackerBase.hp,
         currentHp: Math.min(attackerUnit.currentHp, attackerBase.hp),
-        cheerAtk: attackerBonus.atk - (attackerBonus.effectAtk || 0),
-        effectAtk: attackerBonus.effectAtk || 0,
+        cheerAtk: attackerBonus.atk,
         elementHp: attackerBonus.hp,
         element: attackerPositionTile?.element ?? null,
         matchup: attackerMatchup,
@@ -4700,8 +4692,7 @@ export class Game {
         atk: defenderBase.atk,
         hp: defenderBase.hp,
         currentHp: Math.min(defenderUnit.currentHp, defenderBase.hp),
-        cheerAtk: defenderBonus.atk - (defenderBonus.effectAtk || 0),
-        effectAtk: defenderBonus.effectAtk || 0,
+        cheerAtk: defenderBonus.atk,
         elementHp: defenderBonus.hp,
         element: battleTile.element,
         matchup: defenderMatchup,
@@ -4833,9 +4824,18 @@ export class Game {
 
     // 狂戦士などの固有ステータス倍率は実ダメージだけでなく、攻撃開始前に
     // 大きな文字でも明示する。これで通常の応援加算との区別がつく。
+    const multiplierLabels = (unit, bonus) => {
+      if (!bonus.atkMultiplier || bonus.atkMultiplier === 1) return bonus.effectLabels || [];
+      const before = statTotals(unit, { ...bonus, atkMultiplier: 1 }).atk;
+      const after = statTotals(unit, bonus).atk;
+      return [
+        ...(bonus.effectLabels || []),
+        `${unit.def.name}：最終ATK${bonus.atkMultiplier}倍（${before}→${after}）`,
+      ];
+    };
     const effectRevealSides = [
-      { side: 'attacker', labels: attackerBonus.effectLabels || [] },
-      { side: 'defender', labels: defenderBonus.effectLabels || [] },
+      { side: 'attacker', labels: multiplierLabels(attackerUnit, attackerBonus) },
+      { side: 'defender', labels: multiplierLabels(defenderUnit, defenderBonus) },
     ];
     for (const reveal of effectRevealSides) {
       if (reveal.labels.length === 0) continue;

@@ -89,7 +89,7 @@ function randomStep(min, max, step) {
 // 固有の連鎖/レアリティ補正 - Game._battleBonus/_applyEffectBonus参照) -
 // the caller (Game, which has the board) computes these per-battle and
 // passes them in, same shape as items/curses but never persisted on the unit.
-function statTotals(unit, bonus = {}) {
+export function statTotals(unit, bonus = {}) {
   // Ninja(doubleItemEffect): 装備アイテムのatk/hpボーナスだけを2倍にする
   // （プラスもマイナスも対象）。ネット弁慶(statOverrideInBattle): 素の
   // def.atk/hpの代わりに固定値20/20を基準にする（アイテム・呪い・状況
@@ -105,8 +105,11 @@ function statTotals(unit, bonus = {}) {
   // ダンボールの鎧(forceZeroAtk): 装備中はATKが常に0になる（他の加算要素も
   // 含め完全に上書き）。装備アイテムは常に最大1個なのでsome()で十分。
   const forcesZeroAtk = unit.items.some((i) => i.forceZeroAtk);
+  const additiveAtk = baseAtk + curseAtk + itemAtk + (bonus.atk || 0);
   return {
-    atk: forcesZeroAtk ? 0 : baseAtk + curseAtk + itemAtk + (bonus.atk || 0),
+    // 狂戦士などのATK倍率は、基礎値だけでなく呪い・装備・応援等をすべて
+    // 加算した最終ATKへ掛ける。属性相性はこの後のダメージ計算で別途適用。
+    atk: forcesZeroAtk ? 0 : Math.round(additiveAtk * (bonus.atkMultiplier || 1)),
     maxHp: baseHp + curseHp + itemHp + (bonus.hp || 0),
   };
 }
