@@ -953,8 +953,8 @@ export class Game {
         this.onLog(`${targetTile.unit.def.name}の土地に強制停止の呪いがかかった`);
         return false;
 
-      case 'returnToStartDoubleBonus':
-        this._spellReturnToStartDoubleBonus(player);
+      case 'returnPlayerToStart':
+        await this._spellReturnPlayerToStart(targetPlayer, effect.reward ?? 250);
         return true;
 
       case 'lapCountGold': {
@@ -1285,18 +1285,20 @@ export class Game {
     await this._beginTurn();
   }
 
-  /** 帰巣本能: スタート地点へ瞬間移動し、周回ボーナス（_computeLapBonus、フリーランサー・領地ボーナス込み）の2倍のGを獲得する。呼び出し元がこの後すぐターンを終える。 */
-  _spellReturnToStartDoubleBonus(player) {
+  /** 帰巣本能: 選んだプレイヤーをゴールへ戻して250Gを渡す。ゴール処理は
+   * 通常移動と同じ_grantGoalBonusへ集約し、全CP通過済みの場合だけ周回
+   * ボーナスを追加する（未通過なら250Gのみ）。 */
+  async _spellReturnPlayerToStart(player, reward = 250) {
+    if (!player) return;
     const startTile = this.tiles.find((t) => t.type === TileType.START);
+    if (!startTile) return;
     player.previousTileId = null;
     player.tileId = startTile.id;
     if (player.mesh) player.mesh.position.set(startTile.position.x, PIECE_REST_Y, startTile.position.z);
-    this._healOwnedUnitsOnLap(player);
-    const bonus = this._computeLapBonus(player).total * 2;
-    player.lapsCompleted += 1;
-    player.currency += bonus;
-    this.onLog(`${player.name}は「帰巣本能」でスタート地点に戻り、+${bonus}Gを獲得した！`);
-    if (this.requireAllCheckpoints) player.passedCheckpoints.clear();
+    player.currency += reward;
+    this.onLog(`${player.name}は「帰巣本能」でゴールに戻り、+${reward}Gを獲得した！`);
+    this._notifyState();
+    await this._grantGoalBonus(player);
   }
 
   /**
@@ -5250,6 +5252,14 @@ export class Game {
   async _runCPUTurn() {
     await delay(CPU_PRE_ROLL_MS);
     if (!this.currentPlayer.isCPU) return;
+    if (await this._cpuMaybeUseHomingInstinctSpell(this.currentPlayer)) {
+      for (const player of this.players) await this._resolveNegativeCurrency(player);
+      if (!this.storyEnded) {
+        this._nextTurn();
+        await this._beginTurn();
+      }
+      return;
+    }
     // ダンボール男は③手札の「未知との遭遇」を最優先で使う（無属性モンスター＝ギアを
     // 引き寄せてガシャーン合体を狙う）。1ターン1スペルなので他スペルより先に判定。
     await this._cpuMaybeUseDisclosureRequest(this.currentPlayer);
@@ -5328,6 +5338,37 @@ export class Game {
       });
       return;
     }
+  }
+
+  /** 帰巣本能のCPU判断。
+   * 1) 敵が最後の未通過CPの1マス手前なら、その敵をゴールへ戻して妨害。
+   * 2) 自分の所持Gが300G以下なら自分へ使用。ただし未通過CPが残り1つだけ
+   *    の時は温存し、そのCP通過後（次の手番）に周回ボーナス込みで使う。 */
+  async _cpuMaybeUseHomingInstinctSpell(player) {
+    if (player.spellUsedThisTurn) return false;
+    const card = player.hand.find((candidate) => candidate.effect?.type === 'returnPlayerToStart');
+    if (!card || player.currency < (card.cost || 0)) return false;
+
+    const checkpointTiles = this.tiles.filter((tile) => tile.type === TileType.EVENT);
+    const remainingFor = (target) => checkpointTiles.filter((tile) => !target.passedCheckpoints.has(tile.id));
+    const enemyAtLastCheckpoint = this.players
+      .filter((target) => !target.defeated && target.id !== player.id && !this._isAllyOf(target, player))
+      .map((target) => ({ target, remaining: remainingFor(target) }))
+      .filter(({ target, remaining }) => remaining.length === 1
+        && this._forwardTileDistance(target.tileId, target.previousTileId, remaining[0].id) <= 1)
+      .sort((a, b) => this._totalAssetsOf(b.target) - this._totalAssetsOf(a.target))[0]?.target;
+
+    if (enemyAtLastCheckpoint) {
+      await this._cpuCastSpell(player, card, { targetPlayerId: enemyAtLastCheckpoint.id });
+      return true;
+    }
+
+    const ownRemaining = remainingFor(player);
+    if (player.currency <= 300 && ownRemaining.length !== 1) {
+      await this._cpuCastSpell(player, card, { targetPlayerId: player.id });
+      return true;
+    }
+    return false;
   }
 
   /** ダンボール男専用: 手札に「未知との遭遇」があれば最優先で使用（コスト40G以上あれば）。 */

@@ -244,9 +244,9 @@ export const SPELL_CATALOG = {
     '帰巣本能',
     Rarity.S,
     50,
-    'self',
-    { type: 'returnToStartDoubleBonus' },
-    '自分のコマをスタート地点に戻し、周回ボーナスの2倍のGを獲得する。このターンは他の行動不可',
+    'anyPlayer',
+    { type: 'returnPlayerToStart', reward: 250 },
+    '選んだプレイヤーをゴールに戻し、そのプレイヤーは250Gを得る。全CP通過済みなら周回ボーナスも得る。このターンは他の行動不可',
   ),
 
   // ── 経済系 ──
