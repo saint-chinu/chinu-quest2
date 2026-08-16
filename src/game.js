@@ -572,6 +572,10 @@ export class Game {
    * 形が違うだけ）。
    */
   _disclosureEligibleCards(caster, targetPlayer, disclosureCost = 150) {
+    // 開示請求は敵専用。同盟者を候補にしないだけでなく、候補カード取得の
+    // 最終入口でも空配列にして、固有AIや今後追加されるAI経路から誤って
+    // 同盟者を渡されても発動対象にならないようにする。
+    if (!targetPlayer || targetPlayer.id === caster.id || this._isAllyOf(targetPlayer, caster)) return [];
     const emptyLandExists = this.tiles.some((tile) => tile.type === TileType.LAND && tile.owner == null);
     const availableForExtraCost = Math.max(0, caster.currency - disclosureCost);
     return targetPlayer.hand.filter((card) => {
@@ -5316,6 +5320,8 @@ export class Game {
     const disclosure = player.hand.find((card) => card.type === CardType.SPELL && card.effect?.type === 'disclosureRequest');
     if (!disclosure || player.currency < (disclosure.cost || 0)) return;
     const rarityRank = { [Rarity.N]: 0, [Rarity.S]: 1, [Rarity.R]: 2, [Rarity.EX]: 3 };
+    // 同盟戦では同盟者を絶対に対象に含めない。「彼」・段ボール男を含む
+    // 全CPUがこの共通処理を通る。
     const candidates = this.players
       .filter((target) => !target.defeated && target.id !== player.id && !this._isAllyOf(target, player))
       .flatMap((target) => this._disclosureEligibleCards(player, target, disclosure.cost || 0)
