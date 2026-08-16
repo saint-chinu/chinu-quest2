@@ -45,6 +45,13 @@ const LAND_BONUS_RATE_MULTI = 80;
 // 魔力抽出のCPU判断の分かれ目。この額以下なら「自分の弱い手札を換金」、
 // 上回っていれば「相手の強い手札を潰す妨害」に使う。
 const CPU_MANA_EXTRACTION_RICH_LINE = 400;
+// サイコキネシスで自陣へ引き込んで迎え撃つ時、引き剥がした敵ユニットの勝率が
+// これを超えるなら見送る（守備側が6割以上勝てる勝負だけ受ける）。
+const CPU_PSYCHOKINESIS_MAX_ATTACKER_WIN_RATE = 0.4;
+// 配置済みユニットの移動侵略（酢・ガシャーン・未知の侵略者）は、負けると
+// ユニットと移動元の土地を両方失うため、手札からの侵略しきい値
+// （aiProfile.minWinProbabilityToInvade）より慎重にこの下限を敷く。
+const CPU_MOVE_INVASION_MIN_WIN_RATE = 0.5;
 
 const STARTING_HAND_SIZE = 4;
 const HAND_LIMIT = 6;
@@ -3860,9 +3867,12 @@ export class Game {
     if (player.name === '朕') {
       const source = accessible.find((tile) => catalogIdOf(tile.unit?.def) === 'su');
       if (source) {
+        const minWinRate = Math.max(player.aiProfile?.minWinProbabilityToInvade ?? 0, CPU_MOVE_INVASION_MIN_WIN_RATE);
         const targets = this._moveCommandCandidates(source, player)
           .map(({ tile: target }) => target)
           .filter((target) => target.owner != null && target.unit)
+          // 勝算のない突撃はしない。負けると酢も移動元の土地も失う。
+          .filter((target) => this._estimateUnitBattleWinProbability(source.unit, source, target) >= minWinRate)
           .sort((a, b) => b.level - a.level || this._landValueOfTile(b) - this._landValueOfTile(a));
         if (targets.length > 0) {
           this.onLog(`${player.name}は酢を移動させ、${targets[0].unit.def.name}へ侵略する！`);
@@ -4628,6 +4638,41 @@ export class Game {
     }
   }
 
+  /**
+   * 盤上ユニット同士の戦闘勝率を見積もる（_estimateWinProbabilityの
+   * 「手札カードで侵略」版に対する「配置済みユニットが移動侵略/強制侵略」版）。
+   * 現在HP・装備・呪いを含む実状態の複製で、実際の移動戦闘と同じボーナス
+   * （attackerPositionTile=移動元の属性地HP、応援、貫通のHP無効化）を掛けて
+   * モンテカルロする。戻り値は「攻撃側が勝つ（守備側が死に攻撃側が残る）」確率。
+   * 相手のアイテム使用は考慮しない（_estimateWinProbabilityと同じ簡略化）。
+   */
+  _estimateUnitBattleWinProbability(attackerUnit, attackerPositionTile, defenderTile, trials = 20) {
+    if (!attackerUnit || !defenderTile?.unit) return 0;
+    const savedLog = this.onLog;
+    this.onLog = () => {};
+    try {
+      let wins = 0;
+      for (let i = 0; i < trials; i++) {
+        const atk = this._cloneFieldUnitForSim(attackerUnit);
+        const def = this._cloneFieldUnitForSim(defenderTile.unit);
+        const attackerBonus = this._battleBonus(atk, attackerPositionTile, defenderTile);
+        const defenderBonus = this._battleBonus(def, defenderTile, defenderTile);
+        this._applyEffectBonus(atk, def, attackerBonus);
+        this._applyEffectBonus(def, atk, defenderBonus);
+        this._applyEquippedItemBonus(atk, attackerBonus);
+        this._applyEquippedItemBonus(def, defenderBonus);
+        const attackerHasPierce =
+          atk.def.traits?.includes('pierce') || atk.items.some((i) => i.traits?.includes('pierce'));
+        const battleDefenderBonus = attackerHasPierce ? { ...defenderBonus, hp: 0 } : defenderBonus;
+        const result = resolveBattle(atk, def, new GoldLedger(), attackerBonus, battleDefenderBonus);
+        if (result.attackerSurvived && !result.defenderSurvived) wins++;
+      }
+      return wins / trials;
+    } finally {
+      this.onLog = savedLog;
+    }
+  }
+
   /** Equips + permanently consumes the chosen item (removed from hand, discarded) - a no-op if the side skipped. */
   _consumeBattleItem(player, unit, item) {
     if (!item) return null;
@@ -5363,8 +5408,12 @@ export class Game {
     );
     if (!source) return false;
 
+    // 勝算のない標的は狙わない: 侵略で負けるとアサシンと移動元の土地を両方失い、
+    // 勝てない敵地の横へワープしても待ち伏せが成立しない（ワープ費用も無駄になる）。
+    const minWinRate = Math.max(player.aiProfile?.minWinProbabilityToInvade ?? 0, CPU_MOVE_INVASION_MIN_WIN_RATE);
     const enemyLands = this.tiles
       .filter((tile) => this._isInvadeWorthyEnemyLand(tile, player))
+      .filter((tile) => this._estimateUnitBattleWinProbability(source.unit, source, tile) >= minWinRate)
       .sort((a, b) => b.level - a.level || this._landValueOfTile(b) - this._landValueOfTile(a));
     if (enemyLands.length === 0) return false;
 
@@ -5690,7 +5739,13 @@ export class Game {
    * 相手のモンスターだけを狙う。対象は_cpuPickDamageTargetで選ぶ。
    */
   /** 朕のサイコキネシス: 敵の高レベル土地から守備モンスターを引き剥がし、
-   * 別所有者の配置モンスターへ強制侵略させる。酢なら固有の2マス移動も使う。 */
+   * 別所有者の配置モンスターへ強制侵略させる。酢なら固有の2マス移動も使う。
+   * ①自陣で迎え撃つプランは、引き剥がした敵の勝率が
+   *   CPU_PSYCHOKINESIS_MAX_ATTACKER_WIN_RATE以下（＝守備側有利）の時だけ採用。
+   *   勝てない迎撃は自分の土地とモンスターを差し出すだけなので見送る。
+   * ②敵同士をぶつけるプラン（移動先が別の敵の土地）はどちらが倒れても得なので
+   *   勝率不問で、むしろ優先する。
+   * ③同盟仲間の土地へは送らない（味方に勝手な防衛戦を押し付けない）。 */
   async _cpuMaybeUsePsychokinesisSpell(player) {
     if (player.name !== '朕' || player.spellUsedThisTurn) return false;
     const card = player.hand.find((candidate) => catalogIdOf(candidate) === 'psychokinesis');
@@ -5705,9 +5760,23 @@ export class Game {
         .map(({ tile }) => tile)
         .filter((target) => target.unit && target.owner != null && target.owner !== source.owner);
       for (const destination of destinations) {
+        const destinationOwner = this.players.find((candidate) => candidate.id === destination.owner);
+        const intoOwnLand = destination.owner === player.id;
+        if (!intoOwnLand && this._isAllyOf(destinationOwner, player)) continue;
+        // 実際の強制侵略（_spellForceRelocateOneStep→_runBattleScene）と同じ
+        // 条件で、引き剥がした敵ユニットが勝つ確率を見積もる。
+        const attackerWinRate = this._estimateUnitBattleWinProbability(source.unit, source, destination);
+        if (intoOwnLand && attackerWinRate > CPU_PSYCHOKINESIS_MAX_ATTACKER_WIN_RATE) continue;
         const defenderPower = (destination.unit.currentHp || 0) + (destination.unit.def.atk || 0)
           + this._elementHpBonus(destination.unit, destination);
-        plans.push({ source, destination, score: source.level * 1000 + this._landValueOfTile(source) + defenderPower });
+        plans.push({
+          source,
+          destination,
+          score: source.level * 1000 + this._landValueOfTile(source) + defenderPower
+            // 迎撃は守備側が有利なほど高評価。敵同士の同士討ちはさらに上乗せ。
+            + Math.round((1 - attackerWinRate) * 400)
+            + (intoOwnLand ? 0 : 600),
+        });
       }
     }
     if (plans.length === 0) return false;

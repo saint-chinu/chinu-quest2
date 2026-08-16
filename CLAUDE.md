@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v69`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v78`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## ⚠️ 並行開発 (Codex) — 必ず守る
@@ -193,6 +193,16 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 - **朕(stage7)**: `_cpuMaybeUsePsychokinesisSpell`(敵の高Lv土地から守備を引き剥がし別所有者へ
   強制侵略。移動先は`destinationTileId`でcastに指定)、酢の2マス移動を侵略に優先使用
   (`_cpuUseAccessibleLandCommand`内、accessible制約は人間と同じ)。
+- **盤上ユニットの勝率シミュ** `_estimateUnitBattleWinProbability(attackerUnit,
+  attackerPositionTile, defenderTile)`: `_estimateWinProbability`（手札カード版）の
+  配置済みユニット版。現在HP・装備・呪い込みの複製で実戦と同じボーナス計算を
+  モンテカルロする。**移動侵略・強制侵略のAI判断は必ずこれを通すこと**:
+  - サイコキネシス: 自陣迎撃は敵勝率≤`CPU_PSYCHOKINESIS_MAX_ATTACKER_WIN_RATE`(0.4)
+    の時だけ。敵同士の同士討ちは勝率不問＋加点。同盟仲間の土地へは送らない。
+  - 酢・アサシン(ガシャーン/未知の侵略者)の移動侵略:
+    勝率≥`CPU_MOVE_INVASION_MIN_WIN_RATE`(0.5)とprofileしきい値の高い方。
+    負けるとユニットと移動元の土地を両方失うため手札侵略より慎重。
+    勝てない敵地の横へのワープ待ち伏せもしない。
 - **帰巣本能の共通CPU判断** `_cpuMaybeUseHomingInstinctSpell`(`_runCPUTurn`の最初): ①敵が
   最後の未通過CPの1マス手前なら妨害で敵に使う ②自分の所持G≤300なら自分に使う(ただし
   未通過CPが残り1つの時は温存)。使ったらそのターンは終了。
