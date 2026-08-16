@@ -114,12 +114,12 @@ export const THUNDER_MONSTER_CATALOG = {
     imageDataUrl: assetUrl('/images/card-art/kadenryuuCheetah.png'),
   }),
 
-  gandamu: thunderMonster('gandamu', '願駄無', Rarity.R, 30, 55, {
+  gandamu: thunderMonster('gandamu', 'ロボ戦士', Rarity.R, 30, 55, {
     cost: 120,
     chainRequired: 1,
     effectDescription: '召喚条件: 1連鎖以上',
   }),
-  aruKagakuNo: thunderMonster('aruKagakuNo', 'とある科学の...', Rarity.R, 10, 40, {
+  aruKagakuNo: thunderMonster('aruKagakuNo', '超電磁科学者', Rarity.R, 10, 40, {
     traits: ['firstStrike'],
     effect: { type: 'instantKillOnHit', chance: 0.66, targetElement: Element.WATER },
     effectDescription: '先制。攻撃成功時、水属性モンスターを66%の確率で即死させる',

@@ -1235,7 +1235,7 @@ export class Game {
     if (def) {
       // 「デッキから1体手札に加える」＝複製ではなく移動。元のカードをデッキ
       // （山札/捨札）から1枚取り除いてから手札へ加える。これをやらないと
-      // デッキに残った分と手札の分でメタ〇ン等が増殖してしまう。
+      // デッキに残った分と手札の分でめたんまん等が増殖してしまう。
       this._reclaimCardFromDeck(player, pickedId);
       const monsterCard = {
         ...def,
@@ -2633,7 +2633,7 @@ export class Game {
   }
 
   /**
-   * メタ〇ン: 盤面に存在するモンスターの中から1体を選んで変身する
+   * めたんまん: 盤面に存在するモンスターの中から1体を選んで変身する
    * （基礎値のみコピーし、バフ・デバフは引き継がない＝新しいdefへの
    * 差し替えなので既存のcurses/itemsはそのまま、currentHpだけ変身後の
    * 素のHPにリセットする）。候補は手札・デッキ・図鑑ではなく、現在の盤面に
@@ -2665,7 +2665,7 @@ export class Game {
     const chosen = options.find((o) => o.id === picked.id) || picked;
     const chosenCatId = chosen.catalogId ?? catalogIdOf(chosen);
 
-    // 基礎値のみコピー: メタ〇ンのインスタンスidは保持し、図鑑ID・各ステータス
+    // 基礎値のみコピー: めたんまんのインスタンスidは保持し、図鑑ID・各ステータス
     // ・特性（先制/貫通など）を変身先へ差し替える。現在HPも新しい基礎HPへ。
     const newDef = { ...chosen, id: tile.unit.def.id, catalogId: chosenCatId };
     tile.unit.def = newDef;
@@ -5749,7 +5749,7 @@ export class Game {
    * （＝同属性ボーナスを取り逃している）場合、最優先でこの系統のスペルを
    * 使って属性を揃える。最適化があれば全ての不一致をまとめて直せるので
    * 優先し、無ければ該当する属性のforceTileElementを1件だけ使う
-   * （1ターン1枚のため）。ツイッ〇ランド（無色化）は自分の土地を直す
+   * （1ターン1枚のため）。スイッチランド（無色化）は自分の土地を直す
    * 用途では使わない（無色は同属性ボーナス自体が発生しないうえ、本質的に
    * 相手の連鎖・地価を崩す妨害専用スペルのため） - 除外し
    * _cpuMaybeUseDisruptionSpellで別途扱う。
@@ -5789,7 +5789,7 @@ export class Game {
   }
 
   /**
-   * ツイッ〇ランド（forceTileElement→NEUTRAL）専用のCPU使用判断。
+   * スイッチランド（forceTileElement→NEUTRAL）専用のCPU使用判断。
    * これは自分の土地を整える系のスペルとは違い、相手の土地を無色化して
    * 連鎖・地価を崩す妨害専用スペル - 自分の土地には絶対に使わない。
    * 相手（同盟以外）がレベル3以上の土地を持っているか、いずれかの属性で

@@ -754,7 +754,7 @@ function promptPickMonsterCard(options) {
 }
 
 /**
- * メタ〇ン（copyOnSummon）の変身先選択。盤面のモンスターをクリックさせる
+ * めたんまん（copyOnSummon）の変身先選択。盤面のモンスターをクリックさせる
  * 代わりに、変身候補をカード一覧で表示して選ばせる（renderCardElがHP/ATK/
  * 先制などをそのまま見せる）。モンスターピッカーのモーダルを見出しだけ
  * 差し替えて流用する。

@@ -66,7 +66,7 @@ export const FIRE_MONSTER_CATALOG = {
     imageDataUrl: assetUrl('/images/card-art/yakiTomorokoshiHei.png'),
   }),
 
-  flameChallenger: fireMonster('flameChallenger', '炎のチャレンジャー', Rarity.S, 30, 40, {
+  flameChallenger: fireMonster('flameChallenger', '炎のバクチ打ち', Rarity.S, 30, 40, {
     traits: ['firstStrike'],
     effect: { type: 'challengeOdds', attackFailureChance: 1 / 3, negateIncomingChance: 1 / 3 },
     effectDescription: '先制。1/3の確率で攻撃失敗。1/3の確率で相手の攻撃を無効化する',
@@ -108,12 +108,12 @@ export const FIRE_MONSTER_CATALOG = {
     imageDataUrl: assetUrl('/images/card-art/rengokuMonbanhei.png'),
   }),
 
-  hezumaDragon: fireMonster('hezumaDragon', 'へ〇ま竜', Rarity.R, 50, 50, {
+  hezumaDragon: fireMonster('hezumaDragon', 'ヘチマ竜', Rarity.R, 50, 50, {
     effect: { type: 'chanceSelfDamageOnAttack', chance: 0.5, damage: 10 },
     effectDescription: '攻撃時、1/2の確率で自身も10ダメージを受ける',
     imageDataUrl: assetUrl('/images/card-art/hezumaDragon.jpg'),
   }),
-  ironChef: fireMonster('ironChef', '料〇の鉄人', Rarity.R, 45, 20, {
+  ironChef: fireMonster('ironChef', '鉄火の料理人', Rarity.R, 45, 20, {
     chainRequired: 1,
     commandCost: 150,
     ability: { type: 'healAllOwnedAndCleanse' },

@@ -127,11 +127,11 @@ export const ITEM_CATALOG = {
     effect: { type: 'wielderElementAtkBonus', wielderElement: Element.THUNDER, atkBonus: 30 },
     effectDescription: '雷属性モンスターが使用するとATKがさらに30上昇',
   }),
-  gomuGoNoPistol: item('gomuGoNoPistol', 'ゴムゴ〇のピストル', Rarity.R, ItemType.WEAPON, 80, 20, 0, {
+  gomuGoNoPistol: item('gomuGoNoPistol', '人食い草', Rarity.R, ItemType.WEAPON, 80, 20, 0, {
     effect: { type: 'wielderElementAtkBonus', wielderElement: Element.FOREST, atkBonus: 30 },
     effectDescription: '森属性モンスターが使用するとATKがさらに30上昇',
   }),
-  iceSlugger: item('iceSlugger', 'アイ〇ラッガー', Rarity.R, ItemType.WEAPON, 80, 20, 0, {
+  iceSlugger: item('iceSlugger', '薄氷の剣', Rarity.R, ItemType.WEAPON, 80, 20, 0, {
     effect: { type: 'wielderElementAtkBonus', wielderElement: Element.WATER, atkBonus: 30 },
     effectDescription: '水属性モンスターが使用するとATKがさらに30上昇',
   }),
@@ -404,7 +404,7 @@ export const SPELL_CATALOG = {
     { type: 'forceRelocateOneStep' },
     '配置された全モンスターから1体選択し、1マス強制移動させる（移動先が味方土地・特殊マスなら移動不可。相手土地なら強制戦闘）',
   ),
-  twitterLand: spell('twitterLand', 'ツイッ〇ランド', Rarity.N, 100, 'anyTile', { type: 'forceTileElement', element: Element.NEUTRAL }, '対象の土地を無色に変える'),
+  twitterLand: spell('twitterLand', 'スイッチランド', Rarity.N, 100, 'anyTile', { type: 'forceTileElement', element: Element.NEUTRAL }, '対象の土地を無色に変える'),
   sanctuary: spell(
     'sanctuary',
     '聖域',

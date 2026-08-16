@@ -140,7 +140,7 @@ export const NEUTRAL_MONSTER_CATALOG = {
     ability: { type: 'grantItem', itemId: 'osafune' },
     effectDescription: '土地コマンド（100G）: アイテムカード「オサフネ」を入手',
   }),
-  metaOn: neutralMonster('metaOn', 'メタ〇ン', Rarity.S, 10, 10, {
+  metaOn: neutralMonster('metaOn', 'めたんまん', Rarity.S, 10, 10, {
     effect: { type: 'copyOnSummon' },
     effectDescription: '盤面に存在するモンスターの中から1体を選択し変身する（基礎値のみコピー）',
   }),
