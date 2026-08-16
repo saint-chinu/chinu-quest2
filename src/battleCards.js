@@ -667,14 +667,15 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.kunekune, count: 3 },
         { def: MONSTER_CATALOG.uminoieTencho, count: 3 },
         { def: MONSTER_CATALOG.jukaiNoOnryou, count: 4 },
-        { def: MONSTER_CATALOG.mountGorilla, count: 4 },
+        { def: MONSTER_CATALOG.mountGorilla, count: 2 },
         { def: MONSTER_CATALOG.moriNoYousei, count: 2 },
         // 未知の侵略者（貫通アサシン、30G）。守備召喚はせず移動侵略で敵高レベル地を
         // 削る運用（_cpuChooseSummonCardForKare / _cpuMaybeUseAssassinTactics参照）。
         { def: MONSTER_CATALOG.mysteriousInvader, count: 2 },
         // 中量級の壁・アタッカー（120G前後、1連鎖）。
-        { def: MONSTER_CATALOG.bigMermaid, count: 3 },
+        { def: MONSTER_CATALOG.bigMermaid, count: 2 },
         { def: MONSTER_CATALOG.sekaiju, count: 1 },
+        { def: MONSTER_CATALOG.kontonNoAtama, count: 1 },
         // フィニッシャーの神（150G・2連鎖、各1枚に抑える）。
         { def: MONSTER_CATALOG.suijin, count: 1 },
         { def: MONSTER_CATALOG.yamagami, count: 1 },
@@ -698,6 +699,7 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.senbonZakura, count: 1 },
         { def: SPELL_CATALOG.blueOcean, count: 1 },
         { def: SPELL_CATALOG.manaExtraction, count: 2 },
+        { def: SPELL_CATALOG.homingInstinct, count: 2 },
       ],
     },
   },
