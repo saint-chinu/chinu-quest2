@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v54`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v60`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## ⚠️ 並行開発 (Codex) — 必ず守る
@@ -43,7 +43,8 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 - `src/board.js` — マップ定義。`TileType`は文字列('land','start','runaway'等)。
   `MAPS`の`requireAllCheckpoints`。stage.key = mapId。
 - `src/story.js` — `STORY_STAGES` [0]hitode [1]madai [2]budou [3]q-train
-  [4]danball(段ボール男) [5]kare(「彼」との邂逅) [6]final-alliance(⑦支配の終焉)。
+  [4]danball(段ボール男) [5]kare(「彼」との邂逅) [6]final-alliance(⑦支配の終焉)
+  [7]chin-harbor(⑧朕と酢の花火港)。
 - `src/breedParts.js` — ブリードモンスター(`breedMonster`, 既定属性NEUTRAL)。
 - `src/scene.js` — Three.js。`tween`(utils)ベースのカメラ演出。
 
@@ -109,6 +110,26 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   (`buildBattlePlayerConfigs`が`heroDeckList`をそのまま渡す)。
 - 演出: セリフ行に`action: 'verticalExit'`を付けると立ち絵が垂直跳びで画面外へ
   (`.story-portrait-vertical-exit`, style.css)。
+
+## ストーリー⑧「朕と酢の花火港」(chin-harbor)
+- **1vs1**（vs 朕）。goalCurrency 12000、checkpointBonus **250**、BGM `stage8bgm.mp3`。
+  背景はGIF（`appEl.style.backgroundImage`＝CSS背景なのでアニメする）。
+- 盤面`CHIN_HARBOR_ROWS`: 左右2本の縦路(各11マス)が**ワームホール(記号K)でのみ**
+  接続されるシャトル型。全22マス(土地17/ゴール2/CP1/ワープ2)。両端のゴールが
+  行き止まりで、そこで折り返す。
+- **ワームホール** = `warpOnPass: true` の WARP。**通過した瞬間**に対の
+  Kへ強制転移する（従来のV/Pは「ちょうど停止」時のみ）。最後の1歩でちょうど
+  停止した時だけ `diceCurse = {type:'double'}` で次のサイコロ2倍。
+  盤上マーカーは`WARP_MARKERS.wormhole`、ラベルは「ワームホール」。
+- **複数ゴール**: `alternateGoalStarts: true` のマップは`_assignGoalStarts`が
+  先攻順で各ゴールへ交互配置。story側の`heroStartGoalIndex`/`startGoalIndex`が優先。
+  `player.homeGoalTileId`を持ち、帰巣本能と破産リスタートは**自分のゴール**へ戻る。
+  `_nearestGoalTileId`は複数ゴールから最短を選ぶ。
+- **`warpOnPass`を辿る必要がある経路計算**: `_forwardTileDistance`・`_tileDistance`・
+  `_forwardDestinationIdsFrom`の3つ。入口ではなく出口idへ読み替え、転移後の
+  previousIdはnullにする（新しい通過ワープを足す時はこの3つ全部を直すこと）。
+- **NPC専用カードの所有者ロック**: `exclusiveOwnerName`（酢=朕）。Game構築時に
+  デッキから除外されるので、他プレイヤーへ混入しない。
 
 ## AI (game.js)
 - **ダンボール男(stage5)** `_isDanballBoss`: 召喚は

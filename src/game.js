@@ -1838,12 +1838,20 @@ export class Game {
         const tile = this.tiles[state.currentId];
         const forward = tile.neighbors.filter((id) => id !== state.previousId);
         const options = forward.length > 0 ? forward : tile.neighbors;
-        for (const nextId of options) {
+        for (const rawNextId of options) {
+          // ⑧のワームホール（warpOnPass）は踏んだ瞬間に対岸へ飛ぶので、着地
+          // 予測でも入口ではなく出口を辿る。_forwardTileDistance/_tileDistance
+          // と同じ扱いに揃えないと、ワームホールを跨ぐ出目で「ここに止まる」
+          // ハイライトが実際の着地マスとずれる。
+          const entered = this.tiles[rawNextId];
+          const warped = !!(entered?.warpOnPass && entered.warpTargetId != null);
+          const nextId = warped ? entered.warpTargetId : rawNextId;
           const nextTile = this.tiles[nextId];
           if (this._isForcedStopFor(player, nextTile) || step === steps - 1) {
             destinations.add(nextId);
           } else {
-            nextStates.push({ currentId: nextId, previousId: state.currentId });
+            // 転移後は「来た道」の概念が消える（_resolveWarpTileと同じ）。
+            nextStates.push({ currentId: nextId, previousId: warped ? null : state.currentId });
           }
         }
       }
