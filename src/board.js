@@ -146,19 +146,19 @@ const KARE_ROWS = [
   '........D........',
 ];
 
-// ⑦同盟戦。「彼」の電脳空間が再構築された決戦盤面。
+// ⑦同盟戦。上側は中央ゴールから4本の腕が折れ曲がる卍型、下側は独立した
+// 11マスの直線。I/J=卍の左/右ワープ、K/L=直線の左/右ワープで、左右を
+// 保ったまま相互にだけ転移する（I↔K、J↔L）。Wは水属性土地。
 const FINAL_ALLIANCE_ROWS = [
-  'CFFFTTTWWWC',
-  'M..M.N.F..N',
-  'MMMMNNFFFNN',
-  'M..M.N.F..N',
-  'W..F.N.M..T',
-  'WWWFNCGNNTT',
-  'W..F.N.M..T',
-  'T..T.N.T..W',
-  'TTTTNNNTNNW',
-  'T..T.N.T..W',
-  'CFFFWWWMMMC',
+  'HNCFF...N..',
+  '....F...J..',
+  '....F...T..',
+  'NCMMGTTTC..',
+  'M...W......',
+  'M...W......',
+  'I...WCWHN..',
+  '...........',
+  'KNFMWTNHDNL',
 ];
 
 // 対人戦のマップ選択・ストーリーモードの各ステージ盤面として使う一覧。
@@ -235,10 +235,10 @@ function typeForCode(code) {
   if (code === 'H') return TileType.SHRINE;
   if (code === 'B') return TileType.RUNAWAY;
   if (code === 'D') return TileType.DEFAMATION;
-  // V/Pは共に「ちょうど止まったらワープする」マス(TileType.WARP)。
+  // V/Pおよびステージ7専用I/J/K/Lは共に、ちょうど止まったらワープする。
   // V=ワープ1（1マスだけ）、P=ワープ2（複数マスありうる）- 区別は型では
   // なく、createBoard末尾のリンク付けでtile.warpTargetIdに焼き込む。
-  if (code === 'V' || code === 'P') return TileType.WARP;
+  if (code === 'V' || code === 'P' || ['I', 'J', 'K', 'L'].includes(code)) return TileType.WARP;
   if (LAND_ELEMENT_BY_CODE[code]) return TileType.LAND;
   return null;
 }
@@ -298,7 +298,7 @@ export function createBoard(mapId) {
         checkpointNumber: type === TileType.EVENT ? nextCheckpointNumber++ : null,
         // 同じWARP型でも盤上の画像とラベルを入口(V)・帰り道(P)で
         // 出し分けるため、元のマップ記号を描画用情報として保持する。
-        warpKind: code === 'V' ? 'entrance' : code === 'P' ? 'return' : null,
+        warpKind: ['V', 'I', 'J'].includes(code) ? 'entrance' : ['P', 'K', 'L'].includes(code) ? 'return' : null,
       });
     }
   }
@@ -326,6 +326,16 @@ export function createBoard(mapId) {
   if (warpOut.length === 1 && warpIn.length > 0) {
     warpOut[0].warpTargetId = warpIn[0].id;
     for (const t of warpIn) t.warpTargetId = warpOut[0].id;
+  }
+
+  // ステージ7の左右固定ワープ。卍側から直線側へ、直線側から卍側へしか
+  // 飛ばず、左右が交差することもない。
+  for (const [mainCode, lineCode] of [['I', 'K'], ['J', 'L']]) {
+    const mainWarp = tiles.find((t) => rows[t.gridZ][t.gridX] === mainCode);
+    const lineWarp = tiles.find((t) => rows[t.gridZ][t.gridX] === lineCode);
+    if (!mainWarp || !lineWarp) continue;
+    mainWarp.warpTargetId = lineWarp.id;
+    lineWarp.warpTargetId = mainWarp.id;
   }
 
 
