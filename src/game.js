@@ -28,6 +28,12 @@ function randomSample(list, count) {
 }
 
 const STEP_DURATION_MS = 300;
+/** 対象選択のラベル等でカード種別を日本語表記するための対応表。 */
+const CARD_TYPE_LABEL = {
+  [CardType.MONSTER]: 'モンスター',
+  [CardType.GEAR]: 'アイテム',
+  [CardType.SPELL]: 'スペル',
+};
 // カルドセプト準拠の周回ボーナス（2026-08-12改訂）: 基本ボーナス=(周回数+1)×
 // START_BONUS（周を重ねるほど増える）＋領地ボーナス=所持土地数×
 // LAND_BONUS_RATE（2人戦）/LAND_BONUS_RATE_MULTI（3人以上）。連鎖数は
@@ -35,6 +41,10 @@ const STEP_DURATION_MS = 300;
 const START_BONUS = 100;
 const LAND_BONUS_RATE = 60;
 const LAND_BONUS_RATE_MULTI = 80;
+
+// 魔力抽出のCPU判断の分かれ目。この額以下なら「自分の弱い手札を換金」、
+// 上回っていれば「相手の強い手札を潰す妨害」に使う。
+const CPU_MANA_EXTRACTION_RICH_LINE = 400;
 
 const STARTING_HAND_SIZE = 4;
 const HAND_LIMIT = 6;
@@ -685,6 +695,40 @@ export class Game {
       return { targetPlayerId, targetCardId };
     }
 
+    // 魔力抽出: 自分を含む全プレイヤーから1人選ぶ→その手札を見て1枚選ぶ。
+    // 捨てさせる代わりに対象は報酬Gを得るので、自分を狙う「換金」としても
+    // 相手の強カードを潰す妨害としても使える。手札が無い（自分の場合は
+    // この魔力抽出しか持っていない）プレイヤーは選べない。
+    if (target === 'anyPlayerHandCard') {
+      const extractable = (p) => p.hand.filter((c) => c.id !== card.id);
+      const candidates = this.players.filter((p) => !p.defeated && extractable(p).length > 0);
+      if (candidates.length === 0) {
+        this.onLog('手札を持つプレイヤーがいません');
+        return null;
+      }
+      const targetPlayerId = await this.onPickAbilityTarget(
+        candidates.map((p) => ({
+          id: p.id,
+          label: `${p.name}${p.id === player.id ? '（自分）' : ''}の手札を見る（${extractable(p).length}枚）`,
+        })),
+        player.id,
+      );
+      if (targetPlayerId == null) return null;
+      const targetPlayer = this.players.find((p) => p.id === targetPlayerId);
+      const cards = targetPlayer ? extractable(targetPlayer) : [];
+      if (cards.length === 0) {
+        this.onLog('対象のプレイヤーに捨てさせる手札がありません');
+        return null;
+      }
+      const reward = card.effect?.reward ?? 0;
+      const targetCardId = await this.onPickAbilityTarget(
+        cards.map((c) => ({ id: c.id, label: `${c.name}（${CARD_TYPE_LABEL[c.type] ?? ''}・${c.rarity}）を捨てて${reward}G` })),
+        player.id,
+      );
+      if (targetCardId == null) return null;
+      return { targetPlayerId, targetCardId };
+    }
+
     // 開示請求: 相手を選ぶ→その相手のモンスター/スペルを1枚選ぶ。
     // スペルの場合は、奪う前にそのスペル自身の対象選択まで済ませておく。
     if (target === 'enemyPlayerDisclosureCard') {
@@ -803,6 +847,28 @@ export class Game {
         targetPlayer.hand = targetPlayer.hand.filter((c) => c.id !== cast.targetCardId);
         targetPlayer.deck.discard(discarded);
         this.onLog(`${player.name}は「${card.name}」で${targetPlayer.name}の「${discarded.name}」を捨てさせた`);
+        this._notifyState();
+        return false;
+      }
+
+      case 'extractManaFromHandCard': {
+        // 魔力抽出: 対象の手札1枚を捨てさせ、その見返りに対象へ報酬Gを渡す。
+        // 捨札はキャンセルカルチャーと同じ通常の捨札扱い（再シャッフルで戻り得る）。
+        if (!targetPlayer || cast.targetCardId == null) return false;
+        const extracted = targetPlayer.hand.find((c) => c.id === cast.targetCardId);
+        if (!extracted) {
+          this.onLog('対象のカードは既に手札にありません');
+          return false;
+        }
+        const reward = effect.reward ?? 0;
+        targetPlayer.hand = targetPlayer.hand.filter((c) => c.id !== cast.targetCardId);
+        targetPlayer.deck.discard(extracted);
+        targetPlayer.currency += reward;
+        this.onLog(
+          targetPlayer.id === player.id
+            ? `${player.name}は「${card.name}」で自分の「${extracted.name}」を魔力に変えた (+${reward}G)`
+            : `${player.name}は「${card.name}」で${targetPlayer.name}の「${extracted.name}」を魔力に変えた（${targetPlayer.name}は+${reward}G）`,
+        );
         this._notifyState();
         return false;
       }
@@ -5129,6 +5195,7 @@ export class Game {
     await this._cpuMaybeUseDamageSpell(this.currentPlayer);
     await this._cpuMaybeUsePoisonSpell(this.currentPlayer);
     await this._cpuMaybeUseCancelCultureSpell(this.currentPlayer);
+    await this._cpuMaybeUseManaExtractionSpell(this.currentPlayer);
     await this._cpuMaybeUseNecromancerSpell(this.currentPlayer);
     await this._cpuMaybeUseSplitEvenlySpell(this.currentPlayer);
     await this._cpuMaybeUseDivinationSpell(this.currentPlayer);
@@ -5377,6 +5444,54 @@ export class Game {
     if (!targetCard) return;
 
     await this._cpuCastSpell(player, card, { targetPlayerId: targetPlayer.id, targetCardId: targetCard.id });
+  }
+
+  /**
+   * 魔力抽出（extractManaFromHandCard）のCPU使用判断。二面性のあるスペル
+   * なので、手持ちGで使い分ける:
+   * ①所持Gが CPU_MANA_EXTRACTION_RICH_LINE 以下 → 資金難。自分の手札の
+   *   レアリティS以下（N/S）のカードだけを対象に自分へ撃ち、実質「弱い
+   *   手札1枚を報酬G-コストGに換金」する。強いカード（R/EX）は換金しない。
+   * ②上回っていれば余裕があるので妨害に回す。同盟以外の相手が持つR/EXの
+   *   カードを1枚潰す（相手に報酬Gが渡るデメリットは資金力で許容する）。
+   * ③どちらの条件にも当てはまる対象がいなければ使わない。
+   */
+  async _cpuMaybeUseManaExtractionSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'extractManaFromHandCard');
+    if (!card || player.currency < (card.cost || 0)) return;
+
+    const RARITY_RANK = { [Rarity.N]: 0, [Rarity.S]: 1, [Rarity.R]: 2, [Rarity.EX]: 3 };
+    const rankOf = (c) => RARITY_RANK[c.rarity] ?? 0;
+    // 詠唱中の魔力抽出そのものは対象にできない（この後どのみち捨札になる）。
+    const handOf = (p) => p.hand.filter((c) => c.id !== card.id);
+
+    if (player.currency <= CPU_MANA_EXTRACTION_RICH_LINE) {
+      // 換金モード: 自分のN/Sから最も惜しくない1枚（低レアリティ→低コスト順）。
+      const fodder = handOf(player)
+        .filter((c) => rankOf(c) <= RARITY_RANK[Rarity.S])
+        .sort((a, b) => rankOf(a) - rankOf(b) || (a.cost || 0) - (b.cost || 0))[0];
+      if (!fodder) return;
+      await this._cpuCastSpell(player, card, { targetPlayerId: player.id, targetCardId: fodder.id });
+      return;
+    }
+
+    // 妨害モード: 同盟以外の相手が持つR/EXのうち最も価値の高い1枚を潰す。
+    let best = null;
+    for (const opponent of this.players) {
+      if (opponent.defeated || opponent.id === player.id) continue;
+      if (opponent.allianceId != null && opponent.allianceId === player.allianceId) continue;
+      for (const candidate of handOf(opponent)) {
+        if (rankOf(candidate) < RARITY_RANK[Rarity.R]) continue;
+        if (!best
+          || rankOf(candidate) > rankOf(best.card)
+          || (rankOf(candidate) === rankOf(best.card) && (candidate.cost || 0) > (best.card.cost || 0))) {
+          best = { player: opponent, card: candidate };
+        }
+      }
+    }
+    if (!best) return;
+    await this._cpuCastSpell(player, card, { targetPlayerId: best.player.id, targetCardId: best.card.id });
   }
 
   /**

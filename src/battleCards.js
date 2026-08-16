@@ -276,6 +276,20 @@ export const SPELL_CATALOG = {
     '次にゴールした時、0〜500Gの間でランダムに獲得する（100G刻み、500Gのみ確率10%）',
   ),
   walletVacuum: spell('walletVacuum', '財布チューチュー', Rarity.R, 100, 'anyPlayer', { type: 'stealGoldRatio', ratio: 0.3 }, '選んだプレイヤーから手持ちGの30%を奪う'),
+  // 自分に撃てば「手札1枚を200Gに換金」、相手に撃てば「200Gを渡す代わりに
+  // 強力な手札を1枚潰す」の二面性を持つスペル。手札が空のプレイヤーは対象外。
+  manaExtraction: {
+    ...spell(
+      'manaExtraction',
+      '魔力抽出',
+      Rarity.S,
+      100,
+      'anyPlayerHandCard',
+      { type: 'extractManaFromHandCard', reward: 200 },
+      '自分を含む全プレイヤーから手札のあるプレイヤー1人を選び、その手札を見て1枚捨てさせる。捨てさせた代わりに、そのプレイヤーは200Gを得る',
+    ),
+    imageDataUrl: null,
+  },
 
   // ── 攻撃系 ──
   senbonZakura: spell('senbonZakura', '千本桜', Rarity.R, 100, 'enemyMonster', { type: 'directDamage', amount: 30 }, '対象モンスターに30ダメージ'),
