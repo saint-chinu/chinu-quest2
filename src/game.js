@@ -1027,8 +1027,7 @@ export class Game {
         return false;
 
       case 'warpToNearbyEmptyLand':
-        await this._spellWarpToNearbyEmptyLand(player);
-        return true;
+        return this._spellWarpToNearbyEmptyLand(player);
 
       case 'curseForcedStop':
         if (!targetTile?.unit) {
@@ -1344,7 +1343,7 @@ export class Game {
     const candidates = this.tiles.filter((t) => t.type === TileType.LAND && t.owner == null && t.id !== currentTile.id);
     if (candidates.length === 0) {
       this.onLog('飛べる空き地がありません');
-      return;
+      return false;
     }
     const highValue = this._cpuHighValueEmptyLands(candidates);
     let target;
@@ -1365,10 +1364,10 @@ export class Game {
 
     await this._runLandCommand(player);
     await delay(400);
-    for (const p of this.players) await this._resolveNegativeCurrency(p);
-    if (this.storyEnded) return;
-    this._nextTurn();
-    await this._beginTurn();
+    // ターン送りは人間/CPUそれぞれの呼び出し元で、スペル演出を完全に
+    // 閉じた後に一度だけ行う。ここで進めると次プレイヤーのUIを直前の
+    // onSpellCompleteが消し、操作不能や二重ターン送りの原因になる。
+    return true;
   }
 
   /** 帰巣本能: 選んだプレイヤーをゴールへ戻して250Gを渡す。ゴール処理は
@@ -3348,8 +3347,7 @@ export class Game {
   /**
    * 土地を売り尽くしてもまだGがマイナスな時の破産処理。まず演出
    * （カメラクローズアップ+ゆれ+「破産」の2文字、main.js側）を再生し、
-   * その後は元の_checkBankruptcyと同じ後始末（ストーリー=脱落、
-   * 通常=500Gでゴールから再スタート）を行う。
+   * その後、全モード共通で500Gを受け取り、自分の開始ゴールから再スタートする。
    */
   async _triggerBankruptcy(player) {
     const startTile = this.tiles[player.homeGoalTileId]
@@ -3358,33 +3356,32 @@ export class Game {
       playerId: player.id,
       playerName: player.name,
       position: this.tiles[player.tileId]?.position ?? null,
-      // 通常戦のみ「スタートへワープ→500Gで再スタート」の演出をする（ストーリーは脱落）。
-      startPosition: !this.storyMode && startTile?.position
+      startPosition: startTile?.position
         ? { x: startTile.position.x, z: startTile.position.z }
         : null,
       restartCurrency: 500,
     });
-    if (this.storyMode) {
-      player.defeated = true;
-      player.currency = 0;
-      if (player.mesh) player.mesh.visible = false;
-      for (const tile of this.tiles) {
-        if (tile.owner === player.id) {
-          tile.unit = null;
-          tile.owner = null;
-          tile.transparentCursed = false;
-          this._repaintTileToElement(tile);
-        }
-      }
-      this.onLog(`${player.name}は脱落した！`);
-      this._notifyState();
-      this._checkStoryWinCondition();
-      return;
+    if (!startTile) return;
+    // 正味財産不足では売却選択を省略して直接ここへ来るため、残っている土地も
+    // 破産時にすべて清算する。配置モンスターは手札へ戻さず消滅し、土地Lvも
+    // 強制売却と同じく1へ戻す。
+    for (const tile of this.tiles) {
+      if (tile.owner !== player.id) continue;
+      tile.unit = null;
+      tile.owner = null;
+      tile.transparentCursed = false;
+      tile.level = 1;
+      this._repaintTileToElement(tile);
+      this.scene.updateTileLevelBorder(tile);
     }
+    player.defeated = false;
     player.currency = 500;
     player.tileId = startTile.id;
     player.previousTileId = null;
-    if (player.mesh) player.mesh.position.set(startTile.position.x, PIECE_REST_Y, startTile.position.z);
+    if (player.mesh) {
+      player.mesh.visible = true;
+      player.mesh.position.set(startTile.position.x, PIECE_REST_Y, startTile.position.z);
+    }
     this.onLog(`${player.name}は破産した！500Gを渡されゴール地点から再スタート`);
     this._notifyState();
   }
@@ -5429,7 +5426,16 @@ export class Game {
     await this._cpuMaybeUseDisclosureRequest(this.currentPlayer);
     await this._cpuMaybeUseEncounterSpell(this.currentPlayer);
     await this._cpuMaybeUseMagicCircleSpell(this.currentPlayer);
-    if (await this._cpuMaybeWarpToHighValueLand(this.currentPlayer)) return;
+    if (await this._cpuMaybeWarpToHighValueLand(this.currentPlayer)) {
+      // ブルーオーシャンはサイコロを振らずにターンを終了する。スペルの
+      // 表示終了後に通常のターン終了処理を一度だけ実行する。
+      for (const player of this.players) await this._resolveNegativeCurrency(player);
+      if (!this.storyEnded) {
+        this._nextTurn();
+        await this._beginTurn();
+      }
+      return;
+    }
     await this._cpuMaybeFixLandElementSpell(this.currentPlayer);
     await this._cpuMaybeUsePsychokinesisSpell(this.currentPlayer);
     await this._cpuMaybeUseDisruptionSpell(this.currentPlayer);

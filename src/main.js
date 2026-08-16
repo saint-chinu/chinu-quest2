@@ -1685,8 +1685,8 @@ async function showBankruptcyText(position) {
  * 破産演出: 対象プレイヤーへカメラをクローズアップし、金色のバースト
  * （お金を放出するイメージ、playSummonBurst流用）+ 駒の振動 + 頭上に
  * 「破産」の2文字を1.5秒、同時に再生する。この後はgame.js側
- * （_triggerBankruptcy）が通常の破産処理（500Gで再スタート/ストーリー
- * 脱落）を続ける。
+ * （_triggerBankruptcy）が全モード共通の破産処理（500Gでゴールから
+ * 再スタート）を続ける。
  */
 async function promptBankruptcy({ playerId, playerName, position, startPosition = null, restartCurrency = 500 }) {
   if (!scene) return;
@@ -1704,7 +1704,7 @@ async function promptBankruptcy({ playerId, playerName, position, startPosition 
     mesh ? scene.shakeSprite(mesh, 900) : Promise.resolve(),
     showBankruptcyText(pos),
   ]);
-  // ② スタート地点へワープする演出＋「500Gで再スタート」メッセージ（通常戦のみ）。
+  // ② スタート地点へワープする演出＋「500Gで再スタート」メッセージ。
   if (startPosition) {
     await scene.focusAndZoom(startPosition.x, startPosition.z, 1.5, 500);
     if (mesh) mesh.position.set(startPosition.x, PIECE_REST_Y, startPosition.z);
