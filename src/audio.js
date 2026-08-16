@@ -17,6 +17,7 @@ const TRACK_SRC = {
   qTrain: assetUrl('/audio/stage4-theme.mp3'), // ④暴走列車Q号
   boss: assetUrl('/audio/boss-theme.mp3'), // ⑤暗転した世界
   kare: assetUrl('/audio/stage6-theme.mp3'), // ⑥創造主の世界
+  finalAlliance: assetUrl('/audio/stage7bgm.mp3'), // ⑦支配の終焉「創造主への異議」
 };
 
 // mapId(board.jsのMAPS)→専用トラック。無いキーはplayMapTheme側でboardに
@@ -27,7 +28,7 @@ const MAP_TRACK = {
   'q-train': 'qTrain',
   danball: 'boss',
   kare: 'kare',
-  'final-alliance': 'kare',
+  'final-alliance': 'finalAlliance',
 };
 
 const VOLUME = 0.5;
