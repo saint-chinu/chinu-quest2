@@ -252,11 +252,25 @@ function renderTileInfo(tile) {
       || trait)
     .filter(Boolean);
   const ability = card.effectDescription || (traits.length ? traits.join('・') : '能力なし');
+  // 戦闘になった時だけ基礎値へ上乗せされるボーナス（土地の同属性HP・隣接応援ATK・
+  // マ〇ジャロ等の呪い）を、ここでまとめて見せる。「この土地に置くと/この土地の
+  // 配置モンスターは戦闘でどれだけ増えるか」を土地情報だけで判断できるように
+  // する（ユーザー要望）。該当が無ければ行ごと出さない。
+  const bonusParts = [];
+  if (tile.unitElementHpBonus > 0) bonusParts.push(`土地HP+${tile.unitElementHpBonus}`);
+  if (tile.unitCheerAtkBonus > 0) bonusParts.push(`応援ATK+${tile.unitCheerAtkBonus}`);
+  for (const curse of tile.unitCurses || []) {
+    const statParts = [];
+    if (curse.addedAtk) statParts.push(`ATK${curse.addedAtk > 0 ? '+' : ''}${curse.addedAtk}`);
+    if (curse.addedHp) statParts.push(`HP${curse.addedHp > 0 ? '+' : ''}${curse.addedHp}`);
+    bonusParts.push(`呪い「${curse.name}」${statParts.length ? `(${statParts.join('/')})` : ''}`);
+  }
   tileInfoMonsterDetail.textContent = [
     `${card.rarity || Rarity.N} / ${ELEMENT_LABEL[card.element] || '無属性'} / コスト${card.cost ?? 0}G`,
     `現在HP ${tile.unitHp ?? card.hp} / 基礎HP ${card.hp} / 基礎ATK ${card.atk}`,
+    bonusParts.length ? `戦闘時加算：${bonusParts.join('、')}` : null,
     `能力：${ability}`,
-  ].join('\n');
+  ].filter(Boolean).join('\n');
 }
 
 /**
@@ -3220,6 +3234,34 @@ function showLandInfoCamera() {
 
   function tileSummaryForInfo(tile) {
     if (game) return game.getTileSummary(tile);
+    // ゲスト側（Gameインスタンスを持たない）用のフォールバック。
+    // 呪い込みのATKと、土地HP加算ボーナス／応援ATKをGame._elementHpBonus・
+    // _cheerAtkBonusと同じ条件でローカル計算する（tilesはcreateBoard由来の
+    // 静的なneighborsを保持したまま、applyPvpBoardStateがowner/unit等の
+    // ライブ状態だけを上書きしているので、隣接判定に必要な情報は揃っている）。
+    const unit = tile.unit;
+    const curses = unit?.curses ?? [];
+    const curseAtk = curses.reduce((sum, c) => sum + (c.addedAtk || 0), 0);
+    let elementHpBonus = null;
+    let cheerAtkBonus = null;
+    if (unit) {
+      const ignoresElement = unit.def?.effect?.type === 'elementHpBonusIgnoreElement'
+        || unit.def?.traits?.includes('elementHpBonusIgnoreElement');
+      elementHpBonus = (ignoresElement || tile.element === unit.def?.element)
+        ? Math.min((tile.level || 1) * 10, 50)
+        : 0;
+      const playersById = new Map((pvpMatch?.latestPublicState?.players ?? []).map((p) => [p.id, p]));
+      const me = playersById.get(tile.owner);
+      const hasAlly = (tile.neighbors || []).some((id) => {
+        const neighbor = tiles[id];
+        if (!neighbor || neighbor === tile || !neighbor.unit || neighbor.owner == null) return false;
+        if (neighbor.owner === tile.owner) return true;
+        if (!me) return false;
+        const other = playersById.get(neighbor.owner);
+        return other?.allianceId != null && other.allianceId === me.allianceId;
+      });
+      cheerAtkBonus = hasAlly ? 10 : 0;
+    }
     return {
       id: tile.id,
       type: tile.type,
@@ -3233,8 +3275,11 @@ function showLandInfoCamera() {
       toll: tile.toll ?? 0,
       chainCount: tile.chainCount ?? 0,
       unitName: tile.unit?.def?.name || null,
-      unitAtk: tile.unit?.def?.atk ?? null,
+      unitAtk: unit ? (unit.def?.atk ?? 0) + curseAtk : null,
       unitHp: tile.unit?.currentHp ?? null,
+      unitElementHpBonus: elementHpBonus,
+      unitCheerAtkBonus: cheerAtkBonus,
+      unitCurses: curses,
       unitCard: tile.unit ? {
         catalogId: tile.unit.catalogId ?? tile.unit.def?.catalogId ?? null,
         name: tile.unit.name ?? tile.unit.def?.name,
@@ -7288,6 +7333,9 @@ function applyPvpBoardState(publicState) {
             imageFit: tileState.unit.imageFit ?? null,
           },
           currentHp: tileState.unit.hp,
+          // 呪い（マ〇ジャロ等）。tileSummaryForInfoの土地情報表示が
+          // 基礎値への上乗せを見せるのに使う（_pvpSnapshot参照）。
+          curses: tileState.unit.curses ?? [],
         }
       : null;
     if (tile.unit) {

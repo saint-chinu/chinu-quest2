@@ -5474,6 +5474,17 @@ export class Game {
       // 「倍化」がかかっていても数値に反映されない）。
       unitAtk: tile.unit ? this._baseStats(tile.unit).atk : null,
       unitHp: tile.unit ? (tile.unit.currentHp ?? this._baseStats(tile.unit).hp) : null,
+      // 戦闘になった時だけ基礎値に上乗せされる状況ボーナス（土地情報で見えると
+      // 「この土地に置くと何が乗るか」が事前に分かる）。同属性土地HPは
+      // 「この土地」自体がpositionTile、応援ATKも「この土地」自体が
+      // battleTileになる（防衛時はこのマスで戦うため）。
+      unitElementHpBonus: tile.unit ? this._elementHpBonus(tile.unit, tile) : null,
+      unitCheerAtkBonus: tile.unit ? this._cheerAtkBonus(tile.unit, tile) : null,
+      // 呪い一覧（マ〇ジャロ等のstatCurse、毒・感電のようにaddedAtk/addedHpを
+      // 持たないものも名前だけは分かるよう含める）。
+      unitCurses: tile.unit
+        ? tile.unit.curses.map((c) => ({ name: c.name, addedAtk: c.addedAtk || 0, addedHp: c.addedHp || 0 }))
+        : [],
       unitCard: tile.unit ? {
         catalogId: tile.unit.def.catalogId ?? null,
         name: tile.unit.def.name,
@@ -6555,6 +6566,10 @@ export class Game {
                 effectDescription: t.unit.def.effectDescription ?? '',
                 imageFit: t.unit.def.imageFit ?? null,
                 toll: this._tollOfTile(t),
+                // 呪い一覧（マ〇ジャロ等）。ゲスト側main.jsは土地情報の
+                // 「基礎値への上乗せ」表示（elementHpBonus/cheerAtkBonus/curses）を
+                // Gameを持たずローカルで組み立てるため、名前と加算値だけ渡す。
+                curses: t.unit.curses.map((c) => ({ name: c.name, addedAtk: c.addedAtk || 0, addedHp: c.addedHp || 0 })),
               }
             : null,
         })),

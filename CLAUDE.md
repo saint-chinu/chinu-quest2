@@ -140,6 +140,22 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   イカサマのサイコロ/斬〇剣の`effectDescription`を、この正確な説明文へ統一。
   「不死鳥の盾に貫通耐性があるのでは」という問い合わせは、実際には耐性フラグは
   存在せず、表示文言が誤解を招いていただけと判明。
+- **土地情報に戦闘時加算ボーナスを表示**（2026-08、ユーザー要望）: 配置モンスターの
+  行に「戦闘時加算：土地HP+30、応援ATK+10、呪い「マ〇ジャロ」(ATK+10/HP+20)」
+  のように、実戦闘で基礎値に乗る要素をまとめて見せる（該当なしの項目は出さない）。
+  `getTileSummary(tile)`に`unitElementHpBonus`(`_elementHpBonus(tile.unit, tile)`)・
+  `unitCheerAtkBonus`(`_cheerAtkBonus(tile.unit, tile)`、どちらもpositionTile＝
+  battleTile＝そのマス自身)・`unitCurses`(`tile.unit.curses`をname/addedAtk/addedHp
+  だけに整形)を追加。`renderTileInfo`（main.js）が`tileInfoMonsterDetail`に
+  「戦闘時加算：」行として組み立てる。
+  ⚠️ **ゲスト側（Gameを持たない）はこの計算をローカルで再現する必要がある**:
+  `_pvpSnapshot`の`tiles[].unit`に`curses`を追加（土地HP/応援ATKは`tiles`配列の
+  静的neighbors＋`applyPvpBoardState`が上書きするowner/unit/level/elementだけで
+  計算できるので新規フィールド不要）。`tileSummaryForInfo`のフォールバック
+  （main.js、`game`が無い時の分岐）が`_elementHpBonus`/`_cheerAtkBonus`と同じ条件を
+  手計算し、`unitAtk`も呪いのaddedAtkを足し込む（旧実装は素のdef.atkのみで呪いを
+  無視していた）。ヘッドレステストで、同属性土地Lv3→+30、隣接同盟ユニット→
+  応援+10、属性不一致→+0、マ〇ジャロ付与でcurses/unitAtkが正しく出ることを確認済み。
 - **NPC専用カード**: `npcExclusive: true`を付けると`getCardCatalog`が図鑑・デッキ編集から
   除外する（酢が該当）。
 - **twoStepMove特性**(酢のみ): 土地コマンドの移動が最大2マス。経路の特殊マスを1つだけ
