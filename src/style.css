@@ -2040,17 +2040,75 @@ html, body {
   }
 }
 
-#story-dialogue-portrait {
-  max-height: 46vh;
-  max-width: 80vw;
-  object-fit: contain;
+/*
+ * ストーリー会話画面（intro/outro、全ステージ共通）。ステージ背景画像
+ * （main.jsがgetMapBackgroundで#appへ設定するのと同じ画像）を全面に敷き、
+ * その上に左（主人公）・右（NPC）の立ち絵を大きく立たせ、下部に会話ボックスを
+ * 重ねる。#story-overlay-dialogue（盤面を隠さない①②専用の吹き出し演出）とは
+ * 別物 - こちらは戦闘前後の全画面会話。
+ */
+#story-dialogue-screen {
+  background-size: cover;
+  background-position: center;
+  background-color: #0b1420;
+  justify-content: flex-end;
+  padding-bottom: max(28px, env(safe-area-inset-bottom) + 14px);
 }
 
-#story-dialogue-portrait.hidden {
+#story-dialogue-stage-badge {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  left: max(16px, env(safe-area-inset-left));
+  padding: 5px 14px;
+  border-radius: 8px;
+  background: rgba(12, 14, 24, 0.78);
+  color: #ffd166;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+#story-dialogue-stage-badge.hidden {
   display: none;
 }
 
-#story-dialogue-portrait.story-portrait-vertical-exit {
+.story-dialogue-portrait {
+  position: absolute;
+  bottom: 150px;
+  width: 34vw;
+  max-width: 320px;
+  opacity: 0.5;
+  filter: grayscale(40%) brightness(0.7);
+  transition: opacity 0.25s ease, filter 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+}
+
+.story-dialogue-portrait.hidden {
+  display: none;
+}
+
+.story-dialogue-portrait.active {
+  opacity: 1;
+  filter: none;
+  transform: translateY(-6px);
+}
+
+.story-dialogue-portrait img {
+  width: 100%;
+  max-height: 50vh;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.55));
+}
+
+#story-dialogue-portrait-left {
+  left: 3vw;
+}
+
+#story-dialogue-portrait-right {
+  right: 3vw;
+}
+
+.story-dialogue-portrait.story-portrait-vertical-exit {
   animation: story-portrait-vertical-exit 1.15s cubic-bezier(0.3, 0.75, 0.25, 1) forwards;
 }
 
@@ -2061,16 +2119,25 @@ html, body {
 }
 
 #story-dialogue-box {
-  width: min(600px, 90vw);
-  min-height: 140px;
-  padding: 18px 20px;
-  border-radius: 10px;
-  background: #1c1c2c;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  position: relative;
+  z-index: 1;
+  width: min(640px, 92vw);
+  min-height: 120px;
+  padding: 16px 22px;
+  border-radius: 16px;
+  background: rgba(15, 18, 30, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 14px 32px rgba(0, 0, 0, 0.5);
 }
 
 #story-dialogue-speaker {
+  display: inline-block;
+  padding: 2px 12px;
+  margin: 0 0 8px;
+  border-radius: 20px;
+  background: rgba(110, 231, 217, 0.14);
   color: #6ee7d9;
+  font-size: 13px;
 }
 
 #story-dialogue-text {

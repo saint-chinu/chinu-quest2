@@ -3483,7 +3483,11 @@ const storyScreen = document.getElementById('story-screen');
 const storyStageList = document.getElementById('story-stage-list');
 const storyBackButton = document.getElementById('story-back');
 const storyDialogueScreen = document.getElementById('story-dialogue-screen');
-const storyDialoguePortrait = document.getElementById('story-dialogue-portrait');
+const storyDialogueStageBadge = document.getElementById('story-dialogue-stage-badge');
+const storyDialoguePortraitLeft = document.getElementById('story-dialogue-portrait-left');
+const storyDialogueImgLeft = document.getElementById('story-dialogue-img-left');
+const storyDialoguePortraitRight = document.getElementById('story-dialogue-portrait-right');
+const storyDialogueImgRight = document.getElementById('story-dialogue-img-right');
 const storyDialogueSpeaker = document.getElementById('story-dialogue-speaker');
 const storyDialogueText = document.getElementById('story-dialogue-text');
 const storyDialogueNext = document.getElementById('story-dialogue-next');
@@ -4389,31 +4393,69 @@ function showStoryScreen() {
 storyBackButton.addEventListener('click', showHubScreen);
 
 /** Shows `lines` one at a time (speaker + text), advancing on click of storyDialogueNext. Resolves once the last line has been dismissed. */
-function playDialogueLines(lines) {
+/**
+ * ストーリー会話画面（intro/outro）。ステージ背景を全面に敷き、左＝主人公・
+ * 右＝話しているNPCの立ち絵を大きく立たせ、下部の会話ボックスに台詞を出す
+ * （2026-08、note.comのプロモ画像に合わせた見た目）。話者が「主人公」なら
+ * 左をアクティブ化、NPC_PORTRAIT_URLに載っている名前なら右へその立ち絵を
+ * 出してアクティブ化（既に表示中の相手が話し続ける限り差し替えない）。
+ * 「???」等どちらにも該当しない話者（ナレーション）は両方とも非アクティブに
+ * 沈めるだけで、直前に表示していた立ち絵はそのまま残す。
+ * `background`未指定時は前回設定した背景を維持する（呼び出し側が毎回
+ * ステージ画像を渡す前提だが、念のための保険）。
+ */
+function playDialogueLines(lines, { background, stageBadgeText } = {}) {
+  if (background) storyDialogueScreen.style.backgroundImage = `url('${background}')`;
+  storyDialogueStageBadge.textContent = stageBadgeText || '';
+  storyDialogueStageBadge.classList.toggle('hidden', !stageBadgeText);
+  storyDialoguePortraitLeft.classList.add('hidden');
+  storyDialoguePortraitRight.classList.add('hidden');
+  storyDialoguePortraitLeft.classList.remove('active');
+  storyDialoguePortraitRight.classList.remove('active');
+  storyDialogueImgLeft.src = '';
+  storyDialogueImgRight.src = '';
+
   return new Promise((resolve) => {
     let i = 0;
     let settled = false;
+    let heroPortraitPromise = currentCharacter ? resolveCharacterIcon(currentCharacter) : Promise.resolve(null);
     function finish() {
       if (settled) return;
       settled = true;
-      storyDialoguePortrait.classList.remove('story-portrait-vertical-exit');
+      storyDialoguePortraitLeft.classList.remove('story-portrait-vertical-exit');
+      storyDialoguePortraitRight.classList.remove('story-portrait-vertical-exit');
       storyDialogueNext.removeEventListener('click', onNext);
       storyDialogueSkip.removeEventListener('click', onSkip);
       resolve();
     }
-    function showLine() {
+    async function showLine() {
       const line = lines[i];
-      storyDialoguePortrait.classList.remove('story-portrait-vertical-exit');
+      storyDialoguePortraitLeft.classList.remove('story-portrait-vertical-exit');
+      storyDialoguePortraitRight.classList.remove('story-portrait-vertical-exit');
       storyDialogueSpeaker.textContent = line.speaker;
       storyDialogueText.textContent = line.text;
-      const portraitUrl = NPC_PORTRAIT_URL[line.speaker];
-      storyDialoguePortrait.classList.toggle('hidden', !portraitUrl);
-      if (portraitUrl) {
-        storyDialoguePortrait.src = portraitUrl;
-        if (line.action === 'verticalExit') {
-          void storyDialoguePortrait.offsetWidth;
-          storyDialoguePortrait.classList.add('story-portrait-vertical-exit');
+
+      if (line.speaker === '主人公') {
+        const heroIcon = await heroPortraitPromise;
+        if (heroIcon?.dataUrl) {
+          storyDialogueImgLeft.src = heroIcon.dataUrl;
+          storyDialoguePortraitLeft.classList.remove('hidden');
         }
+        storyDialoguePortraitLeft.classList.add('active');
+        storyDialoguePortraitRight.classList.remove('active');
+      } else {
+        const portraitUrl = NPC_PORTRAIT_URL[line.speaker];
+        if (portraitUrl) {
+          storyDialogueImgRight.src = portraitUrl;
+          storyDialoguePortraitRight.classList.remove('hidden');
+        }
+        storyDialoguePortraitRight.classList.toggle('active', !!portraitUrl);
+        storyDialoguePortraitLeft.classList.remove('active');
+      }
+
+      if (line.action === 'verticalExit') {
+        void storyDialoguePortraitRight.offsetWidth;
+        storyDialoguePortraitRight.classList.add('story-portrait-vertical-exit');
       }
     }
     function onNext() {
@@ -4538,7 +4580,7 @@ async function playStoryStage(index) {
     return;
   }
   showScreen(storyDialogueScreen);
-  await playDialogueLines(stage.intro);
+  await playDialogueLines(stage.intro, { background: getMapBackground(stage.key), stageBadgeText: `STORY${stage.title}` });
   const chosenDeck = await promptDeckSelection({ onCancel: showStoryScreen });
   if (!chosenDeck) return;
   await startStoryBattle(index, chosenDeck.deckList, false);
@@ -4552,7 +4594,7 @@ async function playStoryReplay(index) {
     ? stage.secretReplay
     : stage.replay;
   showScreen(storyDialogueScreen);
-  await playDialogueLines(replay.intro);
+  await playDialogueLines(replay.intro, { background: getMapBackground(stage.key), stageBadgeText: `STORY${stage.title}（再戦）` });
   const chosenDeck = await promptDeckSelection({ onCancel: showStoryScreen });
   if (!chosenDeck) return;
   await startStoryBattle(index, chosenDeck.deckList, true, replay);
@@ -4680,10 +4722,11 @@ async function handleStoryReplayEnd(index, { won }, replayVariant) {
   activeStorySessionMeta = null;
 
   showScreen(storyDialogueScreen);
+  const dialogueOptions = { background: getMapBackground(stage.key), stageBadgeText: `STORY${stage.title}（再戦）` };
   if (won) {
-    await playDialogueLines(replayVariant.outro || [{ speaker: '???', text: 'また挑みに来てくれ！' }]);
+    await playDialogueLines(replayVariant.outro || [{ speaker: '???', text: 'また挑みに来てくれ！' }], dialogueOptions);
   } else {
-    await playDialogueLines([{ speaker: '???', text: '力及ばず、敗れてしまった……もう一度挑もう。' }]);
+    await playDialogueLines([{ speaker: '???', text: '力及ばず、敗れてしまった……もう一度挑もう。' }], dialogueOptions);
   }
   showStoryScreen();
   showToast(`再戦報酬として${mReward.earnedM}M獲得しました`, 2400);
@@ -4710,7 +4753,10 @@ async function handleStoryBattleEnd(index, { won }) {
 
   if (!won) {
     showScreen(storyDialogueScreen);
-    await playDialogueLines([{ speaker: '???', text: '力及ばず、敗れてしまった……もう一度挑もう。' }]);
+    await playDialogueLines(
+      [{ speaker: '???', text: '力及ばず、敗れてしまった……もう一度挑もう。' }],
+      { background: getMapBackground(stage.key), stageBadgeText: `STORY${stage.title}` },
+    );
     showStoryScreen();
     showToast(`ストーリー報酬として${mReward.earnedM}M獲得しました`, 2400);
     return;
@@ -4772,7 +4818,7 @@ async function handleStoryBattleEnd(index, { won }) {
   }
 
   showScreen(storyDialogueScreen);
-  await playDialogueLines(stage.outro);
+  await playDialogueLines(stage.outro, { background: getMapBackground(stage.key), stageBadgeText: `STORY${stage.title}` });
   showStoryScreen();
   showToast(`ストーリー報酬として${mReward.earnedM}M獲得しました`, 2400);
 }

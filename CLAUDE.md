@@ -162,6 +162,25 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 - **NPC専用カードの所有者ロック**: `exclusiveOwnerName`（酢=朕）。Game構築時に
   デッキから除外されるので、他プレイヤーへ混入しない。
 
+## ストーリー会話画面（story-dialogue-screen）(2026-08 再デザイン)
+- intro/outro/敗北の全画面会話（①②の盤面上オーバーレイ`story-overlay-dialogue`とは別物）。
+  note.comのプロモ画像に合わせ、ステージ背景全面＋左（主人公）右（NPC）の立ち絵＋
+  下部の会話ボックスへ全面刷新（旧: 単一立ち絵＋無地背景）。
+- `playDialogueLines(lines, { background, stageBadgeText })`。背景は
+  `getMapBackground(stage.key)`（board.jsの戦闘時と同じ画像）、バッジは
+  `STORY${stage.title}`。呼び出し側（intro/outro/replay/敗北、計5箇所）が
+  毎回渡す。
+- 話者判定はハードコードの左右指定なし: `line.speaker === '主人公'`なら左を
+  アクティブ化、`NPC_PORTRAIT_URL[line.speaker]`にあれば右をその立ち絵へ
+  差し替えてアクティブ化。該当なし（`???`等のナレーション）は両方とも
+  非アクティブに沈めるだけで、直前に表示していた立ち絵は消さない
+  （段ボール男の`verticalExit`演出が「彼の立ち絵が退場する」に自然につながる）。
+- ⚠️ **主人公の立ち絵は`resolveCharacterIcon(currentCharacter)`必須**（`.dataUrl`）。
+  生のプリセット画像URLを直接`<img src>`に入れると白背景のまま出る
+  （見た目確認時にハマった）。`resolveCharacterIcon`→`imageSourceToIcon`が
+  外周から白をフラッドフィルで透過済みにしてから返すので、これを経由すれば
+  背景画像の上にそのまま馴染む。
+
 ## チュートリアル (Codex追加)
 - ログイン前のタイトルからも遊べるデモ。`mapId: 'tutorial'`（3×3外周の8マス、
   G/CP/土地6。`getMap`がMAPS外の`TUTORIAL_MAP`を返す＝対人マップ一覧には出ない）。
