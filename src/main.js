@@ -3010,6 +3010,7 @@ function startBattle(character, storyOptions = {}) {
     onDamageEffect: relayable('damageEffect', promptDamageEffect, { broadcast: true }),
     onTutorialEvent: storyOptions.onTutorialEvent,
     onStoryBattleEnd: storyOptions.onStoryBattleEnd,
+    onResumeCheckpoint: storyOptions.onResumeCheckpoint,
     onPvpSync: handlePvpSync,
     storyMode: storyOptions.storyMode ?? false,
     goalCurrency: storyOptions.goalCurrency ?? null,
@@ -4342,10 +4343,11 @@ const STUB_MODE_LABEL = { story: 'ストーリー' };
 
 let activeStoryStageIndex = null;
 let activeStorySessionMeta = null;
+let latestStoryCheckpoint = null;
 const STORY_RESUME_KEY_PREFIX = 'chinuquest2-story-resume:';
 
-function storyResumeKey() {
-  return `${STORY_RESUME_KEY_PREFIX}${currentUserId || 'guest'}`;
+function storyResumeKey(stageIndex, isReplay = false) {
+  return `${STORY_RESUME_KEY_PREFIX}${currentUserId || 'guest'}:${stageIndex}:${isReplay ? 'replay' : 'main'}`;
 }
 
 function promptCheckpointSound() {
@@ -4356,22 +4358,37 @@ function promptGoalBonusSound() {
   playSfx('goal');
 }
 
-function loadStoryResume() {
-  try { return JSON.parse(localStorage.getItem(storyResumeKey()) || 'null'); } catch { return null; }
+function loadStoryResume(stageIndex, isReplay = false) {
+  try {
+    const value = JSON.parse(localStorage.getItem(storyResumeKey(stageIndex, isReplay)) || 'null');
+    const stage = STORY_STAGES[stageIndex];
+    if (!value || value.schemaVersion !== 2 || value.stageIndex !== stageIndex
+      || value.stageKey !== stage?.key || value.isReplay !== isReplay
+      || !Array.isArray(value.heroDeckList) || value.heroDeckList.length !== 40
+      || value.gameState?.version !== 2) return null;
+    return value;
+  } catch {
+    return null;
+  }
 }
 
-function clearStoryResume() {
-  try { localStorage.removeItem(storyResumeKey()); } catch {}
+function clearStoryResume(stageIndex = activeStoryStageIndex, isReplay = activeStorySessionMeta?.isReplay ?? false) {
+  if (stageIndex == null) return;
+  try { localStorage.removeItem(storyResumeKey(stageIndex, isReplay)); } catch {}
 }
 
 function saveStoryResume() {
-  if (!game || activeStoryStageIndex == null || !activeStorySessionMeta) return false;
+  if (!game || activeStoryStageIndex == null || !activeStorySessionMeta || !latestStoryCheckpoint) return false;
   try {
-    localStorage.setItem(storyResumeKey(), JSON.stringify({
+    const stage = STORY_STAGES[activeStoryStageIndex];
+    localStorage.setItem(storyResumeKey(activeStoryStageIndex, activeStorySessionMeta.isReplay), JSON.stringify({
+      schemaVersion: 2,
       savedAt: Date.now(),
       stageIndex: activeStoryStageIndex,
-      ...activeStorySessionMeta,
-      gameState: game.exportState(),
+      stageKey: stage.key,
+      isReplay: !!activeStorySessionMeta.isReplay,
+      heroDeckList: activeStorySessionMeta.heroDeckList,
+      gameState: latestStoryCheckpoint,
     }));
     return true;
   } catch {
@@ -4380,10 +4397,17 @@ function saveStoryResume() {
 }
 
 async function selectStoryStage(index, cleared, stage) {
-  // 途中再開は廃止。途中退室したら盤面は完全リセットして最初から始める方針
-  // （旧再開機能はセーブデータの不整合で再開時フリーズを起こしていた）。
-  // 古い保存データが残っていても無視して消す。
-  clearStoryResume();
+  const isReplay = !!(cleared && stage.replay);
+  const saved = loadStoryResume(index, isReplay);
+  if (saved) {
+    const resume = await confirmYesNo(`「${stage.title}」の途中データがあります。\n途中から再開しますか？\n（いいえを選ぶと最初から開始します）`);
+    if (resume) {
+      const replayVariant = isReplay ? storyReplayVariant(index) : null;
+      await startStoryBattle(index, saved.heroDeckList, isReplay, replayVariant, saved.gameState);
+      return;
+    }
+    clearStoryResume(index, isReplay);
+  }
   if (cleared && stage.replay) await playStoryReplay(index);
   else await playStoryStage(index);
 }
@@ -4422,7 +4446,10 @@ function showStoryScreen() {
     const meta = document.createElement('div');
     meta.className = 'deck-row-meta';
     const battleInfo = `形式: ${stage.format}　目標: ${stage.goalCurrency.toLocaleString('ja-JP')}G`;
-    meta.textContent = !unlocked
+    const hasResume = unlocked && !!loadStoryResume(index, !!(cleared && stage.replay));
+    meta.textContent = hasResume
+      ? `途中データあり　${battleInfo}`
+      : !unlocked
       ? `ロック中　${battleInfo}`
       : cleared
         ? `クリア済み（もう一度挑戦できます）　${battleInfo}`
@@ -4632,12 +4659,17 @@ async function playStoryStage(index) {
 }
 
 /** クリア済みステージの再戦。進行度・固有カード報酬は変えないが、勝敗を問わず終了時総資産に応じたMを獲得する。 */
+function storyReplayVariant(index) {
+  const stage = STORY_STAGES[index];
+  return stage.secretReplay && (currentCharacter.storyProgress || 0) >= stage.secretReplay.unlockProgress
+    ? stage.secretReplay
+    : stage.replay;
+}
+
 async function playStoryReplay(index) {
   const stage = STORY_STAGES[index];
   if (!stage.replay) return;
-  const replay = stage.secretReplay && (currentCharacter.storyProgress || 0) >= stage.secretReplay.unlockProgress
-    ? stage.secretReplay
-    : stage.replay;
+  const replay = storyReplayVariant(index);
   showScreen(storyDialogueScreen);
   await playDialogueLines(replay.intro, { background: getMapBackground(stage.key), stageBadgeText: `STORY${stage.title}（再戦）` });
   const chosenDeck = await promptDeckSelection({ onCancel: showStoryScreen });
@@ -4704,7 +4736,8 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
   const stage = STORY_STAGES[index];
   const variant = isReplay ? (replayVariant || stage.replay) : stage;
   activeStoryStageIndex = index;
-  activeStorySessionMeta = { heroDeckList, isReplay, replayVariant };
+  activeStorySessionMeta = { heroDeckList, isReplay };
+  latestStoryCheckpoint = null;
 
   const characterIcon = await resolveCharacterIcon(currentCharacter);
   const iconImage = characterIcon?.canvas ?? null;
@@ -4723,6 +4756,7 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
     goalCurrency: stage.goalCurrency,
     playerConfigs,
     onStoryBattleEnd: (result) => (isReplay ? handleStoryReplayEnd(index, result, variant) : handleStoryBattleEnd(index, result)),
+    onResumeCheckpoint: (state) => { latestStoryCheckpoint = state; },
     deferInit: !resumeState && !isReplay && !!(stage.overlayNpc || stage.boardDialogue),
     resumeState,
   });
@@ -4765,6 +4799,7 @@ async function handleStoryReplayEnd(index, { won }, replayVariant) {
   preGame.classList.remove('hidden');
   activeStoryStageIndex = null;
   activeStorySessionMeta = null;
+  latestStoryCheckpoint = null;
 
   showScreen(storyDialogueScreen);
   const dialogueOptions = { background: getMapBackground(stage.key), stageBadgeText: `STORY${stage.title}（再戦）` };
@@ -4795,6 +4830,8 @@ async function handleStoryBattleEnd(index, { won }) {
     preGame.classList.remove('hidden');
   }
   activeStoryStageIndex = null;
+  activeStorySessionMeta = null;
+  latestStoryCheckpoint = null;
 
   if (!won) {
     showScreen(storyDialogueScreen);
@@ -7812,7 +7849,7 @@ gameMenuExit.addEventListener('click', async () => {
   // （ゲストは手元にturnCountが無いので従来どおり対象）。
   let rewardEligible = false;
   if (wasStoryBattle) {
-    confirmed = await confirmYesNo('対戦をやめますか？\n進行状況は保存されず、盤面は最初からになります。');
+    confirmed = await confirmYesNo('ストーリーを途中退室しますか？\n安全な地点の盤面状態を保存し、次回この話を選んだ時に再開できます。');
   } else {
     // ゲスト側はGameを持たないので、直近のpublicStateから自分のGを読む
     // （publicStateがまだ届いていない対戦開始直後は0扱い）。同盟時は
@@ -7839,10 +7876,17 @@ gameMenuExit.addEventListener('click', async () => {
   }
   if (!confirmed) return;
 
-  // 途中退室は「盤面を完全リセット」する方針。途中保存＝再開はデータ不整合
-  // （Setがシリアライズで壊れる等）で再開時フリーズの原因になっていたため廃止し、
-  // 退室時は保存せず、むしろ残っている保存データも消してから抜ける。
-  if (wasStoryBattle) clearStoryResume();
+  // ストーリーは処理途中の生データではなく、Gameが最後に通知した操作可能な
+  // 安全地点を保存する。開始会話中など、まだ最初の安全地点が無い場合は
+  // 盤面進行自体が無いので保存なしで退出する。
+  let storySaved = false;
+  if (wasStoryBattle && latestStoryCheckpoint) {
+    storySaved = saveStoryResume();
+    if (!storySaved) {
+      window.alert('セーブに失敗しました。端末の空き容量を確認してください。');
+      return;
+    }
+  }
   const rewardResult = wasStoryBattle || !rewardEligible ? null : grantExitReward(endingAssetsShare);
 
   // 退出時、もし戦闘シーン演出の途中（onBattleSceneEnter等のPromiseが
@@ -7875,11 +7919,14 @@ gameMenuExit.addEventListener('click', async () => {
   appEl.classList.add('hidden');
   preGame.classList.remove('hidden');
   activeStoryStageIndex = null;
+  activeStorySessionMeta = null;
+  latestStoryCheckpoint = null;
   if (wasStoryBattle) {
     showStoryScreen();
   } else {
     showHubScreen();
   }
+  if (storySaved) showToast('ストーリーの途中データを保存しました', 2200);
   if (rewardResult) showToast(`報酬として${rewardResult.earnedM}M獲得しました`, 2000);
 });
 
@@ -7892,9 +7939,8 @@ function forceTerminateBoardSession() {
   // ルーム待機画面など盤面開始前の最小化/pagehideではセッションを破棄しない。
   // iOSでLINEやDiscordへ切り替えて部屋コードを共有しても、そのまま戻れる。
   if (appEl?.classList.contains('hidden')) return;
-  // 途中再開は廃止（データ不整合で再開時フリーズの原因になっていた）。保存は
-  // 行わず、残っている保存データも消して、次回は必ず最初から始まるようにする。
-  if (activeStoryStageIndex != null) clearStoryResume();
+  // ブラウザ終了・pagehideでは新規保存を作らない。既に「途中退室」で確定保存
+  // されたデータも削除しない。盤面/BGMを破棄するだけに限定する。
   game?.cancel?.();
   cancelActiveBattleItemPicker?.();
   cancelActiveBattleItemPicker = null;
@@ -7921,6 +7967,7 @@ function forceTerminateBoardSession() {
   currentMapId = null;
   activeStoryStageIndex = null;
   activeStorySessionMeta = null;
+  latestStoryCheckpoint = null;
   stopMusic();
   appEl?.classList.add('hidden');
   preGame?.classList.remove('hidden');

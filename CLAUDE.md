@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v91`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v92`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## ⚠️ 並行開発 (Codex) — 必ず守る
@@ -367,8 +367,14 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   相手が1人増えるごとに+3%、同盟戦のみ15%固定、最低50M。
 
 ## ストーリー途中退室
-- **途中再開は廃止**（Setがシリアライズで壊れ再開時フリーズしていた）。退室時は
-  `clearStoryResume()`で保存を消し、次回は必ず盤面リセットで最初から。
+- ストーリー本編・再戦のみ途中再開対応（対人戦・通常CPU戦・チュートリアルは対象外）。
+- `Game._notifyState()`が`awaitingRoll && !isBusy`の操作可能地点だけを
+  `onResumeCheckpoint`へ渡し、途中退室ボタンを確定した時だけlocalStorageへ保存する。
+  戦闘・移動・破産・対象選択の途中状態は保存しない。
+- 保存はユーザー＋ステージ＋本編/再戦ごと。次回同じ話を選択した時だけ再開確認を出す。
+  ログイン・ハブ表示・pagehideから盤面生成やBGM再生を開始してはいけない。
+- 保存形式はschemaVersion 2／Game state version 2。手札、山札、捨て札、G、CP、
+  呪い、現在HP、土地、配置モンスター、経過ターン、死亡モンスター履歴を保持する。
 
 ## テスト（ヘッドレス）
 - Vite SSRローダで単体検証:

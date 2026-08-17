@@ -151,6 +151,7 @@ export class Game {
     onBattleOutcome,
     onDamageEffect,
     onStoryBattleEnd,
+    onResumeCheckpoint,
     onPvpSync,
     playerConfigs,
     humanPlayer,
@@ -236,6 +237,8 @@ export class Game {
     // わざわざ渡す必要はない。
     this.onDamageEffect = onDamageEffect;
     this.onStoryBattleEnd = onStoryBattleEnd;
+    // ストーリー途中保存用。操作可能な安全地点だけをmain.jsへ渡す。
+    this.onResumeCheckpoint = onResumeCheckpoint;
     // 対人戦(PvP)ホスト側のみ使う: _notifyStateのたびに盤面全体のスナップ
     // ショットを渡す（main.js側がFirestoreへpublishする）。通常対戦/
     // ストーリーでは未設定のままなので何も起きない。
@@ -504,14 +507,22 @@ export class Game {
     const clone = (value) => JSON.parse(JSON.stringify(value));
     const tileVisualKeys = new Set(['mesh', 'unitMesh', 'markerSprite', 'ownerLabelMesh', 'position', 'neighbors']);
     return {
-      version: 1,
+      version: 2,
+      mapId: this.mapId,
+      turnCount: this.turnCount,
       currentPlayerIndex: this.currentPlayerIndex,
       forcedDiceRemaining: this.forcedDiceRemaining,
+      deadMonstersThisMatch: clone(this._deadMonstersThisMatch),
       players: this.players.map((player) => {
-        const { mesh, iconImage, aiProfile, deck, passedCheckpoints, ...plain } = player;
+        const {
+          mesh, iconImage, aiProfile, deck, passedCheckpoints,
+          deckNeutralMonsterIds, drawnCatalogIds, ...plain
+        } = player;
         return {
           ...clone(plain),
           passedCheckpoints: [...passedCheckpoints],
+          deckNeutralMonsterIds: [...deckNeutralMonsterIds],
+          drawnCatalogIds: [...drawnCatalogIds],
           drawPile: clone(deck.drawPile),
           discardPile: clone(deck.discardPile),
         };
@@ -525,20 +536,36 @@ export class Game {
   }
 
   _restoreState(snapshot) {
-    if (!snapshot || snapshot.version !== 1 || snapshot.players?.length !== this.players.length) {
+    if (!snapshot || snapshot.version !== 2 || snapshot.mapId !== this.mapId
+      || snapshot.players?.length !== this.players.length
+      || snapshot.tiles?.length !== this.tiles.length) {
       throw new Error('保存データの形式が一致しません');
     }
+    this.turnCount = Math.max(0, Number(snapshot.turnCount) || 0);
     this.currentPlayerIndex = Math.max(0, Math.min(snapshot.currentPlayerIndex || 0, this.players.length - 1));
     this.forcedDiceRemaining = snapshot.forcedDiceRemaining || 0;
+    this._deadMonstersThisMatch = Array.isArray(snapshot.deadMonstersThisMatch) ? snapshot.deadMonstersThisMatch : [];
     snapshot.players.forEach((saved, index) => {
       const player = this.players[index];
-      const { passedCheckpoints, drawPile, discardPile, ...plain } = saved;
+      const {
+        passedCheckpoints, deckNeutralMonsterIds, drawnCatalogIds,
+        drawPile, discardPile, ...plain
+      } = saved;
       Object.assign(player, plain);
       player.passedCheckpoints = new Set(passedCheckpoints || []);
+      player.deckNeutralMonsterIds = new Set(deckNeutralMonsterIds || []);
+      player.drawnCatalogIds = new Set(drawnCatalogIds || []);
       player.deck.drawPile = drawPile || [];
       player.deck.discardPile = discardPile || [];
       player.aiProfile = resolveAiProfile(player.name, player.aiProfile?.preferredElements ?? null);
     });
+    // 旧不具合や境界タイミングの保存データでも、脱落済みプレイヤーの手番を
+    // 再開して永久停止しないよう、生存している次のプレイヤーへ補正する。
+    if (this.players[this.currentPlayerIndex]?.defeated) {
+      const nextAlive = this.players.findIndex((player) => !player.defeated);
+      if (nextAlive < 0) throw new Error('再開できるプレイヤーがいません');
+      this.currentPlayerIndex = nextAlive;
+    }
     snapshot.tiles?.forEach((saved, index) => {
       const tile = this.tiles[index];
       if (!tile || saved.id !== tile.id) return;
@@ -6497,6 +6524,12 @@ export class Game {
         : this._tutorialDiceValue(),
     });
     this.onPvpSync?.(this._pvpSnapshot(playersPayload));
+    // 保存可能なのは、ドローや戦闘、移動、破産処理が終わってサイコロ／
+    // スペルを選べる時だけ。処理途中を保存しないことで復帰時フリーズを防ぐ。
+    if (this.storyMode && !this.tutorialMode && !this.storyEnded
+      && this.awaitingRoll && !this.isBusy && this.onResumeCheckpoint) {
+      this.onResumeCheckpoint(this.exportState());
+    }
   }
 
   /** 行動者を最前面にし、以降の手番順にプレイヤー駒の描画優先度を下げる。 */
