@@ -183,6 +183,11 @@ export class HostGuestRelay {
     this.roomCode = roomCode;
     this.nextRequestId = 1;
     this.pending = null; // { requestId, resolve, reject, timer }
+    // Firestore上の要求欄は各相手につき1本しかない。演出を投げっぱなしで
+    // 連続送信すると後の要求が前を上書きするため、相手ごとに必ず直列化する。
+    this.legacyQueue = Promise.resolve();
+    this.participantQueues = new Map();
+    this.participantPending = new Set();
     this.unsubscribe = listenToRoom(roomCode, (room) => {
       if (!room || !this.pending) return;
       if (room.guestResponseId === this.pending.requestId) {
@@ -195,8 +200,13 @@ export class HostGuestRelay {
   }
 
   ask(type, payload) {
-    const requestId = this.nextRequestId;
-    this.nextRequestId += 1;
+    const task = this.legacyQueue.catch(() => {}).then(() => this._askLegacyNow(type, payload));
+    this.legacyQueue = task.catch(() => {});
+    return task;
+  }
+
+  _askLegacyNow(type, payload) {
+    const requestId = this.nextRequestId++;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         if (!this.pending || this.pending.requestId !== requestId) return;
@@ -209,16 +219,31 @@ export class HostGuestRelay {
   }
 
   askParticipant(uid, type, payload) {
+    const previous = this.participantQueues.get(uid) || Promise.resolve();
+    const task = previous.catch(() => {}).then(() => this._askParticipantNow(uid, type, payload));
+    this.participantQueues.set(uid, task.catch(() => {}));
+    return task;
+  }
+
+  _askParticipantNow(uid, type, payload) {
     const requestId = this.nextRequestId++;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { if (this.pending?.requestId === requestId) { this.pending = null; reject(new Error('参加者の応答がタイムアウトしました')); } }, 45000);
-      this.pending = { requestId, resolve, reject, timer };
+      const record = { uid, requestId, timer: null, stop: null, reject };
+      const finish = (fn, value) => {
+        clearTimeout(record.timer);
+        record.stop?.();
+        this.participantPending.delete(record);
+        fn(value);
+      };
+      record.timer = setTimeout(() => finish(reject, new Error('参加者の応答がタイムアウトしました')), 45000);
+      this.participantPending.add(record);
       const stop = onSnapshot(promptResponseRef(this.roomCode, uid), (snap) => {
         const data = snap.data();
-        if (!data || data.requestId !== requestId || !this.pending) return;
-        clearTimeout(timer); this.pending = null; stop(); resolve(data.value);
+        if (!data || data.requestId !== requestId || !this.participantPending.has(record)) return;
+        finish(resolve, data.value);
       });
-      setDoc(promptRef(this.roomCode, uid), { requestId, type, payload });
+      record.stop = stop;
+      setDoc(promptRef(this.roomCode, uid), { requestId, type, payload }).catch((error) => finish(reject, error));
     });
   }
 
@@ -228,6 +253,13 @@ export class HostGuestRelay {
       this.pending.reject(new Error('対戦リレーが終了しました'));
       this.pending = null;
     }
+    for (const record of this.participantPending) {
+      clearTimeout(record.timer);
+      record.stop?.();
+      record.reject(new Error('対戦リレーが終了しました'));
+    }
+    this.participantPending.clear();
+    this.participantQueues.clear();
     this.unsubscribe();
   }
 }

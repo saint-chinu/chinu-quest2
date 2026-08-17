@@ -7095,7 +7095,17 @@ function relayable(type, localPrompt, { broadcast = false } = {}) {
   return (...args) => {
     if (broadcast) {
       const payload = args.length === 1 ? args[0] : args;
-      if (pvpMatch?.isHost) pvpMatch.relay.ask(type, payload);
+      if (pvpMatch?.isHost) {
+        // 演出は全参加者へ個別チャンネルで送る。room.hostRequest 1本では
+        // 連続演出が上書きされ、2人目以降にも届かない。
+        const remoteUids = [...new Set(Object.values(pvpMatch.uidByPlayerId || {}))]
+          .filter((uid) => uid && uid !== pvpMatch.uid);
+        for (const uid of remoteUids) {
+          pvpMatch.relay.askParticipant(uid, type, payload).catch((error) => {
+            console.warn(`PvP broadcast failed: type=${type}, uid=${uid}`, error);
+          });
+        }
+      }
       return localPrompt(...args);
     }
     const forPlayerId = args[args.length - 1];
@@ -7109,10 +7119,9 @@ function relayable(type, localPrompt, { broadcast = false } = {}) {
     // prompt channel is available, resolve it locally instead of mixing turns.
     const remoteUid = pvpMatch.uidByPlayerId?.[forPlayerId];
     if (!remoteUid) return localPrompt(...localArgs);
-    const legacyGuestOnly = Number(forPlayerId) === Number(pvpMatch.guestPlayerId);
-    const relayPromise = legacyGuestOnly
-      ? pvpMatch.relay.ask(type, payload)
-      : pvpMatch.relay.askParticipant(remoteUid, type, payload);
+    // 質問と演出を同じ参加者専用キューへ通し、演出中に別チャンネルの
+    // 質問が割り込んでオーバーレイやカメラ操作が競合しないようにする。
+    const relayPromise = pvpMatch.relay.askParticipant(remoteUid, type, payload);
     // 質問を投げた直後に相手が切断すると、応答は45秒後にreject
     // （HostGuestRelay参照）される。ここをcatchしないとgame.js側の
     // await this.onXxx(...)が未捕捉の例外で止まり、盤面がフリーズしたまま
@@ -7135,14 +7144,34 @@ function relayable(type, localPrompt, { broadcast = false } = {}) {
 }
 
 /** ホスト側専用: Game._notifyStateのたびに呼ばれる。公開状態(手札を除く)をpublicStateへ、各プレイヤーの手札は本人のprivateドキュメントへ、別々にpublishする。 */
+let pendingPvpSync = null;
+let pvpSyncFlushRunning = false;
+
 function handlePvpSync(snapshot) {
   if (!pvpMatch || !pvpMatch.isHost) return;
-  const { hands, ...publicPart } = snapshot;
-  publishPublicState(pvpMatch.roomCode, publicPart);
-  for (const [playerIdStr, hand] of Object.entries(hands || {})) {
-    const uid = pvpMatch.uidByPlayerId[playerIdStr];
-    if (uid && uid !== pvpMatch.uid) publishPrivateHand(pvpMatch.roomCode, uid, hand);
-  }
+  // 短時間に発生する多数の_notifyStateを同時送信せず、送信中は最新状態へ
+  // 統合する。古い書き込みの後着と参加者側の過剰再描画を防ぐ。
+  pendingPvpSync = {
+    roomCode: pvpMatch.roomCode,
+    hostUid: pvpMatch.uid,
+    uidByPlayerId: { ...(pvpMatch.uidByPlayerId || {}) },
+    snapshot,
+  };
+  if (pvpSyncFlushRunning) return;
+  pvpSyncFlushRunning = true;
+  void (async () => {
+    while (pendingPvpSync) {
+      const job = pendingPvpSync;
+      pendingPvpSync = null;
+      const { hands, ...publicPart } = job.snapshot;
+      const writes = [publishPublicState(job.roomCode, publicPart)];
+      for (const [playerIdStr, hand] of Object.entries(hands || {})) {
+        const uid = job.uidByPlayerId[playerIdStr];
+        if (uid && uid !== job.hostUid) writes.push(publishPrivateHand(job.roomCode, uid, hand));
+      }
+      await Promise.allSettled(writes);
+    }
+  })().finally(() => { pvpSyncFlushRunning = false; });
 }
 
 /** ホスト側専用: ゲスト発の自発的アクション（本人の手番のダイス/スペル使用）を受けてローカルのGameインスタンスに反映する。 */
@@ -7195,8 +7224,11 @@ const pvpGuestHandlers = {
   discardChoice: promptDiscardChoice,
   spellUse: promptSpellUse,
   spellCastEffect: serializedCamera(promptSpellCastEffect),
+  summonEffect: serializedCamera(promptSummonEffect),
+  targetEffect: serializedCamera(promptTargetEffect),
   shrineEffect: serializedCamera(promptShrineEffect),
   warpEffect: serializedCamera(promptWarpEffect),
+  turnFocus: serializedCamera(promptTurnFocus),
   spellComplete: finishSpellPresentation,
   // landCommand/shopPurchaseはgame.js側でpayloadとplayer.idの間に追加引数を
   // 挟む型なので、relayable()が[複数引数]の配列としてまとめて送ってくる -
@@ -7275,6 +7307,10 @@ async function promptPieceMove({ playerId, from, path }) {
   const points = (from ? [from, ...path] : path).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.z));
   if (points.length < 2) return;
 
+  // 最終座標のpublicStateが先着済みなら、出発地点へ逆ワープさせない。
+  const lastPoint = points[points.length - 1];
+  if (Math.hypot(piece.position.x - lastPoint.x, piece.position.z - lastPoint.z) < 0.05) return;
+
   const myGen = (pieceMoveGen.get(playerId) || 0) + 1;
   pieceMoveGen.set(playerId, myGen);
   movingGuestPieces.add(playerId);
@@ -7283,6 +7319,8 @@ async function promptPieceMove({ playerId, from, path }) {
       if (pieceMoveGen.get(playerId) !== myGen) return; // 新しい移動に上書きされた
       const a = points[i - 1];
       const b = points[i];
+      // ホスト側と同じく、移動先が画面外へ出る前にカメラを追従させる。
+      if (scene.isOutsideSafeView(b.x, b.z) || i % 3 === 0) scene.panTo(b.x, b.z);
       await tween(GUEST_STEP_DURATION_MS, (t) => {
         const e = easeInOutQuad(t);
         const hop = Math.sin(Math.PI * t) * GUEST_STEP_HOP;
@@ -7475,6 +7513,16 @@ async function startPvpGuestBattle() {
     } catch (error) {
       console.warn(`対戦アイコンを読み込めませんでした: ${participant.name}`, error);
     }
+  }
+  // CPUはparticipantsに含まれないので、ホストと同じplayerId順でNPC画像を補う。
+  let cpuPlayerId = normalizePvpParticipants(pvpLastRoom).length;
+  const seenCpuNames = new Set();
+  for (const cpuName of (pvpLastRoom?.cpuNames || [])) {
+    if (seenCpuNames.has(cpuName)) continue;
+    seenCpuNames.add(cpuName);
+    const npcIcon = await loadNpcTokenImage(cpuName).catch(() => null);
+    if (npcIcon) pvpMatch.iconImagesByPlayerId.set(cpuPlayerId, npcIcon);
+    cpuPlayerId += 1;
   }
   requestAnimationFrame(animate);
   allowMusicPlayback();
