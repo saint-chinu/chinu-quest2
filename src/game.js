@@ -2,7 +2,7 @@ import { TileType, mapRequiresAllCheckpoints, mapCheckpointBonus, mapUsesAlterna
 import { PIECE_REST_Y, UNIT_ICON_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity } from './cards.js';
 import { buildStarterCardList, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf } from './battleCards.js';
-import { createFieldUnit, resolveBattle, equipItem, applyCurse, applyPoison, GoldLedger, hasTrait, strikeOrderScore, statTotals } from './battle.js';
+import { createFieldUnit, resolveBattle, applyPreAttackItemEffects, equipItem, applyCurse, applyPoison, GoldLedger, hasTrait, strikeOrderScore, statTotals } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay, getWaitCutRate } from './utils.js';
 import { DENCHU_FIELD_MONSTER } from './thunderMonsters.js';
@@ -4883,25 +4883,80 @@ export class Game {
     const defenderFusion = this._applyTrainFusion(defenderUnit, equippedDefenderItem);
     if (attackerFusion) attackerBase = this._baseStats(attackerUnit);
     if (defenderFusion) defenderBase = this._baseStats(defenderUnit);
-    if (equippedAttackerItem) {
+
+    // 攻撃開始前効果（真剣白刃取りの強奪／海賊S・ステゴロの破壊）を、装備公開
+    // （ATK+20等の補正演出）より前に確定・演出する。順序を守らないと、奪われる／
+    // 壊される側の補正演出が先に出てしまい、見た目上は何も起きていないように
+    // 見える（実数値の計算自体は元から正しい順序だった）。
+    const preAttackEffects = applyPreAttackItemEffects(attackerUnit, defenderUnit);
+    preAttackEffects.log.forEach((line) => this.onLog(line));
+    for (const destruction of preAttackEffects.itemDestructions) {
+      await this.onBattleItemDestroy(destruction);
+      if (this._isCancelled) return null;
+    }
+    for (const steal of preAttackEffects.itemSteals) {
+      await this.onBattleItemSteal(steal);
+      if (this._isCancelled) return null;
+    }
+
+    // 装備公開: 奪われた/壊された側はitems配列が既に空になっているのでスキップ
+    // する（何も装備していないので演出しようがない＝見た目上も本当に奪えている）。
+    // 表示中の補正値は複数枚重なる可能性があるため、側ごとに積み上げて追う。
+    let attackerShownAtkBonus = attackerBonus.atk || 0;
+    let attackerShownHpBonus = attackerBonus.hp || 0;
+    let defenderShownAtkBonus = defenderBonus.atk || 0;
+    let defenderShownHpBonus = defenderBonus.hp || 0;
+    if (equippedAttackerItem && attackerUnit.items.includes(equippedAttackerItem)) {
       await this.onBattleEquip({
         side: 'attacker', item: equippedAttackerItem, unitName: attackerUnit.def.name,
         baseAtk: attackerBase.atk, baseHp: attackerBase.hp,
         baseCurrentHp: Math.min(attackerUnit.currentHp, attackerBase.hp),
-        existingAtkBonus: attackerBonus.atk, existingHpBonus: attackerBonus.hp,
+        existingAtkBonus: attackerShownAtkBonus, existingHpBonus: attackerShownHpBonus,
         fusionCard: attackerFusion,
       });
       if (this._isCancelled) return null;
+      attackerShownAtkBonus += Number(equippedAttackerItem.atkBonus || 0);
+      attackerShownHpBonus += Number(equippedAttackerItem.hpBonus || 0);
     }
-    if (equippedDefenderItem) {
+    if (equippedDefenderItem && defenderUnit.items.includes(equippedDefenderItem)) {
       await this.onBattleEquip({
         side: 'defender', item: equippedDefenderItem, unitName: defenderUnit.def.name,
         baseAtk: defenderBase.atk, baseHp: defenderBase.hp,
         baseCurrentHp: Math.min(defenderUnit.currentHp, defenderBase.hp),
-        existingAtkBonus: defenderBonus.atk, existingHpBonus: defenderBonus.hp,
+        existingAtkBonus: defenderShownAtkBonus, existingHpBonus: defenderShownHpBonus,
         fusionCard: defenderFusion,
       });
       if (this._isCancelled) return null;
+      defenderShownAtkBonus += Number(equippedDefenderItem.atkBonus || 0);
+      defenderShownHpBonus += Number(equippedDefenderItem.hpBonus || 0);
+    }
+
+    // 真剣白刃取りで奪ったアイテムぶんの補正演出を、奪った側にもう一段重ねて
+    // かける（元の持ち主側の装備公開は、items配列が空のため上でスキップ済み）。
+    for (const steal of preAttackEffects.itemSteals) {
+      const toAttacker = steal.toSide === 'attacker';
+      const ownerUnit = toAttacker ? attackerUnit : defenderUnit;
+      const ownerBase = toAttacker ? attackerBase : defenderBase;
+      const ownerFusion = toAttacker ? attackerFusion : defenderFusion;
+      for (const stolenItem of steal.items) {
+        const existingAtkBonus = toAttacker ? attackerShownAtkBonus : defenderShownAtkBonus;
+        const existingHpBonus = toAttacker ? attackerShownHpBonus : defenderShownHpBonus;
+        await this.onBattleEquip({
+          side: steal.toSide, item: stolenItem, unitName: ownerUnit.def.name,
+          baseAtk: ownerBase.atk, baseHp: ownerBase.hp,
+          baseCurrentHp: Math.min(ownerUnit.currentHp, ownerBase.hp),
+          existingAtkBonus, existingHpBonus,
+          fusionCard: ownerFusion,
+        });
+        if (this._isCancelled) return null;
+        if (toAttacker) {
+          attackerShownAtkBonus += Number(stolenItem.atkBonus || 0);
+          attackerShownHpBonus += Number(stolenItem.hpBonus || 0);
+        } else {
+          defenderShownAtkBonus += Number(stolenItem.atkBonus || 0);
+          defenderShownHpBonus += Number(stolenItem.hpBonus || 0);
+        }
+      }
     }
 
     // 装備が確定した"後"に、装備アイテム由来の動的加算（イカサマのサイコロの
@@ -4920,22 +4975,12 @@ export class Game {
       attackerUnit.def.traits?.includes('pierce') || attackerUnit.items.some((i) => i.traits?.includes('pierce'));
     const battleDefenderBonus = attackerHasPierce ? { ...defenderBonus, hp: 0 } : defenderBonus;
 
+    // 破壊・強奪はpreAttackEffectsで既に適用・演出済みなので、resolveBattle内の
+    // 同判定はitems配列が既に空/移動済み（length>0ガード）で不発になる。
+    // result.itemDestructions/itemStealsは常に空配列で返るため、ここでの
+    // 二重演出は発生しない。
     const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, battleDefenderBonus);
     result.log.forEach((line) => this.onLog(line));
-
-    // ステゴロ/海賊Sの破壊は真剣白刃取りと同じ攻撃開始前。装備公開後、
-    // 実際の攻撃演出へ入る前に対象アイテムを砕いて消す。
-    for (const destruction of result.itemDestructions || []) {
-      await this.onBattleItemDestroy(destruction);
-      if (this._isCancelled) return null;
-    }
-
-    // 真剣白刃取りはresolveBattle内で攻撃開始前に相手の装備を移し替える。
-    // 計算結果と同じ順序で、公開済みの装備画像も相手側から使用者側へ移動させる。
-    for (const steal of result.itemSteals || []) {
-      await this.onBattleItemSteal(steal);
-      if (this._isCancelled) return null;
-    }
 
     // 先制/後攻/貫通が発動する場合、攻撃演出の前に該当カードを一時的に拡大して
     // ラベルを見せる（先に攻撃する側から順に）。装備アイテム由来の特性

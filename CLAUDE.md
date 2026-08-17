@@ -113,6 +113,24 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   `equipItem`が装備コピーのatkBonusへ加算するので実ダメージ・演出・勝率シミュが一致。
   `_itemPowerScore(item, unit)`もunitを受け取るようになった。
 - **不死鳥の盾** R90G ARMOR(ATK+10/HP+20, `returnsToHandIfUsed`)。剣と同じく戦闘後に手札へ。
+- **真剣白刃取り(stealItemBeforeAttack)/海賊S・ステゴロ(destroyItemBeforeAttack)の
+  演出順序を修正**（2026-08、ユーザー指摘）: 以前は「装備公開(ATK+20等の補正演出)」
+  →`resolveBattle`内で強奪/破壊、という順で処理していたため、**奪われる/壊される
+  側の補正演出が先に画面に出てしまい、見た目上は何も起きていないように見えた**
+  （実ダメージ計算は元から正しい順序だった＝表示だけがズレていた）。
+  `battle.js`の`applyPreAttackItemEffects(attacker, defender)`として強奪/破壊判定を
+  `resolveBattle`から抽出・export。`game.js`の`_runBattleScene`は装備公開より
+  **前**にこれを直接呼んで演出（`onBattleItemDestroy`/`onBattleItemSteal`）を先に
+  流し、items配列を実際に書き換える。`resolveBattle`は内部でも同じ関数を呼ぶが、
+  既にitems.length===0のため強奪/破壊判定は不発（二重適用にならない・
+  シミュレーション用の直接呼び出しは従来どおり自己完結）。
+  装備公開(`onBattleEquip`)は`unit.items.includes(元の手札のitem)`で判定し、
+  奪われた/壊された側は自動的にスキップ（何も装備していないので演出のしようが
+  ない）。奪った側には**奪ったアイテムぶんの装備公開をもう一段追加**し、
+  `existingAtkBonus`/`existingHpBonus`を側ごとに積み上げて渡すことで、複数枚
+  重なっても表示上の合計値が正しくなる。ヘッドレステストで検証済み:
+  盗み演出→装備公開の順、防御側は装備公開ゼロ件、攻撃側に盗んだ分の補正
+  （例: ナイフATK+10）が正しく乗って表示されること。
 - **NPC専用カード**: `npcExclusive: true`を付けると`getCardCatalog`が図鑑・デッキ編集から
   除外する（酢が該当）。
 - **twoStepMove特性**(酢のみ): 土地コマンドの移動が最大2マス。経路の特殊マスを1つだけ

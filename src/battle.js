@@ -471,13 +471,24 @@ export function strikeOrderScore(unit) {
  * message, damage, targetDied}), so the caller's UI can animate them in the
  * right sequence regardless of who went first.
  */
-export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defenderBonus = {}) {
+/**
+ * 攻撃開始前効果（アイテム破壊: 海賊S/ステゴロ、アイテム強奪: 真剣白刃取り）を
+ * attacker/defenderへ即座に適用する（items配列を直接書き換える）。
+ * prepareForBattleより前に呼ぶ必要がある（破壊/強奪したアイテムのHPボーナスが
+ * maxHpに残ってしまうため）。
+ *
+ * resolveBattleが内部でも呼ぶが、その前に呼び出し側（game.jsの戦闘演出）が
+ * 明示的に一度呼んでおくと、items配列が既に書き換わっているのでresolveBattle
+ * 内の呼び出しはlength>0ガードにより何もしない（二重適用にはならない）。
+ * こうすることで、演出側は「装備公開（ATK+20等の補正演出）」より前に
+ * 破壊・強奪の演出を挟める——攻撃前に奪われた/壊されたアイテムの補正演出が
+ * 元の持ち主側に出てしまい、見た目上何も奪えていないように見える問題を防ぐ。
+ */
+export function applyPreAttackItemEffects(attacker, defender) {
   const log = [];
   const itemSteals = [];
   const itemDestructions = [];
 
-  // 攻撃開始前効果: アイテム破壊（海賊S/ステゴロ）。prepareForBattleより
-  // 前でないと破壊したアイテムのHPボーナスがmaxHpに残ってしまう。
   if (getEffect(attacker, 'destroyItemBeforeAttack') && defender.items.length > 0) {
     const destroyedItems = [...defender.items];
     const source = attacker.items.find((i) => i.effect?.type === 'destroyItemBeforeAttack') || attacker.def;
@@ -507,8 +518,6 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     log.push(`${defender.def.name}の予報が的中し、${attacker.def.name}のアイテムを無効化した`);
   }
 
-  // 攻撃開始前効果: アイテム強奪（真剣白刃取り）。破壊と同じタイミングで
-  // 判定する（相手のアイテムを消す代わりに自分の装備に加える）。
   if (getEffect(attacker, 'stealItemBeforeAttack') && defender.items.length > 0) {
     const stolenItems = [...defender.items];
     attacker.items = [...attacker.items, ...defender.items];
@@ -523,6 +532,12 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     itemSteals.push({ fromSide: 'attacker', toSide: 'defender', items: stolenItems });
     log.push(`${defender.def.name}が${attacker.def.name}のアイテムを奪い装備した`);
   }
+
+  return { log, itemSteals, itemDestructions };
+}
+
+export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defenderBonus = {}) {
+  const { log, itemSteals, itemDestructions } = applyPreAttackItemEffects(attacker, defender);
 
   prepareForBattle(attacker, attackerBonus);
   prepareForBattle(defender, defenderBonus);
