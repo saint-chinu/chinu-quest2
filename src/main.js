@@ -4733,6 +4733,11 @@ async function handleStoryBattleEnd(index, { won }) {
   if (stage.key === 'kare') {
     markCatalogSeen(SPELL_CATALOG.disclosureRequest);
   }
+  // 朕（ステージ⑧）を撃破したら、朕専用モンスター「酢」を図鑑に登録する
+  // （npcExclusiveなのでownedCardsは増やさず、デッキには入れられないまま）。
+  if (stage.key === 'chin-harbor') {
+    markCatalogSeen(MONSTER_CATALOG.su);
+  }
   if (index + 1 > (currentCharacter.storyProgress || 0)) {
     currentCharacter.storyProgress = index + 1;
   }
@@ -4861,7 +4866,13 @@ let catalogActiveCategory = 'fire';
 const catalogHiddenRarities = new Set();
 
 function sortedCatalog() {
-  return effectiveCatalog().slice().sort((a, b) =>
+  // NPC専用カード（酢など）はgetCardCatalog/effectiveCatalogから常に除外され、
+  // デッキ編集には出せないが、対応するステージを倒して図鑑登録済み
+  // （catalogSeenCards、markCatalogSeen参照）なら図鑑画面にだけ混ぜて見せる。
+  const seenNpcExclusive = Object.values(MONSTER_CATALOG).filter(
+    (card) => card.npcExclusive && isCatalogSeen(cardKey(card)),
+  );
+  return [...effectiveCatalog(), ...seenNpcExclusive].sort((a, b) =>
     (RARITY_ORDER[a.rarity] ?? 99) - (RARITY_ORDER[b.rarity] ?? 99)
       || a.name.localeCompare(b.name, 'ja'));
 }

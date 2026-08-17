@@ -85,6 +85,12 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   デッキ編集の追加ボタンは`ownedCountOf`基準のままなので実際の所持枚数は0＝
   デッキには入れられない。「見て詳細を確認できるだけ」を図鑑と所持で作り分ける
   時はこのパターン（ownedCardsとcatalogSeenCardsを別に持つ）を使うこと。
+- **npcExclusiveカードの図鑑登録**（2026-08）: 酢のような`npcExclusive`モンスターは
+  `getCardCatalog`が最初から除外している（開示請求と違い、そもそもカタログ配列に
+  入らない）ので、上と同じ`markCatalogSeen`だけでは図鑑に出せない。図鑑専用の
+  `sortedCatalog()`だけを拡張し、`MONSTER_CATALOG`から`npcExclusive && isCatalogSeen`
+  なものを都度足し込んで表示する（`effectiveCatalog()`／デッキ編集は無改変のまま
+  ＝そちらには絶対出ない）。⑧「朕と酢の花火港」クリアで`markCatalogSeen(su)`。
 - **キャンセルカルチャー** Nスペル: 敵の手札のスペル/アイテム1枚を捨てさせる。
 - **魔力抽出(extractManaFromHandCard)** S100G: 自分含む手札のある1人を選び、その手札を
   見て1枚捨てさせ、**捨てられた本人が+200G**。target=`anyPlayerHandCard`。詠唱中の
