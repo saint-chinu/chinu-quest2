@@ -4,7 +4,7 @@ import { GameScene, PIECE_REST_Y } from './scene.js';
 import { createBoard, MAPS, PVP_MAPS, TileType, createMapThumbnailCanvas, getMapBackground } from './board.js';
 import { Game } from './game.js';
 import { CardType, CARD_COLOR, ELEMENT_LABEL, Element, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
-import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, buildCharacterDeckList, MONSTER_CATALOG, ITEM_CATALOG, SPELL_CATALOG } from './battleCards.js';
+import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, buildCharacterDeckList, MONSTER_CATALOG, ITEM_CATALOG, SPELL_CATALOG, catalogIdOf } from './battleCards.js';
 import { loginOrRegister, saveCharacter } from './auth.js';
 import { getCardCatalog, isLegacyPlaceholderCardName } from './cardCatalog.js';
 import { PACKS, drawPack } from './shopPacks.js';
@@ -3253,6 +3253,7 @@ const tutorialGuideChecks = document.getElementById('tutorial-guide-checks');
 const tutorialGuidePrev = document.getElementById('tutorial-guide-prev');
 const tutorialGuideNext = document.getElementById('tutorial-guide-next');
 const tutorialGuideFinish = document.getElementById('tutorial-guide-finish');
+const tutorialStepBubble = document.getElementById('tutorial-step-bubble');
 const charmakeScreen = document.getElementById('charmake-screen');
 const charmakeIcons = document.getElementById('charmake-icons');
 const charmakeIconUpload = document.getElementById('charmake-icon-upload');
@@ -3489,7 +3490,7 @@ const TUTORIAL_LESSONS = [
   },
   {
     title: 'サイコロ・移動・CP',
-    text: '画面のサイコロをタップすると、出た目の数だけ進みます。未通過CPを通ると100Gを獲得し、全CP通過後はゴールで周回ボーナスを得られます。',
+    text: '画面のサイコロをタップすると、出た目の数だけ進みます。序盤は下の吹き出しの誘導に合わせて出目が決まっています（誘導が終わると通常のランダムに戻ります）。未通過CPを通ると100Gを獲得し、全CP通過後はゴールで周回ボーナスを得られます。',
   },
   {
     title: 'モンスター召喚',
@@ -3532,6 +3533,21 @@ const TUTORIAL_CHECK_LABELS = {
   move: '移動侵略',
 };
 
+/** チュートリアルCPU専用デッキ。台本で使うサラリーマンダー（弱めの侵略役）と
+ * 樹海の怨霊（反射で倒される役）を確実に含める。 */
+function buildTutorialCpuDeck() {
+  return [
+    ...tutorialCopies(MONSTER_CATALOG.salarymander, 3),
+    ...tutorialCopies(MONSTER_CATALOG.jukaiNoOnryou, 2),
+    ...tutorialCopies(MONSTER_CATALOG.flameLizard, 3),
+    ...tutorialCopies(MONSTER_CATALOG.sekizou, 2),
+    ...tutorialCopies(ITEM_CATALOG.knife, 3),
+    ...tutorialCopies(ITEM_CATALOG.potLid, 3),
+    ...tutorialCopies(SPELL_CATALOG.heal, 2),
+    ...tutorialCopies(SPELL_CATALOG.sideIncome, 2),
+  ];
+}
+
 function tutorialCopies(def, count) {
   // Deck.fromCardListがidを`card-N`へ振り直すため、通常デッキ(duplicateForDeck)と
   // 同じくcatalogIdを持たせておく。これが無いとcatalogIdOf()が`card-N`を返し、
@@ -3552,6 +3568,7 @@ function buildTutorialPlayerDeck() {
     ...tutorialCopies(SPELL_CATALOG.divination, 2),
     ...tutorialCopies(SPELL_CATALOG.diceOne, 2),
     ...tutorialCopies(SPELL_CATALOG.fireball, 2),
+    ...tutorialCopies(SPELL_CATALOG.iCanFly, 2),
     ...tutorialCopies(SPELL_CATALOG.heal, 2),
     ...tutorialCopies(SPELL_CATALOG.sideIncome, 2),
   ];
@@ -3576,8 +3593,53 @@ function renderTutorialGuide() {
   tutorialGuideFinish.classList.toggle('hidden', !last);
 }
 
+/**
+ * 誘導ステップ（吹き出し）の台本。ゲームからのonTutorialEventで、いま表示中の
+ * ステップの完了条件が満たされた時だけ次へ進む（順番どおりでない操作をしても
+ * 巻き戻ったり飛んだりせず、吹き出しが待ち続けるだけ - サンドボックスは自由）。
+ * matchのplayload条件はイベント種別ごと: summon/moveはプレイヤー自身の操作のみ、
+ * spellはカード指定があればそのカードのみ。
+ */
+const TUTORIAL_FLOW_STEPS = [
+  { event: 'roll', text: 'サイコロをタップして振ってみよう！' },
+  { event: 'summon', text: '空き地に止まった！「召喚／侵略」から「火付け役」を召喚してみよう' },
+  { event: 'battle', defenderIsHuman: true, text: '敵が攻めてきたら、アイテム選択で「なべのふた」を選んで防御しよう。防ぎ切れば通行料ももらえる' },
+  { event: 'summon', text: '次の空き地では「くねくね」を召喚してみよう（HPは低いが攻撃を反射する）' },
+  { event: 'spell', notCard: 'iCanFly', text: '自分のターンが来たら、サイコロを振る前に手札の「占術」を使ってみよう（スペルは1ターン1回）' },
+  { event: 'spell', card: 'iCanFly', text: '「アイキャンフライ」を引いた！自分に使うと次のサイコロが2倍。ぐるっと1周しよう' },
+  { event: 'move', text: 'くねくねのマスに戻ってきた！「土地」→くねくねの土地→「移動」で、隣の樹海の怨霊へ移動侵略しよう。反射で倒せるぞ' },
+  { event: null, text: '基本は全部体験できた！あとは自由に試して、上のガイドの「完了」で終了しよう' },
+];
+
+function renderTutorialStepBubble() {
+  if (!activeTutorialSession) {
+    tutorialStepBubble.classList.add('hidden');
+    return;
+  }
+  const step = TUTORIAL_FLOW_STEPS[activeTutorialSession.stepIndex];
+  if (!step) {
+    tutorialStepBubble.classList.add('hidden');
+    return;
+  }
+  tutorialStepBubble.textContent = step.text;
+  tutorialStepBubble.classList.remove('hidden');
+}
+
+function advanceTutorialStep(type, payload) {
+  const step = TUTORIAL_FLOW_STEPS[activeTutorialSession.stepIndex];
+  if (!step || step.event !== type) return;
+  const human = game?.players?.find((player) => !player.isCPU);
+  if (step.defenderIsHuman && (!human || payload.defenderId !== human.id)) return;
+  if ((type === 'summon' || type === 'move') && human && payload.playerId !== human.id) return;
+  if (step.card && catalogIdOf(payload.card || {}) !== step.card) return;
+  if (step.notCard && catalogIdOf(payload.card || {}) === step.notCard) return;
+  activeTutorialSession.stepIndex += 1;
+  renderTutorialStepBubble();
+}
+
 function recordTutorialEvent(type, payload = {}) {
   if (!activeTutorialSession) return;
+  advanceTutorialStep(type, payload);
   if (type === 'battle') {
     const human = game?.players?.find((player) => !player.isCPU);
     activeTutorialSession.done.add('battle');
@@ -3593,6 +3655,7 @@ async function finishTutorial(completed = true) {
   const session = activeTutorialSession;
   activeTutorialSession = null;
   tutorialGuide.classList.add('hidden');
+  tutorialStepBubble.classList.add('hidden');
   game?.cancel?.();
   game = undefined;
   stopMusic();
@@ -3624,12 +3687,13 @@ async function startTutorialDemo() {
   const ikaIcon = ikaPreset?.dataUrl ? await iconFromDataUrl(ikaPreset.dataUrl) : null;
   const danballIcon = await loadNpcTokenImage('ダンボール男');
   const playerDeck = buildTutorialPlayerDeck();
-  const cpuDeck = buildCharacterDeckList('hitode');
+  const cpuDeck = buildTutorialCpuDeck();
 
   activeTutorialSession = {
     loggedIn,
     savedCharacter,
     lessonIndex: 0,
+    stepIndex: 0,
     done: new Set(),
   };
   await confirmLandscapeReady();
@@ -3659,10 +3723,21 @@ async function startTutorialDemo() {
     },
     tutorialMode: true,
     tutorialOpeningCardIds: ['divination', 'diceOne', 'fireStarter', 'knife', 'potLid', 'kunekune'],
-    // 空キュー＝固定サイコロなし（通常のランダム抽選）。以前の台本は初期
-    // 配置前提で組まれており、初手が必ず1になる等の不自然さの方が目立った。
-    // nullを渡すとGame側の既定台本が適用されるので、明示的に空にする。
-    tutorialDiceQueues: { human: [], cpu: [] },
+    tutorialCpuOpeningCardIds: ['salarymander', 'jukaiNoOnryou'],
+    // 誘導台本（TUTORIAL_FLOW_STEPS参照）どおりの盤面が出来るよう、序盤の
+    // サイコロを両者固定にする。盤面は 0→1→2(CP)→4→7→6→5→3→0 の時計回り。
+    //   自1: 1歩→マス1で火付け役召喚 / 敵1: 1歩→マス1へ侵略（なべのふた防衛）
+    //   自2: 3歩→CP経由でマス7にくねくね / 敵2: 2歩→CP経由でマス4に樹海の怨霊
+    //   自3: 2歩→マス5（手前で占術を試す） / 敵3: 2歩→通過
+    //   自4: 引いたアイキャンフライで3×2=6歩→1周してくねくねのマス7へ着地
+    //        →土地コマンド「移動」でマス4の怨霊に移動侵略→反射で撃破
+    // 台本を使い切った後は通常のランダム抽選に戻る。
+    tutorialDiceQueues: { human: [1, 3, 2, 3], cpu: [1, 2, 2] },
+    tutorialDrawQueues: { human: [null, 'kunekune', null, 'iCanFly'], cpu: [] },
+    tutorialCpuScript: [
+      { type: 'invade', card: 'salarymander' },
+      { type: 'summon', card: 'jukaiNoOnryou' },
+    ],
     onTutorialEvent: recordTutorialEvent,
     playerConfigs: [
       { name: 'プレイヤー', isCPU: false, color: 0x2ec4b6, allianceId: null, deckList: playerDeck, iconImage: ikaIcon?.canvas ?? null },
@@ -3671,6 +3746,7 @@ async function startTutorialDemo() {
   });
   tutorialGuide.classList.remove('hidden');
   renderTutorialGuide();
+  renderTutorialStepBubble();
 }
 
 tutorialDemoLink.addEventListener('click', startTutorialDemo);

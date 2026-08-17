@@ -158,7 +158,10 @@ export class Game {
     goalCurrency = null,
     tutorialMode = false,
     tutorialOpeningCardIds = [],
+    tutorialCpuOpeningCardIds = [],
     tutorialDiceQueues = null,
+    tutorialDrawQueues = null,
+    tutorialCpuScript = [],
     onTutorialEvent = null,
   }) {
     this.tiles = tiles;
@@ -244,7 +247,13 @@ export class Game {
     this.goalCurrency = Number.isFinite(Number(goalCurrency)) ? Number(goalCurrency) : null;
     this.tutorialMode = !!tutorialMode;
     this.tutorialOpeningCardIds = tutorialOpeningCardIds;
+    this.tutorialCpuOpeningCardIds = tutorialCpuOpeningCardIds;
     this.tutorialDiceQueues = tutorialDiceQueues || { human: [1, 1, 2, 1, 3, 2], cpu: [2, 1, 2, 1, 2, 1] };
+    // ターンごとの固定ドロー台本（catalogId、nullなら通常ドロー）。
+    this.tutorialDrawQueues = tutorialDrawQueues || null;
+    // CPUの土地コマンド台本。先頭から順に、状況が合致した時だけ消費する
+    // （合致しなければ通常AIに委ねる）。[{type:'invade'|'summon', card:catalogId}]
+    this.tutorialCpuScript = [...tutorialCpuScript];
     this.onTutorialEvent = onTutorialEvent || (() => {});
     this.storyEnded = false;
     // 経過ターン数（_beginTurnごとに+1）。退出報酬の最低ターン数判定に使う
@@ -444,7 +453,7 @@ export class Game {
       player.mesh = player.iconImage
         ? this.scene.createPieceFromImage(player.iconImage, pos)
         : this.scene.createPiece(player.color, pos);
-      if (this.tutorialMode && !player.isCPU) this._prepareTutorialOpeningHand(player);
+      if (this.tutorialMode) this._prepareTutorialOpeningHand(player);
       for (let i = 0; i < STARTING_HAND_SIZE; i++) {
         const card = player.deck.draw();
         if (card) { player.hand.push(card); this._recordDraw(player, card); }
@@ -457,8 +466,9 @@ export class Game {
   }
 
   _prepareTutorialOpeningHand(player) {
+    const wantedIds = player.isCPU ? this.tutorialCpuOpeningCardIds : this.tutorialOpeningCardIds;
     const selected = [];
-    for (const wantedId of this.tutorialOpeningCardIds) {
+    for (const wantedId of wantedIds) {
       const index = player.deck.drawPile.findIndex((card) => catalogIdOf(card) === wantedId);
       if (index >= 0) selected.push(player.deck.drawPile.splice(index, 1)[0]);
     }
@@ -1610,6 +1620,7 @@ export class Game {
       const key = player.isCPU ? 'cpu' : 'human';
       const fixed = this.tutorialDiceQueues?.[key]?.shift();
       if (fixed != null) steps = fixed;
+      if (!player.isCPU) this.onTutorialEvent('roll', { steps });
     }
     // ダイス呪い（1のダイス/3のダイス/6のダイス/アイキャンフライ/バックファイア）:
     // 次の1回のロールだけ結果を書き換える一度きりの呪い。
@@ -1674,7 +1685,18 @@ export class Game {
   }
 
   async _drawForTurn(player) {
-    const card = player.deck.draw();
+    // チュートリアルのドロー台本: 指定catalogIdの1枚を山札から抜いて引かせる。
+    // null（またはキュー切れ・見つからない）なら通常ドローに落ちる。
+    let card = null;
+    if (this.tutorialMode && this.tutorialDrawQueues) {
+      const queue = this.tutorialDrawQueues[player.isCPU ? 'cpu' : 'human'];
+      const wantedId = queue?.shift();
+      if (wantedId) {
+        const index = player.deck.drawPile.findIndex((c) => catalogIdOf(c) === wantedId);
+        if (index >= 0) card = player.deck.drawPile.splice(index, 1)[0];
+      }
+    }
+    card ||= player.deck.draw();
     if (!card) return;
     this._recordDraw(player, card);
 
@@ -2161,6 +2183,9 @@ export class Game {
 
   /** CPU just picks randomly; the human is prompted (camera-work + diagonal arrows toward whichever screen direction each option actually sits in). */
   async _chooseNextTile(player, fromTile, optionIds, remainingSteps = 0) {
+    // チュートリアルは台本進行を守るため分岐を自動選択する（このマップで
+    // 分岐が出るのはスタート地点の初回だけ。id最小＝時計回り側で固定）。
+    if (this.tutorialMode) return Math.min(...optionIds);
     if (player.isCPU) return this._cpuChooseNextTile(player, optionIds);
 
     const options = optionIds.map((id) => {
@@ -2671,6 +2696,10 @@ export class Game {
     if (tile.type !== TileType.LAND && !isAdmin && accessibleOwnedTiles.length === 0) return;
 
     if (player.isCPU) {
+      if (this.tutorialMode && await this._runTutorialCpuScript(player, tile)) {
+        await this._settleLandingToll(player, tile, owesTollUnlessConquered);
+        return;
+      }
       if (tile.type === TileType.LAND && tile.owner !== player.id && !isAlliedLand) {
         await this._cpuLandCommand(player, tile);
       } else {
@@ -3778,6 +3807,49 @@ export class Game {
    * 使うかを勝率シミュレーションベースで決める（見送ればG消費なしで
    * このターンの土地コマンドを終える）。
    */
+  /**
+   * チュートリアルのCPU台本: 先頭ステップの前提条件（invade=敵ユニットの
+   * いる土地に着地／summon=空き地に着地、指定カードが手札にあり支払える）が
+   * 揃った時だけ消費・実行する。揃わなければ何もせずfalseを返し、呼び出し元が
+   * 通常AIに委ねる（プレイヤーが台本どおり動かなくても詰まない・壊れない）。
+   */
+  async _runTutorialCpuScript(player, tile) {
+    const step = this.tutorialCpuScript[0];
+    if (!step) return false;
+    const card = player.hand.find((c) => catalogIdOf(c) === step.card);
+    if (!card || player.currency < (card.cost || 0)) return false;
+
+    if (step.type === 'invade') {
+      if (tile.type !== TileType.LAND || tile.owner == null || tile.owner === player.id || !tile.unit || tile.transparentCursed) return false;
+      this.tutorialCpuScript.shift();
+      await delay(CPU_DECISION_MS);
+      player.hand = player.hand.filter((c) => c.id !== card.id);
+      this._discardUsedCard(player, card);
+      player.currency -= card.cost;
+      await this._runInvasion(player, tile, card);
+      this._notifyState();
+      return true;
+    }
+
+    if (step.type === 'summon') {
+      if (tile.type !== TileType.LAND || tile.owner != null) return false;
+      this.tutorialCpuScript.shift();
+      await delay(CPU_DECISION_MS);
+      player.hand = player.hand.filter((c) => c.id !== card.id);
+      this._discardUsedCard(player, card);
+      player.currency -= card.cost;
+      const chainGain = this._captureLandGain(player, tile);
+      this._placeUnit(tile, player, card);
+      this.onLog(`${player.name}は${card.name}を召喚した (-${card.cost}G)`);
+      this._notifyState();
+      await this.onSummonEffect?.({ tileId: tile.id, unitName: card.name });
+      await this._presentLandGain(chainGain);
+      return true;
+    }
+
+    return false;
+  }
+
   async _cpuLandCommand(player, tile) {
     await delay(CPU_DECISION_MS);
     const profile = player.aiProfile;
@@ -5520,6 +5592,15 @@ export class Game {
   async _runCPUTurn() {
     await delay(CPU_PRE_ROLL_MS);
     if (!this.currentPlayer.isCPU) return;
+    // チュートリアルのCPUはスペルを使わない: 台本の進行（固定ダイスで決めた
+    // 着地マス）をスペル移動やダイス操作で崩さないため。サイコロを振って
+    // 土地コマンド（台本→通常AI）だけを行う。
+    if (this.tutorialMode) {
+      const fixedDiceValue = this._tutorialDiceValue();
+      const steps = await this.onCpuRoll(fixedDiceValue);
+      this.rollDice(steps);
+      return;
+    }
     if (await this._cpuMaybeUseHomingInstinctSpell(this.currentPlayer)) {
       for (const player of this.players) await this._resolveNegativeCurrency(player);
       if (!this.storyEnded) {

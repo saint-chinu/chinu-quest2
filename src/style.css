@@ -626,6 +626,39 @@ html, body {
 
 #tutorial-guide.hidden { display: none; }
 
+/* 誘導ステップの吹き出し: 手札パネルの上に常駐して「次にやること」を示す。
+   操作を塞がないようpointer-events: none。 */
+#tutorial-step-bubble {
+  position: absolute;
+  left: 50%;
+  bottom: 120px;
+  transform: translateX(-50%);
+  z-index: 18;
+  max-width: min(560px, 84vw);
+  background: rgba(20, 28, 44, 0.95);
+  border: 2px solid #ffd166;
+  border-radius: 14px;
+  padding: 10px 16px;
+  color: #ffe9b0;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.5;
+  pointer-events: none;
+}
+
+#tutorial-step-bubble::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: -10px;
+  transform: translateX(-50%);
+  border-left: 10px solid transparent;
+  border-right: 10px solid transparent;
+  border-top: 10px solid #ffd166;
+}
+
+#tutorial-step-bubble.hidden { display: none; }
+
 #tutorial-guide-box {
   width: min(620px, 76vw);
   max-height: 42vh;
