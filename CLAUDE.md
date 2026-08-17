@@ -76,6 +76,15 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   (`fusionSummon`)とガシャーンは候補除外。全種遭遇済みなら200G+2ドロー。
 - **占術(divination)** N40G(Codex追加): モンスター/アイテム/スペルから1種選び、
   デッキ内の該当をランダム1枚手札へ。
+- **ステージ専用カードの図鑑登録（配布なし）**（2026-08）: 「開示請求」（EXスペル、
+  「彼」＝stage.key `kare`専用デッキにのみ入っている）はショップ抽選が出せる上限が
+  Rareまで（`shopPacks.js`の`rollRarity`にEXが無い）で、他に入手経路が無いため
+  正規プレイでは永久に図鑑が埋まらなかった。⑥クリア時に`markCatalogSeen()`で
+  `currentCharacter.catalogSeenCards[key]=true`だけ立てる（`ownedCards`は増やさない）。
+  図鑑（`showCatalogScreen`）は`owned > 0 || isCatalogSeen(key)`で表示を判定するが、
+  デッキ編集の追加ボタンは`ownedCountOf`基準のままなので実際の所持枚数は0＝
+  デッキには入れられない。「見て詳細を確認できるだけ」を図鑑と所持で作り分ける
+  時はこのパターン（ownedCardsとcatalogSeenCardsを別に持つ）を使うこと。
 - **キャンセルカルチャー** Nスペル: 敵の手札のスペル/アイテム1枚を捨てさせる。
 - **魔力抽出(extractManaFromHandCard)** S100G: 自分含む手札のある1人を選び、その手札を
   見て1枚捨てさせ、**捨てられた本人が+200G**。target=`anyPlayerHandCard`。詠唱中の

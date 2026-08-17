@@ -4728,6 +4728,11 @@ async function handleStoryBattleEnd(index, { won }) {
   if (stage.key === 'danball' && !currentCharacter.receivedEncounterReward) {
     grantEncounterReward();
   }
+  // 「彼」（ステージ⑥）を撃破したら、「彼」専用スペル「開示請求」を図鑑に登録する
+  // （配布はしない＝デッキには入れられない、見て詳細を確認できるだけ）。
+  if (stage.key === 'kare') {
+    markCatalogSeen(SPELL_CATALOG.disclosureRequest);
+  }
   if (index + 1 > (currentCharacter.storyProgress || 0)) {
     currentCharacter.storyProgress = index + 1;
   }
@@ -4891,11 +4896,15 @@ function showCatalogScreen() {
   catalogList.replaceChildren();
   for (const card of sortedCatalog().filter((def) => category.test(def) && !catalogHiddenRarities.has(def.rarity))) {
     const owned = ownedCountOf(cardKey(card));
+    // 「開示請求」等のステージ専用カード: 所持枚数は0のままだが、対応する
+    // ステージをクリアしていれば図鑑には登録済み（詳細を見られる）扱いにする
+    // （markCatalogSeen参照。デッキには入れられない＝枚数は正直に0を表示）。
+    const registered = owned > 0 || isCatalogSeen(cardKey(card));
     const row = document.createElement('div');
-    row.className = `catalog-row${owned ? '' : ' catalog-row-unknown'}`;
+    row.className = `catalog-row${registered ? '' : ' catalog-row-unknown'}`;
     const info = document.createElement('div');
     info.className = 'catalog-card-info';
-    if (owned) {
+    if (registered) {
       const presentation = cardListPresentation(card, owned);
       const name = document.createElement('button');
       name.className = 'catalog-card-name card-summary-heading';
@@ -5321,6 +5330,26 @@ function grantEncounterReward() {
   currentCharacter.receivedEncounterReward = true;
   saveCharacter(currentUserId, currentCharacter);
   showToast('クリア報酬「未知との遭遇」を入手しました！', 2600);
+}
+
+/**
+ * ステージ専用カードの「図鑑登録のみ」。「彼」戦で相手が使う「開示請求」は
+ * ownedCardsを増やさない＝デッキには入れられない（ownedCountOf基準の
+ * デッキ編集・+ボタンはずっと0のまま）。catalogSeenCardsだけを立てて、
+ * 図鑑の表示条件を「所有 or 見た」に広げる（showCatalogScreen参照）。
+ */
+function markCatalogSeen(def) {
+  if (!currentCharacter) return;
+  const key = cardKey(def);
+  currentCharacter.catalogSeenCards = currentCharacter.catalogSeenCards || {};
+  if (currentCharacter.catalogSeenCards[key]) return;
+  currentCharacter.catalogSeenCards[key] = true;
+  saveCharacter(currentUserId, currentCharacter);
+  showToast(`「${def.name}」を図鑑に登録しました（ステージ専用カードのため配布はされません）`, 3000);
+}
+
+function isCatalogSeen(key) {
+  return !!currentCharacter?.catalogSeenCards?.[key];
 }
 
 
