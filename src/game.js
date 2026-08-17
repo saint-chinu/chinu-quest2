@@ -2052,6 +2052,11 @@ export class Game {
 
   async _checkGoalAchievement(player) {
     if (this.storyEnded || this.goalCurrency == null || this._totalAssetsOf(player) < this.goalCurrency) return false;
+    // チュートリアルは練習の場: CPUが先に目標へ届いても決着させない
+    // （通常AIは土地を強気に強化するため、放っておくと2周程度で2000Gに
+    // 達してレッスン途中のプレイヤーを置き去りに終了してしまう）。
+    // プレイヤー自身の達成だけがレッスン①の文章どおり勝利になる。
+    if (this.tutorialMode && player.isCPU) return false;
     this.storyEnded = true;
     this.awaitingRoll = false;
     this.isBusy = true;
@@ -4125,9 +4130,13 @@ export class Game {
    * 使わず、行動開始時の300Gを判断基準にする。
    */
   async _cpuMaybeLevelUp(player, tile) {
-    if (player.currency < 300 || tile.type !== TileType.LAND || tile.level >= LEVEL_CAP || tile.element === Element.NEUTRAL) return false;
+    // チュートリアルではCPUの強化をLv2まで・1段階ずつに抑える。通常AIの
+    // 「+3段階まで一気に上げる」を許すと序盤から地価1000G超の土地ができ、
+    // 初心者が通行料で消耗するうえ、CPUの総資産が目標へ一直線に伸びる。
+    const cpuLevelCap = this.tutorialMode ? 2 : LEVEL_CAP;
+    if (player.currency < 300 || tile.type !== TileType.LAND || tile.level >= cpuLevelCap || tile.element === Element.NEUTRAL) return false;
     const affordableTargets = [];
-    const maxTargetLevel = Math.min(LEVEL_CAP, tile.level + 3);
+    const maxTargetLevel = Math.min(cpuLevelCap, tile.level + (this.tutorialMode ? 1 : 3));
     for (let targetLevel = tile.level + 1; targetLevel <= maxTargetLevel; targetLevel += 1) {
       const cost = LEVEL_INVESTMENT[targetLevel] - LEVEL_INVESTMENT[tile.level];
       if (cost <= player.currency) affordableTargets.push({ targetLevel, cost });

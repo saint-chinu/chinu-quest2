@@ -3644,11 +3644,13 @@ async function startTutorialDemo() {
     // 「総資産が目標以上の状態でゴールすると勝利です」という文章どおり、
     // 達成したらチュートリアル完了として閉じる。
     storyMode: true,
+    // 敗北経路は破産決着のみ（CPUの目標達成はtutorialModeでは決着しない -
+    // game.jsの_checkGoalAchievement参照）。どちらでも完了扱いで報酬を渡す。
     onStoryBattleEnd: async ({ won }) => {
       showToast(
         won
           ? '目標総資産を達成！チュートリアル完了です'
-          : '敵CPUが先に目標を達成しました。チュートリアル完了です',
+          : '敗北しましたが、チュートリアルは完了扱いです',
         3000,
       );
       await finishTutorial(true);

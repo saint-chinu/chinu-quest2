@@ -166,6 +166,11 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   達成＝`finishTutorial(true)`で完了扱い・初回報酬も付与）。`storyMode: true`は
   破産決着（`_checkStoryWinCondition`）も有効にするので、ハンドラは勝敗
   どちらの経路でも呼ばれる前提で書くこと。
+- **チュートリアルではCPUは決着させない**: 通常AIは土地を+3段階まで一気に
+  強化するため2周程度で2000Gへ届き、レッスン途中で終了してしまっていた。
+  `_checkGoalAchievement`は`tutorialMode && isCPU`なら不発、CPUの土地強化は
+  Lv2まで・1段階ずつに制限（`_cpuMaybeLevelUp`）。プレイヤーの敗北経路は
+  破産のみで、それも完了扱い（報酬あり）。
 
 ## PvPフレンド／招待 (Codex追加＋ハードニング)
 - `src/pvpFriends.js`。対戦開始時に`registerPvpFriends`が同席者を自分の一覧へ自動登録。
