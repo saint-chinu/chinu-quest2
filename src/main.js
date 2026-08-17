@@ -3517,7 +3517,7 @@ const TUTORIAL_LESSONS = [
   },
   {
     title: 'チュートリアル完了',
-    text: '説明は以上です。盤面では何度でも操作を試せます。「完了」を押すと終了します。ログイン中の初回完了時だけ、占術1枚と100Mを受け取れます。ログイン前のデモでは報酬や進行状況は保存されません。',
+    text: '説明は以上です。盤面では何度でも操作を試せます。「完了」を押すか、目標総資産を達成した状態でゴールするとチュートリアル終了です。ログイン中の初回完了時だけ、占術1枚と100Mを受け取れます。ログイン前のデモでは報酬や進行状況は保存されません。',
   },
 ];
 
@@ -3638,6 +3638,21 @@ async function startTutorialDemo() {
   startBattle({ name: 'プレイヤー', color: 0x2ec4b6 }, {
     mapId: 'tutorial',
     goalCurrency: 2000,
+    // storyModeが無いと、goalCurrency達成時に_checkGoalAchievementが盤面を
+    // 止めたきり誰も終了処理をしない（CONGRATULATIONS表示後にフリーズし、
+    // メニュー退出＝途中終了扱いで初回報酬も貰えない）。レッスン①の
+    // 「総資産が目標以上の状態でゴールすると勝利です」という文章どおり、
+    // 達成したらチュートリアル完了として閉じる。
+    storyMode: true,
+    onStoryBattleEnd: async ({ won }) => {
+      showToast(
+        won
+          ? '目標総資産を達成！チュートリアル完了です'
+          : '敵CPUが先に目標を達成しました。チュートリアル完了です',
+        3000,
+      );
+      await finishTutorial(true);
+    },
     tutorialMode: true,
     tutorialOpeningCardIds: ['divination', 'diceOne', 'fireStarter', 'knife', 'potLid', 'kunekune'],
     tutorialDiceQueues: { human: [1, 1, 2, 1, 3, 2, 1, 2, 1], cpu: [2, 1, 2, 1, 2, 1, 3, 1] },

@@ -159,6 +159,13 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   catalogIdで引く処理（初期手札指定など）が全て不発になる。
 - 台本を使い切った後は`_tutorialDiceValue()`がnullを返して通常抽選へ戻る
   （固定値を返し続けると、表示されるダイスと実際の移動量が食い違う）。
+- ⚠️ **`goalCurrency`を渡すなら`storyMode: true`と`onStoryBattleEnd`も必須**。
+  `_checkGoalAchievement`は達成時に盤面を止める（isBusy=true）が、終了処理を
+  呼ぶのは`storyMode`のときだけ。チュートリアルはこれが欠けていたため、
+  目標達成（約8ターン）でCONGRATULATIONS表示後にフリーズしていた（2026-08修正:
+  達成＝`finishTutorial(true)`で完了扱い・初回報酬も付与）。`storyMode: true`は
+  破産決着（`_checkStoryWinCondition`）も有効にするので、ハンドラは勝敗
+  どちらの経路でも呼ばれる前提で書くこと。
 
 ## PvPフレンド／招待 (Codex追加＋ハードニング)
 - `src/pvpFriends.js`。対戦開始時に`registerPvpFriends`が同席者を自分の一覧へ自動登録。
