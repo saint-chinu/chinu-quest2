@@ -3488,8 +3488,8 @@ const TUTORIAL_LESSONS = [
     text: '自分の手札は左下に常時表示されます。自分のターンでスペルをタップし、詳細画面から使用します。「占術」や「1のダイス」を実際に使ってみましょう。スペル使用後もサイコロを振れます。',
   },
   {
-    title: '固定サイコロ・移動・CP',
-    text: 'チュートリアルのサイコロは説明イベントが起きるよう固定されています。画面のサイコロをタップすると、その目だけ進みます。未通過CPを通ると100Gを獲得し、全CP通過後はゴールで周回ボーナスを得られます。',
+    title: 'サイコロ・移動・CP',
+    text: '画面のサイコロをタップすると、出た目の数だけ進みます。未通過CPを通ると100Gを獲得し、全CP通過後はゴールで周回ボーナスを得られます。',
   },
   {
     title: 'モンスター召喚',
@@ -3637,7 +3637,9 @@ async function startTutorialDemo() {
   appEl.classList.remove('hidden');
   startBattle({ name: 'プレイヤー', color: 0x2ec4b6 }, {
     mapId: 'tutorial',
-    goalCurrency: 2000,
+    // 2000だと少額スタートでも数周で届いてしまい、レッスン途中に決着する。
+    // 5000は「練習中にうっかり達成しない」ための距離（達成すれば勝利で終了）。
+    goalCurrency: 5000,
     // storyModeが無いと、goalCurrency達成時に_checkGoalAchievementが盤面を
     // 止めたきり誰も終了処理をしない（CONGRATULATIONS表示後にフリーズし、
     // メニュー退出＝途中終了扱いで初回報酬も貰えない）。レッスン①の
@@ -3657,7 +3659,10 @@ async function startTutorialDemo() {
     },
     tutorialMode: true,
     tutorialOpeningCardIds: ['divination', 'diceOne', 'fireStarter', 'knife', 'potLid', 'kunekune'],
-    tutorialDiceQueues: { human: [1, 1, 2, 1, 3, 2, 1, 2, 1], cpu: [2, 1, 2, 1, 2, 1, 3, 1] },
+    // 空キュー＝固定サイコロなし（通常のランダム抽選）。以前の台本は初期
+    // 配置前提で組まれており、初手が必ず1になる等の不自然さの方が目立った。
+    // nullを渡すとGame側の既定台本が適用されるので、明示的に空にする。
+    tutorialDiceQueues: { human: [], cpu: [] },
     onTutorialEvent: recordTutorialEvent,
     playerConfigs: [
       { name: 'プレイヤー', isCPU: false, color: 0x2ec4b6, allianceId: null, deckList: playerDeck, iconImage: ikaIcon?.canvas ?? null },

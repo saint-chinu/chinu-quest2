@@ -470,17 +470,11 @@ export class Game {
     const human = this.players.find((player) => !player.isCPU);
     const cpu = this.players.find((player) => player.isCPU);
     if (!human || !cpu) return;
-    human.currency = 1000;
-    cpu.currency = 1000;
-    // 移動侵略・防衛・通行料をすぐ試せるよう、外周の離れた土地を1つずつ
-    // 初期配置済みにする。通常の召喚練習用空地は十分に残す。
-    const humanLand = this.tiles.find((tile) => tile.id === 3 && tile.type === TileType.LAND);
-    const cpuLand = this.tiles.find((tile) => tile.id === 7 && tile.type === TileType.LAND);
-    if (humanLand) this._placeUnit(humanLand, human, MONSTER_CATALOG.fireStarter);
-    if (cpuLand) {
-      this._placeUnit(cpuLand, cpu, MONSTER_CATALOG.salarymander);
-      cpuLand.level = 2;
-    }
+    // 2026-08調整: 以前は両者1000G＋土地を初期配置（CPU側はLv2）していたが、
+    // その土地を取るだけで総資産が跳ね、何もしなくても目標へ届いてしまった。
+    // 全マスLv1の更地・少額スタートにして、召喚から一歩ずつ体験させる。
+    human.currency = 200;
+    cpu.currency = 200;
     this._notifyState();
   }
 
