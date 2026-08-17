@@ -4992,7 +4992,7 @@ export class Game {
       const labels = [];
       if (hasTrait(unit, 'firstStrike') && myScore > theirScore) labels.push('先制：先に攻撃');
       if (hasTrait(unit, 'lastStrike') && myScore < theirScore) labels.push('後攻：あとに攻撃');
-      if (hasTrait(unit, 'pierce')) labels.push('貫通：基礎HPに直接ダメージ');
+      if (hasTrait(unit, 'pierce')) labels.push('貫通：HPの土地レベルボーナス、ダメージ無効化、反射を無視してダメージ。アイテムのHP増加は無視できない。');
       return labels;
     };
     const traitRevealSides = [

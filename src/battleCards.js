@@ -85,7 +85,7 @@ export const ITEM_CATALOG = {
   mobileSuit: item('mobileSuit', '出張スーツ', Rarity.N, ItemType.ARMOR, 40, 10, 30),
   nyoBou: item('nyoBou', 'にょ〇棒', Rarity.N, ItemType.WEAPON, 30, 10, 10, {
     traits: ['pierce'],
-    effectDescription: '貫通（反射・無効化・土地レベルボーナスを無視する）',
+    effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）',
   }),
   unitoroNoFuku: item('unitoroNoFuku', 'ウニトロの服', Rarity.N, ItemType.ARMOR, 25, 0, 25),
 
@@ -110,7 +110,7 @@ export const ITEM_CATALOG = {
   ikasamaNoSaikoro: item('ikasamaNoSaikoro', 'イカサマのサイコロ', Rarity.S, ItemType.WEAPON, 40, 0, 0, {
     traits: ['pierce'],
     effect: { type: 'atkFromLastDiceRoll', multiplier: 11 },
-    effectDescription: 'ATK+前回移動したサイコロの目×11。貫通（反射・無効化・土地レベルボーナスを無視する）',
+    effectDescription: 'ATK+前回移動したサイコロの目×11。貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）',
   }),
   twinHammer: item('twinHammer', 'ツインハンマー', Rarity.S, ItemType.WEAPON, 65, 10, 0, {
     effect: { type: 'doubleStrike' },
@@ -154,7 +154,7 @@ export const ITEM_CATALOG = {
   zangokuKen: item('zangokuKen', '斬〇剣', Rarity.R, ItemType.WEAPON, 130, 30, 0, {
     traits: ['lastStrike', 'pierce'],
     effect: { type: 'instantKillOnHit', chance: 0.5 },
-    effectDescription: '後攻・貫通（反射・無効化・土地レベルボーナスを無視する）。攻撃成功時50%で相手を即死させる',
+    effectDescription: '後攻・貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。攻撃成功時50%で相手を即死させる',
   }),
 
   // ストーリー③クリア報酬（紫の魔女ホフクからのお礼）。story.jsのSTORY_STAGES[2].rewardから参照。
