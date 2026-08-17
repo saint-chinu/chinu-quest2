@@ -189,6 +189,17 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   - チュートリアルのCPUはスペル不使用、分岐はid最小側を自動選択（_chooseNextTile）
   - 反射はdealDamageの「打撃を受ける側」判定なので、くねくねが攻め込む形でも
     怨霊の先制40を跳ね返して倒せる（反射時は即死などのオンヒット効果も不発）
+- **台本は強制**（2026-08追加）: 誘導中（TUTORIAL_FLOW_STEPSの最終`event: null`
+  以外）は`tutorialGuidedStep()`を各プロンプトが参照し、台本の操作以外を
+  disabled/フィルタする: 土地コマンド3ボタン、召喚ピッカー（requireCardのみ）、
+  防衛アイテム（requireItemのみ・スキップ封じ）、スペル（requireCardのみ、
+  ダイスはスペル未使用の間ブロック）、アイキャンフライ対象（targetSelf=自分のみ）、
+  土地ブラウズ（くねくねの土地のみ）、移動先（敵ユニットの隣接地のみ）。
+  **必要な対象が見つからない時は制限を外す安全弁**を必ず残すこと（ソフトロック
+  防止）。全ステップ完了で`tutorialGuidedStep()`がnullを返し自由プレイへ。
+  防衛レッスンの完了は戦闘開始の'battle'ではなく決着後の**'battleEnd'**
+  （_runInvasion末尾で発火。開始時に発火する'battle'だとアイテム選択中に
+  吹き出しが先へ進んでしまう）。
 
 ## PvPフレンド／招待 (Codex追加＋ハードニング)
 - `src/pvpFriends.js`。対戦開始時に`registerPvpFriends`が同席者を自分の一覧へ自動登録。

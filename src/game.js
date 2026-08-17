@@ -5100,6 +5100,8 @@ export class Game {
 
   async _runInvasion(player, tile, card) {
     this.onTutorialEvent('battle', { attackerId: player.id, defenderId: tile.owner });
+    // battleEnd用: 決着処理でtile.ownerが書き換わる前の防衛側を控えておく。
+    const battleDefenderId = tile.owner;
     const currentOwner = tile.owner != null ? this.players.find((candidate) => candidate.id === tile.owner) : null;
     if (currentOwner?.allianceId != null && currentOwner.allianceId === player.allianceId) {
       this.onLog('同盟仲間の土地には侵略できません');
@@ -5195,6 +5197,9 @@ export class Game {
     }
     if (tile.owner !== defenderPlayer.id) await this._presentLandLoss(defenderLandLoss);
     if (tile.owner === player.id) await this._presentLandGain(attackerLandGain);
+    // 決着後通知: チュートリアルの誘導ステップ（防衛レッスン）はアイテム選択を
+    // 含む戦闘全体が終わってから進めたいので、開始時の'battle'とは別に送る。
+    this.onTutorialEvent('battleEnd', { attackerId: player.id, defenderId: battleDefenderId });
   }
 
   /**

@@ -496,6 +496,16 @@ function setBranchUndoControl({ active, playerId, onUndo } = {}) {
 }
 
 function promptMoveDirection(options) {
+  // チュートリアル誘導中の移動レッスンは、移動侵略の的（敵モンスターの
+  // いる隣接地＝樹海の怨霊）だけを選ばせる。
+  if (tutorialGuidedStep()?.event === 'move') {
+    const humanId = tutorialLocalHumanId();
+    const enemyTargets = options.filter((o) => {
+      const t = game?.tiles?.[o.tileId];
+      return t?.unit && t.owner != null && t.owner !== humanId;
+    });
+    if (enemyTargets.length > 0) options = enemyTargets;
+  }
   return promptDirectionArrows(options);
 }
 
@@ -548,6 +558,13 @@ function promptLandSubmenu(tile) {
   return new Promise((resolve) => {
     landSubmenuTitle.textContent = tileSummaryText(tile);
     landSubmenuAbility.classList.toggle('hidden', !tile.hasAbility);
+    // チュートリアル誘導中の土地サブメニューは移動レッスン専用。
+    const guidedMove = tutorialGuidedStep()?.event === 'move';
+    landSubmenuSwap.disabled = guidedMove;
+    landSubmenuLevelup.disabled = guidedMove;
+    landSubmenuElement.disabled = guidedMove;
+    landSubmenuAbility.disabled = guidedMove;
+    landSubmenuMove.disabled = false;
     landSubmenuModal.classList.remove('hidden');
 
     function cleanup(result) {
@@ -594,6 +611,12 @@ function promptLandSubmenu(tile) {
 
 /** 対象選び。土地・配置モンスターは盤面カメラで選択し、プレイヤーだけ一覧を使う。 */
 function promptPickAbilityTarget(targets) {
+  // チュートリアル誘導中のアイキャンフライは「自分に使う」のが台本。
+  const guidedSelf = tutorialGuidedStep();
+  if (guidedSelf?.targetSelf) {
+    const selfOnly = targets.filter((t) => t.id === tutorialLocalHumanId());
+    if (selfOnly.length > 0) targets = selfOnly;
+  }
   if (targets.length > 0 && targets.every((target) => target.type != null)) {
     return promptPickAreaTarget(targets.map((target) => ({
       ...target,
@@ -750,7 +773,13 @@ function promptPickMonsterCard(options) {
     }
 
     monsterPickerChoices.replaceChildren();
-    for (const card of options) {
+    const guided = tutorialGuidedStep();
+    let pickerOptions = options;
+    if (guided?.event === 'summon' && guided.requireCard) {
+      const filtered = options.filter((card) => catalogIdOf(card) === guided.requireCard);
+      if (filtered.length > 0) pickerOptions = filtered;
+    }
+    for (const card of pickerOptions) {
       const el = document.createElement('div');
       el.className = 'card';
       renderCardEl(el, card);
@@ -1018,6 +1047,11 @@ function startTileHighlight(tileIds, color = BROWSE_HIGHLIGHT_COLOR) {
  * tap. Backing out via 戻る resolves null.
  */
 function promptPickBrowseTile(candidates) {
+  // チュートリアル誘導中の移動レッスンは、くねくねの土地だけを対象にする。
+  if (tutorialGuidedStep()?.event === 'move') {
+    const kune = candidates.filter((c) => c.isMine && c.unitName === 'くねくね');
+    if (kune.length > 0) candidates = kune;
+  }
   return new Promise((resolve) => {
     const camSnap = beginCameraWork();
     const byId = new Map(candidates.map((c) => [c.id, c]));
@@ -1413,7 +1447,10 @@ function renderHand(hand, spellUsable = false) {
     el.className = 'card';
     el.style.pointerEvents = 'auto';
     renderCardEl(el, card, { showMonsterStats: true });
-    const canUseThis = card.type === CardType.SPELL && spellUsable;
+    const guidedSpell = tutorialGuidedStep();
+    const spellAllowedInTutorial = !guidedSpell
+      || (guidedSpell.event === 'spell' && guidedSpell.requireCard === catalogIdOf(card));
+    const canUseThis = card.type === CardType.SPELL && spellUsable && spellAllowedInTutorial;
     el.addEventListener('click', () => {
       // サイコロを振り始めてから確定前に手札（コマンド選択）へ戻った場合は、
       // 回転を止めてリセットする（放置すると裏で回り続けてしまう）。
@@ -1953,6 +1990,14 @@ function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, oppone
     let settled = false;
     let confirming = false;
     let autoSkipTimer = null;
+    // チュートリアル誘導中の防衛レッスン: 台本のアイテムだけを選ばせ、
+    // 「使わない」も封じる（アイテムが手札に無い場合だけ制限を外す安全弁）。
+    const guidedStep = tutorialGuidedStep();
+    const guidedItemId = side === 'defender' && guidedStep?.requireItem
+      && hand.some((c) => catalogIdOf(c) === guidedStep.requireItem)
+      ? guidedStep.requireItem : null;
+    if (guidedItemId) hand = hand.filter((c) => catalogIdOf(c) === guidedItemId);
+    battleItemPickerSkip.disabled = !!guidedItemId;
     battleItemPickerTitle.textContent =
       hand.length > 0 ? `${ownerName}の${unitName}: 使うアイテムを選んでください` : `${ownerName}の${unitName}: アイテムがありません`;
     battleItemPickerChoices.replaceChildren();
@@ -2729,6 +2774,17 @@ function beginDiceMove(result) {
 
 diceButton.addEventListener('click', () => {
   if (diceButton.disabled) return;
+  // チュートリアル誘導中、スペルのステップでは先にそのスペルを使わせる
+  // （カードが手札に無い/払えない時は安全弁としてロールを許可）。
+  const guidedSpellStep = tutorialGuidedStep();
+  if (guidedSpellStep?.event === 'spell') {
+    const humanPlayer = game?.players?.find((p) => !p.isCPU);
+    const requiredCard = humanPlayer?.hand?.find((c) => catalogIdOf(c) === guidedSpellStep.requireCard);
+    if (requiredCard && (humanPlayer.currency ?? 0) >= (requiredCard.cost || 0) && !humanPlayer.spellUsedThisTurn) {
+      showToast(`先に吹き出しの「${requiredCard.name}」を使ってみよう`, 2200);
+      return;
+    }
+  }
   dicePromptDismissed = true;
   syncCenterVisibility();
 
@@ -3602,14 +3658,30 @@ function renderTutorialGuide() {
  */
 const TUTORIAL_FLOW_STEPS = [
   { event: 'roll', text: 'サイコロをタップして振ってみよう！' },
-  { event: 'summon', text: '空き地に止まった！「召喚／侵略」から「火付け役」を召喚してみよう' },
-  { event: 'battle', defenderIsHuman: true, text: '敵が攻めてきたら、アイテム選択で「なべのふた」を選んで防御しよう。防ぎ切れば通行料ももらえる' },
-  { event: 'summon', text: '次の空き地では「くねくね」を召喚してみよう（HPは低いが攻撃を反射する）' },
-  { event: 'spell', notCard: 'iCanFly', text: '自分のターンが来たら、サイコロを振る前に手札の「占術」を使ってみよう（スペルは1ターン1回）' },
-  { event: 'spell', card: 'iCanFly', text: '「アイキャンフライ」を引いた！自分に使うと次のサイコロが2倍。ぐるっと1周しよう' },
+  { event: 'summon', requireCard: 'fireStarter', text: '空き地に止まった！「召喚／侵略」から「火付け役」を召喚してみよう' },
+  { event: 'battleEnd', defenderIsHuman: true, requireItem: 'potLid', text: '敵が攻めてきた！アイテム選択で「なべのふた」を選んで防御しよう。防ぎ切れば通行料ももらえる' },
+  { event: 'summon', requireCard: 'kunekune', text: '次の空き地では「くねくね」を召喚してみよう（HPは低いが攻撃を反射する）' },
+  { event: 'spell', card: 'divination', requireCard: 'divination', text: '自分のターンが来たら、サイコロを振る前に手札の「占術」を使ってみよう（スペルは1ターン1回）' },
+  { event: 'spell', card: 'iCanFly', requireCard: 'iCanFly', targetSelf: true, text: '「アイキャンフライ」を引いた！自分に使うと次のサイコロが2倍。ぐるっと1周しよう' },
   { event: 'move', text: 'くねくねのマスに戻ってきた！「土地」→くねくねの土地→「移動」で、隣の樹海の怨霊へ移動侵略しよう。反射で倒せるぞ' },
-  { event: null, text: '基本は全部体験できた！あとは自由に試して、上のガイドの「完了」で終了しよう' },
+  { event: null, text: '基本は全部体験できた！ここからは自由に試して、上のガイドの「完了」で終了しよう' },
 ];
+
+/**
+ * 台本強制中なら現在のステップを返す（全ステップ完了後＝自由プレイはnull）。
+ * 誘導中は各プロンプトがこれを見て「台本の操作以外」を無効化する。
+ * どのガードも「必要な対象が見つからない時は制限を外す」安全弁付きで、
+ * 想定外の状態でも操作不能に陥らないようにする。
+ */
+function tutorialGuidedStep() {
+  if (!activeTutorialSession || !game?.tutorialMode) return null;
+  const step = TUTORIAL_FLOW_STEPS[activeTutorialSession.stepIndex];
+  return step && step.event !== null ? step : null;
+}
+
+function tutorialLocalHumanId() {
+  return game?.players?.find((p) => !p.isCPU)?.id;
+}
 
 function renderTutorialStepBubble() {
   if (!activeTutorialSession) {
@@ -3632,7 +3704,6 @@ function advanceTutorialStep(type, payload) {
   if (step.defenderIsHuman && (!human || payload.defenderId !== human.id)) return;
   if ((type === 'summon' || type === 'move') && human && payload.playerId !== human.id) return;
   if (step.card && catalogIdOf(payload.card || {}) !== step.card) return;
-  if (step.notCard && catalogIdOf(payload.card || {}) === step.notCard) return;
   activeTutorialSession.stepIndex += 1;
   renderTutorialStepBubble();
 }
