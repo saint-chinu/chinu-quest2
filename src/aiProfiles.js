@@ -31,11 +31,13 @@ export const DEFAULT_AI_PROFILE = {
 /** キャラ名 → DEFAULT_AI_PROFILEからの上書き差分。story.jsのSTORY_STAGESに登場する名前と一致させる。 */
 export const AI_PROFILES = {
   朕: {
-    offElementSummonChance: 0.2,
+    // ⑧のボス。ダンボール男に迫る好戦性で、属性を厳密に守って連鎖・地価を
+    // 積み上げ（連鎖条件付きの大型も出しやすくなる）、アイテム勝負も辞さない。
+    offElementSummonChance: 0.1,
     levelUpReserve: 300,
-    minWinProbabilityToInvade: 0.25,
-    itemGambleChance: 0.85,
-    highValueAvoidance: 0.15,
+    minWinProbabilityToInvade: 0.2,
+    itemGambleChance: 0.9,
+    highValueAvoidance: 0.1,
   },
   // ①ヒトデの縄張り: チュートリアル格の相手なので、ほぼデフォルト通りのバランス型。
   ヒトデ: {

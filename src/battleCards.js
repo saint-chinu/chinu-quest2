@@ -638,25 +638,34 @@ export const CHARACTER_DECKS = {
   chin: {
     composition: {
       monsters: [
+        // ボス強化: 最弱の半魚人(N 30/30)2枚を、嵐を呼ぶ〇女(R 50/50)と
+        // 煉獄の門番兵(S 25/40・先制・60G)へ差し替え。水・火テーマは維持。
         { def: MONSTER_CATALOG.su, count: 2 }, { def: MONSTER_CATALOG.fireworksMaster, count: 3 },
-        { def: MONSTER_CATALOG.hangyojin, count: 2 }, { def: MONSTER_CATALOG.kaikyouSekishoKurage, count: 2 },
+        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 1 }, { def: MONSTER_CATALOG.rengokuMonbanhei, count: 1 },
+        { def: MONSTER_CATALOG.kaikyouSekishoKurage, count: 2 },
         { def: MONSTER_CATALOG.mizuburoShugyoso, count: 2 }, { def: MONSTER_CATALOG.uminoieTencho, count: 2 },
         { def: MONSTER_CATALOG.bigMermaid, count: 2 }, { def: MONSTER_CATALOG.kyousenshi, count: 1 },
         { def: MONSTER_CATALOG.kontonNoAtama, count: 1 }, { def: MONSTER_CATALOG.metaOn, count: 1 },
       ],
       items: [
+        // ハリネズミの服1枚を斬〇剣（後攻・貫通・50%即死）へ。itemGambleChance
+        // 0.9と合わせて、侵略・迎撃どちらでも一撃の脅威を作る。
         { def: ITEM_CATALOG.fushichoNoTate, count: 1 }, { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
         { def: ITEM_CATALOG.shinkenShirahadori, count: 1 }, { def: ITEM_CATALOG.lifeJacket, count: 1 },
         { def: ITEM_CATALOG.iceSlugger, count: 1 }, { def: ITEM_CATALOG.osafune, count: 1 },
-        { def: ITEM_CATALOG.harinezumiNoFuku, count: 2 },
+        { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 }, { def: ITEM_CATALOG.zangokuKen, count: 1 },
       ],
       spells: [
         // 不動産鑑〇士(realEstateAppraiser)はCPUに詠唱ハンドラが無い死に札
         // だったため、財布チューチュー（手持ちG30%強奪 -
         // _cpuMaybeUseStealGoldSpell参照）へ2枚差し替え。
+        // アイキャンフライは罠用途以外でCPUが使わないため1枚に減らし、
+        // 追徴課税（自分の高額地に1.5倍通行料 - _cpuMaybeUseTollBonusSpell）
+        // を追加。1vs1の通行料プレッシャーを強める。
         { def: SPELL_CATALOG.senbonZakura, count: 2 }, { def: SPELL_CATALOG.walletVacuum, count: 2 },
         { def: SPELL_CATALOG.blueOcean, count: 1 }, { def: SPELL_CATALOG.psychokinesis, count: 2 },
-        { def: SPELL_CATALOG.iCanFly, count: 2 }, { def: SPELL_CATALOG.sideIncome, count: 2 },
+        { def: SPELL_CATALOG.iCanFly, count: 1 }, { def: SPELL_CATALOG.specialAudit, count: 1 },
+        { def: SPELL_CATALOG.sideIncome, count: 2 },
         { def: SPELL_CATALOG.manaExtraction, count: 1 }, { def: SPELL_CATALOG.homingInstinct, count: 1 },
         { def: SPELL_CATALOG.divination, count: 1 },
       ],
