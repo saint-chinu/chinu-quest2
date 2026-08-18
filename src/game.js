@@ -151,6 +151,7 @@ export class Game {
     onBattleOutcome,
     onDamageEffect,
     onStoryBattleEnd,
+    onStoryAssistEvent,
     onResumeCheckpoint,
     onPvpSync,
     playerConfigs,
@@ -164,6 +165,7 @@ export class Game {
     tutorialDrawQueues = null,
     tutorialCpuScript = [],
     onTutorialEvent = null,
+    storyAssistEvent = null,
   }) {
     this.tiles = tiles;
     this.mapId = mapId;
@@ -237,6 +239,9 @@ export class Game {
     // わざわざ渡す必要はない。
     this.onDamageEffect = onDamageEffect;
     this.onStoryBattleEnd = onStoryBattleEnd;
+    this.onStoryAssistEvent = onStoryAssistEvent || (() => Promise.resolve());
+    this.storyAssistEvent = storyAssistEvent;
+    this.storyAssistTriggered = false;
     // ストーリー途中保存用。操作可能な安全地点だけをmain.jsへ渡す。
     this.onResumeCheckpoint = onResumeCheckpoint;
     // 対人戦(PvP)ホスト側のみ使う: _notifyStateのたびに盤面全体のスナップ
@@ -430,6 +435,93 @@ export class Game {
     }
   }
 
+  _runtimePlayerFromConfig(cfg, id, startingTileId = null) {
+    const startId = startingTileId ?? this.tiles.find((tile) => tile.type === TileType.START)?.id ?? 0;
+    const sourceDeckList = cfg.deckList ?? buildStarterCardList(cfg.deckVariant);
+    const permittedDeckList = sourceDeckList.filter((card) => (
+      !card.npcExclusive || !card.exclusiveOwnerName || card.exclusiveOwnerName === cfg.name
+    ));
+    const deck = Deck.fromCardList(permittedDeckList);
+    const deckNeutralMonsterIds = new Set(
+      deck.drawPile
+        .filter((c) => c.type === CardType.MONSTER && c.element === Element.NEUTRAL)
+        .map((c) => catalogIdOf(c)),
+    );
+    return {
+      id,
+      name: cfg.name,
+      isCPU: !!cfg.isCPU,
+      currency: 500,
+      tileId: startId,
+      homeGoalTileId: startId,
+      previousTileId: null,
+      color: cfg.color,
+      deckNeutralMonsterIds,
+      drawnCatalogIds: new Set(),
+      iconImage: cfg.iconImage ?? null,
+      allianceId: cfg.allianceId ?? null,
+      deck,
+      deckBreakdown: deck.drawPile.reduce((counts, card) => {
+        const key = card.type === CardType.MONSTER ? `monster:${card.element ?? Element.NEUTRAL}` : card.type;
+        counts[key] = (counts[key] || 0) + 1;
+        return counts;
+      }, {}),
+      hand: [],
+      spellUsedThisTurn: false,
+      defeated: false,
+      passedCheckpoints: new Set(),
+      hasteTurnsRemaining: 0,
+      lastDiceSteps: 0,
+      aiProfile: resolveAiProfile(cfg.name, cfg.elements ?? null),
+      diceCurse: null,
+      lapsCompleted: 0,
+      tollWaiverCharges: 0,
+      lotteryOnNextGoal: false,
+      pierceNextInvasion: false,
+      guaranteedNextInvasionWin: false,
+      allTilesAccessTurnsRemaining: 0,
+      toughnessTurnsRemaining: 0,
+      tileHistory: [],
+    };
+  }
+
+  _addStoryAssistPlayer(cfg) {
+    const human = this.players.find((player) => !player.isCPU && !player.defeated);
+    const player = this._runtimePlayerFromConfig(cfg, this.players.length, human?.homeGoalTileId ?? null);
+    const pos = this.tiles[player.tileId].position;
+    player.mesh = player.iconImage
+      ? this.scene.createPieceFromImage(player.iconImage, pos)
+      : this.scene.createPiece(player.color, pos);
+    for (let i = 0; i < STARTING_HAND_SIZE; i++) {
+      const card = player.deck.draw();
+      if (card) { player.hand.push(card); this._recordDraw(player, card); }
+    }
+    this.players.push(player);
+    this._syncPieceRenderOrder();
+    this._notifyState();
+    return player;
+  }
+
+  async _maybeTriggerStoryAssistEvent() {
+    const event = this.storyAssistEvent;
+    if (!event || this.storyAssistTriggered || this.storyEnded || this._isCancelled) return;
+    const human = this.players.find((player) => !player.isCPU && !player.defeated);
+    if (!human) return;
+    const enemy = this.players.find((player) => (
+      !player.defeated && player.id !== human.id
+      && !(player.allianceId != null && player.allianceId === human.allianceId)
+    ));
+    if (!enemy) return;
+    const heroAssets = Math.max(1, this._totalAssetsOf(human));
+    const enemyAssets = this._totalAssetsOf(enemy);
+    if (enemyAssets < heroAssets * (event.ratio || 2.5)) return;
+    this.storyAssistTriggered = true;
+    await this.onStoryAssistEvent(event);
+    if (this._isCancelled || this.storyEnded) return;
+    const added = this._addStoryAssistPlayer(event.allyConfig);
+    this.onLog(`${added.name}が紅組に参戦した！`);
+  }
+
   /** 呼び出し元（main.jsの「退出」）がこのGameを見限る時に呼ぶ。以後、進行中のターン/戦闘シーンの続きは主要な再開ポイントで早期returnし、次に始まる別セッションのUIを巻き込まない。 */
   cancel() {
     this._isCancelled = true;
@@ -596,6 +688,8 @@ export class Game {
       playerId: this.currentPlayer.id,
       position: { x: turnTile.position.x, z: turnTile.position.z },
     });
+    await this._maybeTriggerStoryAssistEvent();
+    if (this._isCancelled || this.storyEnded) return;
 
     this.isBusy = false;
     this.awaitingRoll = true;
@@ -1186,6 +1280,19 @@ export class Game {
         applyCurse(targetTile.unit, { name: card.name, addedAtk: effect.addedAtk, addedHp: effect.addedHp });
         this.onLog(`${targetTile.unit.def.name}に「${card.name}」の呪いをかけた`);
         return false;
+
+      case 'chainStatCurse': {
+        if (!targetTile?.unit) {
+          this.onLog('対象が既にいません');
+          return false;
+        }
+        const ownerId = targetTile.unit.ownerId;
+        const chain = this._chainCount(ownerId, targetTile.element);
+        const amount = Math.max(0, chain * (effect.perChain || 0));
+        applyCurse(targetTile.unit, { name: card.name, addedAtk: amount, addedHp: amount });
+        this.onLog(`${targetTile.unit.def.name}に「${card.name}」の呪い。${ELEMENT_LABEL[targetTile.element]}${chain}連鎖でHP/ATK+${amount}`);
+        return false;
+      }
 
       case 'guaranteedNextInvasionWin':
         if (player.currency < effect.cost) {

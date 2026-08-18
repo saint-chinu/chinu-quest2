@@ -216,6 +216,17 @@ const HITODEMASO_ROWS = [
   'C.......C',
 ];
 
+// ⑪ふたりは○○。海底神殿奥のワープに飲まれた先の、雀卓めいた閉鎖空間。
+// 変則同盟戦用に、中央のGから四方へ回り込む短めの4属性均等マップ。
+const MAHJONG_DUO_ROWS = [
+  'CFFFGWWWC',
+  'T...N...M',
+  'T.H.N.S.M',
+  'TTTNGNMMM',
+  'W...N...F',
+  'CWWWTTTFC',
+];
+
 // 対人戦のマップ選択・ストーリーモードの各ステージ盤面として使う一覧。
 // idはstory.jsの各ステージ`key`と揃えてある - ストーリーモードは自ステージ
 // のkeyをそのままmapIdとしてcreateBoard()へ渡すだけで対応する専用マップに
@@ -240,6 +251,7 @@ export const MAPS = [
   { id: 'chin-harbor', name: '⑧ 朕と酢の花火港', rows: CHIN_HARBOR_ROWS, requireAllCheckpoints: true, checkpointBonus: 250, alternateGoalStarts: true, background: assetUrl('/images/stage/stage8-fireworks-harbor.gif'), spacing: 2.8 },
   { id: 'tax-audit', name: '⑨ 暴君と税務調査', rows: TAX_AUDIT_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage9-sunken-city.png'), spacing: 2.8 },
   { id: 'hitodemaso', name: '⑩ 成れの果て', rows: HITODEMASO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage10-trench-temple.png'), spacing: 2.8 },
+  { id: 'mahjong-duo', name: '⑪ ふたりは○○', rows: MAHJONG_DUO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage11-mahjong.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {

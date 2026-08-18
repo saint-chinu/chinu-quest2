@@ -16,6 +16,9 @@ export const NPC_PORTRAIT_URL = {
   '少女A': assetUrl('/images/npc-portraits/wonderland-girl.png'),
   'ムール': assetUrl('/images/npc-portraits/muuru.png'),
   '邪神ヒトデマソ': assetUrl('/images/npc-portraits/hitodemaso.png'),
+  '闇・ホフク': assetUrl('/images/npc-portraits/hofuku.png'),
+  '暗・少女A': assetUrl('/images/npc-portraits/wonderland-girl.png'),
+  サーティー: assetUrl('/images/npc-portraits/thirty.png'),
   'ウサギン': assetUrl('/images/npc-portraits/usagin.webp'),
   'ヒトデ': assetUrl('/images/npc-portraits/hitode.webp'),
 };
@@ -33,6 +36,9 @@ export const NPC_TOKEN_URL = {
   '少女A': assetUrl('/images/npc-tokens/wonderland-girl.png'),
   'ムール': assetUrl('/images/npc-tokens/muuru.png'),
   '邪神ヒトデマソ': assetUrl('/images/npc-tokens/hitodemaso.png'),
+  '闇・ホフク': assetUrl('/images/npc-tokens/hofuku.png'),
+  '暗・少女A': assetUrl('/images/npc-tokens/wonderland-girl.png'),
+  サーティー: assetUrl('/images/npc-tokens/thirty.png'),
   'ウサギン': assetUrl('/images/npc-tokens/usagin.webp'),
   'ヒトデ': assetUrl('/images/npc-tokens/hitode.webp'),
 };

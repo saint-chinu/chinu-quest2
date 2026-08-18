@@ -3046,6 +3046,7 @@ function startBattle(character, storyOptions = {}) {
     onDamageEffect: relayable('damageEffect', promptDamageEffect, { broadcast: true }),
     onTutorialEvent: storyOptions.onTutorialEvent,
     onStoryBattleEnd: storyOptions.onStoryBattleEnd,
+    onStoryAssistEvent: storyOptions.onStoryAssistEvent,
     onResumeCheckpoint: storyOptions.onResumeCheckpoint,
     onPvpSync: handlePvpSync,
     storyMode: storyOptions.storyMode ?? false,
@@ -3053,6 +3054,7 @@ function startBattle(character, storyOptions = {}) {
     tutorialMode: storyOptions.tutorialMode ?? false,
     tutorialOpeningCardIds: storyOptions.tutorialOpeningCardIds ?? [],
     tutorialDiceQueues: storyOptions.tutorialDiceQueues ?? null,
+    storyAssistEvent: storyOptions.storyAssistEvent ?? null,
     playerConfigs: storyOptions.playerConfigs,
     humanPlayer: storyOptions.playerConfigs
       ? undefined
@@ -4780,6 +4782,31 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
   const iconDataUrl = characterIcon?.dataUrl ?? null;
 
   const playerConfigs = await buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList);
+  let storyAssistEvent = null;
+  if (!isReplay && stage.midBattleAssist?.ally) {
+    const allyDef = stage.midBattleAssist.ally;
+    const assistConfig = {
+      name: allyDef.name,
+      isCPU: true,
+      color: allyDef.color,
+      allianceId: stage.heroAllianceId ?? null,
+      deckList: allyDef.deckKey ? buildCharacterDeckList(allyDef.deckKey) : buildThemedDeckList(allyDef.theme),
+      iconImage: await loadNpcTokenImage(allyDef.name),
+      elements: allyDef.theme?.elements,
+      startGoalIndex: allyDef.startGoalIndex,
+    };
+    // 途中参戦後にストーリー保存されたデータはプレイヤー数が1人多い。
+    // その場合だけ最初から構成に加え、保存データ復元の人数チェックを通す。
+    if (resumeState?.players?.length === playerConfigs.length + 1) {
+      playerConfigs.push(assistConfig);
+    } else if (!resumeState) {
+      storyAssistEvent = {
+        ratio: stage.midBattleAssist.ratio,
+        allyConfig: assistConfig,
+        lines: stage.midBattleAssist.lines || [],
+      };
+    }
+  }
 
   await confirmLandscapeReady();
 
@@ -4793,6 +4820,24 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
     playerConfigs,
     onStoryBattleEnd: (result) => (isReplay ? handleStoryReplayEnd(index, result, variant) : handleStoryBattleEnd(index, result)),
     onResumeCheckpoint: (state) => { latestStoryCheckpoint = state; },
+    onStoryAssistEvent: async (event) => {
+      const speakerPortraitUrls = Object.fromEntries(
+        Object.keys(stage.overlaySpeakerSides || {}).map((speaker) => [
+          speaker,
+          speaker === '主人公' ? iconDataUrl : NPC_PORTRAIT_URL[speaker],
+        ]),
+      );
+      await playOverlayDialogueLines(event.lines || [], {
+        leftName: '闇・ホフク',
+        leftPortraitUrl: NPC_PORTRAIT_URL['闇・ホフク'],
+        rightName: 'サーティー',
+        rightPortraitUrl: NPC_PORTRAIT_URL['サーティー'],
+        speakerSides: stage.overlaySpeakerSides,
+        speakerPortraitUrls,
+        stageKey: stage.key,
+      });
+    },
+    storyAssistEvent,
     deferInit: !resumeState && !isReplay && !!(stage.overlayNpc || stage.boardDialogue),
     resumeState,
   });

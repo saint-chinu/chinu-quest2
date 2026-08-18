@@ -95,6 +95,27 @@ export const AI_PROFILES = {
     itemGambleChance: 0.65,
     highValueAvoidance: 0.3,
   },
+  '闇・ホフク': {
+    offElementSummonChance: 0.08,
+    levelUpReserve: 300,
+    minWinProbabilityToInvade: 0.22,
+    itemGambleChance: 0.9,
+    highValueAvoidance: 0.12,
+  },
+  '暗・少女A': {
+    offElementSummonChance: 0.03,
+    levelUpReserve: 350,
+    minWinProbabilityToInvade: 0.32,
+    itemGambleChance: 0.75,
+    highValueAvoidance: 0.35,
+  },
+  サーティー: {
+    offElementSummonChance: 0.2,
+    levelUpReserve: 350,
+    minWinProbabilityToInvade: 0.28,
+    itemGambleChance: 0.8,
+    highValueAvoidance: 0.25,
+  },
   Q: {
     offElementSummonChance: 0.8,
     levelUpReserve: 300,
