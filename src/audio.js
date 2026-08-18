@@ -19,6 +19,7 @@ const TRACK_SRC = {
   kare: assetUrl('/audio/stage6-theme.mp3'), // ⑥創造主の世界
   finalAlliance: assetUrl('/audio/stage7bgm.mp3'), // ⑦支配の終焉「創造主への異議」
   chinHarbor: assetUrl('/audio/stage8bgm.mp3'), // ⑧朕と酢の花火港
+  taxAudit: assetUrl('/audio/stage9bgm.mp3'), // ⑨暴君と税務調査
   hitodemaso: assetUrl('/audio/stage10bgm.mp3'), // ⑩成れの果て
 };
 
@@ -33,6 +34,7 @@ const MAP_TRACK = {
   kare: 'kare',
   'final-alliance': 'finalAlliance',
   'chin-harbor': 'chinHarbor',
+  'tax-audit': 'taxAudit',
   hitodemaso: 'hitodemaso',
 };
 
