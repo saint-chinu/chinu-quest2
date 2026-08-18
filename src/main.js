@@ -4879,7 +4879,7 @@ async function handleStoryBattleEnd(index, { won }) {
   }
 
   if (stage.reward) {
-    const rewardDef = ITEM_CATALOG[stage.reward];
+    const rewardDef = ITEM_CATALOG[stage.reward] || SPELL_CATALOG[stage.reward] || MONSTER_CATALOG[stage.reward];
     if (rewardDef) {
       const key = cardKey(rewardDef);
       currentCharacter.ownedCards[key] = (currentCharacter.ownedCards[key] || 0) + 1;

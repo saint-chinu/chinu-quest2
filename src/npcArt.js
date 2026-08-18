@@ -14,6 +14,7 @@ export const NPC_PORTRAIT_URL = {
   'お肉': assetUrl('/images/npc-portraits/nikuchan-mosaic.png?v=2'),
   '紫の魔女ホフク': assetUrl('/images/npc-portraits/hofuku.png'),
   '少女A': assetUrl('/images/npc-portraits/wonderland-girl.png'),
+  'ムール': assetUrl('/images/npc-portraits/muuru.png'),
   'ウサギン': assetUrl('/images/npc-portraits/usagin.webp'),
   'ヒトデ': assetUrl('/images/npc-portraits/hitode.webp'),
 };
@@ -29,6 +30,7 @@ export const NPC_TOKEN_URL = {
   'お肉': assetUrl('/images/npc-tokens/nikuchan-mosaic.png?v=2'),
   '紫の魔女ホフク': assetUrl('/images/npc-tokens/hofuku.png'),
   '少女A': assetUrl('/images/npc-tokens/wonderland-girl.png'),
+  'ムール': assetUrl('/images/npc-tokens/muuru.png'),
   'ウサギン': assetUrl('/images/npc-tokens/usagin.webp'),
   'ヒトデ': assetUrl('/images/npc-tokens/hitode.webp'),
 };

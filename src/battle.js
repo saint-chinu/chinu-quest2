@@ -101,7 +101,10 @@ export function statTotals(unit, bonus = {}) {
   const curseHp = unit.curses.reduce((sum, c) => sum + (c.addedHp || 0), 0);
   const override = unit.def.effect?.type === 'statOverrideInBattle' ? unit.def.effect : null;
   const baseAtk = override ? override.atk : unit.def.atk;
-  const baseHp = override ? override.hp : unit.def.hp;
+  // タフネスで空地へ召喚された個体のHP加算は、その盤面上の個体だけが持つ
+  // 基礎HPとして扱う。カード定義やデッキへは書き戻さない。
+  const summonBaseHpBonus = Number(unit.summonBaseHpBonus || 0);
+  const baseHp = (override ? override.hp : unit.def.hp) + summonBaseHpBonus;
   // ダンボールの鎧(forceZeroAtk): 装備中はATKが常に0になる（他の加算要素も
   // 含め完全に上書き）。装備アイテムは常に最大1個なのでsome()で十分。
   const forcesZeroAtk = unit.items.some((i) => i.forceZeroAtk);
@@ -125,7 +128,8 @@ function getEffect(unit, type) {
  *  HP）。盤面に居る間の「持ち越しダメージ」はこのスケールで測る。ネット弁慶の
  *  statOverrideInBattleだけは素のHP自体を固定値に差し替えるので考慮する。 */
 function baseMaxHp(unit) {
-  return unit.def.effect?.type === 'statOverrideInBattle' ? unit.def.effect.hp : unit.def.hp;
+  const baseHp = unit.def.effect?.type === 'statOverrideInBattle' ? unit.def.effect.hp : unit.def.hp;
+  return baseHp + Number(unit.summonBaseHpBonus || 0);
 }
 
 /**

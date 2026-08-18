@@ -79,6 +79,14 @@ export const AI_PROFILES = {
     itemGambleChance: 0.2,
     highValueAvoidance: 0.85,
   },
+  // ムール: 水連鎖と関所クラゲを守る防御型。無理な侵略を避け、土地投資を優先する。
+  ムール: {
+    offElementSummonChance: 0,
+    levelUpReserve: 400,
+    minWinProbabilityToInvade: 0.82,
+    itemGambleChance: 0.25,
+    highValueAvoidance: 0.8,
+  },
   // 紫の魔女ホフク: 手管に長けた策士。属性の縛りにこだわらず、アイテムを絡めた勝負を好む。
   紫の魔女ホフク: {
     offElementSummonChance: 0.4,

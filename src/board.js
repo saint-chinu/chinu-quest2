@@ -185,6 +185,19 @@ const CHIN_HARBOR_ROWS = [
   'K....G',
 ];
 
+// ⑨暴君と税務調査。沈没都市の外周と中央十字を巡る、水属性中心の盤面。
+// 四隅のCPを回収しながら、中央の火・森・雷・無属性地を水へ変えて
+// 連鎖を広げられる構成にしている。
+const TAX_AUDIT_ROWS = [
+  'CWWWWWGWWWWWC',
+  'W.....F.....W',
+  'W.....F.....W',
+  'MMMMMWNWTTTTT',
+  'W.....F.....W',
+  'W.....F.....W',
+  'CWWWWWNWWWWWC',
+];
+
 // 対人戦のマップ選択・ストーリーモードの各ステージ盤面として使う一覧。
 // idはstory.jsの各ステージ`key`と揃えてある - ストーリーモードは自ステージ
 // のkeyをそのままmapIdとしてcreateBoard()へ渡すだけで対応する専用マップに
@@ -207,6 +220,7 @@ export const MAPS = [
   { id: 'kare', name: '⑥ 創造主の世界', rows: KARE_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage6-cyberspace.png'), spacing: 2.8 },
   { id: 'final-alliance', name: '⑦ 支配の終焉', rows: FINAL_ALLIANCE_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage7-court.png'), spacing: 2.8 },
   { id: 'chin-harbor', name: '⑧ 朕と酢の花火港', rows: CHIN_HARBOR_ROWS, requireAllCheckpoints: true, checkpointBonus: 250, alternateGoalStarts: true, background: assetUrl('/images/stage/stage8-fireworks-harbor.gif'), spacing: 2.8 },
+  { id: 'tax-audit', name: '⑨ 暴君と税務調査', rows: TAX_AUDIT_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage9-sunken-city.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {

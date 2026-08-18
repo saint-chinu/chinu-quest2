@@ -375,6 +375,9 @@ export class Game {
       guaranteedNextInvasionWin: false,
       // 不動産鑑〇士: 自分の全ての土地の土地コマンドにアクセスできる残りターン数。
       allTilesAccessTurnsRemaining: 0,
+      // タフネス: 空き地へ新規召喚した盤面個体だけに基礎HP+10を与える残りターン数。
+      // 元カードやデッキ定義には触れず、_placeUnitでunit.summonBaseHpBonusへ焼き込む。
+      toughnessTurnsRemaining: 0,
       // バックファイア用: 直近に実際に着地したタイルidの履歴（新しい順が先頭）。
       tileHistory: [],
       };
@@ -775,11 +778,12 @@ export class Game {
       return { targetTileId: targetId };
     }
 
-    if (target === 'enemyPlayer' || target === 'anyPlayer') {
+    if (target === 'enemyPlayer' || target === 'anyPlayer' || target === 'selfOrAllyPlayer') {
       const targets = this.players.filter((p) => {
         if (p.defeated) return false;
         if (target === 'enemyPlayer' && p.id === player.id) return false;
         if (target === 'enemyPlayer' && p.allianceId != null && p.allianceId === player.allianceId) return false;
+        if (target === 'selfOrAllyPlayer' && !this._isAllyOf(p, player)) return false;
         return true;
       });
       if (targets.length === 0) {
@@ -1122,6 +1126,13 @@ export class Game {
         this.onLog(`${player.name}は脱税の準備をした`);
         return false;
 
+      case 'summonBaseHpBoostCurse':
+        if (!targetPlayer || !this._isAllyOf(targetPlayer, player)) return false;
+        // 重複加算はせず、再使用時は残り期間を3ターンへ更新する。
+        targetPlayer.toughnessTurnsRemaining = effect.turns;
+        this.onLog(`${targetPlayer.name}は${effect.turns}ターンの間、空き地への召喚時に基礎HP+${effect.hpBonus}を得る`);
+        return false;
+
       case 'lotteryOnNextGoal':
         player.lotteryOnNextGoal = true;
         this.onLog(`${player.name}は宝くじを手に入れた`);
@@ -1201,6 +1212,7 @@ export class Game {
         player.pierceNextInvasion = false;
         player.guaranteedNextInvasionWin = false;
         player.allTilesAccessTurnsRemaining = 0;
+        player.toughnessTurnsRemaining = 0;
         if (targetTile?.unit) targetTile.unit.curses = [];
         this.onLog(`${player.name}は呪いを解除した`);
         return false;
@@ -3918,6 +3930,8 @@ export class Game {
         ? this._cpuChooseSummonCardForDanball(pool, tile, player)
         : player.name === 'Q'
           ? this._cpuChooseSummonCardForQ(pool, tile, profile, player)
+          : player.name === 'ムール'
+            ? this._cpuChooseSummonCardForMuuru(pool, tile, profile, player)
           : player.name === '「彼」'
             ? this._cpuChooseSummonCardForKare(pool, tile, profile, player)
             : this._cpuChooseSummonCard(pool, tile, profile, player);
@@ -4350,6 +4364,15 @@ export class Game {
     return god || this._cpuChooseSummonCard(pool, tile, profile, player);
   }
 
+  /** ムール専用: タフネス中かつ水土地なら、強化した関所クラゲの配置を最優先する。 */
+  _cpuChooseSummonCardForMuuru(options, tile, profile, player) {
+    if (player.toughnessTurnsRemaining > 0 && tile.element === Element.WATER) {
+      const jellyfish = options.find((card) => catalogIdOf(card) === 'kaikyouSekishoKurage');
+      if (jellyfish) return jellyfish;
+    }
+    return this._cpuChooseSummonCard(options, tile, profile, player);
+  }
+
   /** 移動侵略の狙い目になる敵地か: Lv3以上・非同盟の相手が守るモンスター有り・
    *  聖域/透過の呪い無し。ガシャーン/未知の侵略者の運用AIで共用する。 */
   _isInvadeWorthyEnemyLand(tile, player) {
@@ -4634,7 +4657,7 @@ export class Game {
   _baseStats(unit) {
     const curseAtk = unit.curses.reduce((sum, c) => sum + (c.addedAtk || 0), 0);
     const curseHp = unit.curses.reduce((sum, c) => sum + (c.addedHp || 0), 0);
-    return { atk: unit.def.atk + curseAtk, hp: unit.def.hp + curseHp };
+    return { atk: unit.def.atk + curseAtk, hp: unit.def.hp + (unit.summonBaseHpBonus || 0) + curseHp };
   }
 
   /** 装備アイテムとしての強さを大まかに数値化する（CPUの実際の選択と、侵略前のシミュレーションの両方から使う - 同じ基準で選ぶことで「シミュレーションで想定した通りに実際も動く」を保証する）。 */
@@ -5384,7 +5407,14 @@ export class Game {
   }
 
   _placeUnit(tile, player, card) {
+    const isEmptyLandSummon = tile.type === TileType.LAND && tile.owner == null && tile.unit == null;
     tile.unit = createFieldUnit(card, player.id);
+    if (isEmptyLandSummon && player.toughnessTurnsRemaining > 0) {
+      const hpBonus = 10;
+      tile.unit.summonBaseHpBonus = hpBonus;
+      tile.unit.currentHp += hpBonus;
+      this.onLog(`${player.name}の「タフネス」で${card.name}の基礎HPが${hpBonus}上昇した`);
+    }
     tile.owner = player.id;
     tile.transparentCursed = false;
     this._paintTile(tile, player.color);
@@ -5552,6 +5582,9 @@ export class Game {
   }
 
   _nextTurn() {
+    // タフネスは対象プレイヤーが手番を終えた時に1消費する。開始時に減らすと、
+    // 同盟者へかけた直後の最初の手番が2扱いになり、3ターン分使えなくなる。
+    if (this.currentPlayer.toughnessTurnsRemaining > 0) this.currentPlayer.toughnessTurnsRemaining -= 1;
     do {
       this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
     } while (this.players[this.currentPlayerIndex].defeated);
@@ -5707,6 +5740,8 @@ export class Game {
     // ダンボール男は③手札の「未知との遭遇」を最優先で使う（無属性モンスター＝ギアを
     // 引き寄せてガシャーン合体を狙う）。1ターン1スペルなので他スペルより先に判定。
     await this._cpuMaybeUseDisclosureRequest(this.currentPlayer);
+    await this._cpuMaybeUseToughnessSpell(this.currentPlayer);
+    await this._cpuMaybeUseMuuruStrategySpell(this.currentPlayer);
     await this._cpuMaybeUseEncounterSpell(this.currentPlayer);
     await this._cpuMaybeUseMagicCircleSpell(this.currentPlayer);
     if (await this._cpuMaybeWarpToHighValueLand(this.currentPlayer)) {
@@ -5749,6 +5784,7 @@ export class Game {
   _cpuDisclosureCastForSpell(player, card) {
     const target = card.target;
     if (target === 'self' || target === 'none') return {};
+    if (target === 'selfOrAllyPlayer') return { targetPlayerId: player.id };
     const enemies = this.players.filter((candidate) => !candidate.defeated && candidate.id !== player.id && !this._isAllyOf(candidate, player));
     if (target === 'enemyPlayer') return enemies[0] ? { targetPlayerId: enemies[0].id } : null;
     if (target === 'anyPlayer') {
@@ -5803,6 +5839,61 @@ export class Game {
       });
       return;
     }
+  }
+
+  /** ムール専用: 水連鎖と関所クラゲが揃った時だけタフネスを自分へ使う。 */
+  async _cpuMaybeUseToughnessSpell(player) {
+    if (player.name !== 'ムール' || player.spellUsedThisTurn || player.toughnessTurnsRemaining > 0) return;
+    const card = player.hand.find((candidate) => candidate.effect?.type === 'summonBaseHpBoostCurse');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const hasJellyfish = player.hand.some((candidate) => catalogIdOf(candidate) === 'kaikyouSekishoKurage');
+    if (!hasJellyfish || this._chainCount(player.id, Element.WATER) < 1) return;
+    const hasWaterVacancy = this.tiles.some((tile) => tile.type === TileType.LAND
+      && tile.owner == null && tile.element === Element.WATER);
+    if (!hasWaterVacancy) return;
+    await this._cpuCastSpell(player, card, { targetPlayerId: player.id });
+  }
+
+  /** ムール専用の水連鎖・税務スペル運用。タフネスを使わなかった手番だけ実行する。 */
+  async _cpuMaybeUseMuuruStrategySpell(player) {
+    if (player.name !== 'ムール' || player.spellUsedThisTurn) return;
+    const affordable = (effectType) => player.hand.find((candidate) => candidate.type === CardType.SPELL
+      && candidate.effect?.type === effectType && player.currency >= (candidate.cost || 0));
+
+    // まず水モンスターを盤上へ増やし、関所クラゲの召喚条件となる水連鎖を作る。
+    const circle = player.hand.find((candidate) => candidate.effect?.type === 'randomDeckMonsterSummon'
+      && candidate.effect.element === Element.WATER && player.currency >= (candidate.cost || 0));
+    const hasWaterInDeck = [...player.deck.drawPile, ...player.deck.discardPile]
+      .some((candidate) => candidate.type === CardType.MONSTER && candidate.element === Element.WATER);
+    const hasEmptyLand = this.tiles.some((tile) => tile.type === TileType.LAND && tile.owner == null);
+    if (circle && hasWaterInDeck && hasEmptyLand) {
+      await this._cpuCastSpell(player, circle, {});
+      return;
+    }
+
+    // 所有する非水土地を水へ変え、連鎖数と水モンスターの土地HPを同時に伸ばす。
+    const waterRelease = player.hand.find((candidate) => candidate.effect?.type === 'forceTileElement'
+      && candidate.effect.element === Element.WATER && player.currency >= (candidate.cost || 0));
+    const conversionTarget = this.tiles
+      .filter((tile) => tile.owner === player.id && tile.element !== Element.WATER)
+      .sort((a, b) => b.level - a.level || Number(!!b.unit) - Number(!!a.unit))[0];
+    if (waterRelease && conversionTarget) {
+      await this._cpuCastSpell(player, waterRelease, { targetTileId: conversionTarget.id });
+      return;
+    }
+
+    const appraiser = affordable('enableAllOwnTileAbilities');
+    if (appraiser && player.allTilesAccessTurnsRemaining <= 0 && this._ownedTiles(player).length >= 2) {
+      await this._cpuCastSpell(player, appraiser, {});
+      return;
+    }
+
+    // 追徴課税は自分の最も高い通行料を持つ守備土地へ付与する。
+    const audit = affordable('tollBonusOnceCurse');
+    const auditTarget = this._ownedTiles(player)
+      .filter((tile) => tile.unit && !tile.tollBonusOnceMultiplier)
+      .sort((a, b) => this._tollOfTile(b) - this._tollOfTile(a))[0];
+    if (audit && auditTarget) await this._cpuCastSpell(player, audit, { targetTileId: auditTarget.id });
   }
 
   /** 帰巣本能のCPU判断。
