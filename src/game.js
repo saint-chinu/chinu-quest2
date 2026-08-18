@@ -4682,6 +4682,24 @@ export class Game {
     return null;
   }
 
+  /** 貫通を持つか（モンスター自身のtraits、または装備アイテム由来）。 */
+  _hasPierce(unit) {
+    return !!unit?.def?.traits?.includes('pierce')
+      || !!unit?.items?.some((item) => item.traits?.includes('pierce'));
+  }
+
+  /**
+   * 貫通が守備側から剥がすHPを差し引いたボーナスを返す。剥がすのは
+   * 「土地レベル由来のHP加算」(_elementHpBonus)だけで、雷神・水神・炎神の
+   * 連鎖加算や混沌の頭の全連鎖加算といったカード能力由来の分、電柱などの
+   * 場の効果、アイテムのHP加算はそのまま残す（貫通の説明文どおり）。
+   * 実戦闘と、CPUの勝率シミュレーション2種が必ず同じ計算になるよう共通化する。
+   */
+  _pierceAdjustedBonus(defenderBonus, piercedLandHp) {
+    if (!piercedLandHp) return defenderBonus;
+    return { ...defenderBonus, hp: Math.max(0, (defenderBonus.hp || 0) - piercedLandHp) };
+  }
+
   /**
    * 同属性ボーナス: 自分の土地に配置されているモンスターは、土地と同じ
    * 属性なら土地レベル×10（最大50）だけHPが増える。`positionTile` は
@@ -4940,9 +4958,10 @@ export class Game {
         this._applyEffectBonus(defenderUnit, attackerUnit, defenderBonus);
         this._applyEquippedItemBonus(attackerUnit, attackerBonus);
         this._applyEquippedItemBonus(defenderUnit, defenderBonus);
-        const attackerHasPierce =
-          attackerUnit.def.traits?.includes('pierce') || attackerUnit.items.some((i) => i.traits?.includes('pierce'));
-        const battleDefenderBonus = attackerHasPierce ? { ...defenderBonus, hp: 0 } : defenderBonus;
+        const battleDefenderBonus = this._pierceAdjustedBonus(
+          defenderBonus,
+          this._hasPierce(attackerUnit) ? this._elementHpBonus(defenderUnit, defenderTile) : 0,
+        );
 
         const result = resolveBattle(attackerUnit, defenderUnit, new GoldLedger(), attackerBonus, battleDefenderBonus);
         if (result.attackerSurvived && !result.defenderSurvived) wins++;
@@ -4976,9 +4995,10 @@ export class Game {
         this._applyEffectBonus(def, atk, defenderBonus);
         this._applyEquippedItemBonus(atk, attackerBonus);
         this._applyEquippedItemBonus(def, defenderBonus);
-        const attackerHasPierce =
-          atk.def.traits?.includes('pierce') || atk.items.some((i) => i.traits?.includes('pierce'));
-        const battleDefenderBonus = attackerHasPierce ? { ...defenderBonus, hp: 0 } : defenderBonus;
+        const battleDefenderBonus = this._pierceAdjustedBonus(
+          defenderBonus,
+          this._hasPierce(atk) ? this._elementHpBonus(def, defenderTile) : 0,
+        );
         const result = resolveBattle(atk, def, new GoldLedger(), attackerBonus, battleDefenderBonus);
         if (result.attackerSurvived && !result.defenderSurvived) wins++;
       }
@@ -5204,15 +5224,14 @@ export class Game {
     this._applyEquippedItemBonus(attackerUnit, attackerBonus);
     this._applyEquippedItemBonus(defenderUnit, defenderBonus);
 
-    // 貫通: nullifies the defender's 同属性ボーナス (land-added HP) for this
-    // battle's math. 表示側も特性表示のタイミングで同じボーナスを取り除く
-    // （下のtraitRevealSides参照 - 表示だけ残すと貫通ダメージでHPが想定より
-    // 大きく減ったように見えてややこしい）。Item HP bonuses are untouched.
+    // 貫通: 守備側の「土地レベル由来のHP加算」だけを無効化する。表示側も特性
+    // 表示のタイミングで同じ分だけ取り除く（下のtraitRevealSides参照 - 表示
+    // だけ残すと貫通ダメージでHPが想定より大きく減ったように見える）。
     // モンスター自身のtraitsだけでなく、装備アイテムが持つpierce（にょ〇棒/
     // イカサマのサイコロ/斬〇剣）も対象にする。
-    const attackerHasPierce =
-      attackerUnit.def.traits?.includes('pierce') || attackerUnit.items.some((i) => i.traits?.includes('pierce'));
-    const battleDefenderBonus = attackerHasPierce ? { ...defenderBonus, hp: 0 } : defenderBonus;
+    const attackerHasPierce = this._hasPierce(attackerUnit);
+    const piercedLandHp = attackerHasPierce ? this._elementHpBonus(defenderUnit, battleTile) : 0;
+    const battleDefenderBonus = this._pierceAdjustedBonus(defenderBonus, piercedLandHp);
 
     // 破壊・強奪はpreAttackEffectsで既に適用・演出済みなので、resolveBattle内の
     // 同判定はitems配列が既に空/移動済み（length>0ガード）で不発になる。
@@ -5231,16 +5250,15 @@ export class Game {
       const labels = [];
       if (hasTrait(unit, 'firstStrike') && myScore > theirScore) labels.push('先制：先に攻撃');
       if (hasTrait(unit, 'lastStrike') && myScore < theirScore) labels.push('後攻：あとに攻撃');
-      if (hasTrait(unit, 'pierce')) labels.push('貫通：HPの土地レベルボーナス、ダメージ無効化、反射を無視してダメージ。アイテムのHP増加は無視できない。');
+      if (hasTrait(unit, 'pierce')) labels.push('貫通：HPの土地レベルボーナス、ダメージ無効化、反射を無視してダメージ。アイテムやカード能力によるHP増加は無視できない。');
       return labels;
     };
     // 攻撃側の貫通で守備側の土地レベルHPボーナスが実際に無効化される場合、
-    // 特性表示のタイミングで画面上の「+◯◯」表示と表示HPからも取り除く。
-    // 表示だけボーナス込みのままだと、貫通ダメージでHPが想定より大きく
-    // 減ったように見えてややこしい（計算自体は元から正しかった）。
+    // 特性表示のタイミングで画面上の「+◯◯」表示と表示HPからも同じ分だけ
+    // 取り除く（カード能力や電柱由来の加算はここでも残す）。
     const attackerReveal = { side: 'attacker', labels: traitLabelsFor(attackerUnit, attackerScore, defenderScore) };
-    if (attackerHasPierce && (defenderBonus.hp || 0) > 0) {
-      attackerReveal.stripHpBonus = { side: 'defender', amount: defenderBonus.hp };
+    if (piercedLandHp > 0) {
+      attackerReveal.stripHpBonus = { side: 'defender', amount: piercedLandHp };
     }
     const traitRevealSides = [
       attackerReveal,
@@ -5279,7 +5297,9 @@ export class Game {
       const targetUnit = exchange.side === 'attacker' ? defenderUnit : attackerUnit;
       await this.onBattleAttack({
         side: exchange.side,
-        item,
+        // 毒tick・戦闘後の反動は誰かが撃った一撃ではないので、装備カードも
+        // 属性ビームも出さない（aftermath側でスキップする）。
+        item: exchange.aftermath ? null : item,
         message: exchange.message,
         damage: exchange.damage,
         element: exchange.element,
@@ -5289,6 +5309,7 @@ export class Game {
         targetDied: exchange.targetDied,
         special: exchange.special,
         reflected: !!exchange.reflected,
+        aftermath: !!exchange.aftermath,
         targetName: targetUnit.def.name,
       });
       if (this._isCancelled) return null;

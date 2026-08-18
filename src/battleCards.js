@@ -914,25 +914,30 @@ export const CHARACTER_DECKS = {
   },
   muuru: {
     composition: {
+      // 召喚条件付きは関所クラゲ3＋ビッグマーメイド2の5枚だけに絞る（以前は
+      // 20体中10体が連鎖待ちで、水地11マスしか使わないムールでは序盤に手札の
+      // 半分が置けなかった）。残りは条件なしの主力で固める。
       monsters: [
         { def: MONSTER_CATALOG.kaikyouSekishoKurage, count: 3 },
-        { def: MONSTER_CATALOG.tsurara, count: 3 },
+        { def: MONSTER_CATALOG.bigMermaid, count: 2 },
+        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 3 },
+        { def: MONSTER_CATALOG.kaizokuS, count: 2 },
+        { def: MONSTER_CATALOG.tsurara, count: 2 },
         { def: MONSTER_CATALOG.aoriika, count: 2 },
         { def: MONSTER_CATALOG.shinkaiCleaner, count: 2 },
-        { def: MONSTER_CATALOG.uminoieTencho, count: 3 },
-        { def: MONSTER_CATALOG.bigMermaid, count: 2 },
-        { def: MONSTER_CATALOG.suijin, count: 1 },
-        { def: MONSTER_CATALOG.mizuburoShugyoso, count: 1 },
-        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 2 },
+        { def: MONSTER_CATALOG.hangyojin, count: 2 },
+        { def: MONSTER_CATALOG.azarashisan, count: 1 },
         { def: MONSTER_CATALOG.kunekune, count: 1 },
       ],
+      // 以前は8枚中6枚がATK+0の完全な受け身装備で、装備しても勝ちに行けな
+      // かった。全員水属性なので薄氷の剣は実質ATK+50として働く。
       items: [
-        { def: ITEM_CATALOG.fushichoNoTate, count: 1 },
-        { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 },
-        { def: ITEM_CATALOG.lifeJacket, count: 1 },
-        { def: ITEM_CATALOG.heikeNoYoroi, count: 1 },
-        { def: ITEM_CATALOG.nankaNoOmamori, count: 2 },
+        { def: ITEM_CATALOG.iceSlugger, count: 2 },
+        { def: ITEM_CATALOG.osafune, count: 1 },
         { def: ITEM_CATALOG.zangokuKen, count: 1 },
+        { def: ITEM_CATALOG.fushichoNoTate, count: 1 },
+        { def: ITEM_CATALOG.lifeJacket, count: 1 },
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
         { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
       ],
       spells: [
@@ -945,6 +950,51 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.sideIncome, count: 1 },
         { def: SPELL_CATALOG.realEstateAppraiser, count: 1 },
         { def: SPELL_CATALOG.homingInstinct, count: 1 },
+      ],
+    },
+  },
+  /**
+   * ⑨の専門調査官・A（少女Aの裏の顔）。③の少女Aデッキとは別物で、
+   * 雷＝先制の手数、森＝殴り合いの地力、無属性＝仕上げ役という構成。
+   * 召喚条件付きは0枚にして、序盤から途切れず盤面を作れるようにしてある。
+   * スペルは通行料と手持ちGを締め上げる「調査官」寄りに寄せ、盤面の森
+   * （主人公が無競争で取りやすかった帯）も放牧で取りに行く。
+   */
+  investigatorA: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.tenhou, count: 2 },
+        { def: MONSTER_CATALOG.thunderbird, count: 2 },
+        { def: MONSTER_CATALOG.kadenryuuCheetah, count: 2 },
+        { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 },
+        { def: MONSTER_CATALOG.raiun, count: 2 },
+        { def: MONSTER_CATALOG.erekiKagayaki, count: 1 },
+        { def: MONSTER_CATALOG.matagiNoKoshirou, count: 2 },
+        { def: MONSTER_CATALOG.saboriTender, count: 2 },
+        { def: MONSTER_CATALOG.jukaiNoOnryou, count: 2 },
+        { def: MONSTER_CATALOG.mountGorilla, count: 1 },
+        { def: MONSTER_CATALOG.kyousenshi, count: 1 },
+        { def: MONSTER_CATALOG.ninja, count: 1 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.raijinKen, count: 2 },
+        { def: ITEM_CATALOG.gomuGoNoPistol, count: 1 },
+        { def: ITEM_CATALOG.pegasusSword, count: 1 },
+        { def: ITEM_CATALOG.zangokuKen, count: 1 },
+        { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
+        { def: ITEM_CATALOG.lifeJacket, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.specialAudit, count: 2 },
+        { def: SPELL_CATALOG.walletVacuum, count: 2 },
+        { def: SPELL_CATALOG.electrify, count: 2 },
+        { def: SPELL_CATALOG.taxHike, count: 1 },
+        { def: SPELL_CATALOG.grazing, count: 1 },
+        { def: SPELL_CATALOG.senbonZakura, count: 1 },
+        { def: SPELL_CATALOG.divination, count: 1 },
+        { def: SPELL_CATALOG.homingInstinct, count: 1 },
+        { def: SPELL_CATALOG.sideIncome, count: 1 },
       ],
     },
   },

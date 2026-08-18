@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v108`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v109`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## ⚠️ 並行開発 (Codex) — 必ず守る

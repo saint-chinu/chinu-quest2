@@ -696,6 +696,26 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   const dmgToAttacker = exchanges.filter((e) => e.side === 'defender' && !e.reflected).reduce((sum, e) => sum + e.damage, 0);
   const robberEffects = [];
 
+  // 攻防が終わった"後"に入るダメージ（毒tick・氷柱の自傷）は、これまでログ
+  // 1行に出るだけで戦闘画面には一切現れなかった。そのため「画面上は生き
+  // 残ったのに土地を取られた」という、原因の見えない結果になっていた。
+  // 反射・道連れと同じくexchangeとして積み、ダメージ数値とHP減少、力尽きた
+  // 場合は撃破演出まで見せる。reflected扱いにして強盗の与ダメ集計からは除く。
+  const pushAftermath = (unit, damage, message, special) => {
+    if (!(damage > 0)) return;
+    exchanges.push({
+      side: unit === attacker ? 'defender' : 'attacker',
+      message,
+      damage,
+      element: unit.def.element,
+      targetHp: unit.currentHp,
+      targetDied: unit.currentHp <= 0,
+      special: [special],
+      reflected: true,
+      aftermath: true,
+    });
+  };
+
   // 強盗: 実際に与えたダメージの3倍を奪う（どちら側が持っていても効く）。
   if (hasTrait(attacker, 'robber') && dmgToDefender > 0) {
     const stolen = dmgToDefender * 3;
@@ -719,7 +739,9 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     if (!poison) continue;
     const poisonDamage = Math.round(unit.def.hp * poison.poisonRatio);
     unit.currentHp -= poisonDamage;
-    log.push(`${unit.def.name}は毒で${poisonDamage}ダメージを受けた`);
+    const message = `${unit.def.name}は毒で${poisonDamage}ダメージを受けた`;
+    log.push(message);
+    pushAftermath(unit, poisonDamage, message, '毒が回った！');
   }
 
   const attackerSurvived = attacker.currentHp > 0;
@@ -782,13 +804,14 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     defender.currentHp = statTotals(defender, defenderBonus).maxHp;
     log.push(`${defender.def.name}は再生でHPが全回復し、ATKが5上昇した`);
   }
-  if (attackerSurvived && attacker.def.effect?.type === 'selfDamageAfterBattle') {
-    attacker.currentHp -= attacker.def.effect.damage;
-    log.push(`${attacker.def.name}は戦闘後に${attacker.def.effect.damage}ダメージを受けた`);
-  }
-  if (defenderSurvived && defender.def.effect?.type === 'selfDamageAfterBattle') {
-    defender.currentHp -= defender.def.effect.damage;
-    log.push(`${defender.def.name}は戦闘後に${defender.def.effect.damage}ダメージを受けた`);
+  for (const unit of [attacker, defender]) {
+    const survived = unit === attacker ? attackerSurvived : defenderSurvived;
+    if (!survived || unit.def.effect?.type !== 'selfDamageAfterBattle') continue;
+    const damage = unit.def.effect.damage;
+    unit.currentHp -= damage;
+    const message = `${unit.def.name}は戦闘後に${damage}ダメージを受けた`;
+    log.push(message);
+    pushAftermath(unit, damage, message, '戦闘後の反動！');
   }
 
   const finalAttackerSurvived = attacker.currentHp > 0;

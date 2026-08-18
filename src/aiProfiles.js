@@ -79,13 +79,27 @@ export const AI_PROFILES = {
     itemGambleChance: 0.2,
     highValueAvoidance: 0.85,
   },
-  // ムール: 水連鎖と関所クラゲを守る防御型。無理な侵略を避け、土地投資を優先する。
+  // ムール: 水連鎖と関所クラゲを固める守り主体だが、⑨のボスとして机上の
+  // 空論では終わらせない。侵略しきい値0.82・回避0.8では、Lv3以上への実効
+  // しきい値が上限の0.97に張り付いて「育った土地には絶対手を出さない」AIに
+  // なっていたため、確度が見えたら詰めに来る水準へ引き下げた。
+  // 属性厳守(0)はキャラの芯なので維持する。
   ムール: {
     offElementSummonChance: 0,
     levelUpReserve: 400,
-    minWinProbabilityToInvade: 0.82,
-    itemGambleChance: 0.25,
-    highValueAvoidance: 0.8,
+    minWinProbabilityToInvade: 0.5,
+    itemGambleChance: 0.55,
+    highValueAvoidance: 0.45,
+  },
+  // 専門調査官・A（⑨限定）: ③の少女Aと同一人物だが、こちらは裏の顔。
+  // 序盤ステージの少女A（慎重）とは別プロファイルにして、詰めの速い
+  // 調査官として振る舞わせる。
+  '専門調査官・A': {
+    offElementSummonChance: 0.05,
+    levelUpReserve: 350,
+    minWinProbabilityToInvade: 0.42,
+    itemGambleChance: 0.6,
+    highValueAvoidance: 0.4,
   },
   // 紫の魔女ホフク: 手管に長けた策士。属性の縛りにこだわらず、アイテムを絡めた勝負を好む。
   紫の魔女ホフク: {

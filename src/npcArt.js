@@ -14,6 +14,8 @@ export const NPC_PORTRAIT_URL = {
   'お肉': assetUrl('/images/npc-portraits/nikuchan-mosaic.png?v=2'),
   '紫の魔女ホフク': assetUrl('/images/npc-portraits/hofuku.png'),
   '少女A': assetUrl('/images/npc-portraits/wonderland-girl.png'),
+  // ⑨の裏の顔。専用絵が用意されるまでは少女Aと同じ立ち絵を使う。
+  '専門調査官・A': assetUrl('/images/npc-portraits/wonderland-girl.png'),
   'ムール': assetUrl('/images/npc-portraits/muuru.png'),
   '邪神ヒトデマソ': assetUrl('/images/npc-portraits/hitodemaso.png'),
   '闇・ホフク': assetUrl('/images/npc-portraits/hofuku.png'),
@@ -34,6 +36,7 @@ export const NPC_TOKEN_URL = {
   'お肉': assetUrl('/images/npc-tokens/nikuchan-mosaic.png?v=2'),
   '紫の魔女ホフク': assetUrl('/images/npc-tokens/hofuku.png'),
   '少女A': assetUrl('/images/npc-tokens/wonderland-girl.png'),
+  '専門調査官・A': assetUrl('/images/npc-tokens/wonderland-girl.png'),
   'ムール': assetUrl('/images/npc-tokens/muuru.png'),
   '邪神ヒトデマソ': assetUrl('/images/npc-tokens/hitodemaso.png'),
   '闇・ホフク': assetUrl('/images/npc-tokens/hofuku.png'),

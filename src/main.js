@@ -2123,7 +2123,7 @@ function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, oppone
  * として目立たせる: メッセージを一回り大きく表示し、発動した側（この一撃
  * を放った側=attackerEls）のカードを一瞬拡大させて光らせる。
  */
-async function promptBattleAttack({ side, item, message, damage = 0, element, attackPower = 0, elementMultiplier = 1, targetHp, targetDied, special, targetName }) {
+async function promptBattleAttack({ side, item, message, damage = 0, element, attackPower = 0, elementMultiplier = 1, targetHp, targetDied, special, targetName, aftermath = false }) {
     const attackerEls = battleSide[side];
     const targetEls = battleSide[side === 'attacker' ? 'defender' : 'attacker'];
     const hasSpecial = Array.isArray(special) && special.length > 0;
@@ -2138,7 +2138,9 @@ async function promptBattleAttack({ side, item, message, damage = 0, element, at
 
     // 攻撃直前に現在値を確定し、得意属性なら120%分を段階的に加算してから
     // 光線・ダメージへ進む。連続攻撃では同じ加算演出を繰り返さない。
-    if (attackerEls.atk.dataset.built !== 'true') {
+    // 毒tickや戦闘後の反動(aftermath)は誰の攻撃でもないので、この加算演出は
+    // 通さない（attackPowerが無いため、通すとATK表示が0に書き換わる）。
+    if (!aftermath && attackerEls.atk.dataset.built !== 'true') {
       attackerEls.atk.textContent = String(attackPower);
       attackerEls.atkBonus.classList.add('hidden');
       attackerEls.atkFill.style.width = `${Math.min(100, (attackPower / 150) * 100)}%`;
@@ -2158,8 +2160,12 @@ async function promptBattleAttack({ side, item, message, damage = 0, element, at
       attackerEls.atk.dataset.built = 'true';
     }
 
-    attackerEls.el.classList.add('battle-attacking');
-    await playBattleElementBeam(attackerEls.card, targetEls.card, CARD_COLOR[element] || '#ffffff');
+    // aftermathは「攻撃」ではないので、攻撃モーションと属性ビームは出さず、
+    // 被弾側のダメージ数値・HP減少・撃破演出だけを見せる。
+    if (!aftermath) {
+      attackerEls.el.classList.add('battle-attacking');
+      await playBattleElementBeam(attackerEls.card, targetEls.card, CARD_COLOR[element] || '#ffffff');
+    }
     if (damage > 0) await showBattleDamageNumber(targetEls.card, damage);
     targetEls.el.classList.add('battle-hit');
     await animateBattleHp(targetEls, Math.max(targetHp, 0));
