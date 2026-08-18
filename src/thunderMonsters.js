@@ -12,6 +12,7 @@ const thunderMonster = (id, name, rarity, hp, atk, options = {}) => ({
   atk,
   cost: options.cost ?? NORMAL_COST,
   ...(options.chainRequired ? { chainRequired: options.chainRequired } : {}),
+  ...(options.summonSacrifice ? { summonSacrifice: options.summonSacrifice } : {}),
   ...(options.commandCost ? { commandCost: options.commandCost } : {}),
   ...(options.ability ? { ability: options.ability } : {}),
   ...(options.traits ? { traits: options.traits } : {}),
@@ -88,8 +89,12 @@ export const THUNDER_MONSTER_CATALOG = {
     effect: { type: 'shockOnHit', chance: 1 / 3 },
     effectDescription: '攻撃成功時、相手を感電状態にする（以後の攻撃が1/3の確率で不発になる。入れ替え/死亡まで継続）',
   }),
-  raiheishinZamurai: thunderMonster('raiheishinZamurai', '避雷針侍', Rarity.S, 40, 30, {
-    effectDescription: '配置されていると、味方モンスターが相手の攻撃で死ぬ場合、代わりに避雷針侍が身代わりになって死亡する（本来死ぬはずのモンスターはノーダメージ）',
+  // 身代わり性能が強すぎたため、HPを15へ下げたうえで召喚時の生贄（手札から
+  // 任意の1枚を捨てる）を条件に追加した。壁として置くのではなく、身代わり
+  // 要員に徹させるための下方修正。
+  raiheishinZamurai: thunderMonster('raiheishinZamurai', '避雷針侍', Rarity.S, 15, 30, {
+    summonSacrifice: 1,
+    effectDescription: '召喚条件: 手札から任意の1枚を生贄にする（捨てる）。配置されていると、味方モンスターが相手の攻撃で死ぬ場合、代わりに避雷針侍が身代わりになって死亡する（本来死ぬはずのモンスターはノーダメージ）',
   }),
   erekiKagayaki: thunderMonster('erekiKagayaki', 'エレキ輝', Rarity.S, 30, 30, {
     cost: 30,

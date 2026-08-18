@@ -12,6 +12,7 @@ const waterMonster = (id, name, rarity, hp, atk, options = {}) => ({
   atk,
   cost: options.cost ?? NORMAL_COST,
   ...(options.chainRequired ? { chainRequired: options.chainRequired } : {}),
+  ...(options.summonSacrifice ? { summonSacrifice: options.summonSacrifice } : {}),
   ...(options.commandCost ? { commandCost: options.commandCost } : {}),
   ...(options.ability ? { ability: options.ability } : {}),
   ...(options.traits ? { traits: options.traits } : {}),

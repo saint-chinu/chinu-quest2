@@ -3070,9 +3070,36 @@ export class Game {
     return this._chainCount(player.id, card.element) >= card.chainRequired;
   }
 
+  /** 生贄召喚（避雷針侍）: そのカード自身を除いて、捨てられる手札が足りているか。 */
+  _meetsSacrificeRequirement(player, card) {
+    if (!card.summonSacrifice) return true;
+    return player.hand.filter((c) => c.id !== card.id).length >= card.summonSacrifice;
+  }
+
+  /**
+   * 生贄召喚のコストを支払う。手札（召喚するカードは既に抜かれている前提）
+   * から指定枚数を捨てる。人間は捨てる札を選び、CPUは手札上限と同じ基準で
+   * 一番いらない札を出す。
+   */
+  async _paySummonSacrifice(player, card) {
+    const count = card.summonSacrifice || 0;
+    for (let i = 0; i < count; i++) {
+      if (player.hand.length === 0 || this._isCancelled) return;
+      const discarded = player.isCPU
+        ? this._cpuChooseDiscard(player)
+        : await this.onDiscardChoice(player.hand, player.id);
+      if (this._isCancelled || !discarded) return;
+      player.hand = player.hand.filter((c) => c.id !== discarded.id);
+      this._discardUsedCard(player, discarded);
+      this.onLog(`${player.name}は${card.name}の生贄として「${discarded.name}」を捨てた`);
+      this._notifyState();
+    }
+  }
+
   _affordableMonsterCards(player) {
     return player.hand.filter(
-      (c) => c.type === CardType.MONSTER && c.cost <= player.currency && this._meetsChainRequirement(player, c),
+      (c) => c.type === CardType.MONSTER && c.cost <= player.currency
+        && this._meetsChainRequirement(player, c) && this._meetsSacrificeRequirement(player, c),
     );
   }
 
@@ -3277,6 +3304,9 @@ export class Game {
     player.hand = player.hand.filter((c) => c.id !== card.id);
     this._discardUsedCard(player, card);
     player.currency -= card.cost;
+    // 生贄はG支払いと同じ「召喚コスト」なので、盤面へ出す前に必ず払わせる。
+    await this._paySummonSacrifice(player, card);
+    if (this._isCancelled) return false;
 
     if (actionType === 'summon' || actionType === 'swap') {
       if (actionType === 'swap' && tile.unit) {
@@ -4143,6 +4173,8 @@ export class Game {
       player.hand = player.hand.filter((c) => c.id !== card.id);
       this._discardUsedCard(player, card);
       player.currency -= card.cost;
+      await this._paySummonSacrifice(player, card);
+      if (this._isCancelled) return;
       const chainGain = this._captureLandGain(player, tile);
       this._placeUnit(tile, player, card);
       this.onLog(`${player.name}は${card.name}を召喚した (-${card.cost}G)`);
@@ -4162,6 +4194,8 @@ export class Game {
     player.hand = player.hand.filter((c) => c.id !== card.id);
     this._discardUsedCard(player, card);
     player.currency -= card.cost;
+    await this._paySummonSacrifice(player, card);
+    if (this._isCancelled) return;
     await this._runInvasion(player, tile, card);
     this._notifyState();
   }
