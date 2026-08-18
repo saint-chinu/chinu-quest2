@@ -697,14 +697,14 @@ export const STORY_STAGES = [
       { speaker: 'ヒトデ', text: '体が動かねえ。少し眠る。回復したら、故郷の南の海に帰るさ。' },
       { speaker: '主人公', text: 'ああ。帰ったら、また勝負だ。今度はチュートリアル扱いじゃなく、本気でな。' },
       { speaker: 'ヒトデ', text: 'へっ……言ってろ。次は、俺が勝つ……。' },
-      { speaker: '???', text: 'ヒトデは深い眠りについた。主人公は「ヒトデの再生」を手に入れ、さらに深い旅路へ泳ぎ出す。' },
+      { speaker: '???', text: 'ヒトデは深い眠りについた。主人公は「ヒトデの魂」を手に入れ、さらに深い旅路へ泳ぎ出す。' },
     ],
     opponents: [
       {
         name: '邪神ヒトデマソ',
         color: 0x6a1b2a,
         deckKey: 'hitodemaso',
-        theme: { elements: [Element.NEUTRAL], featuredMonster: MONSTER_CATALOG.hitodemaso },
+        theme: { elements: [Element.NEUTRAL] },
       },
     ],
     breedPartReward: 'part-hitode-regeneration',

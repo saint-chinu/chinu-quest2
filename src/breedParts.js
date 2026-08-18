@@ -50,7 +50,7 @@ export const BREED_PARTS = [
   { id: 'part-pierce', name: '貫通', rarity: Rarity.R, costDelta: 70, trait: 'pierce', price: 90 },
   { id: 'part-phoenix', name: '不死鳥', rarity: Rarity.S, costDelta: 40, trait: 'phoenix', price: 60 },
   { id: 'part-robber', name: '強盗', rarity: Rarity.S, costDelta: 30, trait: 'robber', price: 60 },
-  { id: 'part-hitode-regeneration', name: 'ヒトデの再生', rarity: Rarity.EX, hpDelta: 10, costDelta: 60, trait: 'regenerate', price: null },
+  { id: 'part-hitode-regeneration', name: 'ヒトデの魂', rarity: Rarity.EX, hpDelta: 10, costDelta: 60, trait: 'regenerate', price: null },
 ];
 
 export const BREED_PART_PACK = { cost: 150, count: 3 };
