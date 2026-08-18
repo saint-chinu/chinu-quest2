@@ -5344,6 +5344,15 @@ export class Game {
     // 強盗は攻撃後に実際の与ダメージから奪取額を算出するため、通常攻撃の
     // 再生が終わった直後に戦闘画面内で明示する。上部ログだけでは流れて
     // 見落とされるため、特性表示と同じ大きな表示を使う。
+    // 与ダメージ比例の強奪（テンホウ／目出し帽）も同じ扱いで、発動した
+    // 回数ぶん並べる（ツインハンマーの2回攻撃なら2件出る）。
+    for (const effect of result.stealEffects || []) {
+      await this.onBattleTraitReveal({
+        side: effect.side,
+        labels: [`強奪：${effect.amount}Gを奪った！`],
+      });
+      if (this._isCancelled) return null;
+    }
     for (const effect of result.robberEffects || []) {
       await this.onBattleTraitReveal({
         side: effect.side,

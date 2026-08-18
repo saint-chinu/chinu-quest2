@@ -354,7 +354,20 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
 
   const result = dealDamage(attackerUnit, defenderUnit, log, bonus);
 
-  // 通常攻撃のダメージだけで相手が倒れた場合、毒・目くらまし・略奪・
+  // 与ダメージ比例の強奪（テンホウ／目出し帽）は、相手を倒した一撃でも成立
+  // させる。毒や目くらましと違って相手の生存を前提にした状態異常ではなく、
+  // 「与えたダメージ分だけ奪う」効果だからで、全ダメージから計算する強盗
+  // (robber)とも揃う。ツインハンマーの2回攻撃で2発目が致命打になると
+  // 1回分しか徴収されなかったのはこの取りこぼしが原因。
+  const stealMultipleEffect = getEffect(attackerUnit, 'stealDamageMultiple');
+  if (stealMultipleEffect && result.damage > 0) {
+    const stolen = result.damage * stealMultipleEffect.multiplier;
+    gold.transfer(defenderUnit.ownerId, attackerUnit.ownerId, stolen);
+    log.push(`${attackerUnit.def.name}が${stolen}Gを奪った`);
+    result.stolenGold = stolen;
+  }
+
+  // 通常攻撃のダメージだけで相手が倒れた場合、毒・目くらまし・
   // 即死判定などの「攻撃成功時」効果は発動しない。撃破時効果はこの下の
   // 専用ブロックで別途処理する。
   if (result.damage > 0 && defenderUnit.currentHp > 0) {
@@ -377,12 +390,6 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
     if (attackerEffect?.type === 'shockOnHit') {
       applyShock(defenderUnit, attackerEffect.chance);
       log.push(`${defenderUnit.def.name}は感電状態になった`);
-    }
-    const stealMultipleEffect = getEffect(attackerUnit, 'stealDamageMultiple');
-    if (stealMultipleEffect) {
-      const stolen = result.damage * stealMultipleEffect.multiplier;
-      gold.transfer(defenderUnit.ownerId, attackerUnit.ownerId, stolen);
-      log.push(`${attackerUnit.def.name}が${stolen}Gを奪った`);
     }
     if (defenderUnit.currentHp > 0 && attackerEffect?.type === 'chanceSetHpOnHit' && Math.random() < attackerEffect.chance) {
       defenderUnit.currentHp = attackerEffect.hp;
@@ -588,6 +595,9 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   // 効果分岐を1つずつ書き換えなくて済むよう、既存のlog.push呼び出しを
   // そのまま再利用する設計。
   const exchanges = [];
+  // 与ダメージ比例の強奪が発動した回数分を積む（強盗と同じく、攻撃再生の
+  // 直後に1件ずつ大きく見せる）。2回攻撃なら2件並ぶ。
+  const stealEffects = [];
   let firstTargetSurvived = true;
   for (let i = 0; i < strikeCount(first.unit) && firstTargetSurvived && first.unit.currentHp > 0; i++) {
     const beforeLen = log.length;
@@ -597,6 +607,9 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     firstTargetSurvived = first.target.currentHp > 0;
     const special = log.slice(beforeLen).filter((line) => line !== strike.message && line !== strike.retaliationMessage);
     if (i === 0 && orderSpecial) special.unshift(orderSpecial);
+    if (strike.stolenGold > 0) {
+      stealEffects.push({ side: first.side, unitName: first.unit.def.name, amount: strike.stolenGold });
+    }
     exchanges.push({
       side: first.side,
       message: strike.reflectedDamage > 0
@@ -649,6 +662,9 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
       const strike = performStrike(second.unit, second.target, second.bonus, log, gold);
       secondTargetSurvived = second.target.currentHp > 0;
       const special = log.slice(beforeLen).filter((line) => line !== strike.message && line !== strike.retaliationMessage);
+      if (strike.stolenGold > 0) {
+        stealEffects.push({ side: second.side, unitName: second.unit.def.name, amount: strike.stolenGold });
+      }
       exchanges.push({
         side: second.side,
         message: strike.reflectedDamage > 0
@@ -827,5 +843,5 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   if (finalAttackerSurvived) attacker.currentHp = restoreOnBoardHp(attacker);
   if (finalDefenderSurvived) defender.currentHp = restoreOnBoardHp(defender);
 
-  return { log, dmgToAttacker, dmgToDefender, attackerSurvived: finalAttackerSurvived, defenderSurvived: finalDefenderSurvived, exchanges, itemSteals, itemDestructions, robberEffects };
+  return { log, dmgToAttacker, dmgToDefender, attackerSurvived: finalAttackerSurvived, defenderSurvived: finalDefenderSurvived, exchanges, itemSteals, itemDestructions, robberEffects, stealEffects };
 }
