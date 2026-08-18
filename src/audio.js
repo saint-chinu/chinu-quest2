@@ -21,6 +21,7 @@ const TRACK_SRC = {
   chinHarbor: assetUrl('/audio/stage8bgm.mp3'), // ⑧朕と酢の花火港
   taxAudit: assetUrl('/audio/stage9bgm.mp3'), // ⑨暴君と税務調査
   hitodemaso: assetUrl('/audio/stage10bgm.mp3'), // ⑩成れの果て
+  mahjongDuo: assetUrl('/audio/stage11bgm.mp3'), // ⑪ふたりは○○
 };
 
 // mapId(board.jsのMAPS)→専用トラック。無いキーはplayMapTheme側でboardに
@@ -36,6 +37,7 @@ const MAP_TRACK = {
   'chin-harbor': 'chinHarbor',
   'tax-audit': 'taxAudit',
   hitodemaso: 'hitodemaso',
+  'mahjong-duo': 'mahjongDuo',
 };
 
 const VOLUME = 0.5;
