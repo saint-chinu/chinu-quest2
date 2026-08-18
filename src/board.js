@@ -203,9 +203,13 @@ const TAX_AUDIT_ROWS = [
 const HITODEMASO_ROWS = [
   'C.......C',
   'F.......W',
-  'F.T...W.W',
-  'FTWTGFWMM',
-  'T.F.M...M',
+  'F.......W',
+  'F.......W',
+  'F.......W',
+  'FHGSTMNNW',
+  'T.......M',
+  'T.......M',
+  'T.......M',
   'T.......M',
   'C.......C',
 ];
