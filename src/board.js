@@ -404,7 +404,7 @@ export function createBoard(mapId) {
   if (map.id === 'tax-audit' && warpOut.length === 1) {
     // ⑨の渦中心は通過・停止のどちらでも発動する完全ランダム転移。
     warpOut[0].warpOnPass = true;
-    warpOut[0].warpKind = 'wormhole';
+    warpOut[0].warpKind = 'parallel';
     warpOut[0].randomWarp = true;
   }
 

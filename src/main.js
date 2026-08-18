@@ -221,9 +221,11 @@ const BLINK_MS = 600;
 const TILE_TYPE_LABEL = { start: 'ゴール', land: '土地', event: 'チェックポイント', shop: 'ショップ', shrine: 'ほこら', warp: 'ワープ', runaway: '暴走', defamation: '誹謗中傷' };
 
 function tileSummaryText(tile) {
-  const typeLabel = tile.type === 'warp' && tile.warpKind === 'wormhole'
-    ? 'ワームホール'
-    : TILE_TYPE_LABEL[tile.type];
+  const typeLabel = tile.type === 'warp' && tile.warpKind === 'parallel'
+    ? 'パラレルワールド'
+    : tile.type === 'warp' && tile.warpKind === 'wormhole'
+      ? 'ワームホール'
+      : TILE_TYPE_LABEL[tile.type];
   const lines = [`【${typeLabel}】`];
   if (tile.type === 'land') {
     lines.push(`属性: ${ELEMENT_LABEL[tile.element]} / Lv${tile.level}`);
@@ -8024,3 +8026,4 @@ window.addEventListener('pageshow', (event) => {
 
 // 初期表示時点で、前ページのAudio状態が残っていても必ず無音から始める。
 stopMusic();
+

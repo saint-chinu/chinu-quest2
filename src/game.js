@@ -2721,12 +2721,12 @@ export class Game {
       playerName: player.name,
       sourcePosition: tile.position,
       targetPosition: targetTile.position,
-      label: tile.warpKind === 'wormhole' ? 'ワームホール' : 'ワープ',
+      label: tile.warpKind === 'parallel' ? 'パラレルワールド' : tile.warpKind === 'wormhole' ? 'ワームホール' : 'ワープ',
     });
     player.previousTileId = null;
     player.tileId = targetTile.id;
     if (player.mesh) player.mesh.position.set(targetTile.position.x, PIECE_REST_Y, targetTile.position.z);
-    const warpLabel = tile.warpKind === 'wormhole' ? 'ワームホール' : 'ワープ';
+    const warpLabel = tile.warpKind === 'parallel' ? 'パラレルワールド' : tile.warpKind === 'wormhole' ? 'ワームホール' : 'ワープ';
     this.onLog(`${player.name}は${warpLabel}で転移した！`);
     if (doubleNextDice) {
       player.diceCurse = { type: 'double' };
