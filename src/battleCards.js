@@ -651,7 +651,10 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.harinezumiNoFuku, count: 2 },
       ],
       spells: [
-        { def: SPELL_CATALOG.senbonZakura, count: 2 }, { def: SPELL_CATALOG.realEstateAppraiser, count: 2 },
+        // 不動産鑑〇士(realEstateAppraiser)はCPUに詠唱ハンドラが無い死に札
+        // だったため、財布チューチュー（手持ちG30%強奪 -
+        // _cpuMaybeUseStealGoldSpell参照）へ2枚差し替え。
+        { def: SPELL_CATALOG.senbonZakura, count: 2 }, { def: SPELL_CATALOG.walletVacuum, count: 2 },
         { def: SPELL_CATALOG.blueOcean, count: 1 }, { def: SPELL_CATALOG.psychokinesis, count: 2 },
         { def: SPELL_CATALOG.iCanFly, count: 2 }, { def: SPELL_CATALOG.sideIncome, count: 2 },
         { def: SPELL_CATALOG.manaExtraction, count: 1 }, { def: SPELL_CATALOG.homingInstinct, count: 1 },

@@ -5728,6 +5728,7 @@ export class Game {
     await this._cpuMaybeUseManaExtractionSpell(this.currentPlayer);
     await this._cpuMaybeUseNecromancerSpell(this.currentPlayer);
     await this._cpuMaybeUseSplitEvenlySpell(this.currentPlayer);
+    await this._cpuMaybeUseStealGoldSpell(this.currentPlayer);
     await this._cpuMaybeUseDivinationSpell(this.currentPlayer);
     await this._cpuMaybeUseImmediateSpell(this.currentPlayer);
     await this._cpuMaybeUseDiceSpell(this.currentPlayer);
@@ -5866,6 +5867,25 @@ export class Game {
   }
 
   /** 配られたら即時使うスペル。アイキャンフライを副業収入より優先する。 */
+  /**
+   * 財布チューチュー(stealGoldRatio)のCPU使用判断: 同盟仲間を除く相手のうち
+   * 手持ちGが最も多いプレイヤーを狙い、奪える見込み額（手持ちG×ratio）が
+   * コストの2倍以上ある時だけ使う（30%・コスト100Gなら手持ち667G以上）。
+   * 序盤の小銭に撃って無駄遣いせず、目標達成間際の貯め込みを崩す用途に絞る。
+   */
+  async _cpuMaybeUseStealGoldSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'stealGoldRatio');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const target = this.players
+      .filter((p) => !p.defeated && p.id !== player.id && !this._isAllyOf(p, player))
+      .sort((a, b) => b.currency - a.currency)[0];
+    if (!target) return;
+    const expected = Math.round(target.currency * (card.effect.ratio || 0));
+    if (expected < (card.cost || 0) * 2) return;
+    await this._cpuCastSpell(player, card, { targetPlayerId: target.id });
+  }
+
   async _cpuMaybeUseImmediateSpell(player) {
     if (player.spellUsedThisTurn) return;
     const fly = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'doubleNextDice');
