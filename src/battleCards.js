@@ -158,13 +158,26 @@ export const ITEM_CATALOG = {
   }),
 
   // ストーリー③クリア報酬（紫の魔女ホフクからのお礼）。story.jsのSTORY_STAGES[2].rewardから参照。
-  peeStaff: item('peeStaff', 'ペーの杖', Rarity.EX, ItemType.WEAPON, 20, 25, 10, {
-    traits: ['firstStrike'],
-    atkBonusRange: [25, 50],
-    effectDescription: '先制。ATKボーナスは装備するたびに25〜50でランダムに決まる',
-    imageDataUrl: assetUrl('/images/card-art/penotue.png'),
-  }),
+  peeStaff: {
+    ...item('peeStaff', 'ペーの杖', Rarity.EX, ItemType.WEAPON, 20, 25, 10, {
+      traits: ['firstStrike'],
+      atkBonusRange: [25, 50],
+      effectDescription: '先制。ATKボーナスは装備するたびに25〜50でランダムに決まる',
+      imageDataUrl: assetUrl('/images/card-art/penotue.png'),
+    }),
+    rewardOnly: true,
+  },
 };
+
+/**
+ * ストーリー報酬・NPC専用として配るカードか。盤面のショップマスの品揃えから
+ * 除外するために使う（図鑑・デッキ編集からは今まで通り見える／使える）。
+ * これが無いと、③の報酬であるペーの杖(EX武器が20G)や、⑨⑩の報酬スペルが
+ * ショップに普通に並んでしまう。
+ */
+export function isRewardOnlyCard(card) {
+  return !!card?.rewardOnly;
+}
 
 const spell = (id, name, rarity, cost, target, effect, effectDescription) => ({
   id,
@@ -213,6 +226,7 @@ export const SPELL_CATALOG = {
       '相手の手札からモンスターかスペルを1枚選ぶ。モンスターは自分の空き地へ召喚し、スペルは自分の詠唱として即時使用する。追加コストは使用者が負担。相手は1枚引き100Gを得る',
     ),
     imageDataUrl: null,
+    rewardOnly: true,
   },
   toughness: {
     ...spell(
@@ -225,6 +239,7 @@ export const SPELL_CATALOG = {
       '自身か味方への呪い。3ターンの間、空き地へ召喚するモンスターの基礎HPが10上昇する（侵略には適用されない）',
     ),
     imageDataUrl: assetUrl('/images/card-art/toughness.png'),
+    rewardOnly: true,
   },
   forcedAscension: {
     ...spell(
@@ -237,6 +252,7 @@ export const SPELL_CATALOG = {
       '自分の所有する土地を、地価の120%で強制換金する。配置モンスターは消滅し、土地は空き地Lv1に戻る',
     ),
     imageDataUrl: assetUrl('/images/card-art/forcedAscension.png'),
+    rewardOnly: true,
   },
   // ── 移動系 ──
   diceOne: spell('diceOne', '1のダイス', Rarity.N, 30, 'anyPlayer', { type: 'setNextDice', value: 1 }, '選んだプレイヤーの次のサイコロを1にする'),
@@ -441,15 +457,18 @@ export const SPELL_CATALOG = {
     '対象のモンスターを他プレイヤーが侵略できない状態にする。通行料も発生しない',
   ),
   // ステージ⑤・段ボール男初回撃破のクリア報酬。EXレア。使うと手札に戻る（捨てたら消滅）。
-  encounterUnknown: spell(
-    'encounterUnknown',
-    '未知との遭遇',
-    Rarity.EX,
-    40,
-    'self',
-    { type: 'encounterUnknown' },
-    'デッキにセットしていてまだ一度もドローしていない無属性モンスターを1体手札に加える（使うと手札に戻る／捨てたら消滅）。全種遭遇済みなら復帰せず200G＋2ドロー',
-  ),
+  encounterUnknown: {
+    ...spell(
+      'encounterUnknown',
+      '未知との遭遇',
+      Rarity.EX,
+      40,
+      'self',
+      { type: 'encounterUnknown' },
+      'デッキにセットしていてまだ一度もドローしていない無属性モンスターを1体手札に加える（使うと手札に戻る／捨てたら消滅）。全種遭遇済みなら復帰せず200G＋2ドロー',
+    ),
+    rewardOnly: true,
+  },
   // 色の魔法陣シリーズ: デッキ内（drawPile/discardPile）の該当属性モンスターを
   // 1枚ランダムに引き当てて空き地へ直接召喚する（手札もコストも経由しない）。
   // 対象の属性モンスターがデッキ内に1体も残っていない場合は150Gを得る。

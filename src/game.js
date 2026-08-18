@@ -1,7 +1,7 @@
 import { TileType, mapRequiresAllCheckpoints, mapCheckpointBonus, mapUsesAlternateGoalStarts } from './board.js';
 import { PIECE_REST_Y, UNIT_ICON_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity } from './cards.js';
-import { buildStarterCardList, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf } from './battleCards.js';
+import { buildStarterCardList, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf, isRewardOnlyCard } from './battleCards.js';
 import { createFieldUnit, resolveBattle, applyPreAttackItemEffects, equipItem, applyCurse, applyPoison, GoldLedger, hasTrait, strikeOrderScore, statTotals } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay, getWaitCutRate } from './utils.js';
@@ -1991,6 +1991,14 @@ export class Game {
           // と同じ扱いに揃えないと、ワームホールを跨ぐ出目で「ここに止まる」
           // ハイライトが実際の着地マスとずれる。
           const entered = this.tiles[rawNextId];
+          // ⑨のパラレルワールド（randomWarp）は飛び先がランダムなので着地点を
+          // 予測できない。踏んだ時点で行き先が決まる＝この先は辿らず、マス自身を
+          // 終着として見せる。辿ってしまうと、実際には絶対に止まれないマス
+          // （渦の中心の無属性マス等）がハイライトされてしまう。
+          if (entered?.warpOnPass && entered.randomWarp) {
+            destinations.add(rawNextId);
+            continue;
+          }
           const warped = !!(entered?.warpOnPass && entered.warpTargetId != null);
           const nextId = warped ? entered.warpTargetId : rawNextId;
           const nextTile = this.tiles[nextId];
@@ -2591,7 +2599,10 @@ export class Game {
    * the hub's ショップ screen's job, a completely separate system).
    */
   async _resolveShopTile(player) {
-    const sellable = getCardCatalog().filter((c) => c.cost != null);
+    // ストーリー報酬・NPC専用カード（ペーの杖/未知との遭遇/開示請求/タフネス/
+    // 強制成仏）はショップに並べない。報酬として渡す意味が無くなるうえ、
+    // ペーの杖は20GのEX武器なので実質バグ価格になっていた。
+    const sellable = getCardCatalog().filter((c) => c.cost != null && !isRewardOnlyCard(c));
     let card = null;
     if (player.isCPU) {
       card = this._chooseCpuShopPurchase(player, sellable);
@@ -2625,7 +2636,11 @@ export class Game {
     const missingTypes = requiredTypes.filter((type) => !handTypes.has(type));
     // モンスター・アイテム・スペルの3種類が手札に揃っているなら買わない。
     if (missingTypes.length === 0) return null;
-    const affordable = sellable.filter((card) => missingTypes.includes(card.type) && player.currency >= card.cost);
+    // 召喚と同じく、買った後も「一番高い敵地の通行料」を払える備えを残す
+    // （_cpuSummonReserve参照）。残さないと高額地の直前で散財して破産する。
+    const reserve = this._cpuSummonReserve(player);
+    const affordable = sellable.filter((card) => missingTypes.includes(card.type)
+      && player.currency - card.cost >= reserve);
     if (affordable.length === 0) return null;
     return randomSample(affordable, 1)[0] || null;
   }
@@ -3545,6 +3560,12 @@ export class Game {
       for (const id of frontier) {
         for (const rawNeighborId of this.tiles[id].neighbors) {
           const entered = this.tiles[rawNeighborId];
+          // ランダムワープはこの先の行き先が確定しないので、そこで打ち切る
+          // （踏んだ時点でどこへ飛ぶか分からない＝距離を測れない）。
+          if (entered?.warpOnPass && entered.randomWarp) {
+            if (rawNeighborId === toId) return distance;
+            continue;
+          }
           const neighborId = entered?.warpOnPass && entered.warpTargetId != null
             ? entered.warpTargetId
             : rawNeighborId;
@@ -3575,6 +3596,11 @@ export class Game {
         const options = forward.length > 0 ? forward : tile.neighbors;
         for (const rawNeighborId of options) {
           const entered = this.tiles[rawNeighborId];
+          // ランダムワープの先は不定なので探索を打ち切る（_tileDistanceと同様）。
+          if (entered?.warpOnPass && entered.randomWarp) {
+            if (rawNeighborId === targetId) return distance;
+            continue;
+          }
           const neighborId = entered?.warpOnPass && entered.warpTargetId != null
             ? entered.warpTargetId
             : rawNeighborId;
