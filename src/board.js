@@ -185,19 +185,19 @@ const CHIN_HARBOR_ROWS = [
   'K....G',
 ];
 
-// ⑨暴君と税務調査。沈没都市の外周から内側へ巻き込む渦型盤面。
-// 火・水・森・雷は各10マスで均等。四隅寄りにCPを置き、中央へ向かうほど
-// 分岐と接触が増える構成にしている。
+// ⑨暴君と税務調査。沈没都市を外周から中心へ巻き込む渦型盤面。
+// 火・水・森・雷は各11マスで均等。CPは2つに絞り、中心の強制ワープ(V)は
+// 通過・停止のどちらでも完全ランダムなマスへ転移する。
 const TAX_AUDIT_ROWS = [
-  'GFFFFFFFC',
+  'GFFFFFFFF',
   '........F',
-  'CWWWWWW.F',
-  'W.....W.F',
-  'W.TTT.W.N',
-  'M.T...T.M',
-  'M.TTTTT.M',
-  'M.......M',
-  'CMMMM...C',
+  'MMMMMMC.F',
+  'M.....T.F',
+  'M.TVN.T.C',
+  'M.T...T.W',
+  'M.TTTTT.W',
+  'M.......W',
+  'TWWWWWWWW',
 ];
 
 // ⑩成れの果て。海底都市の最深部・大海溝の神殿。
@@ -400,6 +400,12 @@ export function createBoard(mapId) {
   if (warpOut.length === 1 && warpIn.length > 0) {
     warpOut[0].warpTargetId = warpIn[0].id;
     for (const t of warpIn) t.warpTargetId = warpOut[0].id;
+  }
+  if (map.id === 'tax-audit' && warpOut.length === 1) {
+    // ⑨の渦中心は通過・停止のどちらでも発動する完全ランダム転移。
+    warpOut[0].warpOnPass = true;
+    warpOut[0].warpKind = 'wormhole';
+    warpOut[0].randomWarp = true;
   }
 
   // ステージ7の左右固定ワープ。卍側から直線側へ、直線側から卍側へしか

@@ -2708,7 +2708,13 @@ export class Game {
    */
   async _resolveWarpTile(player, sourceTile = null, { doubleNextDice = false } = {}) {
     const tile = sourceTile ?? this.tiles[player.tileId];
-    const targetTile = this.tiles.find((t) => t.id === tile.warpTargetId);
+    let targetTile = null;
+    if (tile.randomWarp) {
+      const candidates = this.tiles.filter((t) => t.id !== tile.id && t.type !== TileType.WARP);
+      targetTile = candidates[Math.floor(Math.random() * candidates.length)] || null;
+    } else {
+      targetTile = this.tiles.find((t) => t.id === tile.warpTargetId);
+    }
     if (!targetTile) return;
     await this.onWarpEffect({
       playerId: player.id,
