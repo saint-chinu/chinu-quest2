@@ -4992,10 +4992,9 @@ export class Game {
     this._applyEquippedItemBonus(defenderUnit, defenderBonus);
 
     // 貫通: nullifies the defender's 同属性ボーナス (land-added HP) for this
-    // battle's math specifically - the stat panel above already showed the
-    // "nominal" bonus, since traits (unlike items) aren't secret and the
-    // pierce interaction is meant to land as a damage-calc surprise, not an
-    // upfront display change. Item HP bonuses are untouched either way.
+    // battle's math. 表示側も特性表示のタイミングで同じボーナスを取り除く
+    // （下のtraitRevealSides参照 - 表示だけ残すと貫通ダメージでHPが想定より
+    // 大きく減ったように見えてややこしい）。Item HP bonuses are untouched.
     // モンスター自身のtraitsだけでなく、装備アイテムが持つpierce（にょ〇棒/
     // イカサマのサイコロ/斬〇剣）も対象にする。
     const attackerHasPierce =
@@ -5022,8 +5021,16 @@ export class Game {
       if (hasTrait(unit, 'pierce')) labels.push('貫通：HPの土地レベルボーナス、ダメージ無効化、反射を無視してダメージ。アイテムのHP増加は無視できない。');
       return labels;
     };
+    // 攻撃側の貫通で守備側の土地レベルHPボーナスが実際に無効化される場合、
+    // 特性表示のタイミングで画面上の「+◯◯」表示と表示HPからも取り除く。
+    // 表示だけボーナス込みのままだと、貫通ダメージでHPが想定より大きく
+    // 減ったように見えてややこしい（計算自体は元から正しかった）。
+    const attackerReveal = { side: 'attacker', labels: traitLabelsFor(attackerUnit, attackerScore, defenderScore) };
+    if (attackerHasPierce && (defenderBonus.hp || 0) > 0) {
+      attackerReveal.stripHpBonus = { side: 'defender', amount: defenderBonus.hp };
+    }
     const traitRevealSides = [
-      { side: 'attacker', labels: traitLabelsFor(attackerUnit, attackerScore, defenderScore) },
+      attackerReveal,
       { side: 'defender', labels: traitLabelsFor(defenderUnit, defenderScore, attackerScore) },
     ];
     // 先に攻撃する側（スコアが高い側／同点なら攻撃側）を先に見せる。

@@ -2345,7 +2345,7 @@ async function promptBattleItemSteal({ fromSide, toSide, items = [] }) {
 }
 
 /** 先制/後攻/貫通の発動演出: 該当カードを一時的に10%拡大しラベルを1.5秒表示してから元に戻す。 */
-async function promptBattleTraitReveal({ side, labels }) {
+async function promptBattleTraitReveal({ side, labels, stripHpBonus = null }) {
   const sideEls = battleSide[side];
   if (!sideEls || !labels || labels.length === 0) return;
   battleMessageText.textContent = labels.join('\n');
@@ -2356,6 +2356,40 @@ async function promptBattleTraitReveal({ side, labels }) {
   sideEls.card.classList.remove('trait-reveal');
   battleMessageText.classList.add('hidden');
   battleMessageText.classList.remove('special');
+
+  // 貫通: 無効化される土地レベルHPボーナスを表示からも取り除く。
+  // 「+◯◯」チップと、HPゲージ用の内部現在値/最大値の両方から差し引く。
+  // アイテム由来のHP増加分（貫通で無視できない分）はチップに残す。
+  // これをやらないと表示だけボーナス込みのままになり、貫通の一撃でHPが
+  // 想定より大きく減ったように見えてややこしい（計算は元から正しい）。
+  if (stripHpBonus) {
+    const targetEls = battleSide[stripHpBonus.side];
+    const amount = Number(stripHpBonus.amount) || 0;
+    if (targetEls && amount > 0) {
+      const shownBonus = targetEls.hpBonus.classList.contains('hidden')
+        ? 0
+        : Number((targetEls.hpBonus.textContent || '').replace('+', '')) || 0;
+      const strip = Math.min(amount, shownBonus);
+      if (strip > 0) {
+        const remaining = shownBonus - strip;
+        targetEls.hpBonus.textContent = remaining > 0 ? `+${remaining}` : '';
+        targetEls.hpBonus.classList.toggle('hidden', remaining <= 0);
+        const current = Math.max(0, (Number(targetEls.hp.dataset.current) || 0) - strip);
+        const max = Math.max(1, (Number(targetEls.hp.dataset.max) || 0) - strip);
+        targetEls.hp.dataset.current = String(current);
+        targetEls.hp.dataset.max = String(max);
+        targetEls.hpFill.style.width = `${Math.max(0, Math.min(100, (current / max) * 100))}%`;
+        battleMessageText.textContent = `貫通！ 土地レベルボーナス +${strip} は無効`;
+        battleMessageText.classList.remove('hidden');
+        battleMessageText.classList.add('special');
+        targetEls.el.classList.add('battle-hit');
+        await new Promise((resolve) => setTimeout(resolve, 1400));
+        targetEls.el.classList.remove('battle-hit');
+        battleMessageText.classList.add('hidden');
+        battleMessageText.classList.remove('special');
+      }
+    }
+  }
 }
 
 /** 避雷針侍: 撃破表示を取り消し、身代わりカードを防衛側へ重ねて大きく知らせる。 */

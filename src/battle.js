@@ -416,7 +416,14 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
       // 道連れダメージも攻撃側のナンカのお守りで1回無効化できる。
       if (!consumeDamageNegation(attackerUnit, log)) {
         attackerUnit.currentHp -= defenderEffect.damage;
-        log.push(`${defenderUnit.def.name}は道連れに${attackerUnit.def.name}へ${defenderEffect.damage}ダメージ！`);
+        const retaliationMessage = `${defenderUnit.def.name}は道連れに${attackerUnit.def.name}へ${defenderEffect.damage}ダメージ！`;
+        log.push(retaliationMessage);
+        // 反射(reflectedDamage)と同様、resolveBattleが専用のexchangeとして
+        // ダメージ数値・HP減少を演出できるよう結果へ載せる。載せないと
+        // 相打ち時に道連れ分のエフェクトが一切出ず、決着メッセージだけになる。
+        result.retaliationDamage = defenderEffect.damage;
+        result.retaliationTargetHp = attackerUnit.currentHp;
+        result.retaliationMessage = retaliationMessage;
       }
     }
   }
@@ -584,7 +591,7 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     const elementMultiplier = first.unit.def.element === WEAK_AGAINST[first.target.def.element] ? 1.2 : 1;
     const strike = performStrike(first.unit, first.target, first.bonus, log, gold);
     firstTargetSurvived = first.target.currentHp > 0;
-    const special = log.slice(beforeLen).filter((line) => line !== strike.message);
+    const special = log.slice(beforeLen).filter((line) => line !== strike.message && line !== strike.retaliationMessage);
     if (i === 0 && orderSpecial) special.unshift(orderSpecial);
     exchanges.push({
       side: first.side,
@@ -611,6 +618,22 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
         reflected: true,
       });
     }
+    if (strike.retaliationDamage > 0) {
+      // 道連れ（花火師など）: 倒された側から一撃側へ入る追加ダメージを、
+      // 反射と同じく専用exchangeとして再生する（ダメージ数値とHP減少を見せる）。
+      // reflected扱いにして強盗の与ダメージ集計からは除外する。
+      exchanges.push({
+        side: first.side === 'attacker' ? 'defender' : 'attacker',
+        message: strike.retaliationMessage,
+        damage: strike.retaliationDamage,
+        element: first.target.def.element,
+        attackPower: statTotals(first.target, second.bonus).atk,
+        targetHp: strike.retaliationTargetHp,
+        targetDied: strike.retaliationTargetHp <= 0,
+        special: ['道連れ発動！'],
+        reflected: true,
+      });
+    }
   }
 
   if (firstTargetSurvived && first.unit.currentHp > 0) {
@@ -621,7 +644,7 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
       const elementMultiplier = second.unit.def.element === WEAK_AGAINST[second.target.def.element] ? 1.2 : 1;
       const strike = performStrike(second.unit, second.target, second.bonus, log, gold);
       secondTargetSurvived = second.target.currentHp > 0;
-      const special = log.slice(beforeLen).filter((line) => line !== strike.message);
+      const special = log.slice(beforeLen).filter((line) => line !== strike.message && line !== strike.retaliationMessage);
       exchanges.push({
         side: second.side,
         message: strike.reflectedDamage > 0
@@ -644,6 +667,21 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
           targetHp: strike.reflectedTargetHp,
           targetDied: strike.reflectedTargetHp <= 0,
           special: ['反射！'],
+          reflected: true,
+        });
+      }
+      if (strike.retaliationDamage > 0) {
+        // 道連れ: 相打ち（守備側の反撃で攻撃側が倒れつつ道連れ発動、または
+        // その逆）で最も起きやすいのがこちらの経路。専用exchangeで演出する。
+        exchanges.push({
+          side: second.side === 'attacker' ? 'defender' : 'attacker',
+          message: strike.retaliationMessage,
+          damage: strike.retaliationDamage,
+          element: second.target.def.element,
+          attackPower: statTotals(second.target, first.bonus).atk,
+          targetHp: strike.retaliationTargetHp,
+          targetDied: strike.retaliationTargetHp <= 0,
+          special: ['道連れ発動！'],
           reflected: true,
         });
       }
