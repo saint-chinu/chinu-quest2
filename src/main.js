@@ -3060,6 +3060,7 @@ function startBattle(character, storyOptions = {}) {
     onTutorialEvent: storyOptions.onTutorialEvent,
     onStoryBattleEnd: storyOptions.onStoryBattleEnd,
     onStoryAssistEvent: storyOptions.onStoryAssistEvent,
+    onCardSeen: handleCardSeen,
     onResumeCheckpoint: storyOptions.onResumeCheckpoint,
     onPvpSync: handlePvpSync,
     storyMode: storyOptions.storyMode ?? false,
@@ -5590,6 +5591,22 @@ function markCatalogSeen(def) {
 
 function isCatalogSeen(key) {
   return !!currentCharacter?.catalogSeenCards?.[key];
+}
+
+/**
+ * 盤面でカードが実際に使われた時（召喚・詠唱・装備）にGameから呼ばれる。
+ * 入手手段が無いカードだけを図鑑に登録する: NPC専用（酢・サーティーの
+ * ブリモン）、ストーリー報酬専用、そしてEX全般（ショップのパックはN/S/Rしか
+ * 排出しないので、報酬にもなっていないEX＝国士無双！！のようなカードは
+ * 敵の使用を見る以外に図鑑を埋める手段が無い）。
+ * 既に所持しているカードは所持数で登録済み扱いになるので何もしない。
+ */
+function handleCardSeen(def) {
+  if (!def || !currentCharacter) return;
+  const unobtainable = def.npcExclusive || def.rewardOnly || def.rarity === Rarity.EX;
+  if (!unobtainable) return;
+  if (ownedCountOf(cardKey(def)) > 0) return;
+  markCatalogSeen(def);
 }
 
 

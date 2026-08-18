@@ -152,6 +152,7 @@ export class Game {
     onDamageEffect,
     onStoryBattleEnd,
     onStoryAssistEvent,
+    onCardSeen,
     onResumeCheckpoint,
     onPvpSync,
     playerConfigs,
@@ -240,6 +241,9 @@ export class Game {
     this.onDamageEffect = onDamageEffect;
     this.onStoryBattleEnd = onStoryBattleEnd;
     this.onStoryAssistEvent = onStoryAssistEvent || (() => Promise.resolve());
+    // カードが実際に場に出た時に呼ぶ（召喚・スペル詠唱・アイテム装備）。
+    // 図鑑登録に使う - 敵しか使わないカードでも、見たのなら図鑑に載る。
+    this.onCardSeen = onCardSeen;
     this.storyAssistEvent = storyAssistEvent;
     this.storyAssistTriggered = false;
     // ストーリー途中保存用。操作可能な安全地点だけをmain.jsへ渡す。
@@ -746,6 +750,7 @@ export class Game {
       return;
     }
 
+    this.onCardSeen?.(card);
     player.hand = player.hand.filter((c) => c.id !== card.id);
     this._discardUsedCard(player, card);
     player.currency -= card.cost || 0;
@@ -5027,6 +5032,7 @@ export class Game {
   /** Equips + permanently consumes the chosen item (removed from hand, discarded) - a no-op if the side skipped. */
   _consumeBattleItem(player, unit, item) {
     if (!item) return null;
+    this.onCardSeen?.(item);
     const equipped = equipItem(unit, item);
     player.hand = player.hand.filter((c) => c.id !== item.id);
     this._discardUsedCard(player, item);
@@ -5249,17 +5255,13 @@ export class Game {
     const piercedLandHp = attackerHasPierce ? this._elementHpBonus(defenderUnit, battleTile) : 0;
     const battleDefenderBonus = this._pierceAdjustedBonus(defenderBonus, piercedLandHp);
 
-    // 破壊・強奪はpreAttackEffectsで既に適用・演出済みなので、resolveBattle内の
-    // 同判定はitems配列が既に空/移動済み（length>0ガード）で不発になる。
-    // result.itemDestructions/itemStealsは常に空配列で返るため、ここでの
-    // 二重演出は発生しない。
-    const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, battleDefenderBonus);
-    result.log.forEach((line) => this.onLog(line));
-
-    // 先制/後攻/貫通が発動する場合、攻撃演出の前に該当カードを一時的に拡大して
-    // ラベルを見せる（先に攻撃する側から順に）。装備アイテム由来の特性
-    // （斬〇剣の後攻・貫通など）も含めて判定するため、equip後・resolveBattle後の
-    // ここで評価する。
+    // 先制/後攻/貫通と最終ATK倍率の表示内容は、resolveBattleを呼ぶ"前"に
+    // 確定させる。resolveBattleは終了時にunit.itemsを空にするため、後から
+    // 評価すると装備由来の特性・ATKが消えた状態で計算されてしまう
+    // （ペーの杖の先制が消えて相手のNinjaだけが「先制」と表示される、
+    // 狂戦士＋不死鳥の盾が50→75ではなく40→60と表示される、等）。
+    // 強奪・破壊はpreAttackEffectsで適用済みなので、この時点のitemsが
+    // 実際に戦う装備そのものになる。
     const attackerScore = strikeOrderScore(attackerUnit);
     const defenderScore = strikeOrderScore(defenderUnit);
     const traitLabelsFor = (unit, myScore, theirScore) => {
@@ -5282,14 +5284,10 @@ export class Game {
     ];
     // 先に攻撃する側（スコアが高い側／同点なら攻撃側）を先に見せる。
     if (defenderScore > attackerScore) traitRevealSides.reverse();
-    for (const reveal of traitRevealSides) {
-      if (reveal.labels.length === 0) continue;
-      await this.onBattleTraitReveal(reveal);
-      if (this._isCancelled) return null;
-    }
 
     // 狂戦士などの固有ステータス倍率は実ダメージだけでなく、攻撃開始前に
     // 大きな文字でも明示する。これで通常の応援加算との区別がつく。
+    // 倍率の前後の値は装備込みの実数値（ここもresolveBattleより前に確定させる）。
     const multiplierLabels = (unit, bonus) => {
       if (!bonus.atkMultiplier || bonus.atkMultiplier === 1) return [];
       const before = statTotals(unit, { ...bonus, atkMultiplier: 1 }).atk;
@@ -5300,6 +5298,19 @@ export class Game {
       { side: 'attacker', labels: multiplierLabels(attackerUnit, attackerBonus) },
       { side: 'defender', labels: multiplierLabels(defenderUnit, defenderBonus) },
     ];
+
+    // 破壊・強奪はpreAttackEffectsで既に適用・演出済みなので、resolveBattle内の
+    // 同判定はitems配列が既に空/移動済み（length>0ガード）で不発になる。
+    // result.itemDestructions/itemStealsは常に空配列で返るため、ここでの
+    // 二重演出は発生しない。
+    const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, battleDefenderBonus);
+    result.log.forEach((line) => this.onLog(line));
+
+    for (const reveal of traitRevealSides) {
+      if (reveal.labels.length === 0) continue;
+      await this.onBattleTraitReveal(reveal);
+      if (this._isCancelled) return null;
+    }
     for (const reveal of effectRevealSides) {
       if (reveal.labels.length === 0) continue;
       await this.onBattleTraitReveal(reveal);
@@ -5634,6 +5645,7 @@ export class Game {
   }
 
   _placeUnit(tile, player, card) {
+    this.onCardSeen?.(card);
     const isEmptyLandSummon = tile.type === TileType.LAND && tile.owner == null && tile.unit == null;
     tile.unit = createFieldUnit(card, player.id);
     if (isEmptyLandSummon && player.toughnessTurnsRemaining > 0) {
@@ -6989,6 +7001,7 @@ export class Game {
    * 直接渡す。
    */
   async _cpuCastSpell(player, card, cast) {
+    this.onCardSeen?.(card);
     player.hand = player.hand.filter((c) => c.id !== card.id);
     this._discardUsedCard(player, card);
     player.currency -= card.cost || 0;
