@@ -3558,6 +3558,22 @@ export class Game {
     const landLoss = this._captureLandLoss(player, tile);
     const salePrice = Math.round(this._landValueOfTile(tile) * multiplier);
     const unit = tile.unit;
+    const level = tile.level;
+
+    // 盤面を書き換える"前"に対象マスへ寄り、成仏の光と一緒に「誰が消えて
+    // いくら入るのか」を見せる。以前は所有権もモンスターも無言で消え、
+    // ログ1行が流れるだけで何が起きたのか分からなかった。
+    // 光は_notifyStateの_syncUnitIconsでアイコンが消える前に再生する。
+    await this.onTargetEffect?.({
+      tileId: tile.id,
+      position: tile.position,
+      aura: 'ascension',
+      message: unit
+        ? `強制成仏\n${unit.def.name}が成仏した\n${player.name}はLv${level}の土地を手放し${salePrice}Gを得た`
+        : `強制成仏\n${player.name}はLv${level}の空き地を手放し${salePrice}Gを得た`,
+    });
+    if (this._isCancelled) return;
+
     player.currency += salePrice;
     tile.owner = null;
     tile.unit = null;

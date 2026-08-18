@@ -1671,14 +1671,21 @@ async function promptSummonEffect({ tileId, unitName }) {
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, pvpWaitCut(320));
 }
 
-async function promptTargetEffect({ tileId = null, playerId = null, position = null, message }) {
+async function promptTargetEffect({ tileId = null, playerId = null, position = null, message, aura = null }) {
   const player = playerId != null ? game?.players?.find((entry) => entry.id === playerId) : null;
   const tile = tileId != null ? tiles.find((entry) => entry.id === tileId) : player ? tiles[player.tileId] : null;
   const targetPosition = position || tile?.position;
   if (!targetPosition || !scene) return;
   const savedFocus = { x: scene.focus.x, z: scene.focus.z };
   await scene.focusAndZoom(targetPosition.x, targetPosition.z, 1.35, 320);
-  await showTargetEffectMessage(targetPosition, message);
+  const presentation = showTargetEffectMessage(targetPosition, message);
+  // aura指定時はメッセージと並行して光の演出も出す（強制成仏の「成仏」など、
+  // 文字だけでは何が起きたか伝わりにくい効果用）。
+  if (aura === 'ascension') {
+    await Promise.all([scene.playBlessingLight(targetPosition), presentation]);
+  } else {
+    await presentation;
+  }
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
 }
 
