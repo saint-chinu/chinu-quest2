@@ -4797,9 +4797,12 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
     };
     // 途中参戦後にストーリー保存されたデータはプレイヤー数が1人多い。
     // その場合だけ最初から構成に加え、保存データ復元の人数チェックを通す。
+    // それ以外（新規開始／参戦前にセーブした再開）は、これから参戦させる。
+    // ここを`else if (!resumeState)`にすると、参戦前セーブから再開した時だけ
+    // 味方が永久に来ず、1vs2のまま戦い続けることになる。
     if (resumeState?.players?.length === playerConfigs.length + 1) {
       playerConfigs.push(assistConfig);
-    } else if (!resumeState) {
+    } else {
       storyAssistEvent = {
         ratio: stage.midBattleAssist.ratio,
         allyConfig: assistConfig,

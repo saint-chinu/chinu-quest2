@@ -5958,6 +5958,9 @@ export class Game {
     await this._cpuMaybeUseCurseCleanseSpell(this.currentPlayer);
     await this._cpuMaybeUseHealSpell(this.currentPlayer);
     await this._cpuMaybeUsePhoenixCurseSpell(this.currentPlayer);
+    await this._cpuMaybeUseChainStatCurseSpell(this.currentPlayer);
+    await this._cpuMaybeUseGuaranteedWinSpell(this.currentPlayer);
+    await this._cpuMaybeUseReverseDiceSpell(this.currentPlayer);
     await this._cpuMaybeUseShuffleSpell(this.currentPlayer);
     await this._cpuMaybeUseTollBonusSpell(this.currentPlayer);
     await this._cpuMaybeUseTollReductionSpell(this.currentPlayer);
@@ -6261,6 +6264,70 @@ export class Game {
       .sort((a, b) => b.score - a.score);
     if (candidates.length === 0) return;
     await this._cpuCastSpell(player, card, { targetTileId: candidates[0].tile.id });
+  }
+
+  /**
+   * 国士無双！！(chainStatCurse)のCPU使用判断: 呪いは「その土地の所有者の
+   * 同属性連鎖数×perChain」だけHP/ATKを上げる＝敵にかけると敵を強化して
+   * しまうので、必ず自分（同盟仲間含む）のモンスターに使う。連鎖が伸びて
+   * いる土地ほど効果が大きいので、上がり幅が最大の1体を選び、上げ幅が
+   * 小さすぎる（10未満）うちは温存する。
+   */
+  async _cpuMaybeUseChainStatCurseSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'chainStatCurse');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const perChain = card.effect.perChain || 0;
+    const candidates = this.tiles
+      .filter((t) => t.unit && this._isFriendlyUnitTile(t, player))
+      // 呪いは1体1つしか保持できない。既に有益な呪いが乗っている個体は避ける。
+      .filter((t) => !t.unit.curses?.some((c) => (c.addedAtk || 0) > 0 || (c.addedHp || 0) > 0))
+      .map((tile) => ({ tile, gain: this._chainCount(tile.unit.ownerId, tile.element) * perChain }))
+      .filter(({ gain }) => gain >= 10)
+      .sort((a, b) => b.gain - a.gain || b.tile.level - a.tile.level);
+    if (candidates.length === 0) return;
+    await this._cpuCastSpell(player, card, { targetTileId: candidates[0].tile.id });
+  }
+
+  /**
+   * お前も〇ぬんだ(guaranteedNextInvasionWin)のCPU使用判断: 発動そのものの
+   * コストに加えて侵略時に700Gを失うので、その両方を払ってなお備え
+   * （_cpuSummonReserve）が残る時だけ仕込む。狙える敵地（同盟以外が守る
+   * Lv2以上の土地）が無い、もしくは手札に侵略用モンスターが無い時は温存。
+   */
+  async _cpuMaybeUseGuaranteedWinSpell(player) {
+    if (player.spellUsedThisTurn || player.guaranteedNextInvasionWin) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'guaranteedNextInvasionWin');
+    if (!card) return;
+    const upfront = (card.cost || 0) + (card.effect.cost || 0);
+    if (player.currency - upfront < this._cpuSummonReserve(player)) return;
+    if (this._affordableMonsterCards(player).length === 0) return;
+    const worthwhile = this.tiles.some((t) => {
+      if (t.type !== TileType.LAND || t.owner == null || t.owner === player.id || !t.unit) return false;
+      const owner = this.players.find((p) => p.id === t.owner);
+      if (!owner || owner.defeated || this._isAllyOf(owner, player)) return false;
+      return t.level >= 2 && !t.transparentCursed;
+    });
+    if (!worthwhile) return;
+    await this._cpuCastSpell(player, card, {});
+  }
+
+  /**
+   * バックファイア(reverseNextDice)のCPU使用判断: 同盟以外の相手のうち、
+   * 未通過CPが最も少なく（＝ゴールに一番近い）総資産も高い相手を後退させる。
+   * 既に有害なダイス呪いがかかっている相手には重ねない。
+   */
+  async _cpuMaybeUseReverseDiceSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'reverseNextDice');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const target = this.players
+      .filter((p) => !p.defeated && p.id !== player.id && !this._isAllyOf(p, player))
+      .filter((p) => !this._hasHarmfulDiceCurse(p))
+      .sort((a, b) => b.passedCheckpoints.size - a.passedCheckpoints.size
+        || this._totalAssetsOf(b) - this._totalAssetsOf(a))[0];
+    if (!target) return;
+    await this._cpuCastSpell(player, card, { targetPlayerId: target.id });
   }
 
   /**
