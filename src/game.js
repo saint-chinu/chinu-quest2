@@ -2591,15 +2591,21 @@ export class Game {
    * the hub's ショップ screen's job, a completely separate system).
    */
   async _resolveShopTile(player) {
-    if (player.isCPU) return; // CPU doesn't shop
-    // Spells have no cost field at all today (useSpell has always been
-    // free once drawn) - excluded here rather than pretending they cost 0G.
     const sellable = getCardCatalog().filter((c) => c.cost != null);
-    const options = randomSample(sellable, SHOP_OPTION_COUNT);
-    const card = await this.onShopPurchase(options, player.currency, player.id);
-    if (!card) return;
+    let card = null;
+    if (player.isCPU) {
+      card = this._chooseCpuShopPurchase(player, sellable);
+      if (!card) {
+        this.onLog(`${player.name}はショップを見送った`);
+        return;
+      }
+    } else {
+      const options = randomSample(sellable, SHOP_OPTION_COUNT);
+      card = await this.onShopPurchase(options, player.currency, player.id);
+      if (!card) return;
+    }
     if (player.currency < card.cost) {
-      this.onLog('ゴールドが足りません');
+      if (!player.isCPU) this.onLog('ゴールドが足りません');
       return;
     }
     player.currency -= card.cost;
@@ -2611,6 +2617,17 @@ export class Game {
     this.onLog(`${player.name}はショップで「${card.name}」を購入した (-${card.cost}G)`);
     this._notifyState();
     await this._enforceHandLimit(player);
+  }
+
+  _chooseCpuShopPurchase(player, sellable) {
+    const requiredTypes = [CardType.MONSTER, CardType.GEAR, CardType.SPELL];
+    const handTypes = new Set((player.hand || []).map((card) => card.type));
+    const missingTypes = requiredTypes.filter((type) => !handTypes.has(type));
+    // モンスター・アイテム・スペルの3種類が手札に揃っているなら買わない。
+    if (missingTypes.length === 0) return null;
+    const affordable = sellable.filter((card) => missingTypes.includes(card.type) && player.currency >= card.cost);
+    if (affordable.length === 0) return null;
+    return randomSample(affordable, 1)[0] || null;
   }
 
   /**
@@ -6919,3 +6936,4 @@ export class Game {
     };
   }
 }
+
