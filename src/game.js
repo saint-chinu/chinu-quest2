@@ -5729,6 +5729,13 @@ export class Game {
     await this._cpuMaybeUseNecromancerSpell(this.currentPlayer);
     await this._cpuMaybeUseSplitEvenlySpell(this.currentPlayer);
     await this._cpuMaybeUseStealGoldSpell(this.currentPlayer);
+    await this._cpuMaybeUseCurseCleanseSpell(this.currentPlayer);
+    await this._cpuMaybeUseHealSpell(this.currentPlayer);
+    await this._cpuMaybeUseShuffleSpell(this.currentPlayer);
+    await this._cpuMaybeUseTollBonusSpell(this.currentPlayer);
+    await this._cpuMaybeUseTollReductionSpell(this.currentPlayer);
+    await this._cpuMaybeUseTollWaiverSpell(this.currentPlayer);
+    await this._cpuMaybeUseAppraiserSpell(this.currentPlayer);
     await this._cpuMaybeUseDivinationSpell(this.currentPlayer);
     await this._cpuMaybeUseImmediateSpell(this.currentPlayer);
     await this._cpuMaybeUseDiceSpell(this.currentPlayer);
@@ -5884,6 +5891,123 @@ export class Game {
     const expected = Math.round(target.currency * (card.effect.ratio || 0));
     if (expected < (card.cost || 0) * 2) return;
     await this._cpuCastSpell(player, card, { targetPlayerId: target.id });
+  }
+
+  /**
+   * 呪い解除(cleanseCurses)のCPU使用判断: 有害なダイス呪いを受けているか、
+   * 自分の配置モンスターに呪いが付いている時に使う。有益な状態（宝くじ・
+   * 絶対攻撃・お前も〇ぬんだ・脱税チャージ・不動産鑑〇士・出目強化）まで
+   * まとめて消えてしまう仕様のため、それらを持っている間は温存する。
+   */
+  async _cpuMaybeUseCurseCleanseSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'cleanseCurses');
+    if (!card || player.currency < (card.cost || 0)) return;
+    if (player.lotteryOnNextGoal || player.pierceNextInvasion || player.guaranteedNextInvasionWin
+      || player.tollWaiverCharges > 0 || player.allTilesAccessTurnsRemaining > 0) return;
+    if (player.diceCurse && !this._hasHarmfulDiceCurse(player)) return;
+    const cursedTiles = this.tiles.filter(
+      (t) => t.owner === player.id && t.unit?.ownerId === player.id && t.unit.curses.length > 0,
+    );
+    if (!this._hasHarmfulDiceCurse(player) && cursedTiles.length === 0) return;
+    const target = [...cursedTiles].sort((a, b) => b.unit.curses.length - a.unit.curses.length)[0];
+    await this._cpuCastSpell(player, card, target ? { targetTileId: target.id } : {});
+  }
+
+  /** ヒール(fullHeal)のCPU使用判断: HPを4割以上（かつ20以上）失っている
+   * 自分の配置モンスターのうち、失いが最も大きい1体を全回復する。 */
+  async _cpuMaybeUseHealSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'fullHeal');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const wounded = this.tiles
+      .filter((t) => t.owner === player.id && t.unit?.ownerId === player.id)
+      .map((tile) => ({ tile, maxHp: this._baseStats(tile.unit).hp }))
+      .map((x) => ({ ...x, missing: x.maxHp - x.tile.unit.currentHp }))
+      .filter((x) => x.missing >= 20 && x.tile.unit.currentHp <= x.maxHp * 0.6);
+    if (wounded.length === 0) return;
+    const best = wounded.sort((a, b) => b.missing - a.missing || b.tile.level - a.tile.level)[0];
+    await this._cpuCastSpell(player, card, { targetTileId: best.tile.id });
+  }
+
+  /**
+   * シャッフル(swapTwoMonsters)のCPU使用判断: 最高レベルの土地の守備が
+   * 明確に弱く（合計ステ差30以上）、レベル差2以上の低レベル土地に強い
+   * モンスターが居る時、入れ替えて高地価の土地の守りを固める。
+   */
+  async _cpuMaybeUseShuffleSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'swapTwoMonsters');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const owned = this.tiles.filter((t) => t.owner === player.id && t.unit?.ownerId === player.id);
+    if (owned.length < 2) return;
+    const power = (t) => t.unit.def.atk + t.unit.def.hp;
+    const high = [...owned].sort((a, b) => b.level - a.level)[0];
+    const strongest = [...owned].sort((a, b) => power(b) - power(a))[0];
+    if (high.id === strongest.id) return;
+    if (high.level - strongest.level < 2) return;
+    if (power(strongest) - power(high) < 30) return;
+    await this._cpuCastSpell(player, card, { targetTileIds: [high.id, strongest.id] });
+  }
+
+  /** 追徴課税(tollBonusOnceCurse)のCPU使用判断: 自分の土地のうち通行料が
+   * 最も高い所へ仕込む。上乗せ見込み（通行料×+50%分）がコストを上回る時だけ。 */
+  async _cpuMaybeUseTollBonusSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'tollBonusOnceCurse');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const candidates = this.tiles.filter((t) => t.owner === player.id && !t.tollBonusOnceMultiplier);
+    const best = [...candidates].sort((a, b) => this._tollOfTile(b) - this._tollOfTile(a))[0];
+    if (!best) return;
+    const gain = this._tollOfTile(best) * ((card.effect.multiplier || 1) - 1);
+    if (gain < (card.cost || 0)) return;
+    await this._cpuCastSpell(player, card, { targetTileId: best.id });
+  }
+
+  /** 増税通知(tollReductionCurse)のCPU使用判断: 同盟以外の敵の土地のうち
+   * 通行料が最も高い所へかける。減額見込みがコストを上回る時だけ。 */
+  async _cpuMaybeUseTollReductionSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'tollReductionCurse');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const candidates = this.tiles.filter((t) => {
+      if (t.owner == null || t.owner === player.id || t.tollReductionRatio) return false;
+      const owner = this.players.find((p) => p.id === t.owner);
+      return owner && !owner.defeated && !this._isAllyOf(owner, player);
+    });
+    const best = [...candidates].sort((a, b) => this._tollOfTile(b) - this._tollOfTile(a))[0];
+    if (!best) return;
+    if (this._tollOfTile(best) * (card.effect.ratio || 0) < (card.cost || 0)) return;
+    await this._cpuCastSpell(player, card, { targetTileId: best.id });
+  }
+
+  /** 脱税(tollWaiverCurse)のCPU使用判断: 踏むと痛い敵地（コストの3倍以上の
+   * 通行料）が存在する時、通行料無効チャージを1つだけ準備しておく。 */
+  async _cpuMaybeUseTollWaiverSpell(player) {
+    if (player.spellUsedThisTurn || player.tollWaiverCharges > 0) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'tollWaiverCurse');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const dangerToll = this.tiles.reduce((max, t) => {
+      if (t.owner == null || t.owner === player.id) return max;
+      const owner = this.players.find((p) => p.id === t.owner);
+      if (!owner || owner.defeated || this._isAllyOf(owner, player)) return max;
+      return Math.max(max, this._tollOfTile(t));
+    }, 0);
+    if (dangerToll < (card.cost || 0) * 3) return;
+    await this._cpuCastSpell(player, card, {});
+  }
+
+  /** 不動産鑑〇士(enableAllOwnTileAbilities)のCPU使用判断: 配置済みの所有地が
+   * 3つ以上あり、レベルアップ資金（目安200G）も残る時に使う。効果中はどこに
+   * 止まっても全所有地で土地コマンドが使える（_runLandCommandのisAdmin参照）
+   * ため、CPUの既存の土地コマンドAI（レベルアップ・能力・移動）がそのまま活きる。 */
+  async _cpuMaybeUseAppraiserSpell(player) {
+    if (player.spellUsedThisTurn || player.allTilesAccessTurnsRemaining > 0) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'enableAllOwnTileAbilities');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const garrisoned = this.tiles.filter((t) => t.owner === player.id && t.unit).length;
+    if (garrisoned < 3 || player.currency < (card.cost || 0) + 200) return;
+    await this._cpuCastSpell(player, card, {});
   }
 
   async _cpuMaybeUseImmediateSpell(player) {
