@@ -5957,6 +5957,7 @@ export class Game {
     await this._cpuMaybeUseStealGoldSpell(this.currentPlayer);
     await this._cpuMaybeUseCurseCleanseSpell(this.currentPlayer);
     await this._cpuMaybeUseHealSpell(this.currentPlayer);
+    await this._cpuMaybeUsePhoenixCurseSpell(this.currentPlayer);
     await this._cpuMaybeUseShuffleSpell(this.currentPlayer);
     await this._cpuMaybeUseTollBonusSpell(this.currentPlayer);
     await this._cpuMaybeUseTollReductionSpell(this.currentPlayer);
@@ -6240,6 +6241,26 @@ export class Game {
     if (wounded.length === 0) return;
     const best = wounded.sort((a, b) => b.missing - a.missing || b.tile.level - a.tile.level)[0];
     await this._cpuCastSpell(player, card, { targetTileId: best.tile.id });
+  }
+
+  /** 不死鳥の呪い: 高レベル地や高価値モンスターを1回だけ致死回避できるよう守る。 */
+  async _cpuMaybeUsePhoenixCurseSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'surviveLethalDamageCurse');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const candidates = this.tiles
+      .filter((t) => t.owner === player.id && t.unit?.ownerId === player.id)
+      .filter((t) => !t.unit.items?.some((item) => item.effect?.type === 'surviveLethalDamage'))
+      .map((tile) => {
+        const def = tile.unit.def;
+        const rarityScore = def.rarity === Rarity.EX ? 80 : def.rarity === Rarity.R ? 50 : def.rarity === Rarity.S ? 25 : 0;
+        const statScore = (def.hp || 0) + (def.atk || 0);
+        return { tile, score: tile.level * 35 + (def.cost || 0) + rarityScore + statScore };
+      })
+      .filter(({ score }) => score >= 170)
+      .sort((a, b) => b.score - a.score);
+    if (candidates.length === 0) return;
+    await this._cpuCastSpell(player, card, { targetTileId: candidates[0].tile.id });
   }
 
   /**

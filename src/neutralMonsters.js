@@ -193,4 +193,11 @@ export const NEUTRAL_MONSTER_CATALOG = {
     }),
     imageDataUrl: assetUrl('images/card-art/mysteriousInvader.png'),
   },
+  thirtyBreedMonster: neutralMonster('thirtyBreedMonster', 'サーティーのブリモン', Rarity.R, 40, 40, {
+    cost: 80,
+    npcExclusive: true,
+    exclusiveOwnerName: 'サーティー',
+    effectDescription: 'サーティーが連れている専用ブリードモンスター。汎用性の高い無属性アタッカー',
+    imageDataUrl: assetUrl('/images/card-art/burimon.png'),
+  }),
 };
