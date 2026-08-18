@@ -670,6 +670,52 @@ export const STORY_STAGES = [
       outro: [{ speaker: 'ムール', text: '再調査終了です。納付書は再発行しておきます。' }],
     },
   },
+  {
+    key: 'hitodemaso',
+    title: '⑩ 成れの果て',
+    format: '1vs1',
+    goalCurrency: 16000,
+    overlayNpc: '邪神ヒトデマソ',
+    intro: [
+      { speaker: '???', text: '沈没都市のさらに奥。光の届かない大海溝の底に、古い神殿が沈んでいた。' },
+      { speaker: '主人公', text: 'ここが最深部か……。水が重い。まるで海そのものが怒っているみたいだ。' },
+      { speaker: '???', text: '神殿の中心で、巨大な影が蠢いた。赤黒く膨れ上がった五つの腕。その中心には、見覚えのある小さな姿が埋もれていた。' },
+      { speaker: '主人公', text: 'ヒトデ……？ お前なのか！？' },
+      { speaker: '邪神ヒトデマソ', text: 'コロシテ...コロシテクレメンス...' },
+      { speaker: '???', text: 'それは、チュートリアル代わりに何度も倒され続けたヒトデの無念が集まった成れの果て。邪神ヒトデマソだった。' },
+      { speaker: '主人公', text: 'ふざけんな。そんな姿にされるために、あいつは俺を送り出したんじゃない。' },
+      { speaker: '邪神ヒトデマソ', text: 'コロシテ...タスケテ...' },
+      { speaker: '主人公', text: 'わかった。俺が終わらせる。お前を倒して、ヒトデを取り戻す！' },
+      { speaker: '???', text: '深海の神殿が震え、無念の集合体が咆哮する。主人公は単身、かつての腐れ縁を救うため邪神へ挑む。' },
+    ],
+    outro: [
+      { speaker: '邪神ヒトデマソ', text: 'ア...アァ......' },
+      { speaker: '???', text: '崩れ落ちる邪神の体から、小さなヒトデが静かに浮かび上がった。' },
+      { speaker: '主人公', text: 'ヒトデ！ しっかりしろ！' },
+      { speaker: 'ヒトデ', text: '……うるせえな。そんな大声出さなくても聞こえてるよ。' },
+      { speaker: '主人公', text: '戻ったのか……よかった。' },
+      { speaker: 'ヒトデ', text: '体が動かねえ。少し眠る。回復したら、故郷の南の海に帰るさ。' },
+      { speaker: '主人公', text: 'ああ。帰ったら、また勝負だ。今度はチュートリアル扱いじゃなく、本気でな。' },
+      { speaker: 'ヒトデ', text: 'へっ……言ってろ。次は、俺が勝つ……。' },
+      { speaker: '???', text: 'ヒトデは深い眠りについた。主人公は「ヒトデの再生」を手に入れ、さらに深い旅路へ泳ぎ出す。' },
+    ],
+    opponents: [
+      {
+        name: '邪神ヒトデマソ',
+        color: 0x6a1b2a,
+        deckKey: 'hitodemaso',
+        theme: { elements: [Element.NEUTRAL], featuredMonster: MONSTER_CATALOG.hitodemaso },
+      },
+    ],
+    breedPartReward: 'part-hitode-regeneration',
+    replay: {
+      intro: [
+        { speaker: 'ヒトデ', text: '悪夢の残り香ってやつか。もう一度だけ、付き合ってくれ。' },
+        { speaker: '主人公', text: '何度でも付き合う。今度は飲まれるなよ、ヒトデ！' },
+      ],
+      outro: [{ speaker: 'ヒトデ', text: '少しずつ、体が戻ってきた気がする。ありがとな。' }],
+    },
+  },
 ];
 
 export function isStageUnlocked(character, index) {

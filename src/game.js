@@ -1133,6 +1133,11 @@ export class Game {
         this.onLog(`${targetPlayer.name}は${effect.turns}ターンの間、空き地への召喚時に基礎HP+${effect.hpBonus}を得る`);
         return false;
 
+      case 'cashOutOwnLand':
+        if (!targetTile || targetTile.owner !== player.id) return false;
+        await this._cashOutOwnLand(player, targetTile, effect.multiplier || 1);
+        return false;
+
       case 'lotteryOnNextGoal':
         player.lotteryOnNextGoal = true;
         this.onLog(`${player.name}は宝くじを手に入れた`);
@@ -3401,6 +3406,26 @@ export class Game {
     player.currency += salePrice;
     this.onLog(`${player.name}は${ELEMENT_LABEL[tile.element]}属性の土地を売却した (+${salePrice}G)`);
     this._notifyState();
+  }
+
+  /** 強制成仏: 自分の土地を地価倍率で換金し、配置モンスターは消滅、土地はLv1空き地へ戻る。 */
+  async _cashOutOwnLand(player, tile, multiplier = 1.2) {
+    const landLoss = this._captureLandLoss(player, tile);
+    const salePrice = Math.round(this._landValueOfTile(tile) * multiplier);
+    const unit = tile.unit;
+    player.currency += salePrice;
+    tile.owner = null;
+    tile.unit = null;
+    tile.level = 1;
+    tile.transparentCursed = false;
+    tile.forcedStopCursed = false;
+    tile.tollReductionRatio = null;
+    tile.tollBonusOnceMultiplier = null;
+    this._repaintTileToElement(tile);
+    this.onLog(`${player.name}は「強制成仏」で土地を${salePrice}Gに換金した`);
+    if (unit) await this._handleUnitDeath(unit, player);
+    this._notifyState();
+    await this._presentLandLoss(landLoss);
   }
 
   /**
@@ -5737,6 +5762,7 @@ export class Game {
       }
       return;
     }
+    await this._cpuMaybeUseForcedAscensionSpell(this.currentPlayer);
     // ダンボール男は③手札の「未知との遭遇」を最優先で使う（無属性モンスター＝ギアを
     // 引き寄せてガシャーン合体を狙う）。1ターン1スペルなので他スペルより先に判定。
     await this._cpuMaybeUseDisclosureRequest(this.currentPlayer);
@@ -5925,6 +5951,19 @@ export class Game {
       return true;
     }
     return false;
+  }
+
+  async _cpuMaybeUseForcedAscensionSpell(player) {
+    if (player.name !== '邪神ヒトデマソ' || player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'cashOutOwnLand');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const candidates = this.tiles
+      .filter((tile) => tile.type === TileType.LAND && tile.owner === player.id)
+      .map((tile) => ({ tile, value: this._landValueOfTile(tile) }))
+      .filter(({ tile, value }) => tile.level >= 3 || value >= 600)
+      .sort((a, b) => b.value - a.value);
+    if (!candidates.length) return;
+    await this._cpuCastSpell(player, card, { targetTileId: candidates[0].tile.id });
   }
 
   /** ダンボール男専用: 手札に「未知との遭遇」があれば最優先で使用（コスト40G以上あれば）。 */

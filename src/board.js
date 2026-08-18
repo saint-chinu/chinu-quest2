@@ -198,6 +198,21 @@ const TAX_AUDIT_ROWS = [
   'CWWWWWNWWWWWC',
 ];
 
+// ⑩成れの果て。海底都市の最深部・大海溝の神殿。
+// 中央ゴールから四方向へ伸びる短めの十字型。四端にCPを置き、終盤らしく
+// R主体デッキ同士が早めにぶつかる密度にしている。
+const HITODEMASO_ROWS = [
+  '....C....',
+  '....W....',
+  '....W....',
+  '....T....',
+  'CFFTGNMMC',
+  '....F....',
+  '....M....',
+  '....N....',
+  '....C....',
+];
+
 // 対人戦のマップ選択・ストーリーモードの各ステージ盤面として使う一覧。
 // idはstory.jsの各ステージ`key`と揃えてある - ストーリーモードは自ステージ
 // のkeyをそのままmapIdとしてcreateBoard()へ渡すだけで対応する専用マップに
@@ -221,6 +236,7 @@ export const MAPS = [
   { id: 'final-alliance', name: '⑦ 支配の終焉', rows: FINAL_ALLIANCE_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage7-court.png'), spacing: 2.8 },
   { id: 'chin-harbor', name: '⑧ 朕と酢の花火港', rows: CHIN_HARBOR_ROWS, requireAllCheckpoints: true, checkpointBonus: 250, alternateGoalStarts: true, background: assetUrl('/images/stage/stage8-fireworks-harbor.gif'), spacing: 2.8 },
   { id: 'tax-audit', name: '⑨ 暴君と税務調査', rows: TAX_AUDIT_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage9-sunken-city.png'), spacing: 2.8 },
+  { id: 'hitodemaso', name: '⑩ 成れの果て', rows: HITODEMASO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage10-trench-temple.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {
@@ -348,7 +364,7 @@ export function createBoard(mapId) {
         // 基本地価 (base land price) - flat across all tiles for now. See
         // Game._landValueOfTile/_tollOfTile for how level/chain multipliers
         // turn this into 地価 と 通行料.
-        price: isLand ? 150 : null,
+        price: isLand ? 100 : null,
         neighbors: [],
         checkpointNumber: type === TileType.EVENT ? nextCheckpointNumber++ : null,
         // 同じWARP型でも盤上の画像とラベルを入口(V)・帰り道(P)で

@@ -17,6 +17,8 @@ const neutralMonster = (id, name, rarity, hp, atk, options = {}) => ({
   ...(options.traits ? { traits: options.traits } : {}),
   ...(options.effect ? { effect: options.effect } : {}),
   ...(options.effectDescription ? { effectDescription: options.effectDescription } : {}),
+  ...(options.npcExclusive ? { npcExclusive: true } : {}),
+  ...(options.exclusiveOwnerName ? { exclusiveOwnerName: options.exclusiveOwnerName } : {}),
   ...(options.dualUseItem ? {
     dualUseItem: true,
     atkBonus: options.atkBonus || 0,
@@ -148,6 +150,14 @@ export const NEUTRAL_MONSTER_CATALOG = {
     traits: ['firstStrike'],
     effect: { type: 'doubleItemEffect' },
     effectDescription: '先制。装備アイテムの効果が2倍になる（マイナス効果も2倍）',
+  }),
+  hitodemaso: neutralMonster('hitodemaso', '邪神ヒトデマソ', Rarity.EX, 80, 70, {
+    cost: 250,
+    npcExclusive: true,
+    exclusiveOwnerName: '邪神ヒトデマソ',
+    traits: ['pierce'],
+    effectDescription: '醜悪な邪神。貫通',
+    imageDataUrl: assetUrl('/images/card-art/hitodemaso.png'),
   }),
   freelancer: neutralMonster('freelancer', 'フリーランサー', Rarity.S, 30, 30, {
     effect: { type: 'lapBonusMultiplier', multiplier: 1.3 },

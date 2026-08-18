@@ -15,6 +15,7 @@ export const NPC_PORTRAIT_URL = {
   '紫の魔女ホフク': assetUrl('/images/npc-portraits/hofuku.png'),
   '少女A': assetUrl('/images/npc-portraits/wonderland-girl.png'),
   'ムール': assetUrl('/images/npc-portraits/muuru.png'),
+  '邪神ヒトデマソ': assetUrl('/images/npc-portraits/hitodemaso.png'),
   'ウサギン': assetUrl('/images/npc-portraits/usagin.webp'),
   'ヒトデ': assetUrl('/images/npc-portraits/hitode.webp'),
 };
@@ -31,6 +32,7 @@ export const NPC_TOKEN_URL = {
   '紫の魔女ホフク': assetUrl('/images/npc-tokens/hofuku.png'),
   '少女A': assetUrl('/images/npc-tokens/wonderland-girl.png'),
   'ムール': assetUrl('/images/npc-tokens/muuru.png'),
+  '邪神ヒトデマソ': assetUrl('/images/npc-tokens/hitodemaso.png'),
   'ウサギン': assetUrl('/images/npc-tokens/usagin.webp'),
   'ヒトデ': assetUrl('/images/npc-tokens/hitode.webp'),
 };

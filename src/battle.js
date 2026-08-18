@@ -100,7 +100,7 @@ export function statTotals(unit, bonus = {}) {
   const curseAtk = unit.curses.reduce((sum, c) => sum + (c.addedAtk || 0), 0);
   const curseHp = unit.curses.reduce((sum, c) => sum + (c.addedHp || 0), 0);
   const override = unit.def.effect?.type === 'statOverrideInBattle' ? unit.def.effect : null;
-  const baseAtk = override ? override.atk : unit.def.atk;
+  const baseAtk = (override ? override.atk : unit.def.atk) + Number(unit.regenAtkBonus || 0);
   // タフネスで空地へ召喚された個体のHP加算は、その盤面上の個体だけが持つ
   // 基礎HPとして扱う。カード定義やデッキへは書き戻さない。
   const summonBaseHpBonus = Number(unit.summonBaseHpBonus || 0);
@@ -771,6 +771,16 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     defender.currentHp = Math.min(defender.currentHp + eff.healAmount, maxHp);
     gold.add(defender.ownerId, -eff.cost);
     log.push(`${defender.def.name}は戦闘後にHP${eff.healAmount}回復した (-${eff.cost}G)`);
+  }
+  if (attackerSurvived && hasTrait(attacker, 'regenerate')) {
+    attacker.regenAtkBonus = Number(attacker.regenAtkBonus || 0) + 5;
+    attacker.currentHp = statTotals(attacker, attackerBonus).maxHp;
+    log.push(`${attacker.def.name}は再生でHPが全回復し、ATKが5上昇した`);
+  }
+  if (defenderSurvived && hasTrait(defender, 'regenerate')) {
+    defender.regenAtkBonus = Number(defender.regenAtkBonus || 0) + 5;
+    defender.currentHp = statTotals(defender, defenderBonus).maxHp;
+    log.push(`${defender.def.name}は再生でHPが全回復し、ATKが5上昇した`);
   }
   if (attackerSurvived && attacker.def.effect?.type === 'selfDamageAfterBattle') {
     attacker.currentHp -= attacker.def.effect.damage;

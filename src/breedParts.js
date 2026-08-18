@@ -27,6 +27,7 @@ export const TRAIT_LABEL = {
   pierce: '貫通',
   phoenix: '不死鳥',
   robber: '強盗',
+  regenerate: '再生',
 };
 
 /**
@@ -49,6 +50,7 @@ export const BREED_PARTS = [
   { id: 'part-pierce', name: '貫通', rarity: Rarity.R, costDelta: 70, trait: 'pierce', price: 90 },
   { id: 'part-phoenix', name: '不死鳥', rarity: Rarity.S, costDelta: 40, trait: 'phoenix', price: 60 },
   { id: 'part-robber', name: '強盗', rarity: Rarity.S, costDelta: 30, trait: 'robber', price: 60 },
+  { id: 'part-hitode-regeneration', name: 'ヒトデの再生', rarity: Rarity.EX, hpDelta: 10, costDelta: 60, trait: 'regenerate', price: null },
 ];
 
 export const BREED_PART_PACK = { cost: 150, count: 3 };
@@ -140,7 +142,7 @@ export function describeBreedPart(part) {
 // 質素な絵合わせアイコン（剣=ATK、盾=HP、金貨=コスト、パレット=属性、
 // 特殊効果ごとに1文字絵文字）。パーツ一覧を数値バッジとして表示するのに使う。
 const STAT_ICON = { atk: '⚔️', hp: '🛡️', cost: '💰' };
-const TRAIT_ICON = { firstStrike: '⚡', halfDamage: '💠', pierce: '🏹', phoenix: '🔥', robber: '🥷' };
+const TRAIT_ICON = { firstStrike: '⚡', halfDamage: '💠', pierce: '🏹', phoenix: '🔥', robber: '🥷', regenerate: '♻️' };
 
 /** {icon, text} badges for one part - e.g. ATKアップ → [{icon:'⚔️', text:'+10'}, {icon:'💰', text:'+20G'}]. */
 export function breedPartBadges(part) {

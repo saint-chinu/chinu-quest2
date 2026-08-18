@@ -226,6 +226,18 @@ export const SPELL_CATALOG = {
     ),
     imageDataUrl: assetUrl('/images/card-art/toughness.png'),
   },
+  forcedAscension: {
+    ...spell(
+      'forcedAscension',
+      '強制成仏',
+      Rarity.EX,
+      70,
+      'ownTile',
+      { type: 'cashOutOwnLand', multiplier: 1.2 },
+      '自分の所有する土地を、地価の120%で強制換金する。配置モンスターは消滅し、土地は空き地Lv1に戻る',
+    ),
+    imageDataUrl: assetUrl('/images/card-art/forcedAscension.png'),
+  },
   // ── 移動系 ──
   diceOne: spell('diceOne', '1のダイス', Rarity.N, 30, 'anyPlayer', { type: 'setNextDice', value: 1 }, '選んだプレイヤーの次のサイコロを1にする'),
   backfire: spell('backfire', 'バックファイア', Rarity.S, 50, 'anyPlayer', { type: 'reverseNextDice' }, '選んだプレイヤーを次のサイコロの数だけ後退させる'),
@@ -902,6 +914,34 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.sideIncome, count: 1 },
         { def: SPELL_CATALOG.realEstateAppraiser, count: 1 },
         { def: SPELL_CATALOG.homingInstinct, count: 1 },
+      ],
+    },
+  },
+  hitodemaso: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.mysteriousInvader, count: 4 },
+        { def: MONSTER_CATALOG.kontonNoAtama, count: 4 },
+        { def: MONSTER_CATALOG.kyousenshi, count: 4 },
+        { def: MONSTER_CATALOG.battleTrain, count: 2 },
+        { def: MONSTER_CATALOG.sacrificeCar, count: 2 },
+        { def: MONSTER_CATALOG.ninja, count: 4 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.peeStaff, count: 1 },
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 4 },
+        { def: ITEM_CATALOG.twinHammer, count: 2 },
+        { def: ITEM_CATALOG.lifeJacket, count: 2 },
+        { def: ITEM_CATALOG.fushichoNoTate, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.forcedAscension, count: 3 },
+        { def: SPELL_CATALOG.homingInstinct, count: 2 },
+        { def: SPELL_CATALOG.realEstateAppraiser, count: 1 },
+        { def: SPELL_CATALOG.psychokinesis, count: 1 },
+        { def: SPELL_CATALOG.disclosureRequest, count: 1 },
+        { def: SPELL_CATALOG.encounterUnknown, count: 1 },
+        { def: SPELL_CATALOG.toughness, count: 1 },
       ],
     },
   },

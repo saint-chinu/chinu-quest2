@@ -117,6 +117,14 @@ export const AI_PROFILES = {
     itemGambleChance: 0.85,
     highValueAvoidance: 0.1,
   },
+  // 邪神ヒトデマソ: ほぼ侵略専用。高額地へ突っ込み、奪った土地を強制成仏で換金する。
+  邪神ヒトデマソ: {
+    offElementSummonChance: 0.95,
+    levelUpReserve: 300,
+    minWinProbabilityToInvade: 0.1,
+    itemGambleChance: 0.95,
+    highValueAvoidance: 0.05,
+  },
 };
 
 /** キャラ名（無ければデフォルトのCPU）とデッキテーマの属性配列から、実行時に使うAIプロファイルを組み立てる。 */

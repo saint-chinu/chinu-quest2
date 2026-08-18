@@ -3202,7 +3202,7 @@ STARTマスを通過・着地すると「基本ボーナス＋領地ボーナス
 【土地レベルと連鎖】
 ・土地レベルアップ: 自分の土地を強化してレベル1〜5にできます。レベルが上がるほど地価が上がり、通行料も高くなります
 ・連鎖: 同じ属性の自分の土地が隣接して繋がっていると「連鎖」になり、繋がっている数だけ地価・通行料の倍率が上がります（無色の土地は連鎖しません）
-・地価 = 基本地価 × レベル倍率 × 連鎖倍率、通行料 = 地価 × 通行料率（レベルが高いほど通行料率も上がります）
+・地価 = （基本地価100G＋累計投資額）×連鎖倍率、通行料 = 地価×通行料率（レベルが高いほど通行料率も上がります）
 
 【土地コマンド】
 自分が通ったことのある土地を選ぶと、以下の操作ができます。
@@ -4884,6 +4884,10 @@ async function handleStoryBattleEnd(index, { won }) {
       const key = cardKey(rewardDef);
       currentCharacter.ownedCards[key] = (currentCharacter.ownedCards[key] || 0) + 1;
     }
+  }
+  if (stage.breedPartReward) {
+    if (!Array.isArray(currentCharacter.ownedPartIds)) currentCharacter.ownedPartIds = [];
+    currentCharacter.ownedPartIds.push(stage.breedPartReward);
   }
   // 段ボール男（ステージ⑤）を初めて撃破したら、EXスペル「未知との遭遇」をクリア報酬に。
   // 受領フラグで一度きり（再戦では付与しない）。
