@@ -3422,6 +3422,9 @@ export class Game {
     tile.tollReductionRatio = null;
     tile.tollBonusOnceMultiplier = null;
     this._repaintTileToElement(tile);
+    // レベルを1へ戻したら枠線も戻す（_sellLandTile等レベルを触る全箇所と同じ）。
+    // これが無いと換金後もLv5の枠が残り、空き地なのに高レベルに見える。
+    this.scene.updateTileLevelBorder(tile);
     this.onLog(`${player.name}は「強制成仏」で土地を${salePrice}Gに換金した`);
     if (unit) await this._handleUnitDeath(unit, player);
     this._notifyState();
@@ -4682,7 +4685,13 @@ export class Game {
   _baseStats(unit) {
     const curseAtk = unit.curses.reduce((sum, c) => sum + (c.addedAtk || 0), 0);
     const curseHp = unit.curses.reduce((sum, c) => sum + (c.addedHp || 0), 0);
-    return { atk: unit.def.atk + curseAtk, hp: unit.def.hp + (unit.summonBaseHpBonus || 0) + curseHp };
+    // 再生(regenerate)で積み上げた恒久ATKと、タフネスで焼き込んだ基礎HPは
+    // その個体の"素のステータス"として扱う（statTotalsと同じ基準にしないと、
+    // 戦闘画面の基礎ステ表示だけが実際の数値とズレる）。
+    return {
+      atk: unit.def.atk + (unit.regenAtkBonus || 0) + curseAtk,
+      hp: unit.def.hp + (unit.summonBaseHpBonus || 0) + curseHp,
+    };
   }
 
   /** 装備アイテムとしての強さを大まかに数値化する（CPUの実際の選択と、侵略前のシミュレーションの両方から使う - 同じ基準で選ぶことで「シミュレーションで想定した通りに実際も動く」を保証する）。 */
@@ -5837,7 +5846,9 @@ export class Game {
 
   /** 「彼」・段ボール男共通: 開示請求はモンスター優先、その中でEX→R→S→Nの順に奪う。 */
   async _cpuMaybeUseDisclosureRequest(player) {
-    if ((player.name !== '「彼」' && !this._isDanballBoss(player)) || player.spellUsedThisTurn) return;
+    // 対象選びは総資産・レアリティ・同盟だけを見る共通処理なので、名前で
+    // 絞らずこのカードを引いたCPU全員が使う（邪神ヒトデマソの分も含む）。
+    if (player.spellUsedThisTurn) return;
     const disclosure = player.hand.find((card) => card.type === CardType.SPELL && card.effect?.type === 'disclosureRequest');
     if (!disclosure || player.currency < (disclosure.cost || 0)) return;
     const rarityRank = { [Rarity.N]: 0, [Rarity.S]: 1, [Rarity.R]: 2, [Rarity.EX]: 3 };
@@ -5869,14 +5880,27 @@ export class Game {
 
   /** ムール専用: 水連鎖と関所クラゲが揃った時だけタフネスを自分へ使う。 */
   async _cpuMaybeUseToughnessSpell(player) {
-    if (player.name !== 'ムール' || player.spellUsedThisTurn || player.toughnessTurnsRemaining > 0) return;
+    if (player.spellUsedThisTurn || player.toughnessTurnsRemaining > 0) return;
     const card = player.hand.find((candidate) => candidate.effect?.type === 'summonBaseHpBoostCurse');
     if (!card || player.currency < (card.cost || 0)) return;
-    const hasJellyfish = player.hand.some((candidate) => catalogIdOf(candidate) === 'kaikyouSekishoKurage');
-    if (!hasJellyfish || this._chainCount(player.id, Element.WATER) < 1) return;
-    const hasWaterVacancy = this.tiles.some((tile) => tile.type === TileType.LAND
-      && tile.owner == null && tile.element === Element.WATER);
-    if (!hasWaterVacancy) return;
+
+    if (player.name === 'ムール') {
+      // ムールは強化した関所クラゲを水地に据えるのが狙い（_cpuChooseSummonCard
+      // ForMuuru参照）。その形が組める時だけ使う。
+      const hasJellyfish = player.hand.some((candidate) => catalogIdOf(candidate) === 'kaikyouSekishoKurage');
+      if (!hasJellyfish || this._chainCount(player.id, Element.WATER) < 1) return;
+      const hasWaterVacancy = this.tiles.some((tile) => tile.type === TileType.LAND
+        && tile.owner == null && tile.element === Element.WATER);
+      if (!hasWaterVacancy) return;
+      await this._cpuCastSpell(player, card, { targetPlayerId: player.id });
+      return;
+    }
+
+    // 汎用: これから空き地へ召喚できる算段（召喚可能なモンスター＋空き地）が
+    // ある時だけ自分にかける。侵略には乗らないので、空き地が無い盤面では温存。
+    if (this._affordableMonsterCards(player).length === 0) return;
+    const hasVacancy = this.tiles.some((tile) => tile.type === TileType.LAND && tile.owner == null);
+    if (!hasVacancy) return;
     await this._cpuCastSpell(player, card, { targetPlayerId: player.id });
   }
 
@@ -5968,7 +5992,9 @@ export class Game {
 
   /** ダンボール男専用: 手札に「未知との遭遇」があれば最優先で使用（コスト40G以上あれば）。 */
   async _cpuMaybeUseEncounterSpell(player) {
-    if (!this._isDanballBoss(player) || player.spellUsedThisTurn) return;
+    // ダンボール男専用だった判定を外し、このカードを持つCPU全員が使う。
+    // 効果自体は「無属性モンスターを引き寄せる」だけで持ち主を選ばない。
+    if (player.spellUsedThisTurn) return;
     const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'encounterUnknown');
     if (!card || player.currency < (card.cost || 0)) return;
     await this._cpuCastSpell(player, card, {});
@@ -6200,7 +6226,9 @@ export class Game {
    *   勝率不問で、むしろ優先する。
    * ③同盟仲間の土地へは送らない（味方に勝手な防衛戦を押し付けない）。 */
   async _cpuMaybeUsePsychokinesisSpell(player) {
-    if (player.name !== '朕' || player.spellUsedThisTurn) return false;
+    // 判断材料は所有者・同盟・勝率だけで朕固有の前提が無いため、このカードを
+    // 持つCPU全員が使う（邪神ヒトデマソのデッキで死に札にしない）。
+    if (player.spellUsedThisTurn) return false;
     const card = player.hand.find((candidate) => catalogIdOf(candidate) === 'psychokinesis');
     if (!card || player.currency < (card.cost || 0)) return false;
 
