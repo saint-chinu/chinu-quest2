@@ -5217,12 +5217,14 @@ export class Game {
 
     // 装備公開: 奪われた/壊された側はitems配列が既に空になっているのでスキップ
     // する（何も装備していないので演出しようがない＝見た目上も本当に奪えている）。
+    // ただし列車の合体も_applyTrainFusionがitemsを空にするので、items判定だけ
+    // だと合体演出まで丸ごと飛んでしまう。合体した側は必ず演出する。
     // 表示中の補正値は複数枚重なる可能性があるため、側ごとに積み上げて追う。
     let attackerShownAtkBonus = attackerBonus.atk || 0;
     let attackerShownHpBonus = attackerBonus.hp || 0;
     let defenderShownAtkBonus = defenderBonus.atk || 0;
     let defenderShownHpBonus = defenderBonus.hp || 0;
-    if (equippedAttackerItem && attackerUnit.items.includes(equippedAttackerItem)) {
+    if (equippedAttackerItem && (attackerFusion || attackerUnit.items.includes(equippedAttackerItem))) {
       await this.onBattleEquip({
         side: 'attacker', item: equippedAttackerItem, unitName: attackerUnit.def.name,
         baseAtk: attackerBase.atk, baseHp: attackerBase.hp,
@@ -5234,7 +5236,7 @@ export class Game {
       attackerShownAtkBonus += Number(equippedAttackerItem.atkBonus || 0);
       attackerShownHpBonus += Number(equippedAttackerItem.hpBonus || 0);
     }
-    if (equippedDefenderItem && defenderUnit.items.includes(equippedDefenderItem)) {
+    if (equippedDefenderItem && (defenderFusion || defenderUnit.items.includes(equippedDefenderItem))) {
       await this.onBattleEquip({
         side: 'defender', item: equippedDefenderItem, unitName: defenderUnit.def.name,
         baseAtk: defenderBase.atk, baseHp: defenderBase.hp,
