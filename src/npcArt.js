@@ -21,6 +21,7 @@ export const NPC_PORTRAIT_URL = {
   '闇・ホフク': assetUrl('/images/npc-portraits/dark-hofuku.png'),
   '暗・少女A': assetUrl('/images/npc-portraits/dark-shoujo-a.png'),
   サーティー: assetUrl('/images/npc-portraits/thirty.png'),
+  クエ: assetUrl('/images/npc-portraits/que.png'),
   'ウサギン': assetUrl('/images/npc-portraits/usagin.webp'),
   'ヒトデ': assetUrl('/images/npc-portraits/hitode.webp'),
 };
@@ -42,6 +43,7 @@ export const NPC_TOKEN_URL = {
   '闇・ホフク': assetUrl('/images/npc-tokens/dark-hofuku.png'),
   '暗・少女A': assetUrl('/images/npc-tokens/dark-shoujo-a.png'),
   サーティー: assetUrl('/images/npc-tokens/thirty.png'),
+  クエ: assetUrl('/images/npc-tokens/que.png'),
   'ウサギン': assetUrl('/images/npc-tokens/usagin.webp'),
   'ヒトデ': assetUrl('/images/npc-tokens/hitode.webp'),
 };

@@ -22,6 +22,7 @@ const TRACK_SRC = {
   taxAudit: assetUrl('/audio/stage9bgm.mp3'), // ⑨暴君と税務調査
   hitodemaso: assetUrl('/audio/stage10bgm.mp3'), // ⑩成れの果て
   mahjongDuo: assetUrl('/audio/stage11bgm.mp3'), // ⑪ふたりは○○
+  ofudaField: assetUrl('/audio/stage12bgm.mp3'), // ⑫海上金融街のフィクサー
 };
 
 // mapId(board.jsのMAPS)→専用トラック。無いキーはplayMapTheme側でboardに
@@ -38,6 +39,7 @@ const MAP_TRACK = {
   'tax-audit': 'taxAudit',
   hitodemaso: 'hitodemaso',
   'mahjong-duo': 'mahjongDuo',
+  'ofuda-field': 'ofudaField',
 };
 
 const VOLUME = 0.5;

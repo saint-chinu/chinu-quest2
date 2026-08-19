@@ -273,7 +273,7 @@ export const MAPS = [
   { id: 'tax-audit', name: '⑨ 暴君と税務調査', rows: TAX_AUDIT_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage9-sunken-city.png'), spacing: 2.8 },
   { id: 'hitodemaso', name: '⑩ 成れの果て', rows: HITODEMASO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage10-trench-temple.png'), spacing: 2.8 },
   { id: 'mahjong-duo', name: '⑪ ふたりは○○', rows: MAHJONG_DUO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage11-mahjong.png'), spacing: 2.8 },
-  { id: 'ofuda-field', name: '⑫ お札の田んぼ', rows: OFUDA_FIELD_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage1.png'), spacing: 2.8 },
+  { id: 'ofuda-field', name: '⑫ 海上金融街', rows: OFUDA_FIELD_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage12-financial-city.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {

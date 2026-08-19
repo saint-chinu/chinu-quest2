@@ -5033,7 +5033,8 @@ async function handleStoryReplayEnd(index, { won }, replayVariant) {
   showToast(`再戦報酬として${mReward.earnedM}M獲得しました`, 2400);
 }
 
-async function handleStoryBattleEnd(index, { won }) {
+async function handleStoryBattleEnd(index, result = {}) {
+  const { won } = result;
   const stage = STORY_STAGES[index];
   clearStoryResume();
   // ストーリー本編・再戦共通の「4%＋相手人数×3%」報酬を勝敗にかかわらず付与。
@@ -5091,6 +5092,32 @@ async function handleStoryBattleEnd(index, { won }) {
   if (stage.key === 'chin-harbor') {
     markCatalogSeen(MONSTER_CATALOG.su);
   }
+  const queDefeatedByBankruptcy = stage.key === 'ofuda-field'
+    && Array.isArray(result.alivePlayerIds)
+    && !result.alivePlayerIds.includes(1);
+  let secretOutroLines = [];
+  let replaceOutroWithSecret = false;
+  if (queDefeatedByBankruptcy) {
+    const newlyRewarded = !currentCharacter.receivedCapitalismIncarnateReward;
+    if (newlyRewarded) {
+      const key = cardKey(SPELL_CATALOG.capitalismIncarnate);
+      currentCharacter.ownedCards[key] = (currentCharacter.ownedCards[key] || 0) + 1;
+      currentCharacter.receivedCapitalismIncarnateReward = true;
+    }
+    secretOutroLines = [
+      { speaker: 'クエ', text: '破産……このワイが、ほんまに破産……。もう金融業は廃業や。' },
+      { speaker: 'クエ', text: 'これからはイカを釣って暮らすわ。チャートより潮目を読む人生や……。' },
+      ...(newlyRewarded ? [
+        { speaker: '???', text: 'クエが去った跡に、金色に光る契約書のようなカードが残されていた。' },
+        { speaker: '主人公', text: '……資本主義の権化？ 金融業を廃業した奴が置いていくカード名じゃないだろ。' },
+        { speaker: '???', text: 'EXカード「資本主義の権化」を手に入れた！' },
+      ] : [
+        { speaker: '主人公', text: '二度目でも廃業宣言するのかよ。イカ釣りの方も心配になってきたな……。' },
+      ]),
+    ];
+    replaceOutroWithSecret = true;
+  }
+  const outroLines = replaceOutroWithSecret ? secretOutroLines : [...(stage.outro || []), ...secretOutroLines];
   if (index + 1 > (currentCharacter.storyProgress || 0)) {
     currentCharacter.storyProgress = index + 1;
   }
@@ -5104,7 +5131,7 @@ async function handleStoryBattleEnd(index, { won }) {
           speaker === '主人公' ? characterIcon?.dataUrl ?? null : NPC_PORTRAIT_URL[speaker],
         ]))
       : null;
-    await playOverlayDialogueLines(stage.outro, {
+    await playOverlayDialogueLines(outroLines, {
       leftName: stage.overlayNpc,
       leftPortraitUrl: NPC_PORTRAIT_URL[stage.overlayNpc],
       rightName: currentCharacter.name,
@@ -5125,7 +5152,7 @@ async function handleStoryBattleEnd(index, { won }) {
   }
 
   showScreen(storyDialogueScreen);
-  await playDialogueLines(stage.outro, { background: getMapBackground(stage.key), stageBadgeText: `STORY${stage.title}` });
+  await playDialogueLines(outroLines, { background: getMapBackground(stage.key), stageBadgeText: `STORY${stage.title}` });
   showStoryScreen();
   showToast(`ストーリー報酬として${mReward.earnedM}M獲得しました`, 2400);
 }

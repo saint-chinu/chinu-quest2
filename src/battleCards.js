@@ -266,6 +266,19 @@ export const SPELL_CATALOG = {
     imageDataUrl: assetUrl('/images/card-art/forcedAscension.png'),
     rewardOnly: true,
   },
+  capitalismIncarnate: {
+    ...spell(
+      'capitalismIncarnate',
+      '資本主義の権化',
+      Rarity.EX,
+      30,
+      'none',
+      { type: 'capitalismIncarnate' },
+      '全プレイヤーの手札にあるモンスターを、各自の手持ちGの範囲でランダムな空き地へ召喚させる。召喚条件と生け贄は無視し、コストの安い順に可能な限り召喚する',
+    ),
+    imageDataUrl: assetUrl('/images/card-art/capitalismIncarnate.png'),
+    rewardOnly: true,
+  },
   // ── 移動系 ──
   diceOne: spell('diceOne', '1のダイス', Rarity.N, 30, 'anyPlayer', { type: 'setNextDice', value: 1 }, '選んだプレイヤーの次のサイコロを1にする'),
   backfire: spell('backfire', 'バックファイア', Rarity.S, 50, 'anyPlayer', { type: 'reverseNextDice' }, '選んだプレイヤーを次のサイコロの数だけ後退させる'),
@@ -1186,6 +1199,30 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.optimize, count: 1 },
         { def: SPELL_CATALOG.psychokinesis, count: 2 },
         { def: SPELL_CATALOG.necromancer, count: 2 },
+      ],
+    },
+  },
+  que: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.sekaiju, count: 3 },
+        { def: MONSTER_CATALOG.hezumaDragon, count: 3 },
+        { def: MONSTER_CATALOG.kontonNoAtama, count: 4 },
+        { def: MONSTER_CATALOG.bigMermaid, count: 2 },
+        { def: MONSTER_CATALOG.classicDragon, count: 2 },
+        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 2 },
+        { def: MONSTER_CATALOG.gandamu, count: 2 },
+        { def: MONSTER_CATALOG.ninja, count: 2 },
+        { def: MONSTER_CATALOG.rainbowChameleon, count: 2 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 4 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.homingInstinct, count: 4 },
+        { def: SPELL_CATALOG.walletVacuum, count: 4 },
+        { def: SPELL_CATALOG.iCanFly, count: 4 },
+        { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },
       ],
     },
   },
