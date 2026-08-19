@@ -2882,11 +2882,23 @@ html, body {
   left: 50%;
   flex-direction: row;
   gap: 14px;
+  width: min(96vw, 860px);
+  justify-content: center;
 }
 
 #center-panel.opponent-turn #dice-row {
   flex-direction: column;
   gap: 7px;
+  flex: 0 0 auto;
+  z-index: 1;
+}
+
+#center-panel.opponent-turn #center-hand {
+  min-width: 0;
+  max-width: calc(96vw - 110px);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding-bottom: 6px;
 }
 
 #dice-row {

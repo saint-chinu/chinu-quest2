@@ -7253,9 +7253,13 @@ function relayable(type, localPrompt, { broadcast = false, awaitRemote = false }
     if (broadcast) {
       const payload = args.length === 1 ? args[0] : args;
       const remotePromises = [];
+      const awaitedRemotePromises = [];
       if (pvpMatch?.isHost) {
         // 演出は全参加者へ個別チャンネルで送る。room.hostRequest 1本では
         // 連続演出が上書きされ、2人目以降にも届かない。
+        const awaitOnlyUid = type === 'pieceMove' && payload?.playerId != null
+          ? pvpMatch.uidByPlayerId?.[payload.playerId]
+          : null;
         const remoteUids = [...new Set(Object.values(pvpMatch.uidByPlayerId || {}))]
           .filter((uid) => uid && uid !== pvpMatch.uid);
         for (const uid of remoteUids) {
@@ -7263,11 +7267,15 @@ function relayable(type, localPrompt, { broadcast = false, awaitRemote = false }
             console.warn(`PvP broadcast failed: type=${type}, uid=${uid}`, error);
           });
           remotePromises.push(remotePromise);
+          // pieceMoveは分岐選択や着地後メニューの前に「操作する本人」の画面だけ
+          // 追いついていればよい。観戦側まで待つとホスト/本人の土地コマンド表示が
+          // ラグぶん遅れるため、本人がリモート参加者の時だけその1人を待つ。
+          if (!awaitOnlyUid || uid === awaitOnlyUid) awaitedRemotePromises.push(remotePromise);
         }
       }
       const localResult = localPrompt(...args);
       if (!awaitRemote || remotePromises.length === 0) return localResult;
-      return Promise.allSettled([Promise.resolve(localResult), ...remotePromises]);
+      return Promise.allSettled([Promise.resolve(localResult), ...awaitedRemotePromises]);
     }
     const forPlayerId = args[args.length - 1];
     const localArgs = args.slice(0, -1);
