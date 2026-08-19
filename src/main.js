@@ -146,6 +146,12 @@ const camWorkBack = document.getElementById('cam-work-back');
 const debtSaleModal = document.getElementById('debt-sale-modal');
 const debtSaleTitle = document.getElementById('debt-sale-title');
 const debtSaleChoices = document.getElementById('debt-sale-choices');
+const ofudaMarketButton = document.getElementById('ofuda-market-button');
+const ofudaMarketModal = document.getElementById('ofuda-market-modal');
+const ofudaMarketTitle = document.getElementById('ofuda-market-title');
+const ofudaMarketNote = document.getElementById('ofuda-market-note');
+const ofudaMarketChoices = document.getElementById('ofuda-market-choices');
+const ofudaMarketClose = document.getElementById('ofuda-market-close');
 const tileInfoModal = document.getElementById('tile-info-modal');
 const tileInfoText = document.getElementById('tile-info-text');
 const tileInfoClose = document.getElementById('tile-info-close');
@@ -772,6 +778,109 @@ function promptPickSellLandForDebt({ tiles, deficit }) {
   });
 }
 
+function buildOfudaRows({ market = [], holdings = {}, currency = 0, interactive = false, resolve = null } = {}) {
+  ofudaMarketChoices.replaceChildren();
+  for (const entry of market) {
+    const row = document.createElement('div');
+    row.className = 'ofuda-market-row';
+    const owned = holdings?.[entry.element] || 0;
+    const info = document.createElement('div');
+    info.className = 'ofuda-market-info';
+    info.innerHTML = `<strong>${entry.label}のお札</strong><span>${entry.price}G / 枚　所持${owned}枚</span>`;
+    row.appendChild(info);
+    if (interactive) {
+      const buy = document.createElement('button');
+      buy.textContent = '200G買う';
+      buy.disabled = currency < entry.price || entry.price <= 0;
+      buy.addEventListener('click', () => resolve?.({ action: 'buy', element: entry.element, amountG: 200 }));
+      const sell = document.createElement('button');
+      sell.textContent = '売る';
+      sell.disabled = owned <= 0;
+      sell.addEventListener('click', async () => {
+        const ok = await confirmYesNo(`${entry.label}のお札を売却しますか？（${entry.price}G/枚）`);
+        if (ok) resolve?.({ action: 'sell', element: entry.element, count: owned });
+      });
+      row.append(buy, sell);
+    }
+    ofudaMarketChoices.appendChild(row);
+  }
+}
+
+function promptOfudaMarket(payload, forcedPlayerId = null) {
+  return new Promise((resolve) => {
+    const localPlayerId = pvpMatch?.localPlayerId ?? game?.players.find((player) => !player.isCPU)?.id;
+    const interactive = forcedPlayerId == null || forcedPlayerId === localPlayerId;
+    function cleanup(result) {
+      ofudaMarketModal.classList.add('hidden');
+      ofudaMarketClose.removeEventListener('click', onClose);
+      unregisterPromptCanceller(cancelSelf);
+      resolve(result);
+    }
+    function onClose() { cleanup({ action: 'close' }); }
+    function cancelSelf() { cleanup({ action: 'close' }); }
+    ofudaMarketTitle.textContent = 'お札相場';
+    ofudaMarketNote.textContent = interactive
+      ? `${payload.playerName}：所持${payload.currency}G。ゴールではお札を売買できます。`
+      : '現在のお札相場です。売買はゴールでできます。';
+    buildOfudaRows({ ...payload, interactive, resolve: cleanup });
+    ofudaMarketModal.classList.remove('hidden');
+    ofudaMarketClose.addEventListener('click', onClose);
+    registerPromptCanceller(cancelSelf);
+  });
+}
+
+function showOfudaMarketView() {
+  const market = game?._ofudaMarketSummary?.() || pvpMatch?.latestPublicState?.ofudaMarket || [];
+  if (!market.length) return;
+  const localPlayerId = pvpMatch?.localPlayerId ?? game?.players.find((player) => !player.isCPU)?.id;
+  const player = game?.players?.find((p) => p.id === localPlayerId)
+    || pvpMatch?.latestPublicState?.players?.find((p) => p.id === localPlayerId);
+  promptOfudaMarket({
+    playerName: player?.name || 'プレイヤー',
+    currency: player?.currency || 0,
+    holdings: player?.ofuda || {},
+    market,
+  }, -1);
+}
+
+function promptPickDebtRecovery({ tiles = [], ofuda = [], deficit }) {
+  if (!ofuda.length) {
+    return promptPickSellLandForDebt({ tiles, deficit }).then((id) => ({ type: 'land', id }));
+  }
+  return new Promise((resolve) => {
+    function cleanup(result) {
+      debtSaleModal.classList.add('hidden');
+      unregisterPromptCanceller(cancelSelf);
+      resolve(result);
+    }
+    function cancelSelf() {
+      cleanup(tiles[0] ? { type: 'land', id: tiles[0].id } : { type: 'ofuda', element: ofuda[0]?.element, count: 1 });
+    }
+    debtSaleTitle.textContent = `Gがマイナスです（不足額 ${deficit}G）。お札か土地を売ってください`;
+    debtSaleChoices.replaceChildren();
+    for (const entry of ofuda) {
+      const el = document.createElement('button');
+      el.className = 'debt-sale-choice';
+      const need = Math.max(1, Math.min(entry.count, Math.ceil(deficit / Math.max(entry.price, 1))));
+      el.innerHTML = `<span class="debt-sale-price">+${need * entry.price}G</span><span class="debt-sale-unit">${entry.label}のお札 ${need}枚売却（所持${entry.count}枚 / ${entry.price}G）</span>`;
+      el.addEventListener('click', () => cleanup({ type: 'ofuda', element: entry.element, count: need }));
+      debtSaleChoices.appendChild(el);
+    }
+    for (const tile of tiles) {
+      const el = document.createElement('button');
+      el.className = 'debt-sale-choice';
+      const unitLine = tile.unitName
+        ? `${tile.unitName}（${tile.unitRarity}） ATK${tile.unitAtk} / HP${tile.unitHp}`
+        : '（配置モンスターなし）';
+      el.innerHTML = `<span class="debt-sale-price">+${tile.salePrice}G</span><span class="debt-sale-unit">土地売却：${unitLine}</span>`;
+      el.addEventListener('click', () => cleanup({ type: 'land', id: tile.id }));
+      debtSaleChoices.appendChild(el);
+    }
+    debtSaleModal.classList.remove('hidden');
+    registerPromptCanceller(cancelSelf);
+  });
+}
+
 /** Shows the hand's monster cards; clicking one blinks it twice before resolving. */
 function promptPickMonsterCard(options) {
   return new Promise((resolve) => {
@@ -1205,9 +1314,16 @@ function renderPlayerPanels(players, checkpointNumbers, goalCurrency = null) {
 
     const lines = document.createElement('div');
     lines.className = 'player-info-lines';
+    const ofudaLine = player.ofuda
+      ? Object.entries(player.ofuda)
+        .filter(([, count]) => count > 0)
+        .map(([element, count]) => `${ELEMENT_LABEL[element] || element}${count}`)
+        .join(' ')
+      : '';
     lines.innerHTML = `
       <div class="player-name">${player.name}${player.defeated ? '（脱落）' : ''}</div>
       <div class="player-stat">所持 ${player.currency}G / 総資産 ${player.totalAssets}G</div>
+      ${ofudaLine ? `<div class="player-stat player-ofuda-stat">お札 ${ofudaLine}</div>` : ''}
       ${checkpointRowHtml(checkpointNumbers, player.passedCheckpointNumbers)}
     `;
 
@@ -2951,6 +3067,7 @@ function startBattle(character, storyOptions = {}) {
   setWaitCutRate(pvpMatch ? selectedPvpWaitCutRate : 0);
   currentMapId = storyOptions.mapId ?? null;
   applyMapBackground(currentMapId);
+  ofudaMarketButton.classList.add('hidden');
   // 目標G表示（2026-08-12実装）: ストーリーの各ステージが持つgoalCurrency
   // を盤面右下に表示するだけ（表示専用、勝敗判定には使わない）。CPU戦・
   // 対人戦などgoalCurrency未指定の対戦では非表示のまま。
@@ -2989,6 +3106,7 @@ function startBattle(character, storyOptions = {}) {
       turnIndicator.textContent = turnText;
       diceButton.disabled = !canRoll || !isLocalTurn;
       renderPlayerPanels(players, checkpointNumbers, game?.goalCurrency);
+      ofudaMarketButton.classList.toggle('hidden', !game?._ofudaMarketSummary?.()?.length);
       renderHand(hand, isLocalTurn && showCenter && !spellUsedThisTurn);
 
       const enteringShowCenter = showCenter && !showCenterState;
@@ -3036,6 +3154,8 @@ function startBattle(character, storyOptions = {}) {
     onPickLevelUp: relayable('pickLevelUp', promptPickLevelUp),
     onConfirmMove: relayable('confirmMove', promptConfirmMove),
     onPickSellLandForDebt: relayable('pickSellLandForDebt', promptPickSellLandForDebt),
+    onOfudaMarket: relayable('ofudaMarket', promptOfudaMarket),
+    onPickDebtRecovery: relayable('pickDebtRecovery', promptPickDebtRecovery),
     onBankruptcy: relayable('bankruptcy', promptBankruptcy, { broadcast: true }),
     onPickBrowseTile: relayable('pickBrowseTile', promptPickBrowseTile),
     onLandSubmenu: relayable('landSubmenu', promptLandSubmenu),
@@ -3394,6 +3514,7 @@ function showLandInfoCamera() {
   tileInfoClose.addEventListener('click', onInfoClose);
 }
 landInfoButton.addEventListener('click', showLandInfoCamera);
+ofudaMarketButton.addEventListener('click', showOfudaMarketView);
 const loginScreen = document.getElementById('login-screen');
 const loginId = document.getElementById('login-id');
 const loginPassword = document.getElementById('login-password');
@@ -7410,6 +7531,8 @@ const pvpGuestHandlers = {
   pickLevelUp: promptPickLevelUp,
   confirmMove: promptConfirmMove,
   pickSellLandForDebt: promptPickSellLandForDebt,
+  ofudaMarket: ({ a0: payload } = {}) => promptOfudaMarket(payload || {}),
+  pickDebtRecovery: ({ a0: payload } = {}) => promptPickDebtRecovery(payload || {}),
   bankruptcy: promptBankruptcy,
   pickBrowseTile: promptPickBrowseTile,
   landSubmenu: promptLandSubmenu,
@@ -7695,14 +7818,17 @@ function applyPvpPublicState(publicState) {
       name: p.name,
       currency: p.currency,
       assets: p.totalAssets,
+      ofuda: p.ofuda,
       cp: p.passedCheckpointNumbers,
       defeated: p.defeated,
       banned: p.banned,
       allianceId: p.allianceId,
     })) ?? [],
     checkpointNumbers: publicState.checkpointNumbers ?? [],
+    ofudaMarket: publicState.ofudaMarket ?? null,
     goalCurrency: pvpLastRoom?.goalCurrency ?? null,
   });
+  ofudaMarketButton.classList.toggle('hidden', !(publicState.ofudaMarket?.length));
   if (panelSignature !== lastPvpPanelSignature) {
     renderPlayerPanels(publicState.players, publicState.checkpointNumbers, pvpLastRoom?.goalCurrency);
     lastPvpPanelSignature = panelSignature;

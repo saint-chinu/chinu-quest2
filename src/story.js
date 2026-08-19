@@ -807,6 +807,37 @@ export const STORY_STAGES = [
       outro: [{ speaker: 'サーティー', text: '夢は繰り返す。だが、勝ち筋を覚えた奴は強い。' }],
     },
   },
+  {
+    key: 'ofuda-field',
+    title: '⑫ お札の田んぼ',
+    format: '1vs3',
+    goalCurrency: 15000,
+    boardDialogue: true,
+    intro: [
+      { speaker: '???', text: 'ワープの先に広がっていたのは、田の字に区切られた奇妙な湿地だった。水面には火・水・森・雷の札がぷかぷかと浮いている。' },
+      { speaker: '主人公', text: 'なんだこの札……土地の気配と連動して値段が動いてる？' },
+      { speaker: 'ヒトデ', text: 'いわゆる相場ってやつだな。土地を育てれば札も育つ。買いすぎれば上がり、売り浴びせれば下がる。' },
+      { speaker: '主人公', text: '土地だけじゃなく札まで奪い合うってことか。魚に金融商品を持たせるなよ。' },
+      { speaker: 'ヒトデ', text: '文句言うな。ここから先は、資産運用できる魚だけが泳げる海だ。' },
+      { speaker: '???', text: '目標総資産は15,000G。ゴールでお札を売買し、4隅のCPを巡りながら勝利を目指せ！' },
+    ],
+    outro: [
+      { speaker: '主人公', text: '土地と札、両方見ると盤面がまるで違って見えるな。' },
+      { speaker: 'ヒトデ', text: 'ようこそ相場の海へ。溺れるなよ。' },
+    ],
+    opponents: [
+      { name: '暴君マダイ', color: 0xe63946, deckKey: 'madai', theme: { elements: [Element.FIRE, Element.WATER] } },
+      { name: 'ムール', color: 0x3949ab, deckKey: 'muuru', theme: { elements: [Element.WATER] } },
+      { name: '専門調査官・A', color: 0x4caf6e, deckKey: 'investigatorA', theme: { elements: [Element.THUNDER, Element.FOREST] } },
+    ],
+    replay: {
+      intro: [
+        { speaker: 'ヒトデ', text: 'もう一回、相場を泳いでみるか？' },
+        { speaker: '主人公', text: '今度は高値掴みしないからな。' },
+      ],
+      outro: [{ speaker: 'ヒトデ', text: '勝っても負けても、相場は明日も動く。' }],
+    },
+  },
 ];
 
 export function isStageUnlocked(character, index) {

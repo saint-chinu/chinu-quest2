@@ -1,4 +1,4 @@
-import { TileType, mapRequiresAllCheckpoints, mapCheckpointBonus, mapUsesAlternateGoalStarts } from './board.js';
+import { TileType, mapRequiresAllCheckpoints, mapCheckpointBonus, mapUsesAlternateGoalStarts, mapHasOfuda } from './board.js';
 import { PIECE_REST_Y, UNIT_ICON_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity } from './cards.js';
 import { buildStarterCardList, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf, isRewardOnlyCard } from './battleCards.js';
@@ -87,6 +87,11 @@ const LEVEL_INVESTMENT = { 1: 0, 2: 50, 3: 250, 4: 650, 5: 1250 };
 const ELEMENT_CHANGE_COST_PER_LEVEL = 100;
 const NEUTRAL_ELEMENT_CHANGE_DISCOUNT = 0.5;
 const CHANGEABLE_ELEMENTS = [Element.FIRE, Element.WATER, Element.THUNDER, Element.FOREST, Element.NEUTRAL];
+const OFUDA_ELEMENTS = [Element.FIRE, Element.WATER, Element.FOREST, Element.THUNDER];
+const OFUDA_TRADE_UNIT_G = 200;
+const OFUDA_INITIAL_PRICE = 10;
+const OFUDA_MAX_PRICE = 100;
+const OFUDA_LEVEL_SCORE = { 1: 0.5, 2: 1.625, 3: 2.75, 4: 3.875, 5: 5 };
 
 // 速度違反はご愛嬌（ほこら効果）で強制されるサイコロ目。
 const FORCED_DICE_STEPS = 10;
@@ -127,6 +132,8 @@ export class Game {
     onPickLevelUp,
     onConfirmMove,
     onPickSellLandForDebt,
+    onOfudaMarket,
+    onPickDebtRecovery,
     onBankruptcy,
     onPickBrowseTile,
     onLandSubmenu,
@@ -213,6 +220,8 @@ export class Game {
     // 未指定ならテスト等で素通りできるようデフォルトを与えておく
     // （_resolveNegativeCurrency/_triggerBankruptcy参照）。
     this.onPickSellLandForDebt = onPickSellLandForDebt || (() => Promise.resolve(null));
+    this.onOfudaMarket = onOfudaMarket || (() => Promise.resolve(null));
+    this.onPickDebtRecovery = onPickDebtRecovery || (() => Promise.resolve(null));
     this.onBankruptcy = onBankruptcy || (() => Promise.resolve());
     this.onPickBrowseTile = onPickBrowseTile;
     this.onLandSubmenu = onLandSubmenu;
@@ -257,6 +266,12 @@ export class Game {
     // 対戦モードでは今まで通り500Gを渡されゴール地点から再スタートするだけ。
     this.storyMode = storyMode;
     this.goalCurrency = Number.isFinite(Number(goalCurrency)) ? Number(goalCurrency) : null;
+    this.hasOfuda = mapHasOfuda(mapId);
+    this.ofudaPressure = Object.fromEntries(OFUDA_ELEMENTS.map((element) => [element, 0]));
+    this.ofudaInitialCounts = Object.fromEntries(OFUDA_ELEMENTS.map((element) => [
+      element,
+      this.tiles.filter((tile) => tile.type === TileType.LAND && tile.element === element).length,
+    ]));
     this.tutorialMode = !!tutorialMode;
     this.tutorialOpeningCardIds = tutorialOpeningCardIds;
     this.tutorialCpuOpeningCardIds = tutorialCpuOpeningCardIds;
@@ -351,6 +366,7 @@ export class Game {
         return counts;
       }, {}),
       hand: [],
+      ofuda: Object.fromEntries(OFUDA_ELEMENTS.map((element) => [element, 0])),
       spellUsedThisTurn: false,
       defeated: false,
       // requireAllCheckpointsが有効なマップでだけ参照する: このラップで
@@ -611,6 +627,7 @@ export class Game {
       turnCount: this.turnCount,
       currentPlayerIndex: this.currentPlayerIndex,
       forcedDiceRemaining: this.forcedDiceRemaining,
+      ofudaPressure: clone(this.ofudaPressure),
       deadMonstersThisMatch: clone(this._deadMonstersThisMatch),
       players: this.players.map((player) => {
         const {
@@ -643,6 +660,7 @@ export class Game {
     this.turnCount = Math.max(0, Number(snapshot.turnCount) || 0);
     this.currentPlayerIndex = Math.max(0, Math.min(snapshot.currentPlayerIndex || 0, this.players.length - 1));
     this.forcedDiceRemaining = snapshot.forcedDiceRemaining || 0;
+    this.ofudaPressure = { ...this.ofudaPressure, ...(snapshot.ofudaPressure || {}) };
     this._deadMonstersThisMatch = Array.isArray(snapshot.deadMonstersThisMatch) ? snapshot.deadMonstersThisMatch : [];
     snapshot.players.forEach((saved, index) => {
       const player = this.players[index];
@@ -2233,9 +2251,67 @@ export class Game {
       player.currency += lotteryAmount;
       this.onLog(`${player.name}は宝くじで${lotteryAmount}Gを獲得した！`);
     }
+    await this._maybeTradeOfudaAtGoal(player);
     this._notifyState();
     if (await this._checkGoalAchievement(player)) return;
     await delay(900);
+  }
+
+  async _maybeTradeOfudaAtGoal(player) {
+    if (!this.hasOfuda || this._isCancelled) return;
+    if (player.isCPU) {
+      await this._cpuMaybeTradeOfuda(player);
+      return;
+    }
+    for (;;) {
+      const trade = await this.onOfudaMarket({
+        playerName: player.name,
+        currency: player.currency,
+        holdings: player.ofuda || {},
+        market: this._ofudaMarketSummary(),
+      }, player.id);
+      if (this._isCancelled || !trade || trade.action === 'close') return;
+      const element = trade.element;
+      if (!OFUDA_ELEMENTS.includes(element)) continue;
+      if (trade.action === 'buy') {
+        const budget = Math.max(0, Math.floor(Number(trade.amountG) || 0));
+        const price = this._ofudaPrice(element);
+        const count = price > 0 ? Math.floor(Math.min(budget, player.currency) / price) : 0;
+        if (count <= 0) { this.onLog('購入できるお札がありません'); continue; }
+        const spent = count * price;
+        const before = this._applyOfudaTradePressure(element, spent, 'buy');
+        player.currency -= spent;
+        player.ofuda[element] = (player.ofuda[element] || 0) + count;
+        this.onLog(`${player.name}は${ELEMENT_LABEL[element]}のお札を${count}枚購入した (-${spent}G)`);
+        this._notifyState();
+        await this._presentOfudaPriceChange(element, before);
+      } else if (trade.action === 'sell') {
+        const result = this._sellOfuda(player, element, Number(trade.count) || 0);
+        if (result.sold <= 0) { this.onLog('売却できるお札がありません'); continue; }
+        this.onLog(`${player.name}は${ELEMENT_LABEL[element]}のお札を${result.sold}枚売却した (+${result.revenue}G)`);
+        this._notifyState();
+        await this._presentOfudaPriceChange(element, result.before);
+      }
+    }
+  }
+
+  async _cpuMaybeTradeOfuda(player) {
+    const market = this._ofudaMarketSummary().filter((entry) => entry.price > 0);
+    if (market.length === 0 || player.currency < 200) return;
+    const ownedElements = new Set(this._ownedTiles(player).map((tile) => tile.element));
+    const preferred = market
+      .filter((entry) => ownedElements.has(entry.element))
+      .sort((a, b) => b.price - a.price)[0] || market.sort((a, b) => a.price - b.price)[0];
+    const budget = Math.min(400, Math.floor(player.currency / 2));
+    const count = Math.floor(budget / preferred.price);
+    if (count <= 0) return;
+    const spent = count * preferred.price;
+    const before = this._applyOfudaTradePressure(preferred.element, spent, 'buy');
+    player.currency -= spent;
+    player.ofuda[preferred.element] = (player.ofuda[preferred.element] || 0) + count;
+    this.onLog(`${player.name}は${ELEMENT_LABEL[preferred.element]}のお札を${count}枚購入した (-${spent}G)`);
+    this._notifyState();
+    await this._presentOfudaPriceChange(preferred.element, before);
   }
 
   async _checkGoalAchievement(player) {
@@ -3258,6 +3334,69 @@ export class Game {
     return Math.round(this._baseLandValueOfTile(tile) * this._chainMultiplier(tile.owner, tile.element));
   }
 
+  _ofudaBasePrice(element) {
+    if (!this.hasOfuda || !OFUDA_ELEMENTS.includes(element)) return 0;
+    const initialCount = Math.max(1, this.ofudaInitialCounts[element] || 0);
+    const score = this.tiles
+      .filter((tile) => tile.type === TileType.LAND && tile.element === element)
+      .reduce((sum, tile) => sum + (OFUDA_LEVEL_SCORE[tile.level] ?? OFUDA_LEVEL_SCORE[1]), 0);
+    if (score <= 0) return 0;
+    return Math.round(OFUDA_MAX_PRICE * score / (initialCount * OFUDA_LEVEL_SCORE[LEVEL_CAP]));
+  }
+
+  _ofudaPrice(element) {
+    if (!this.hasOfuda || !OFUDA_ELEMENTS.includes(element)) return 0;
+    return Math.max(0, Math.min(OFUDA_MAX_PRICE, this._ofudaBasePrice(element) + Math.trunc(this.ofudaPressure[element] || 0)));
+  }
+
+  _ofudaMarketSummary() {
+    if (!this.hasOfuda) return [];
+    return OFUDA_ELEMENTS.map((element) => ({
+      element,
+      label: ELEMENT_LABEL[element],
+      price: this._ofudaPrice(element),
+      basePrice: this._ofudaBasePrice(element),
+      pressure: Math.trunc(this.ofudaPressure[element] || 0),
+    }));
+  }
+
+  _ofudaValueOf(player) {
+    if (!this.hasOfuda) return 0;
+    return OFUDA_ELEMENTS.reduce((sum, element) => (
+      sum + (player.ofuda?.[element] || 0) * this._ofudaPrice(element)
+    ), 0);
+  }
+
+  async _presentOfudaPriceChange(element, before) {
+    const after = this._ofudaPrice(element);
+    if (!this.hasOfuda || before === after) return;
+    const message = `${ELEMENT_LABEL[element]}のお札：${before}G→${after}G`;
+    this.onLog(message);
+    await this.onTargetEffect?.({ playerId: this.currentPlayer?.id, message });
+    await delay(1500);
+  }
+
+  _applyOfudaTradePressure(element, amountG, direction) {
+    if (!this.hasOfuda || !OFUDA_ELEMENTS.includes(element) || !Number.isFinite(amountG) || amountG <= 0) return null;
+    const before = this._ofudaPrice(element);
+    const delta = amountG / OFUDA_TRADE_UNIT_G * (direction === 'sell' ? -1 : 1);
+    this.ofudaPressure[element] = (this.ofudaPressure[element] || 0) + delta;
+    return before;
+  }
+
+  _sellOfuda(player, element, count) {
+    if (!this.hasOfuda || !OFUDA_ELEMENTS.includes(element)) return { sold: 0, revenue: 0, before: null };
+    const owned = player.ofuda?.[element] || 0;
+    const sold = Math.max(0, Math.min(owned, Math.floor(count)));
+    if (sold <= 0) return { sold: 0, revenue: 0, before: null };
+    const price = this._ofudaPrice(element);
+    const revenue = sold * price;
+    player.ofuda[element] = owned - sold;
+    const before = this._applyOfudaTradePressure(element, revenue, 'sell');
+    player.currency += revenue;
+    return { sold, revenue, before };
+  }
+
   /**
    * 本家同様、通行料にも連鎖倍率を直接適用する。
    * 通行料 = 連鎖前土地価値 × 連鎖倍率 × レベル別通行料率。
@@ -3367,6 +3506,7 @@ export class Game {
     if (targetLevel == null) return false;
     const previousLevel = tile.level;
     const tollBefore = this._tollOfTile(tile);
+    const ofudaPriceBefore = this._ofudaPrice(tile.element);
     const cost = LEVEL_INVESTMENT[targetLevel] - LEVEL_INVESTMENT[tile.level];
 
     player.currency -= cost;
@@ -3385,6 +3525,7 @@ export class Game {
       tollBefore,
       tollAfter: this._tollOfTile(tile),
     });
+    await this._presentOfudaPriceChange(tile.element, ofudaPriceBefore);
     this.onTutorialEvent('levelUp', { playerId: player.id, tileId: tile.id, previousLevel, newLevel: tile.level });
     return true;
   }
@@ -3406,11 +3547,16 @@ export class Game {
       return false;
     }
 
+    const oldElement = tile.element;
+    const oldOfudaPrice = this._ofudaPrice(oldElement);
+    const newOfudaPrice = this._ofudaPrice(newElement);
     player.currency -= cost;
     tile.element = newElement;
     this._repaintTileToElement(tile);
     this.onLog(`${player.name}は土地属性を${ELEMENT_LABEL[newElement]}に変更した (-${cost}G)`);
     this._notifyState();
+    await this._presentOfudaPriceChange(oldElement, oldOfudaPrice);
+    await this._presentOfudaPriceChange(newElement, newOfudaPrice);
     return true;
   }
 
@@ -3588,6 +3734,7 @@ export class Game {
    */
   _sellLandTile(player, tile) {
     const salePrice = Math.round(this._landValueOfTile(tile) / 2);
+    const ofudaPriceBefore = this._ofudaPrice(tile.element);
     // G不足による強制売却では、配置モンスターは手札へ戻らず消滅する。
     tile.unit = null;
     tile.owner = null;
@@ -3598,6 +3745,7 @@ export class Game {
     player.currency += salePrice;
     this.onLog(`${player.name}は${ELEMENT_LABEL[tile.element]}属性の土地を売却した (+${salePrice}G)`);
     this._notifyState();
+    void this._presentOfudaPriceChange(tile.element, ofudaPriceBefore);
   }
 
   /** 強制成仏: 自分の土地を地価倍率で換金し、配置モンスターは消滅、土地はLv1空き地へ戻る。 */
@@ -3622,6 +3770,7 @@ export class Game {
     if (this._isCancelled) return;
 
     player.currency += salePrice;
+    const ofudaPriceBefore = this._ofudaPrice(tile.element);
     tile.owner = null;
     tile.unit = null;
     tile.level = 1;
@@ -3636,6 +3785,7 @@ export class Game {
     this.onLog(`${player.name}は「強制成仏」で土地を${salePrice}Gに換金した`);
     if (unit) await this._handleUnitDeath(unit, player);
     this._notifyState();
+    await this._presentOfudaPriceChange(tile.element, ofudaPriceBefore);
     await this._presentLandLoss(landLoss);
   }
 
@@ -3656,20 +3806,63 @@ export class Game {
     }
     while (player.currency < 0) {
       const candidates = this._ownedTiles(player);
+      const ofudaCandidates = this.hasOfuda
+        ? OFUDA_ELEMENTS
+          .map((element) => ({
+            element,
+            label: ELEMENT_LABEL[element],
+            price: this._ofudaPrice(element),
+            count: player.ofuda?.[element] || 0,
+          }))
+          .filter((entry) => entry.count > 0 && entry.price > 0)
+        : [];
       if (candidates.length === 0) {
+        if (ofudaCandidates.length > 0) {
+          const best = ofudaCandidates.sort((a, b) => b.price - a.price)[0];
+          const need = Math.ceil((-player.currency) / best.price);
+          const result = this._sellOfuda(player, best.element, need);
+          this.onLog(`${player.name}は${best.label}のお札を${result.sold}枚売却した (+${result.revenue}G)`);
+          this._notifyState();
+          await this._presentOfudaPriceChange(best.element, result.before);
+          continue;
+        }
         await this._triggerBankruptcy(player);
         return;
       }
       if (player.isCPU) {
+        if (ofudaCandidates.length > 0) {
+          const best = ofudaCandidates.sort((a, b) => b.price - a.price)[0];
+          const need = Math.ceil((-player.currency) / best.price);
+          const result = this._sellOfuda(player, best.element, need);
+          this.onLog(`${player.name}は${best.label}のお札を${result.sold}枚売却した (+${result.revenue}G)`);
+          this._notifyState();
+          await this._presentOfudaPriceChange(best.element, result.before);
+          continue;
+        }
         const cheapest = candidates.reduce((min, t) => (this._landValueOfTile(t) < this._landValueOfTile(min) ? t : min));
         this._sellLandTile(player, cheapest);
         continue;
       }
-      const pickedId = await this.onPickSellLandForDebt(
-        { tiles: candidates.map((t) => this._sellLandSummary(t)), deficit: -player.currency },
+      const choice = await this.onPickDebtRecovery(
+        {
+          tiles: candidates.map((t) => this._sellLandSummary(t)),
+          ofuda: ofudaCandidates,
+          deficit: -player.currency,
+        },
         player.id,
       );
       if (this._isCancelled) return;
+      if (choice?.type === 'ofuda') {
+        const entry = ofudaCandidates.find((candidate) => candidate.element === choice.element);
+        if (!entry) continue;
+        const result = this._sellOfuda(player, entry.element, Number(choice.count) || 0);
+        if (result.sold <= 0) continue;
+        this.onLog(`${player.name}は${entry.label}のお札を${result.sold}枚売却した (+${result.revenue}G)`);
+        this._notifyState();
+        await this._presentOfudaPriceChange(entry.element, result.before);
+        continue;
+      }
+      const pickedId = choice?.type === 'land' ? choice.id : choice;
       const pickedTile = candidates.find((t) => t.id === pickedId);
       if (!pickedTile) continue; // 念のため: 不正な選択は無視して再提示する
       this._sellLandTile(player, pickedTile);
@@ -4504,6 +4697,7 @@ export class Game {
 
     const previousLevel = tile.level;
     const tollBefore = this._tollOfTile(tile);
+    const ofudaPriceBefore = this._ofudaPrice(tile.element);
     player.currency -= cost;
     tile.level = targetLevel;
     this.scene.updateTileLevelBorder(tile);
@@ -4520,6 +4714,7 @@ export class Game {
       tollBefore,
       tollAfter: this._tollOfTile(tile),
     });
+    await this._presentOfudaPriceChange(tile.element, ofudaPriceBefore);
     return true;
   }
 
@@ -7102,7 +7297,7 @@ export class Game {
   _totalAssetsOf(player) {
     const teammates =
       player.allianceId != null ? this.players.filter((p) => p.allianceId === player.allianceId) : [player];
-    return teammates.reduce((sum, p) => sum + p.currency + this._landValueOf(p.id), 0);
+    return teammates.reduce((sum, p) => sum + p.currency + this._landValueOf(p.id) + this._ofudaValueOf(p), 0);
   }
 
   /**
@@ -7138,7 +7333,7 @@ export class Game {
 
   /** 隠しステータス「正味財産」= 手持ちG + 全土地を1枚ずつ売った時の総額（連鎖減衰込み）。 */
   _netWorthOf(player) {
-    return player.currency + this._liquidationValueOf(player);
+    return player.currency + this._ofudaValueOf(player) + this._liquidationValueOf(player);
   }
 
   _notifyState() {
@@ -7158,6 +7353,7 @@ export class Game {
       tileId: p.tileId,
       currency: p.currency,
       totalAssets: this._totalAssetsOf(p),
+      ofuda: this.hasOfuda ? { ...(p.ofuda || {}) } : null,
       // 同盟人数（ソロなら1）。totalAssetsは同盟内で合算した値なので、退出
       // 報酬計算側（main.js）はこれで割って「自分の取り分」を出す - 割らずに
       // 使うとチーム全員が満額を個別に受け取れてしまう（同盟報酬の二重取り）。
@@ -7176,6 +7372,7 @@ export class Game {
       currentPlayerId: this.currentPlayer.id,
       canRoll: showCenter && !this.currentPlayer.isCPU,
       checkpointNumbers: this.checkpointNumbers,
+      ofudaMarket: this.hasOfuda ? this._ofudaMarketSummary() : null,
       players: playersPayload,
       hand: human?.hand ?? [],
       showCenter,
@@ -7236,6 +7433,7 @@ export class Game {
       waitCutRate: getWaitCutRate(),
       turnHand: this.awaitingRoll && !this.isBusy ? this.currentPlayer.hand : [],
       checkpointNumbers: this.checkpointNumbers,
+      ofudaMarket: this.hasOfuda ? this._ofudaMarketSummary() : null,
       players: playersPayload,
       tiles: this.tiles
         .filter((t) => t.type === TileType.LAND)

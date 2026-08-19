@@ -234,6 +234,20 @@ const MAHJONG_DUO_ROWS = [
   'TTTTTTTTTTB',
 ];
 
+// ⑫お札ステージ。田んぼの「田」型に近い大きめの盤面。
+// 四隅にCP、中央にゴールを置き、火・水・森・雷は各10マスで均等。
+const OFUDA_FIELD_ROWS = [
+  'CFFFFTTTTC',
+  'W...W...T',
+  'W...W...T',
+  'W...W...T',
+  'WWWWGTTTT',
+  'M...F...F',
+  'M...F...F',
+  'M...F...F',
+  'CMMMMFFFFC',
+];
+
 // 対人戦のマップ選択・ストーリーモードの各ステージ盤面として使う一覧。
 // idはstory.jsの各ステージ`key`と揃えてある - ストーリーモードは自ステージ
 // のkeyをそのままmapIdとしてcreateBoard()へ渡すだけで対応する専用マップに
@@ -259,6 +273,7 @@ export const MAPS = [
   { id: 'tax-audit', name: '⑨ 暴君と税務調査', rows: TAX_AUDIT_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage9-sunken-city.png'), spacing: 2.8 },
   { id: 'hitodemaso', name: '⑩ 成れの果て', rows: HITODEMASO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage10-trench-temple.png'), spacing: 2.8 },
   { id: 'mahjong-duo', name: '⑪ ふたりは○○', rows: MAHJONG_DUO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage11-mahjong.png'), spacing: 2.8 },
+  { id: 'ofuda-field', name: '⑫ お札の田んぼ', rows: OFUDA_FIELD_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage1.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {
@@ -311,6 +326,10 @@ export function mapCheckpointBonus(mapId) {
 /** 対人戦の行動順に従い、複数ゴールへ交互配置するマップか。 */
 export function mapUsesAlternateGoalStarts(mapId) {
   return !!getMap(mapId).alternateGoalStarts;
+}
+
+export function mapHasOfuda(mapId) {
+  return !!getMap(mapId).hasOfuda;
 }
 
 const LAND_ELEMENT_BY_CODE = {

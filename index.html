@@ -529,6 +529,7 @@
         <div id="log"></div>
         <div id="hand-panel"></div>
         <div id="branch-remaining-steps" class="hidden">残り <span>0</span>マス</div>
+        <button id="ofuda-market-button" class="hidden" aria-label="お札の相場を見る">相場</button>
         <button id="land-info-button" aria-label="土地情報を見る">土地情報</button>
         <button id="menu-button" aria-label="メニュー">メニュー</button>
         <div id="stage-goal-display" class="hidden">目標G: <span id="stage-goal-amount"></span></div>
@@ -677,6 +678,14 @@
         <div id="debt-sale-box">
           <p id="debt-sale-title"></p>
           <div id="debt-sale-choices"></div>
+        </div>
+      </div>
+      <div id="ofuda-market-modal" class="hidden">
+        <div id="ofuda-market-box">
+          <p id="ofuda-market-title">お札相場</p>
+          <p id="ofuda-market-note"></p>
+          <div id="ofuda-market-choices"></div>
+          <button id="ofuda-market-close">閉じる</button>
         </div>
       </div>
       <div id="camera-work-overlay" class="hidden">

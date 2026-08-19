@@ -2452,6 +2452,25 @@ html, body {
   color: #06231f;
 }
 
+#ofuda-market-button {
+  position: absolute;
+  right: 16px;
+  bottom: 120px;
+  z-index: 15;
+  pointer-events: auto;
+  border: 1px solid rgba(255, 216, 102, 0.75);
+  border-radius: 10px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: bold;
+  background: rgba(58, 43, 15, 0.88);
+  color: #ffe08a;
+}
+
+#ofuda-market-button.hidden {
+  display: none;
+}
+
 #game-menu-modal,
 #help-modal {
   position: absolute;
@@ -3115,6 +3134,7 @@ html, body {
 #confirm-modal,
 #level-up-modal,
 #tile-info-modal,
+#ofuda-market-modal,
 #debt-sale-modal {
   position: absolute;
   inset: 0;
@@ -3175,6 +3195,7 @@ html, body {
 #confirm-modal.hidden,
 #level-up-modal.hidden,
 #tile-info-modal.hidden,
+#ofuda-market-modal.hidden,
 #debt-sale-modal.hidden {
   display: none;
 }
@@ -3193,6 +3214,7 @@ html, body {
 #confirm-box,
 #level-up-box,
 #tile-info-box,
+#ofuda-market-box,
 #debt-sale-box {
   background: #22223b;
   border-radius: 12px;
@@ -3204,6 +3226,54 @@ html, body {
   max-height: 90vh;
   overflow-y: auto;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+}
+
+#ofuda-market-box {
+  width: min(92vw, 540px);
+}
+
+#ofuda-market-title {
+  margin: 0 0 8px;
+  color: #ffd866;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+#ofuda-market-note {
+  margin: 0 0 14px;
+  color: #d9e8ef;
+  font-size: 14px;
+}
+
+#ofuda-market-choices {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.ofuda-market-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.ofuda-market-info {
+  display: grid;
+  gap: 3px;
+  text-align: left;
+}
+
+.ofuda-market-info strong {
+  color: #fff;
+}
+
+.ofuda-market-info span {
+  color: #b8cce0;
+  font-size: 13px;
 }
 
 /* 停止した土地で表示する「召喚／侵略・土地・終了」コマンドだけを、
