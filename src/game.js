@@ -3095,7 +3095,11 @@ export class Game {
       if (player.hand.length === 0 || this._isCancelled) return;
       const discarded = player.isCPU
         ? this._cpuChooseDiscard(player)
-        : await this.onDiscardChoice(player.hand, player.id);
+        : await this.onDiscardChoice(player.hand, {
+            reason: 'summonSacrifice',
+            sourceName: card.name,
+            count,
+          }, player.id);
       if (this._isCancelled || !discarded) return;
       player.hand = player.hand.filter((c) => c.id !== discarded.id);
       this._discardUsedCard(player, discarded);

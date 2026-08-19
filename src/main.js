@@ -2639,7 +2639,7 @@ function confirmYesNo(text) {
 }
 
 /** カードを選ぶと画像・効果詳細と捨てる確認を同じモーダル内に表示する。 */
-function promptDiscardChoice(hand) {
+function promptDiscardChoice(hand, context = {}) {
   return new Promise((resolve) => {
     // キャンセル操作は本来存在しない（手札上限は強制）が、退出時は
     // _isCancelled側で処理を打ち切るので、ここでは先頭のカードを返して
@@ -2655,7 +2655,9 @@ function promptDiscardChoice(hand) {
       resolve(card);
     }
 
-    discardHint.textContent = '手札が7枚になりました。捨てるカードを選んでください';
+    discardHint.textContent = context?.reason === 'summonSacrifice'
+      ? `${context.sourceName || 'このカード'}の召喚には手札を1枚いけにえにする必要があります。いけにえにするカードを選んでください`
+      : '手札が7枚になりました。捨てるカードを選んでください';
     discardChoices.replaceChildren();
     discardChoices.classList.remove('hidden');
     discardHint.classList.remove('hidden');
@@ -7380,7 +7382,9 @@ function serializedCamera(fn) {
 
 const pvpGuestHandlers = {
   cardReveal: promptCardReveal,
-  discardChoice: promptDiscardChoice,
+  discardChoice: (payload) => Array.isArray(payload?.a0)
+    ? promptDiscardChoice(payload.a0, payload.a1)
+    : promptDiscardChoice(payload),
   spellUse: promptSpellUse,
   spellCastEffect: serializedCamera(promptSpellCastEffect),
   summonEffect: serializedCamera(promptSummonEffect),
