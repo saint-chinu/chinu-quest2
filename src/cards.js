@@ -42,10 +42,12 @@ export const MONSTER_ELEMENTS = [Element.FIRE, Element.WATER, Element.THUNDER, E
 export const Rarity = { N: 'N', S: 'S', R: 'R', EX: 'EX' };
 
 // EX never sells (null price) - it's the top tier, meant to stay collected.
+// 売却額はパック200Gへの値上げに合わせて従来(N15/S30/R100)の半額。
+// Nの7.5は8Gへ切り上げ。
 export const RARITY_SELL_PRICE = {
-  [Rarity.N]: 15,
-  [Rarity.S]: 30,
-  [Rarity.R]: 100,
+  [Rarity.N]: 8,
+  [Rarity.S]: 15,
+  [Rarity.R]: 50,
   [Rarity.EX]: null,
 };
 

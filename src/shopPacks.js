@@ -1,13 +1,13 @@
 import { CardType, Element, Rarity } from './cards.js';
 
 export const PACKS = [
-  { id: 'fire', name: '火パック', description: '火モンスター4枚', cost: 100, count: 4, type: CardType.MONSTER, element: Element.FIRE },
-  { id: 'forest', name: '森パック', description: '森モンスター4枚', cost: 100, count: 4, type: CardType.MONSTER, element: Element.FOREST },
-  { id: 'water', name: '水パック', description: '水モンスター4枚', cost: 100, count: 4, type: CardType.MONSTER, element: Element.WATER },
-  { id: 'thunder', name: '雷パック', description: '雷モンスター4枚', cost: 100, count: 4, type: CardType.MONSTER, element: Element.THUNDER },
-  { id: 'neutral', name: '無属性パック', description: '無属性モンスター4枚', cost: 100, count: 4, type: CardType.MONSTER, element: Element.NEUTRAL },
-  { id: 'item', name: 'アイテムパック', description: '武器・防具4枚', cost: 100, count: 4, type: CardType.GEAR },
-  { id: 'spell', name: 'スペルパック', description: 'スペル4枚', cost: 100, count: 4, type: CardType.SPELL },
+  { id: 'fire', name: '火パック', description: '火モンスター4枚', cost: 200, count: 4, type: CardType.MONSTER, element: Element.FIRE },
+  { id: 'forest', name: '森パック', description: '森モンスター4枚', cost: 200, count: 4, type: CardType.MONSTER, element: Element.FOREST },
+  { id: 'water', name: '水パック', description: '水モンスター4枚', cost: 200, count: 4, type: CardType.MONSTER, element: Element.WATER },
+  { id: 'thunder', name: '雷パック', description: '雷モンスター4枚', cost: 200, count: 4, type: CardType.MONSTER, element: Element.THUNDER },
+  { id: 'neutral', name: '無属性パック', description: '無属性モンスター4枚', cost: 200, count: 4, type: CardType.MONSTER, element: Element.NEUTRAL },
+  { id: 'item', name: 'アイテムパック', description: '武器・防具4枚', cost: 200, count: 4, type: CardType.GEAR },
+  { id: 'spell', name: 'スペルパック', description: 'スペル4枚', cost: 200, count: 4, type: CardType.SPELL },
 ];
 
 const rollRarity = (random) => {
