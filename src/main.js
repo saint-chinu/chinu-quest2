@@ -7558,8 +7558,11 @@ const pvpGuestHandlers = {
   pickLevelUp: promptPickLevelUp,
   confirmMove: promptConfirmMove,
   pickSellLandForDebt: promptPickSellLandForDebt,
-  ofudaMarket: ({ a0: payload } = {}) => promptOfudaMarket(payload || {}),
-  pickDebtRecovery: ({ a0: payload } = {}) => promptPickDebtRecovery(payload || {}),
+  // どちらもgame.js側は(payload, playerId)の2引数で呼ぶ ＝ relayable()は
+  // 「payload以外はplayerIdだけ」と判断して素のpayloadを1つ送ってくるので、
+  // landCommandのような{a0,a1}形にはならない。念のため両形を受ける。
+  ofudaMarket: (payload) => promptOfudaMarket(payload?.a0 ?? payload ?? {}),
+  pickDebtRecovery: (payload) => promptPickDebtRecovery(payload?.a0 ?? payload ?? {}),
   bankruptcy: promptBankruptcy,
   pickBrowseTile: promptPickBrowseTile,
   landSubmenu: promptLandSubmenu,
@@ -7834,9 +7837,14 @@ function applyPvpPublicState(publicState) {
     publicState.fixedDiceValue ?? '',
     publicState.spellUsedThisTurn ? 1 : 0,
   ].join('|');
+  // diceButton.disabledはbeginDiceMove()がローカルにも書き換える（クリックと
+  // 同じイベント内で即ロックする）ため、シグネチャ差分でスキップしてはいけない。
+  // ホストがrollDiceを取りこぼすとシグネチャが変わらないまま押せない状態が
+  // 固定され、二度とサイコロを振れなくなる。ここは毎回無条件に上書きして
+  // 自己修復させる（turnTextの再描画だけを差分ガードの対象に残す）。
+  diceButton.disabled = !(showCenter && isMyTurn);
   if (turnUiSignature !== lastPvpTurnUiSignature) {
     turnIndicator.textContent = publicState.turnText;
-    diceButton.disabled = !(showCenter && isMyTurn);
     lastPvpTurnUiSignature = turnUiSignature;
   }
   const panelSignature = JSON.stringify({

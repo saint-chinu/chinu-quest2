@@ -166,6 +166,20 @@ function restoreOnBoardHp(unit) {
   return Math.max(1, Math.min(boardHpBefore, unit.currentHp));
 }
 
+/**
+ * 戦闘中/戦闘後の「回復」を、戦闘用HPと盤面へ持ち越す基礎HPの両方へ効かせる。
+ * restoreOnBoardHpは盤面HPを戦闘前の値で頭打ちにするので、currentHpだけ上げても
+ * 回復分がまるごと消える（再生・selfHealAfterBattleが効かない）。回復した分は
+ * 一時シールドではなく実際の回復なので、持ち越しの上限も一緒に引き上げる。
+ * `amount`にInfinityを渡すと全回復（基礎最大HPまで）。
+ */
+function healUnit(unit, amount, battleMaxHp) {
+  if (!(amount > 0)) return;
+  unit.currentHp = Math.min(unit.currentHp + amount, battleMaxHp);
+  const boardBefore = unit._boardHpBeforeBattle ?? unit.currentHp;
+  unit._boardHpBeforeBattle = Math.min(baseMaxHp(unit), boardBefore + amount);
+}
+
 /** Traits may come from the monster itself, its one-use item, or a persistent spell curse. */
 export function hasTrait(unit, trait) {
   return !!unit.def.traits?.includes(trait)
@@ -801,26 +815,24 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   // ので、items/cursesのクリア判定は最後にfinalXSurvivedで再計算する。
   if (attackerSurvived && attacker.def.effect?.type === 'selfHealAfterBattle') {
     const eff = attacker.def.effect;
-    const maxHp = statTotals(attacker, attackerBonus).maxHp;
-    attacker.currentHp = Math.min(attacker.currentHp + eff.healAmount, maxHp);
+    healUnit(attacker, eff.healAmount, statTotals(attacker, attackerBonus).maxHp);
     gold.add(attacker.ownerId, -eff.cost);
     log.push(`${attacker.def.name}は戦闘後にHP${eff.healAmount}回復した (-${eff.cost}G)`);
   }
   if (defenderSurvived && defender.def.effect?.type === 'selfHealAfterBattle') {
     const eff = defender.def.effect;
-    const maxHp = statTotals(defender, defenderBonus).maxHp;
-    defender.currentHp = Math.min(defender.currentHp + eff.healAmount, maxHp);
+    healUnit(defender, eff.healAmount, statTotals(defender, defenderBonus).maxHp);
     gold.add(defender.ownerId, -eff.cost);
     log.push(`${defender.def.name}は戦闘後にHP${eff.healAmount}回復した (-${eff.cost}G)`);
   }
   if (attackerSurvived && hasTrait(attacker, 'regenerate')) {
     attacker.regenAtkBonus = Number(attacker.regenAtkBonus || 0) + 5;
-    attacker.currentHp = statTotals(attacker, attackerBonus).maxHp;
+    healUnit(attacker, Infinity, statTotals(attacker, attackerBonus).maxHp);
     log.push(`${attacker.def.name}は再生でHPが全回復し、ATKが5上昇した`);
   }
   if (defenderSurvived && hasTrait(defender, 'regenerate')) {
     defender.regenAtkBonus = Number(defender.regenAtkBonus || 0) + 5;
-    defender.currentHp = statTotals(defender, defenderBonus).maxHp;
+    healUnit(defender, Infinity, statTotals(defender, defenderBonus).maxHp);
     log.push(`${defender.def.name}は再生でHPが全回復し、ATKが5上昇した`);
   }
   for (const unit of [attacker, defender]) {

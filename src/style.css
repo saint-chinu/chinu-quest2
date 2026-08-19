@@ -2918,6 +2918,11 @@ html, body {
   overflow-x: auto;
   overflow-y: hidden;
   padding-bottom: 6px;
+  /* #center-hand本体はpointer-events:none（相手の手札はクリック不可）だが、
+     それだとこの横スクロールに指もホイールも届かず、はみ出した札が永久に
+     見えない。スクロール操作だけ受け付けるようここで復活させる。中のカードは
+     `#center-hand .card`側でnoneのままなので、誤タップは起きない。 */
+  pointer-events: auto;
 }
 
 #dice-row {

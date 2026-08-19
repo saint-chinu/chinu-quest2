@@ -1605,6 +1605,9 @@ export class Game {
         const tile = summonPool[Math.floor(Math.random() * summonPool.length)];
         const chainGain = this._captureLandGain(player, tile);
         player.hand = player.hand.filter((candidate) => candidate.id !== card.id);
+        // 通常召喚（_resolveLandCommand/チュートリアルCPU）と同じく捨札へ送る。
+        // ここを飛ばすとカードが山からも捨札からも消え、デッキが1枚ずつ痩せていく。
+        this._discardUsedCard(player, card);
         player.currency -= cost;
         this._placeUnit(tile, player, card);
         totalSummoned += 1;
@@ -2238,7 +2241,9 @@ export class Game {
     // 次のサイコロから通常どおりゴール方向へ進み直せるようにする。
     player.previousTileId = player.tileHistory[1] ?? null;
     if (destinationId != null) this.onMoveDestination({ tileId: destinationId, active: false });
-    this._broadcastPieceMove(player, originTileId);
+    // _broadcastPieceMoveはasync（ゲストの歩行アニメ完了まで待つ）。awaitしないと
+    // 後退の演出が終わる前に着地処理が進み、ゲスト画面で駒と進行がズレる。
+    await this._broadcastPieceMove(player, originTileId);
   }
 
   /**
@@ -3511,7 +3516,9 @@ export class Game {
 
   async _presentOfudaPriceChange(element, before) {
     const after = this._ofudaPrice(element);
-    if (!this.hasOfuda || before === after) return;
+    // _applyOfudaTradePressureは取引額0（相場0Gのお札を売った等）でnullを返す。
+    // そのまま流すと「nullG→0G」と表示されるので、変動なし扱いで捨てる。
+    if (!this.hasOfuda || before == null || before === after) return;
     const message = `${ELEMENT_LABEL[element]}のお札：${before}G→${after}G`;
     this.onLog(message);
     await this.onTargetEffect?.({ playerId: this.currentPlayer?.id, message });
@@ -3874,7 +3881,7 @@ export class Game {
    * （_resolveNegativeCurrency）だけが使う内部処理で、確認ダイアログは
    * 挟まない（マイナスGの解消は任意ではなく必須のため）。
    */
-  _sellLandTile(player, tile) {
+  async _sellLandTile(player, tile) {
     const salePrice = Math.round(this._landValueOfTile(tile) / 2);
     const ofudaPriceBefore = this._ofudaPrice(tile.element);
     // G不足による強制売却では、配置モンスターは手札へ戻らず消滅する。
@@ -3887,7 +3894,9 @@ export class Game {
     player.currency += salePrice;
     this.onLog(`${player.name}は${ELEMENT_LABEL[tile.element]}属性の土地を売却した (+${salePrice}G)`);
     this._notifyState();
-    void this._presentOfudaPriceChange(tile.element, ofudaPriceBefore);
+    // awaitせずに投げるとfocusAndZoomの退避/復帰が多重に走り、連続売却で
+    // カメラが元の位置へ戻らなくなる。他の相場変動演出と同じく必ず待つ。
+    await this._presentOfudaPriceChange(tile.element, ofudaPriceBefore);
   }
 
   /** 強制成仏: 自分の土地を地価倍率で換金し、配置モンスターは消滅、土地はLv1空き地へ戻る。 */
@@ -3982,7 +3991,7 @@ export class Game {
           continue;
         }
         const cheapest = candidates.reduce((min, t) => (this._landValueOfTile(t) < this._landValueOfTile(min) ? t : min));
-        this._sellLandTile(player, cheapest);
+        await this._sellLandTile(player, cheapest);
         continue;
       }
       const choice = await this.onPickDebtRecovery(
@@ -4007,7 +4016,7 @@ export class Game {
       const pickedId = choice?.type === 'land' ? choice.id : choice;
       const pickedTile = candidates.find((t) => t.id === pickedId);
       if (!pickedTile) continue; // 念のため: 不正な選択は無視して再提示する
-      this._sellLandTile(player, pickedTile);
+      await this._sellLandTile(player, pickedTile);
     }
   }
 
@@ -4019,17 +4028,20 @@ export class Game {
   async _triggerBankruptcy(player) {
     const startTile = this.tiles[player.homeGoalTileId]
       ?? this.tiles.find((t) => t.type === TileType.START);
+    // ⑫海上金融街はサドンデス: 破産した時点で敗北確定なので、再スタート演出
+    // （スタート地点へのワープ＋「500Gで再スタート」表示）は出さない。演出の
+    // 後で判定すると「500Gで再スタート」と出てから敗北が告げられて嘘になる。
+    const suddenDeath = this.storyMode && this.mapId === 'ofuda-field';
     await this.onBankruptcy({
       playerId: player.id,
       playerName: player.name,
       position: this.tiles[player.tileId]?.position ?? null,
-      startPosition: startTile?.position
+      startPosition: !suddenDeath && startTile?.position
         ? { x: startTile.position.x, z: startTile.position.z }
         : null,
       restartCurrency: 500,
     });
-    if (!startTile) return;
-    if (this.storyMode && this.mapId === 'ofuda-field') {
+    if (suddenDeath) {
       player.defeated = true;
       player.mesh && (player.mesh.visible = false);
       this.onLog(`${player.name}は破産した！金融街のサドンデスにより敗北が確定した`);
@@ -4037,6 +4049,7 @@ export class Game {
       this._checkStoryWinCondition();
       return;
     }
+    if (!startTile) return;
     // 正味財産不足では売却選択を省略して直接ここへ来るため、残っている土地も
     // 破産時にすべて清算する。配置モンスターは手札へ戻さず消滅し、土地Lvも
     // 強制売却と同じく1へ戻す。
