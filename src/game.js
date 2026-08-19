@@ -2275,6 +2275,11 @@ export class Game {
         .map((tile) => tile.checkpointNumber);
       this.onLog(`${player.name}はゴールを通過（ボーナスなし）　残りのCPは${remaining.map((number) => `${number}番`).join('、')}です`);
       this._notifyState();
+      // お札の売買はチェックポイント完走とは切り離す。周回ボーナスと違って
+      // 「ゴールを通過したら取引できる」のが仕様なので、CP未通過のこの分岐でも
+      // 必ず相場を開く（開かないとCPを揃えるまで新システムに一切触れない）。
+      await this._maybeTradeOfudaAtGoal(player);
+      this._notifyState();
       // CP未通過なら周回ボーナスは付かないが、勝利条件は「目標総資産に
       // 到達した状態でゴールへ戻る」こと。以前はここでreturnしていたため、
       // 土地価値などで既に目標へ到達したプレイヤーがゴールを踏んでも
