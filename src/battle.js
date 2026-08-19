@@ -321,7 +321,7 @@ export class GoldLedger {
  * 1回の攻撃（先制側・後攻側どちらの1手も同じ形）を解決する。目くらまし
  * （アオリイカ）を受けていれば0ダメージでスキップして消費、そうでなければ
  * 挑戦者オッズ系（炎のバクチ打ち: 自分の攻撃が1/3の確率で失敗 / 相手が
- * 1/3の確率で無効化）を判定してからdealDamageを呼ぶ。命中時だけ発動する
+ * 1/3の確率で無効化。ただし貫通攻撃はこの無効化を素通り）を判定してからdealDamageを呼ぶ。命中時だけ発動する
  * オンヒット効果（毒付与・目くらまし付与・G略奪）、撃破時効果（賠償金・
  * 道連れ）、攻撃終了時に無条件で発動する自傷系もここでまとめて処理する。
  */
@@ -342,13 +342,14 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
 
   const attackerEffect = attackerUnit.def.effect;
   const defenderEffect = defenderUnit.def.effect;
+  const pierces = hasTrait(attackerUnit, 'pierce');
 
   if (attackerEffect?.type === 'challengeOdds' && Math.random() < attackerEffect.attackFailureChance) {
     const message = `${attackerUnit.def.name}の攻撃は外れた`;
     log.push(message);
     return { damage: 0, message };
   }
-  if (defenderEffect?.type === 'challengeOdds' && Math.random() < defenderEffect.negateIncomingChance) {
+  if (!pierces && defenderEffect?.type === 'challengeOdds' && Math.random() < defenderEffect.negateIncomingChance) {
     const message = `${defenderUnit.def.name}が攻撃を無効化した`;
     log.push(message);
     return { damage: 0, message };

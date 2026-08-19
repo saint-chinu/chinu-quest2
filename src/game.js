@@ -5578,10 +5578,13 @@ export class Game {
     } else if (result.attackerSurvived) {
       // 引き分け（両者生存）: 召喚侵略で出したモンスターは手札に戻る。召喚時に
       // 捨札へ送った同一カードを回収してから戻すことで増殖を防ぐ。
+      // 戦闘列車/供物車両が戦闘中に合体した場合は、元カードではなく合体後の
+      // モンスターとして戻す（戦闘結果の見た目と手札状態を一致させる）。
       this.onLog(`${defenderPlayer.name}の${defenderUnit.def.name}が防衛に成功した`);
       this._reclaimCardFromDeck(player, catalogIdOf(card));
-      player.hand.push({ ...card, id: `drawreturn-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}` });
-      this.onLog(`引き分けのため${card.name}は${player.name}の手札に戻った`);
+      const returnDef = attackerUnit.def || card;
+      player.hand.push({ ...returnDef, id: `drawreturn-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}` });
+      this.onLog(`引き分けのため${returnDef.name}は${player.name}の手札に戻った`);
       this._notifyState();
       await this._enforceHandLimit(player);
     } else {
@@ -7266,4 +7269,3 @@ export class Game {
     };
   }
 }
-

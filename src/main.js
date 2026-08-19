@@ -3014,7 +3014,7 @@ function startBattle(character, storyOptions = {}) {
     onSpellComplete: relayable('spellComplete', finishSpellPresentation, { broadcast: true }),
     onSummonEffect: relayable('summonEffect', promptSummonEffect, { broadcast: true }),
     onTargetEffect: relayable('targetEffect', promptTargetEffect, { broadcast: true }),
-    onShrineEffect: relayable('shrineEffect', promptShrineEffect, { broadcast: true }),
+    onShrineEffect: relayable('shrineEffect', promptShrineEffect, { broadcast: true, awaitRemote: true }),
     onWarpEffect: relayable('warpEffect', promptWarpEffect, { broadcast: true }),
     onTurnFocus: relayable('turnFocus', promptTurnFocus, { broadcast: true }),
     onTollPayment: relayable('tollPayment', promptTollPayment, { broadcast: true }),
@@ -7221,8 +7221,8 @@ pvpRoomLeave.addEventListener('click', async () => {
  * は別経路なのでそもそもこの関数を通らない）常にローカルprompt関数を
  * そのまま呼ぶ - 既存の対戦・ストーリーの動作は完全に無変更。
  * broadcast:trueは両者が見る演出（バトルシーン等）用 - ホストはローカル
- * 描画を待ちつつ、ゲストへは投げっぱなし（返事を待たない）で同じ演出を
- * 再生させる。
+ * 描画を待ちつつ、ゲストへは通常投げっぱなしで同じ演出を
+ * 再生させる。awaitRemote:trueの演出だけは次イベントへの追い越しを防ぐため全員の完了を待つ。
  */
 /**
  * game.jsのonXxxコールバックは型によって引数の数が違う（大半はpayload+
@@ -8169,4 +8169,3 @@ window.addEventListener('pageshow', (event) => {
 
 // 初期表示時点で、前ページのAudio状態が残っていても必ず無音から始める。
 stopMusic();
-
