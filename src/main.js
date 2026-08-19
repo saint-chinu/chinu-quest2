@@ -7433,6 +7433,13 @@ const pvpPieces = new Map(); // playerId -> billboard sprite (ゲスト側のロ
 const movingGuestPieces = new Set();
 // 同じプレイヤーの移動が重なった時、古いアニメーションを打ち切るための世代番号。
 const pieceMoveGen = new Map();
+// ゲスト側はFirestoreのpublicState/private handの両方から同じ状態を何度も受け取る。
+// そのたびに全UI/全マスを描き直すと、スマホで駒移動がカクつくため軽い差分キャッシュを持つ。
+const pvpTileRenderState = new Map();
+let lastPvpPanelSignature = '';
+let lastPvpHandSignature = '';
+let lastPvpCenterHandSignature = '';
+let lastPvpTurnUiSignature = '';
 const GUEST_STEP_DURATION_MS = 300; // game.jsのSTEP_DURATION_MS相当（未export）
 const GUEST_STEP_HOP = 0.55;
 
@@ -7446,6 +7453,11 @@ function clearPvpPieces() {
   pvpPieces.clear();
   movingGuestPieces.clear();
   pieceMoveGen.clear();
+  pvpTileRenderState.clear();
+  lastPvpPanelSignature = '';
+  lastPvpHandSignature = '';
+  lastPvpCenterHandSignature = '';
+  lastPvpTurnUiSignature = '';
 }
 
 /**
@@ -7496,6 +7508,7 @@ function applyPvpBoardState(publicState) {
   for (const tileState of publicState.tiles) {
     const tile = tiles[tileState.id];
     if (!tile) continue;
+    const previous = pvpTileRenderState.get(tileState.id) || {};
     tile.owner = tileState.owner;
     tile.level = tileState.level;
     tile.element = tileState.element;
@@ -7542,14 +7555,24 @@ function applyPvpBoardState(publicState) {
       toll: tileState.unit.toll ?? 0,
         ownerName: ownerPlayer?.name ?? '',
       });
-    } else if (tile.unitMesh) {
+      } else if (tile.unitMesh) {
       scene.removeUnitIcon(tile.unitMesh);
       tile.unitMesh = null;
     }
-    if (tile.mesh) {
+    if (tile.mesh && previous.element !== tileState.element) {
       tile.mesh.material.color.set(CARD_COLOR[tile.element]);
     }
-    scene.updateTileLevelBorder(tile);
+    if (previous.level !== tileState.level) scene.updateTileLevelBorder(tile);
+    pvpTileRenderState.set(tileState.id, {
+      owner: tileState.owner,
+      level: tileState.level,
+      element: tileState.element,
+      unitKey: nextUnitKey,
+      unitHp: tileState.unit?.hp ?? null,
+      unitMaxHp: tileState.unit?.maxHp ?? null,
+      unitToll: tileState.unit?.toll ?? 0,
+      ownerName: ownerPlayer?.name ?? '',
+    });
   }
 
   for (const p of publicState.players) {
@@ -7582,10 +7605,43 @@ function applyPvpPublicState(publicState) {
   const isMyTurn = publicState.currentPlayerId === pvpMatch.localPlayerId;
   const showCenter = publicState.awaitingRoll && !publicState.isBusy;
 
-  turnIndicator.textContent = publicState.turnText;
-  diceButton.disabled = !(showCenter && isMyTurn);
-  renderPlayerPanels(publicState.players, publicState.checkpointNumbers, pvpLastRoom?.goalCurrency);
-  renderHand(pvpMatch.myHand, isMyTurn && showCenter && !publicState.spellUsedThisTurn);
+  const turnUiSignature = [
+    publicState.turnText,
+    publicState.currentPlayerId,
+    publicState.awaitingRoll ? 1 : 0,
+    publicState.isBusy ? 1 : 0,
+    publicState.fixedDiceValue ?? '',
+    publicState.spellUsedThisTurn ? 1 : 0,
+  ].join('|');
+  if (turnUiSignature !== lastPvpTurnUiSignature) {
+    turnIndicator.textContent = publicState.turnText;
+    diceButton.disabled = !(showCenter && isMyTurn);
+    lastPvpTurnUiSignature = turnUiSignature;
+  }
+  const panelSignature = JSON.stringify({
+    players: publicState.players?.map((p) => ({
+      id: p.id,
+      name: p.name,
+      currency: p.currency,
+      assets: p.totalAssets,
+      tileId: p.tileId,
+      cp: p.checkpoints,
+      defeated: p.defeated,
+      banned: p.banned,
+      allianceId: p.allianceId,
+    })) ?? [],
+    checkpointNumbers: publicState.checkpointNumbers ?? [],
+    goalCurrency: pvpLastRoom?.goalCurrency ?? null,
+  });
+  if (panelSignature !== lastPvpPanelSignature) {
+    renderPlayerPanels(publicState.players, publicState.checkpointNumbers, pvpLastRoom?.goalCurrency);
+    lastPvpPanelSignature = panelSignature;
+  }
+  const handSignature = `${isMyTurn && showCenter && !publicState.spellUsedThisTurn ? 1 : 0}|${(pvpMatch.myHand || []).map((card) => card.id).join(',')}`;
+  if (handSignature !== lastPvpHandSignature) {
+    renderHand(pvpMatch.myHand, isMyTurn && showCenter && !publicState.spellUsedThisTurn);
+    lastPvpHandSignature = handSignature;
+  }
   const me = publicState.players.find((p) => p.id === pvpMatch.localPlayerId);
   if (me) {
     pvpMatch.lastCurrency = me.currency;
@@ -7617,7 +7673,12 @@ function applyPvpPublicState(publicState) {
   }
   if (showCenter && publicState.fixedDiceValue != null && diceState !== 'fixed') showFixedDice(publicState.fixedDiceValue);
   syncCenterVisibility();
-  renderCenterHand(showCenter && !isMyTurn ? (publicState.turnHand || []) : []);
+  const centerCards = showCenter && !isMyTurn ? (publicState.turnHand || []) : [];
+  const centerHandSignature = centerCards.map((card) => card.id).join(',');
+  if (centerHandSignature !== lastPvpCenterHandSignature) {
+    renderCenterHand(centerCards);
+    lastPvpCenterHandSignature = centerHandSignature;
+  }
 
   applyPvpBoardState(publicState);
 
