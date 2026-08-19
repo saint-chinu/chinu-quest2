@@ -1709,7 +1709,7 @@ export class Game {
     } else {
       const defenderPlayer = this.players.find((p) => p.id === destTile.owner);
       const defenderUnit = destTile.unit;
-      const result = await this._runBattleScene(unit, unitOwner, defenderUnit, defenderPlayer, targetTile, destTile);
+      const result = await this._runBattleScene(unit, unitOwner, defenderUnit, defenderPlayer, null, destTile);
       if (!result) return;
       destTile.forcedStopCursed = false;
       await this._maybeRedirectDeathToLightningRod(defenderPlayer, destTile, result);
@@ -3514,7 +3514,7 @@ export class Game {
     } else {
       const defenderPlayer = this.players.find((p) => p.id === targetTile.owner);
       const defenderUnit = targetTile.unit;
-      const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, tile, targetTile);
+      const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, null, targetTile);
       if (!result) return false;
       targetTile.forcedStopCursed = false; // 戦闘が終わると消える - _shrineForcedStop参照。
       await this._maybeRedirectDeathToLightningRod(defenderPlayer, targetTile, result);
@@ -4231,7 +4231,7 @@ export class Game {
           .map(({ tile: target }) => target)
           .filter((target) => target.owner != null && target.unit)
           // 勝算のない突撃はしない。負けると酢も移動元の土地も失う。
-          .filter((target) => this._estimateUnitBattleWinProbability(source.unit, source, target) >= minWinRate)
+          .filter((target) => this._estimateUnitBattleWinProbability(source.unit, null, target) >= minWinRate)
           .sort((a, b) => b.level - a.level || this._landValueOfTile(b) - this._landValueOfTile(a));
         if (targets.length > 0) {
           this.onLog(`${player.name}は酢を移動させ、${targets[0].unit.def.name}へ侵略する！`);
@@ -5039,7 +5039,7 @@ export class Game {
    * 盤上ユニット同士の戦闘勝率を見積もる（_estimateWinProbabilityの
    * 「手札カードで侵略」版に対する「配置済みユニットが移動侵略/強制侵略」版）。
    * 現在HP・装備・呪いを含む実状態の複製で、実際の移動戦闘と同じボーナス
-   * （attackerPositionTile=移動元の属性地HP、応援、貫通のHP無効化）を掛けて
+   * （移動側は土地を離れて戦うため土地HPなし、応援、貫通のHP無効化）を掛けて
    * モンテカルロする。戻り値は「攻撃側が勝つ（守備側が死に攻撃側が残る）」確率。
    * 相手のアイテム使用は考慮しない（_estimateWinProbabilityと同じ簡略化）。
    */
@@ -5052,7 +5052,7 @@ export class Game {
       for (let i = 0; i < trials; i++) {
         const atk = this._cloneFieldUnitForSim(attackerUnit);
         const def = this._cloneFieldUnitForSim(defenderTile.unit);
-        const attackerBonus = this._battleBonus(atk, attackerPositionTile, defenderTile);
+        const attackerBonus = this._battleBonus(atk, null, defenderTile);
         const defenderBonus = this._battleBonus(def, defenderTile, defenderTile);
         this._applyEffectBonus(atk, def, attackerBonus);
         this._applyEffectBonus(def, atk, defenderBonus);
@@ -5908,7 +5908,7 @@ export class Game {
     const minWinRate = Math.max(player.aiProfile?.minWinProbabilityToInvade ?? 0, CPU_MOVE_INVASION_MIN_WIN_RATE);
     const enemyLands = this.tiles
       .filter((tile) => this._isInvadeWorthyEnemyLand(tile, player))
-      .filter((tile) => this._estimateUnitBattleWinProbability(source.unit, source, tile) >= minWinRate)
+      .filter((tile) => this._estimateUnitBattleWinProbability(source.unit, null, tile) >= minWinRate)
       .sort((a, b) => b.level - a.level || this._landValueOfTile(b) - this._landValueOfTile(a));
     if (enemyLands.length === 0) return false;
 
@@ -5962,7 +5962,7 @@ export class Game {
     const defenderLandLoss = this._captureLandLoss(defenderPlayer, target);
     const attackerLandGain = this._captureLandGain(player, target, { showAnyChange: true });
     attackerUnit.curses = [];
-    const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, source, target);
+    const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, null, target);
     if (!result) return false;
     target.forcedStopCursed = false;
     await this._maybeRedirectDeathToLightningRod(defenderPlayer, target, result);
@@ -6592,7 +6592,7 @@ export class Game {
         if (!intoOwnLand && this._isAllyOf(destinationOwner, player)) continue;
         // 実際の強制侵略（_spellForceRelocateOneStep→_runBattleScene）と同じ
         // 条件で、引き剥がした敵ユニットが勝つ確率を見積もる。
-        const attackerWinRate = this._estimateUnitBattleWinProbability(source.unit, source, destination);
+        const attackerWinRate = this._estimateUnitBattleWinProbability(source.unit, null, destination);
         if (intoOwnLand && attackerWinRate > CPU_PSYCHOKINESIS_MAX_ATTACKER_WIN_RATE) continue;
         const defenderPower = (destination.unit.currentHp || 0) + (destination.unit.def.atk || 0)
           + this._elementHpBonus(destination.unit, destination);

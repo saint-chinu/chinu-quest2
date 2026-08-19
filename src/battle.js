@@ -159,9 +159,11 @@ export function prepareForBattle(unit, bonus = {}) {
  *  戦闘中の一時シールド分を剥がし、受けた総ダメージだけを盤面の状態として残す
  *  ことで、次の戦闘までダメージが持ち越され、盤面表示(def.hp基準)とも一致する。 */
 function restoreOnBoardHp(unit) {
-  const battleMax = unit._battleMaxHp ?? baseMaxHp(unit);
-  const damage = Math.max(0, battleMax - unit.currentHp);
-  return Math.max(1, baseMaxHp(unit) - damage);
+  const boardHpBefore = Math.max(1, Math.min(baseMaxHp(unit), unit._boardHpBeforeBattle ?? unit.currentHp));
+  // アイテム・土地レベル・応援等で増えたHPは戦闘中だけのシールド。
+  // そのシールドが削れただけなら、盤面に持ち越す基礎HPは減らさない。
+  // 戦闘中HPが戦闘前の基礎HPを下回った分だけを実ダメージとして残す。
+  return Math.max(1, Math.min(boardHpBefore, unit.currentHp));
 }
 
 /** Traits may come from the monster itself, its one-use item, or a persistent spell curse. */
