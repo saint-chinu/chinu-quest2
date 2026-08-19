@@ -7437,6 +7437,8 @@ const pvpPieces = new Map(); // playerId -> billboard sprite (ゲスト側のロ
 const movingGuestPieces = new Set();
 // 同じプレイヤーの移動が重なった時、古いアニメーションを打ち切るための世代番号。
 const pieceMoveGen = new Map();
+// publicState由来の短距離補間が、同じ終点へ何度も再起動してカクつくのを防ぐ。
+const pvpPieceSnapshotTargets = new Map();
 // ゲスト側はFirestoreのpublicState/private handの両方から同じ状態を何度も受け取る。
 // そのたびに全UI/全マスを描き直すと、スマホで駒移動がカクつくため軽い差分キャッシュを持つ。
 const pvpTileRenderState = new Map();
@@ -7446,6 +7448,7 @@ let lastPvpCenterHandSignature = '';
 let lastPvpTurnUiSignature = '';
 const GUEST_STEP_DURATION_MS = 300; // game.jsのSTEP_DURATION_MS相当（未export）
 const GUEST_STEP_HOP = 0.55;
+const GUEST_SNAPSHOT_MOVE_DURATION_MS = 220;
 
 /** 対戦をまたいで前のThree.jsシーンの駒を再利用しないよう、ゲスト駒を破棄する。 */
 function clearPvpPieces() {
@@ -7457,6 +7460,7 @@ function clearPvpPieces() {
   pvpPieces.clear();
   movingGuestPieces.clear();
   pieceMoveGen.clear();
+  pvpPieceSnapshotTargets.clear();
   pvpTileRenderState.clear();
   lastPvpPanelSignature = '';
   lastPvpHandSignature = '';
@@ -7484,6 +7488,7 @@ async function promptPieceMove({ playerId, from, path }) {
 
   const myGen = (pieceMoveGen.get(playerId) || 0) + 1;
   pieceMoveGen.set(playerId, myGen);
+  pvpPieceSnapshotTargets.delete(playerId);
   movingGuestPieces.add(playerId);
   try {
     for (let i = 1; i < points.length; i++) {
@@ -7504,6 +7509,45 @@ async function promptPieceMove({ playerId, from, path }) {
     // 自分が最新世代のときだけ移動中フラグを解除（後発アニメを邪魔しない）。
     if (pieceMoveGen.get(playerId) === myGen) movingGuestPieces.delete(playerId);
   }
+}
+
+/**
+ * publicStateだけが先に届いた時の保険。以前はここで終点へ即スナップしていたため、
+ * 直後に届くpieceMoveが「もう終点にいる」と判断して歩行アニメを飛ばすことがあった。
+ * ゲスト側ではスナップショット由来の位置変更も短く補間し、正式なpieceMoveが届いたら
+ * 世代番号でこちらを打ち切って、分岐同期のための本来の経路アニメに譲る。
+ */
+function glidePvpPieceToTile(playerId, piece, tilePosition) {
+  if (!piece || !tilePosition || movingGuestPieces.has(playerId)) return;
+  const targetKey = `${tilePosition.x.toFixed(3)},${tilePosition.z.toFixed(3)}`;
+  if (pvpPieceSnapshotTargets.get(playerId) === targetKey) return;
+  const dx = tilePosition.x - piece.position.x;
+  const dz = tilePosition.z - piece.position.z;
+  const distance = Math.hypot(dx, dz);
+  if (distance < 0.05) {
+    piece.position.set(tilePosition.x, PIECE_REST_Y, tilePosition.z);
+    pvpPieceSnapshotTargets.delete(playerId);
+    return;
+  }
+  pvpPieceSnapshotTargets.set(playerId, targetKey);
+  const myGen = (pieceMoveGen.get(playerId) || 0) + 1;
+  pieceMoveGen.set(playerId, myGen);
+  const from = { x: piece.position.x, y: piece.position.y, z: piece.position.z };
+  const duration = Math.min(360, Math.max(GUEST_SNAPSHOT_MOVE_DURATION_MS, distance * 85));
+  void tween(duration, (t) => {
+    if (pieceMoveGen.get(playerId) !== myGen) return;
+    const e = easeInOutQuad(t);
+    piece.position.set(
+      from.x + (tilePosition.x - from.x) * e,
+      PIECE_REST_Y + Math.sin(Math.PI * t) * (GUEST_STEP_HOP * 0.45),
+      from.z + (tilePosition.z - from.z) * e,
+    );
+  }).then(() => {
+    if (pieceMoveGen.get(playerId) === myGen) {
+      piece.position.set(tilePosition.x, PIECE_REST_Y, tilePosition.z);
+      pvpPieceSnapshotTargets.delete(playerId);
+    }
+  });
 }
 
 /** ゲスト側専用: publicStateの土地(所有者/レベル/属性/配置モンスター)と各プレイヤーの駒位置をローカルのtiles/sceneへそのまま反映する。ホストのように1マスずつアニメーションはしない（毎回のsync時点の最終状態へスナップするだけ）。 */
@@ -7553,12 +7597,22 @@ function applyPvpBoardState(publicState) {
         if (tile.unitMesh) scene.removeUnitIcon(tile.unitMesh);
         tile.unitMesh = scene.createUnitIcon(tile.unit, tile.position);
       }
-      scene.updateUnitIcon(tile.unitMesh, {
-        hp: tile.unit.currentHp,
-        maxHp: tile.unit.def.hp,
-      toll: tileState.unit.toll ?? 0,
-        ownerName: ownerPlayer?.name ?? '',
-      });
+      const unitToll = tileState.unit.toll ?? 0;
+      const ownerName = ownerPlayer?.name ?? '';
+      if (
+        previousUnitKey !== nextUnitKey
+        || previous.unitHp !== tileState.unit.hp
+        || previous.unitMaxHp !== tileState.unit.maxHp
+        || previous.unitToll !== unitToll
+        || previous.ownerName !== ownerName
+      ) {
+        scene.updateUnitIcon(tile.unitMesh, {
+          hp: tile.unit.currentHp,
+          maxHp: tile.unit.def.hp,
+          toll: unitToll,
+          ownerName,
+        });
+      }
       } else if (tile.unitMesh) {
       scene.removeUnitIcon(tile.unitMesh);
       tile.unitMesh = null;
@@ -7591,8 +7645,9 @@ function applyPvpBoardState(publicState) {
       pvpPieces.set(p.id, piece);
     }
     // 移動アニメーション中の駒は、後追いのpublicStateで終点へワープさせない。
+    // それ以外のスナップ更新も短く補間して、正式なpieceMoveが遅れても飛びを目立たせない。
     if (!movingGuestPieces.has(p.id)) {
-      piece.position.set(tile.position.x, PIECE_REST_Y, tile.position.z);
+      glidePvpPieceToTile(p.id, piece, tile.position);
     }
   }
 }
@@ -7628,8 +7683,7 @@ function applyPvpPublicState(publicState) {
       name: p.name,
       currency: p.currency,
       assets: p.totalAssets,
-      tileId: p.tileId,
-      cp: p.checkpoints,
+      cp: p.passedCheckpointNumbers,
       defeated: p.defeated,
       banned: p.banned,
       allianceId: p.allianceId,
