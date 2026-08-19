@@ -1946,6 +1946,14 @@ export class Game {
       const options = forward.length > 0 ? forward : fromTile.neighbors;
       if (options.length === 0) break;
       // 分岐選択は経路計画時ではなく、駒が実際に分岐マスへ到着してから行う。
+      // 対人ゲストは歩行アニメをpieceMove配信で再生するため、分岐マスに着く
+      // までのセグメントを先に流し切ってから選択UIを出す。これをしないと
+      // ゲスト画面では駒が手前に残ったまま分岐矢印だけが先に出てしまう。
+      if (options.length > 1 && this._segmentPathIds.length > 0) {
+        await this._broadcastPieceMove(player, movementSegmentOriginTileId);
+        this._segmentPathIds = [];
+        movementSegmentOriginTileId = player.tileId;
+      }
       const remainingSteps = steps - i - 1;
       const nextId = options.length === 1 ? options[0] : await this._chooseNextTile(player, fromTile, options, remainingSteps);
       if (this._isCancelled || nextId == null) break;
@@ -2018,7 +2026,7 @@ export class Game {
         // リセットするのは配信用のセグメント経路だけ。_turnPathIdsは土地コマンドの
         // 権限（このターンに通った自分の土地）に使うので、ワープを跨いでも
         // 通過済みの土地が対象から消えないよう1ターン分を保持し続ける。
-        this._broadcastPieceMove(player, movementSegmentOriginTileId);
+        await this._broadcastPieceMove(player, movementSegmentOriginTileId);
         this._segmentPathIds = [];
         await this._resolveWarpTile(player, toTile, { doubleNextDice: exactStop });
         movementSegmentOriginTileId = player.tileId;
@@ -2058,7 +2066,7 @@ export class Game {
     }
     this.onBranchUndo({ active: false, playerId: player.id });
     if (destinationIds.length) this.onMoveDestination({ tileIds: destinationIds, active: false });
-    this._broadcastPieceMove(player, movementSegmentOriginTileId);
+    await this._broadcastPieceMove(player, movementSegmentOriginTileId);
   }
 
   /**
@@ -2070,7 +2078,7 @@ export class Game {
    * （1ターン分を通しで保持）とは別物なので混同しないこと。
    * ローカルプレイ・ホスト自身では onPieceMove は実質no-op（relayable参照）。
    */
-  _broadcastPieceMove(player, originTileId) {
+  async _broadcastPieceMove(player, originTileId) {
     const path = this._segmentPathIds;
     if (!path || path.length === 0) return;
     const posOf = (id) => {
@@ -2080,7 +2088,7 @@ export class Game {
     const from = posOf(originTileId);
     const points = path.map(posOf).filter(Boolean);
     if (!from || points.length === 0) return;
-    this.onPieceMove({ playerId: player.id, from, path: points });
+    await this.onPieceMove({ playerId: player.id, from, path: points });
   }
 
   /** 分岐をまだ選ばない状態で、残り歩数から到達し得る全タイルを列挙する。 */

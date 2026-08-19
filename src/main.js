@@ -3019,7 +3019,7 @@ function startBattle(character, storyOptions = {}) {
     onTurnFocus: relayable('turnFocus', promptTurnFocus, { broadcast: true }),
     onTollPayment: relayable('tollPayment', promptTollPayment, { broadcast: true }),
     onMoveDestination: relayable('moveDestination', promptMoveDestination, { broadcast: true }),
-    onPieceMove: relayable('pieceMove', promptPieceMove, { broadcast: true }),
+    onPieceMove: relayable('pieceMove', promptPieceMove, { broadcast: true, awaitRemote: true }),
     onLandLoss: relayable('landLoss', promptLandLoss, { broadcast: true }),
     onLandChain: relayable('landChain', promptLandChain, { broadcast: true }),
     onLandLevelUp: relayable('landLevelUp', promptLandLevelUp, { broadcast: true }),
@@ -7246,22 +7246,26 @@ pvpRoomLeave.addEventListener('click', async () => {
  * 扱うと、broadcast型の唯一の引数（payloadそのもの）が誤ってforPlayerId
  * 扱いされて消え、ゲスト側でundefinedを渡してしまうバグになる。
  */
-function relayable(type, localPrompt, { broadcast = false } = {}) {
+function relayable(type, localPrompt, { broadcast = false, awaitRemote = false } = {}) {
   return (...args) => {
     if (broadcast) {
       const payload = args.length === 1 ? args[0] : args;
+      const remotePromises = [];
       if (pvpMatch?.isHost) {
         // 演出は全参加者へ個別チャンネルで送る。room.hostRequest 1本では
         // 連続演出が上書きされ、2人目以降にも届かない。
         const remoteUids = [...new Set(Object.values(pvpMatch.uidByPlayerId || {}))]
           .filter((uid) => uid && uid !== pvpMatch.uid);
         for (const uid of remoteUids) {
-          pvpMatch.relay.askParticipant(uid, type, payload).catch((error) => {
+          const remotePromise = pvpMatch.relay.askParticipant(uid, type, payload).catch((error) => {
             console.warn(`PvP broadcast failed: type=${type}, uid=${uid}`, error);
           });
+          remotePromises.push(remotePromise);
         }
       }
-      return localPrompt(...args);
+      const localResult = localPrompt(...args);
+      if (!awaitRemote || remotePromises.length === 0) return localResult;
+      return Promise.allSettled([Promise.resolve(localResult), ...remotePromises]);
     }
     const forPlayerId = args[args.length - 1];
     const localArgs = args.slice(0, -1);
