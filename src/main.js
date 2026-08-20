@@ -7597,7 +7597,17 @@ function relayable(type, localPrompt, { broadcast = false, awaitRemote = false }
           // 待たない演出はfire-and-forget（アウトボックスに積むだけ）にして、
           // ホストの進行がFirestore往復に一切ブロックされないようにする。
           const awaited = awaitRemote && (!awaitOnlyUid || uid === awaitOnlyUid);
-          const remotePromise = pvpMatch.relay.broadcastParticipant(uid, type, payload, awaited).catch((error) => {
+          // 送信は同期throwし得る（Firestoreのバリデーション等）。ここで
+          // 素通しすると進行中の戦闘・移動処理ごと巻き添えで止まるため、
+          // 同期・非同期どちらの失敗もこの場で握り潰して演出だけ諦める。
+          let remotePromise;
+          try {
+            remotePromise = Promise.resolve(pvpMatch.relay.broadcastParticipant(uid, type, payload, awaited));
+          } catch (error) {
+            remotePromise = Promise.resolve();
+            console.warn(`PvP broadcast threw: type=${type}, uid=${uid}`, error);
+          }
+          remotePromise = remotePromise.catch((error) => {
             console.warn(`PvP broadcast failed: type=${type}, uid=${uid}`, error);
           });
           remotePromises.push(remotePromise);
@@ -7621,7 +7631,14 @@ function relayable(type, localPrompt, { broadcast = false, awaitRemote = false }
     if (!remoteUid) return localPrompt(...localArgs);
     // 質問と演出を同じ参加者専用キューへ通し、演出中に別チャンネルの
     // 質問が割り込んでオーバーレイやカメラ操作が競合しないようにする。
-    const relayPromise = pvpMatch.relay.askParticipant(remoteUid, type, payload);
+    let relayPromise;
+    try {
+      relayPromise = Promise.resolve(pvpMatch.relay.askParticipant(remoteUid, type, payload));
+    } catch (error) {
+      // 送信自体が失敗したら質問は成立しない。盤面を止めず「未選択」で続行する。
+      console.warn(`PvP ask threw: type=${type}, forPlayerId=${forPlayerId}`, error);
+      return Promise.resolve(null);
+    }
     // 質問を投げた直後に相手が切断すると、応答は45秒後にreject
     // （HostGuestRelay参照）される。ここをcatchしないとgame.js側の
     // await this.onXxx(...)が未捕捉の例外で止まり、盤面がフリーズしたまま
@@ -7686,7 +7703,11 @@ function flushPvpSync() {
           cacheHolder._lastLightJson = lightJson;
           cacheHolder._lastTilesJson = tilesJson;
         }
-        writes.push(publishPublicState(job.roomCode, publicPart, { includeTiles: tilesChanged }).catch((error) => {
+        // JSON文字列は差分判定で既に作ってあるので、それを戻して送る。
+        // JSON.stringifyはundefinedのプロパティを落とすため、この経路を通せば
+        // Firestoreが拒否するundefinedが混ざる余地がなくなる（追加コストなし）。
+        const safePart = { ...JSON.parse(lightJson), tiles: JSON.parse(tilesJson) };
+        writes.push(publishPublicState(job.roomCode, safePart, { includeTiles: tilesChanged }).catch((error) => {
           // 失敗時はキャッシュを無効化して、次のnotifyで必ず再送させる。
           if (cacheHolder) { cacheHolder._lastLightJson = null; cacheHolder._lastTilesJson = null; }
           throw error;

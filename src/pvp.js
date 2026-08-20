@@ -190,6 +190,26 @@ export function sendGuestResponse(roomCode, requestId, response) {
  * differのtypeで束縛して渡す想定（例: onConfirmMove:
  * (payload) => relay.ask('confirmMove', payload)）。
  */
+/**
+ * Firestoreはフィールド値にundefinedを一切許さず、setDoc()は
+ * 「Unsupported field value: undefined」を**同期的にthrow**する。
+ * 中継する演出ペイロードは各所でオブジェクトリテラルとして組まれており、
+ * 値が入らない項目（例: 反射・道連れのexchangeにはattackPower/
+ * elementMultiplierが無い）はundefinedのまま載る。これをそのまま送ると
+ * 送信時に例外が飛び、呼び出し元の戦闘処理ごと巻き添えで停止していた
+ * （対人戦だけで起きる現象。CPU戦はFirestoreを通らないため無害）。
+ * 送信直前にundefinedをnullへ均し、キー自体は保つ（受信側は?? / 既定値で
+ * 扱っており、nullでも従来と同じ挙動になる）。
+ */
+function stripUndefined(value) {
+  if (value === undefined) return null;
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(stripUndefined);
+  const out = {};
+  for (const [key, entry] of Object.entries(value)) out[key] = stripUndefined(entry);
+  return out;
+}
+
 export class HostGuestRelay {
   constructor(roomCode) {
     this.roomCode = roomCode;
@@ -313,8 +333,14 @@ export class HostGuestRelay {
     const state = this._participantState(uid);
     clearTimeout(state.cleanupTimer);
     const id = state.nextId++;
-    state.outbox.push({ id, type, payload, ack: mode !== 'fire', wantValue: mode === 'value' });
-    this._flushParticipant(uid);
+    state.outbox.push({ id, type, payload: stripUndefined(payload), ack: mode !== 'fire', wantValue: mode === 'value' });
+    // 送信の失敗で呼び出し元（進行中の戦闘・移動処理）を巻き込まない。
+    // 同期throwはPromiseの外で飛ぶため、relayable側の.catchでは受けられない。
+    try {
+      this._flushParticipant(uid);
+    } catch (error) {
+      console.warn('PvP prompt flush threw synchronously', error);
+    }
     if (mode === 'fire') return Promise.resolve();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -358,7 +384,8 @@ export class HostGuestRelay {
     // 合体しても常に「未ACKの全件」が入っているので取りこぼさない。
     // ackedThroughはゲストがACK済みの水位。ゲストの再読込直後、文書に残る
     // 処理済みイベントをもう一度再生してしまわないための基準線になる。
-    setDoc(promptRef(this.roomCode, uid), { requestId, type: '__batch', payload: { events, ackedThrough: state.ackedThrough || 0 } })
+    Promise.resolve()
+      .then(() => setDoc(promptRef(this.roomCode, uid), { requestId, type: '__batch', payload: { events, ackedThrough: state.ackedThrough || 0 } }))
       .catch((error) => console.warn('PvP prompt flush failed', error))
       .finally(() => {
         state.flushing = false;
