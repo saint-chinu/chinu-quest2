@@ -6379,7 +6379,15 @@ function inDeckCountOf(key) {
 // ---- デッキ選択（対戦・ストーリー共通）: 盤面に入る直前に毎回どのデッキを使うか選ばせる ----
 
 /** 最大3件を並べ、選んだデッキを内訳付きで確認してから確定する。resolveされるのは確定した{id,name,deckList}。 */
+// デッキ選択は画面・ボタンを使い回す共有UIなので、前の選択が終わらないうちに
+// 別の選択が始まると、1回のクリックで両方のonYesが発火し、古い側は
+// デッキ未選択のままnullで解決してしまう（対人戦の招待受諾が二重に走ると
+// 発生し、呼び出し元でnull.deckListとなって英語のTypeErrorが表示されていた）。
+// 新しい選択を始める前に、古い選択を必ずキャンセル扱いで畳む。
+let cancelActiveDeckSelection = null;
+
 function promptDeckSelection({ onCancel = null } = {}) {
+  cancelActiveDeckSelection?.();
   return new Promise((resolve) => {
     let pendingDeck = null;
 
@@ -6465,15 +6473,23 @@ function promptDeckSelection({ onCancel = null } = {}) {
       resolve(null);
     }
     function cleanup() {
+      if (cancelActiveDeckSelection === supersede) cancelActiveDeckSelection = null;
       deckSelectYes.removeEventListener('click', onYes);
       deckSelectNo.removeEventListener('click', onNo);
       deckSelectBack.removeEventListener('click', onBack);
+    }
+    // 後から始まった選択に主導権を譲る時の畳み方。onCancelは呼ばない
+    // （画面遷移は新しい選択側が行うため）。呼び出し元はnull＝中断として扱う。
+    function supersede() {
+      cleanup();
+      resolve(null);
     }
 
     deckSelectYes.addEventListener('click', onYes);
     deckSelectNo.addEventListener('click', onNo);
     deckSelectBack.classList.toggle('hidden', !onCancel);
     if (onCancel) deckSelectBack.addEventListener('click', onBack);
+    cancelActiveDeckSelection = supersede;
     showScreen(deckSelectScreen);
     showPicker();
   });
@@ -7062,6 +7078,8 @@ let pvpPresenceUnsubscribes = [];
 let pvpSocialUid = null;
 let pendingPvpInvite = null;
 let pvpReceivedInvites = [];
+// 招待受諾〜入室完了までの間はtrue。この間は新しい招待通知を出さない。
+let pvpJoinInProgress = false;
 // 招待済みの相手uid。renderPvpFriendListsは在席が変わるたびに行を作り直すため、
 // ボタン自身のdisabled/ラベルに状態を持たせると数十秒で「招待」に戻り、
 // ホストが気づかず重複送信してしまう。描画のたびにここから復元する。
@@ -7139,7 +7157,7 @@ function renderPvpFriendLists() {
         invite.textContent = '送信済み';
       } catch (error) {
         invite.disabled = false;
-        showToast(`招待を送れませんでした：${error?.message || '通信エラー'}`, 2500);
+        showToast(pvpErrorMessage(error, '招待を送れませんでした（通信エラー）'), 2500);
       }
     });
     row.append(name, invite);
@@ -7160,13 +7178,27 @@ function rebuildPvpPresenceListeners() {
   renderPvpFriendLists();
 }
 
+/**
+ * ユーザーに見せてよいエラー文だけを選ぶ。FirestoreのFirebaseErrorや
+ * JSのTypeErrorはメッセージが英語のまま（例:「Cannot read properties of
+ * null」）なので、そのままトーストに出すと何が起きたか伝わらない。
+ * 自前でthrowした日本語メッセージだけを通し、それ以外は定型文にする。
+ */
+function pvpErrorMessage(error, fallback) {
+  const message = typeof error?.message === 'string' ? error.message : '';
+  return /[ぁ-んァ-ヶ一-龠]/.test(message) ? message : fallback;
+}
+
 function showNewestPvpInvite(invites) {
   pvpReceivedInvites = Array.isArray(invites) ? invites : [];
   const fresh = invites.find((invite) => Date.now() - (invite.createdAt?.toMillis?.() || Date.now()) < 10 * 60 * 1000);
   // 対戦中(pvpMatch)だけでなく、部屋で待機中(pvpSession)も出さない。待機中に
   // 受諾すると、元の部屋に自分の参加エントリを残したまま別部屋へ移ってしまう。
+  // 参加処理中(pvpJoinInProgress)も同様に出さない。pvpSessionが入るのは入室
+  // 完了後なので、デッキ選択中に2通目の招待が届くとこの通知がデッキ選択画面へ
+  // 覆いかぶさり、操作を塞いだまま二重参加まで誘発していた（二重招待バグ）。
   const boardIsActive = !appEl.classList.contains('hidden');
-  if (!fresh || pvpMatch || pvpSession || boardIsActive) {
+  if (!fresh || pvpMatch || pvpSession || pvpJoinInProgress || boardIsActive) {
     pvpInviteNotice.classList.add('hidden');
     if (!fresh) pendingPvpInvite = null;
     return;
@@ -7216,18 +7248,26 @@ pvpInviteDecline.addEventListener('click', async () => {
 
 pvpInviteAccept.addEventListener('click', async () => {
   const invite = pendingPvpInvite;
-  if (!invite) return;
+  if (!invite || pvpJoinInProgress) return;
+  pvpJoinInProgress = true;
   pvpInviteAccept.disabled = true;
   // デッキ選択画面より前面に招待通知が残ると操作を塞ぐため、参加処理中は隠す。
   pvpInviteNotice.classList.add('hidden');
   try {
-    await joinPvpRoomByCode(invite.roomCode);
-    await dismissPvpInvite(invite.id);
+    const session = await joinPvpRoomByCode(invite.roomCode);
+    // 同じ部屋への招待が複数届いていると（招待の連打・再招待）、受諾した1通
+    // だけ消しても残りが後から通知として復活し、参加済みの部屋へもう一度
+    // 入ろうとして失敗する。同じ部屋宛ての招待はまとめて片付ける。
+    const sameRoom = pvpReceivedInvites.filter((entry) => entry.roomCode === invite.roomCode);
+    const targets = new Set([invite.id, ...sameRoom.map((entry) => entry.id)]);
+    await Promise.all([...targets].map((id) => dismissPvpInvite(id).catch(() => {})));
     pendingPvpInvite = null;
+    if (!session) pvpInviteNotice.classList.add('hidden'); // 中断時は通知を復活させない
   } catch (error) {
-    showToast(error?.message || '招待された部屋に参加できませんでした', 2800);
+    showToast(pvpErrorMessage(error, '招待された部屋に参加できませんでした'), 2800);
     if (pendingPvpInvite?.id === invite.id) pvpInviteNotice.classList.remove('hidden');
   } finally {
+    pvpJoinInProgress = false;
     pvpInviteAccept.disabled = false;
   }
 });
@@ -7393,7 +7433,7 @@ function showPvpMapConfirm(map) {
       console.error('PvP room creation failed:', error);
       const detail = error?.code === 'permission-denied'
         ? '（サーバーの権限設定を確認してください）'
-        : error?.message ? `（${error.message}）` : '';
+        : /[ぁ-んァ-ヶ一-龠]/.test(String(error?.message || '')) ? `（${error.message}）` : '';
       pvpMenuError.textContent = `部屋を作成できませんでした${detail}`;
       pvpMenuError.classList.remove('hidden');
       showScreen(pvpMenuScreen);
@@ -7415,22 +7455,27 @@ async function joinPvpRoomByCode(codeInput) {
     throw new Error('部屋コードは3桁の数字で入力してください');
   }
   const chosenDeck = await promptDeckSelection();
+  if (!chosenDeck) return null; // 「戻る」や別の選択に差し替えられた場合は中断
   const characterIcon = await resolveCharacterIcon(currentCharacter);
   const iconDataUrl = compactCharacterIconDataUrl(characterIcon);
   const session = await joinPvpRoom(code, { name: currentCharacter.name, color: currentCharacter.color, iconDataUrl, deckList: chosenDeck.deckList });
   enterPvpRoomScreen(session);
+  return session;
 }
 
 pvpJoinButton.addEventListener('click', async () => {
+  if (pvpJoinInProgress) return;
   pvpMenuError.classList.add('hidden');
+  pvpJoinInProgress = true;
   pvpJoinButton.disabled = true;
   try {
     await joinPvpRoomByCode(pvpJoinCode.value);
   } catch (error) {
-    pvpMenuError.textContent = error.message || '入室できませんでした';
+    pvpMenuError.textContent = pvpErrorMessage(error, '入室できませんでした');
     pvpMenuError.classList.remove('hidden');
     showScreen(pvpMenuScreen);
   } finally {
+    pvpJoinInProgress = false;
     pvpJoinButton.disabled = false;
   }
 });
@@ -8144,6 +8189,7 @@ pvpRoomStart.addEventListener('click', async () => {
   pvpRoomStart.disabled = true;
   pvpBattleEndHandled = false;
   const hostDeck = await promptDeckSelection();
+  if (!hostDeck) { pvpRoomStart.disabled = false; return; }
   await confirmLandscapeReady();
 
   // ゲストのデッキは入室と同時にguestDeckListとしてもう届いている
