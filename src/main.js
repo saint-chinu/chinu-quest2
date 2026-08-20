@@ -2262,7 +2262,7 @@ function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, oppone
  * として目立たせる: メッセージを一回り大きく表示し、発動した側（この一撃
  * を放った側=attackerEls）のカードを一瞬拡大させて光らせる。
  */
-async function promptBattleAttack({ side, item, message, damage = 0, element, attackPower = 0, elementMultiplier = 1, targetHp, targetDied, special, targetName, aftermath = false }) {
+async function promptBattleAttack({ side, item, message, damage = 0, element, attackPower, elementMultiplier = 1, targetHp, targetDied, special, targetName, aftermath = false }) {
     const attackerEls = battleSide[side];
     const targetEls = battleSide[side === 'attacker' ? 'defender' : 'attacker'];
     const hasSpecial = Array.isArray(special) && special.length > 0;
@@ -2277,9 +2277,12 @@ async function promptBattleAttack({ side, item, message, damage = 0, element, at
 
     // 攻撃直前に現在値を確定し、得意属性なら120%分を段階的に加算してから
     // 光線・ダメージへ進む。連続攻撃では同じ加算演出を繰り返さない。
-    // 毒tickや戦闘後の反動(aftermath)は誰の攻撃でもないので、この加算演出は
-    // 通さない（attackPowerが無いため、通すとATK表示が0に書き換わる）。
-    if (!aftermath && attackerEls.atk.dataset.built !== 'true') {
+    // 毒tick・戦闘後の反動(aftermath)や反射・道連れは「その側が放った一撃」では
+    // ないのでattackPowerを持たない。これらでこの加算演出を通すと、反射した側の
+    // ATK表示が0に書き換わったうえでbuilt済みと記録され、その後その側が本当に
+    // 攻撃する番になっても本来のATKが二度と表示されなくなる（くねくねの反射で
+    // 発覚）。attackPowerが渡された一撃だけを対象にする。
+    if (!aftermath && Number.isFinite(attackPower) && attackerEls.atk.dataset.built !== 'true') {
       attackerEls.atk.textContent = String(attackPower);
       attackerEls.atkBonus.classList.add('hidden');
       attackerEls.atkFill.style.width = `${Math.min(100, (attackPower / 150) * 100)}%`;
