@@ -2270,19 +2270,24 @@ export class Game {
    * カルドセプト準拠の周回ボーナス総額を計算する（実際に加算はしない、
    * _grantGoalBonusと帰巣本能スペルが共用する純粋な計算のみ）。
    * - 基本ボーナス: (周回数+1)×START_BONUS。周を重ねるほど増える。
-   *   フリーランサーが盤上にいれば倍率補正がかかる。
    * - 領地ボーナス: 所持土地数×LAND_BONUS_RATE（2人戦）/
    *   LAND_BONUS_RATE_MULTI（3人以上）。連鎖数・土地レベルは影響しない。
+   * - お札利回り: 保有お札の評価額×OFUDA_LAP_YIELD（⑫のみ）。
+   * フリーランサーが盤上にいれば、上記3つの合計すべてに倍率が乗る
+   * （以前は基本ボーナスだけだったが、領地・お札で稼ぐ盤面では実入りが
+   * 小さすぎたため周回収入の総額補正へ拡張した）。
    */
   _computeLapBonus(player) {
-    const baseBonus = (player.lapsCompleted + 1) * START_BONUS;
     const freelancerTile = this.tiles.find(
       (t) => t.unit && t.unit.ownerId === player.id && t.unit.def.effect?.type === 'lapBonusMultiplier',
     );
-    const base = freelancerTile ? Math.round(baseBonus * freelancerTile.unit.def.effect.multiplier) : baseBonus;
+    const multiplier = freelancerTile ? freelancerTile.unit.def.effect.multiplier : 1;
+    const base = Math.round((player.lapsCompleted + 1) * START_BONUS * multiplier);
     const landRate = this.players.length >= 3 ? LAND_BONUS_RATE_MULTI : LAND_BONUS_RATE;
-    const land = this._summonCountOf(player.id) * landRate;
-    const ofuda = this.hasOfuda ? Math.round(this._ofudaValueOf(player) * OFUDA_LAP_YIELD) : 0;
+    const land = Math.round(this._summonCountOf(player.id) * landRate * multiplier);
+    const ofuda = this.hasOfuda
+      ? Math.round(this._ofudaValueOf(player) * OFUDA_LAP_YIELD * multiplier)
+      : 0;
     return { base, land, ofuda, total: base + land + ofuda };
   }
 

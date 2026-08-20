@@ -154,7 +154,7 @@ export const NEUTRAL_MONSTER_CATALOG = {
   }),
   freelancer: neutralMonster('freelancer', 'フリーランサー', Rarity.S, 30, 30, {
     effect: { type: 'lapBonusMultiplier', multiplier: 1.3 },
-    effectDescription: '配置していると周回ボーナス30%アップ',
+    effectDescription: '配置していると周回ボーナスの総額（基本＋領地＋お札利回り）が30%アップ',
   }),
   rainbowChameleon: neutralMonster('rainbowChameleon', 'レインボーカメレオン', Rarity.S, 25, 30, {
     cost: 80,
