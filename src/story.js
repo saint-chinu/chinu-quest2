@@ -800,22 +800,49 @@ export const STORY_STAGES = [
     ],
     replay: {
       intro: [
-        { speaker: '闇・ホフク', text: 'また座りに来たの？ 懲りない魚ね。' },
-        { speaker: '暗・少女A', text: '再戦料は身体で払うゆ。' },
-        { speaker: 'サーティー', text: '今度は最初から俺も卓につく。夢の続きといこうぜ。' },
-        { speaker: '主人公', text: '麻雀じゃなくて盤面で決着つけようぜ！' },
+        { speaker: '闇・ホフク', text: 'あの負けはアンタのせいよ。リーチひとつ読めない木偶が隣に座ってたんだから。' },
+        { speaker: '暗・少女A', text: 'はあ？ 姐さんこそ振り込みまくってたゆ。もうアンタとは組まないゆ。' },
+        { speaker: 'サーティー', text: '（おい、修羅場だぞ。……で、なんで俺たちが呼ばれたんだ？）' },
+        { speaker: '主人公', text: '（知らないよ……）なあ、俺たちは関係ないだろ。帰っていいか？' },
+        { speaker: '闇・ホフク', text: '関係大アリよ。アンタたちに負けたせいでこうなったんだから、責任を取りなさい。' },
+        { speaker: '暗・少女A', text: '全員まとめて沈めて、あたしが一番だって証明するゆ。同盟なんかいらないゆ。' },
+        { speaker: 'サーティー', text: '……こうなったら仕方ない。全員敵ってわけだ。悪いが俺も勝たせてもらうぜ。' },
+        { speaker: '主人公', text: '巻き込まれ損にもほどがある……！ こうなったら勝って帰る！' },
       ],
-      outro: [{ speaker: 'サーティー', text: '夢は繰り返す。だが、勝ち筋を覚えた奴は強い。' }],
-      // 本編のサーティーはmidBattleAssist（途中参戦）で来るが、あの仕組みは
-      // 再戦では発火しない（main.jsの!isReplayガード）。ここでallyを明示
-      // しないと再戦だけ恒久1vs2になってしまう（アウトロでサーティーが
-      // 喋るのに本人が盤面にいない）。再戦は最初から2vs2で戦う。
-      ally: {
-        name: 'サーティー',
-        color: 0x232323,
-        deckKey: 'thirty',
-        theme: { elements: [Element.NEUTRAL, Element.THUNDER] },
-      },
+      outro: [
+        { speaker: '闇・ホフク', text: '……はぁ。アンタと組んでた時のほうが、まだマシだったかもね。' },
+        { speaker: '暗・少女A', text: '……次はまた姐さんと組むゆ。それで今度こそ勝つゆ。' },
+        { speaker: '主人公', text: 'あっさり仲直りかよ。じゃあこの戦いは何だったんだ……。' },
+        { speaker: 'サーティー', text: '世の中そんなもんだ。ま、いい勝負だったけどな。' },
+      ],
+      // 本編は「闇の2人が同盟／サーティーは途中参戦の味方」だが、再戦は
+      // 敗北をきっかけに闇の2人が仲違いした四つ巴（同盟なしFFA）。
+      // midBattleAssistは再戦では発火しないため、サーティーは味方ではなく
+      // 独立した対戦者としてopponentsに入れる。
+      format: '1vs1vs1vs1',
+      ally: null,
+      heroAllianceId: null,
+      enemyAllianceId: null,
+      opponents: [
+        {
+          name: '闇・ホフク',
+          color: 0x8d2149,
+          deckKey: 'darkHofuku',
+          theme: { elements: [Element.FIRE] },
+        },
+        {
+          name: '暗・少女A',
+          color: 0x6044ff,
+          deckKey: 'darkShoujoA',
+          theme: { elements: [Element.THUNDER] },
+        },
+        {
+          name: 'サーティー',
+          color: 0x232323,
+          deckKey: 'thirty',
+          theme: { elements: [Element.NEUTRAL, Element.THUNDER] },
+        },
+      ],
     },
   },
   {
@@ -863,10 +890,20 @@ export const STORY_STAGES = [
     ],
     replay: {
       intro: [
-        { speaker: 'クエ', text: 'また来たんか貧乏魚。今度は板ごと沈めたるわ。' },
-        { speaker: '主人公', text: 'こっちも少しは相場を覚えたんでな。もう高値掴みはしないぞ。' },
+        { speaker: 'クエ', text: 'また来たんか。ちょうどええ、相場も熱うなってきたところや。' },
+        { speaker: 'クエ', text: 'ただし今回は遊びやない。目標は20,000G。前より長い勝負になる分、お札の仕込みが物を言うで。' },
+        { speaker: 'クエ', text: 'ワイの土俵で、ワイの流儀で、今度こそ沈めたる。' },
+        { speaker: '主人公', text: '望むところだ。相場の読み方なら、あんたを見て一番学んだからな。' },
       ],
-      outro: [{ speaker: 'クエ', text: 'チッ……まだ折れんか。相場は明日も動く、覚えとけ。' }],
+      outro: [
+        { speaker: 'クエ', text: '……ワイの負けや。お前、ほんまに数字が読める魚になったんやな。' },
+        { speaker: 'クエ', text: 'また相場が動いたら来い。この街は、勝ち続ける奴に一番冷たいからな。' },
+      ],
+      // 目標を本編の15,000Gから引き上げ、決着までの周回数を増やす。
+      // 長期戦ほどお札の仕込み（安値買い→土地育成→高値売り）と利回りが
+      // 効くため、相場ステージの再戦を「本気の相場戦」にする狙い。
+      // サドンデス（破産＝即敗北）と破産隠し報酬は本編と同じく有効。
+      goalCurrency: 20000,
     },
   },
 ];
