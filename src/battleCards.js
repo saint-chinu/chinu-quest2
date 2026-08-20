@@ -1231,10 +1231,13 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 1 }, // ATK+直前の出目×11、貫通
       ],
       spells: [
-        { def: SPELL_CATALOG.walletVacuum, count: 4 },   // 相手のGを削る＝マウントゴリラのATK2倍条件も整う
+        { def: SPELL_CATALOG.walletVacuum, count: 3 },   // 相手のGを削る＝マウントゴリラのATK2倍条件も整う
         { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },
         { def: SPELL_CATALOG.homingInstinct, count: 2 }, // 自分に撃って周回＝お札取引の回数を稼ぐ
-        { def: SPELL_CATALOG.iCanFly, count: 1 },
+        // 副業収入(0G): 純粋な収入源。捨て札が山に戻るたび再利用でき、
+        // 周回が進むほど実入りが増える（周回数×50+50G）。スペル枠の
+        // 暇な手番を現金化に充て、通行料での資金ショートを防ぐ。
+        { def: SPELL_CATALOG.sideIncome, count: 2 },
         // アリジゴク（強制停止の呪い）対策の1枚。呪われた高額地は毎周
         // 通行料を搾り取ってくるうえ、壁が固いと普通の侵略では抜けない。
         // 差し押さえるように戦闘なしで奪い取り、呪いごと自分の資産へ変える。

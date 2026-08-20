@@ -2396,11 +2396,15 @@ export class Game {
     // 600G前後）を残し、残りの6割を相場へ突っ込む。従来の「1周につき最大
     // 700G」では総資産15,000Gのステージに対して誤差にしかならなかったが、
     // 全額突っ込ませると今度は召喚も投資もできない置物になる。
+    // 相手の土地が育ってきたら、最悪1回の通行料（上限1200G）も軍資金に含める
+    // （お札は自動売却で通行料の足しになるとはいえ、買った直後に売ると
+    // 相場を自分で往復させて目減りするだけなので、最初から買いすぎない）。
     // お前も〇ぬんだ（詠唱100G＋発動700G）を握っている間はその分も残す。
     // これを積まないと、相場に突っ込んだ直後は常にG不足で撃てず、
     // アリジゴク対策の切り札が手札で腐り続ける。
     const holdsFinisher = (player.hand || []).some((c) => c.effect?.type === 'guaranteedNextInvasionWin');
-    const fixerReserve = 600 + (holdsFinisher ? 800 : 0);
+    const fixerReserve = Math.max(600, Math.min(this._cpuMaxEnemyToll(player), 1200))
+      + (holdsFinisher ? 800 : 0);
     const budget = isFixer
       ? Math.floor(Math.max(0, player.currency - fixerReserve) * 0.6)
       : Math.min(350, Math.max(0, player.currency - 200));
@@ -4920,11 +4924,18 @@ export class Game {
     // 初心者が通行料で消耗するうえ、CPUの総資産が目標へ一直線に伸びる。
     const cpuLevelCap = this.tutorialMode ? 2 : LEVEL_CAP;
     if (player.currency < 300 || tile.type !== TileType.LAND || tile.level >= cpuLevelCap || tile.element === Element.NEUTRAL) return false;
+    // 投資後も「最悪1回の敵地通行料（上限800G）」を現金＋お札で払える範囲に
+    // 抑える。ここを見ずに1250Gまで一気に注ぎ込むと、直後に高額地を踏んだ
+    // 瞬間マイナス→土地とお札の投げ売り→破産の一直線になる（⑫はサドン
+    // デスなのでそのまま敗北）。土地レベル投資は売れば半額しか戻らない、
+    // 一番流動性の低い使い道なので、支払い余力の確保を最優先にする。
+    const dangerReserve = Math.min(this._cpuMaxEnemyToll(player), 800);
+    const liquidity = this._cpuLiquidity(player);
     const affordableTargets = [];
     const maxTargetLevel = Math.min(cpuLevelCap, tile.level + (this.tutorialMode ? 1 : 3));
     for (let targetLevel = tile.level + 1; targetLevel <= maxTargetLevel; targetLevel += 1) {
       const cost = LEVEL_INVESTMENT[targetLevel] - LEVEL_INVESTMENT[tile.level];
-      if (cost <= player.currency) affordableTargets.push({ targetLevel, cost });
+      if (cost <= player.currency && liquidity - cost >= dangerReserve) affordableTargets.push({ targetLevel, cost });
     }
     if (affordableTargets.length === 0) return false;
     // クエ（金融街のフィクサー）は、自分が仕込んでいるお札と同じ属性の土地
@@ -4991,6 +5002,11 @@ export class Game {
    *  自由に召喚でき、中盤以降は高くなり高コストカードでの散財を抑える。上限は
    *  召喚・レベルアップをある程度積極的に回せるよう500Gでキャップ。 */
   _cpuSummonReserve(player) {
+    return Math.min(this._cpuMaxEnemyToll(player), 500);
+  }
+
+  /** 盤上で自分が払い得る最大の敵地（非同盟）通行料。CPUの各種「散財しすぎ防止」の基準。 */
+  _cpuMaxEnemyToll(player) {
     let maxToll = 0;
     for (const tile of this.tiles) {
       if (tile.type !== TileType.LAND || tile.owner == null || tile.owner === player.id) continue;
@@ -4998,7 +5014,13 @@ export class Game {
       if (owner?.allianceId != null && owner.allianceId === player.allianceId) continue;
       maxToll = Math.max(maxToll, this._tollOfTile(tile));
     }
-    return Math.min(maxToll, 500);
+    return maxToll;
+  }
+
+  /** CPUの支払い余力: 現金＋お札の評価額8掛け（お札はマイナスG時に自動売却される
+   *  流動資産だが、売ると相場が下がるので満額では数えない）。 */
+  _cpuLiquidity(player) {
+    return player.currency + Math.floor(this._ofudaValueOf(player) * 0.8);
   }
 
   _cpuChooseSummonCard(options, tile, profile, player) {
