@@ -1234,7 +1234,11 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.walletVacuum, count: 4 },   // 相手のGを削る＝マウントゴリラのATK2倍条件も整う
         { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },
         { def: SPELL_CATALOG.homingInstinct, count: 2 }, // 自分に撃って周回＝お札取引の回数を稼ぐ
-        { def: SPELL_CATALOG.iCanFly, count: 2 },
+        { def: SPELL_CATALOG.iCanFly, count: 1 },
+        // アリジゴク（強制停止の呪い）対策の1枚。呪われた高額地は毎周
+        // 通行料を搾り取ってくるうえ、壁が固いと普通の侵略では抜けない。
+        // 差し押さえるように戦闘なしで奪い取り、呪いごと自分の資産へ変える。
+        { def: SPELL_CATALOG.dieWithMe, count: 1 },
       ],
     },
   },

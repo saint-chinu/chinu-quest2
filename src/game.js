@@ -2396,8 +2396,13 @@ export class Game {
     // 600G前後）を残し、残りの6割を相場へ突っ込む。従来の「1周につき最大
     // 700G」では総資産15,000Gのステージに対して誤差にしかならなかったが、
     // 全額突っ込ませると今度は召喚も投資もできない置物になる。
+    // お前も〇ぬんだ（詠唱100G＋発動700G）を握っている間はその分も残す。
+    // これを積まないと、相場に突っ込んだ直後は常にG不足で撃てず、
+    // アリジゴク対策の切り札が手札で腐り続ける。
+    const holdsFinisher = (player.hand || []).some((c) => c.effect?.type === 'guaranteedNextInvasionWin');
+    const fixerReserve = 600 + (holdsFinisher ? 800 : 0);
     const budget = isFixer
-      ? Math.floor(Math.max(0, player.currency - 600) * 0.6)
+      ? Math.floor(Math.max(0, player.currency - fixerReserve) * 0.6)
       : Math.min(350, Math.max(0, player.currency - 200));
     if (budget <= 0) return;
     const preferred = this._rankOfudaBuyCandidates(player, market)[0];
@@ -5175,6 +5180,15 @@ export class Game {
    * 踏み切る（それ以外は見送り）。
    */
   _cpuDecideInvasion(player, tile, options, profile) {
+    // お前も〇ぬんだ発動中は戦闘そのものが起きず必ず土地を奪える
+    // （_runInvasion参照）。勝率見積もりで判断すると、壁が固い土地ほど
+    // 「勝てない」と見送ってフラグを死蔵してしまう＝一番使いたい場所で
+    // 使えない。ここでは確定勝利として扱い、戦わない以上ステータスは
+    // 無意味なので最安のカードを差し出す（高いカードは温存する）。
+    if (player.guaranteedNextInvasionWin && options.length > 0) {
+      const cheapest = options.reduce((min, c) => ((c.cost || 0) < (min.cost || 0) ? c : min));
+      return { card: cheapest };
+    }
     const candidates = options.map((card) => ({
       card,
       noItemRate: this._estimateWinProbability(card, player.id, player.hand, tile, false),
@@ -6895,7 +6909,13 @@ export class Game {
       if (t.type !== TileType.LAND || t.owner == null || t.owner === player.id || !t.unit) return false;
       const owner = this.players.find((p) => p.id === t.owner);
       if (!owner || owner.defeated || this._isAllyOf(owner, player)) return false;
-      return t.level >= 2 && !t.transparentCursed;
+      if (t.transparentCursed) return false;
+      // アリジゴクで強制停止をかけられた敵地は、レベルを問わず最優先の的。
+      // 放置すると毎周そこで止まらされて通行料を搾り取られ続ける
+      // （⑫はサドンデスなので、ジリ貧がそのまま敗北になる）。奪えば
+      // 呪いごと自分の土地になり、相手が積んだ地価もこちらの資産になる。
+      if (this._isForcedStopFor(player, t)) return true;
+      return t.level >= 2;
     });
     if (!worthwhile) return;
     await this._cpuCastSpell(player, card, {});
