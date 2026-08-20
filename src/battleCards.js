@@ -733,7 +733,11 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.senbonZakura, count: 2 }, { def: SPELL_CATALOG.walletVacuum, count: 2 },
         { def: SPELL_CATALOG.blueOcean, count: 1 }, { def: SPELL_CATALOG.psychokinesis, count: 2 },
         { def: SPELL_CATALOG.iCanFly, count: 1 }, { def: SPELL_CATALOG.specialAudit, count: 1 },
-        { def: SPELL_CATALOG.sideIncome, count: 2 },
+        { def: SPELL_CATALOG.sideIncome, count: 3 },
+        // 増税通知(40G): 相手の一番高い通行料を恒久的に30%減らす。
+        // 「高額地1枚で通行料破産を狙う」対クエ戦術の直接の解毒剤
+        // （CPUは減額見込みがコストを上回る土地にだけ使う既存AI）。
+        { def: SPELL_CATALOG.taxHike, count: 1 },
         { def: SPELL_CATALOG.manaExtraction, count: 1 }, { def: SPELL_CATALOG.homingInstinct, count: 1 },
         { def: SPELL_CATALOG.divination, count: 1 },
       ],
@@ -870,7 +874,11 @@ export const CHARACTER_DECKS = {
       spells: [
         { def: SPELL_CATALOG.diceOne, count: 3 },
         { def: SPELL_CATALOG.diceThree, count: 3 },
-        { def: SPELL_CATALOG.sideIncome, count: 2 },
+        { def: SPELL_CATALOG.sideIncome, count: 3 },
+        // 増税通知(40G): 相手の一番高い通行料を恒久的に30%減らす。
+        // 「高額地1枚で通行料破産を狙う」対クエ戦術の直接の解毒剤
+        // （CPUは減額見込みがコストを上回る土地にだけ使う既存AI）。
+        { def: SPELL_CATALOG.taxHike, count: 1 },
         { def: SPELL_CATALOG.splitEvenly, count: 1 },
         { def: SPELL_CATALOG.poisonMist, count: 1 },
         { def: SPELL_CATALOG.specialAudit, count: 1 },
@@ -1237,7 +1245,10 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 1 }, // ATK+直前の出目×11、貫通
       ],
       spells: [
-        { def: SPELL_CATALOG.walletVacuum, count: 2 },   // 相手のGを削る＝マウントゴリラのATK2倍条件も整う
+        // 財布チューチューは抜いた: ⑫の対人ではプレイヤーが現金をお札と
+        // 土地に換えるため手持ちGが薄く、30%奪取がコスト100Gに見合わない
+        // （CPUの発動条件も成立せず手札で腐る）。マウントゴリラのATK2倍は
+        // 相手が現金を持っていない時点で最初から成立している。
         // 放牧: 敵の異属性の土地を森へ塗り替える。相手の連鎖を折りつつ、
         // 森のお札の基礎価格（所有者を問わず土地レベル合計で決まる）を
         // 押し上げる、フィクサーの相場操作そのもの。
@@ -1247,7 +1258,11 @@ export const CHARACTER_DECKS = {
         // 副業収入(0G): 純粋な収入源。捨て札が山に戻るたび再利用でき、
         // 周回が進むほど実入りが増える（周回数×50+50G）。スペル枠の
         // 暇な手番を現金化に充て、通行料での資金ショートを防ぐ。
-        { def: SPELL_CATALOG.sideIncome, count: 2 },
+        { def: SPELL_CATALOG.sideIncome, count: 3 },
+        // 増税通知(40G): 相手の一番高い通行料を恒久的に30%減らす。
+        // 「高額地1枚で通行料破産を狙う」対クエ戦術の直接の解毒剤
+        // （CPUは減額見込みがコストを上回る土地にだけ使う既存AI）。
+        { def: SPELL_CATALOG.taxHike, count: 1 },
         // アリジゴク（強制停止の呪い）対策の1枚。呪われた高額地は毎周
         // 通行料を搾り取ってくるうえ、壁が固いと普通の侵略では抜けない。
         // 差し押さえるように戦闘なしで奪い取り、呪いごと自分の資産へ変える。
