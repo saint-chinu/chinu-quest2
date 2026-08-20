@@ -1219,9 +1219,9 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.trufuButa, count: 2 },        // 50G 30/30 1/3で150G
         { def: MONSTER_CATALOG.shinrinChouzeikan, count: 2 }, // 90G 35/40 連鎖2 通行料1.3倍
         { def: MONSTER_CATALOG.yamagami, count: 2 },         // 150G 連鎖2 森連鎖×7
+        { def: MONSTER_CATALOG.sekaiju, count: 2 },          // 120G 0/70 連鎖1 防衛拠点
         // テック枠。避雷針侍は生贄1が必要なので手札が薄い時は出せない。
         { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 }, // 雷 50G 15/30 身代わり
-        { def: MONSTER_CATALOG.kaizokuS, count: 2 },          // 水 100G 30/30 相手アイテム破壊
         // 無属性。⑫は4属性が育つので盤面全体の連鎖数が伸びやすい。
         { def: MONSTER_CATALOG.kontonNoAtama, count: 2 },     // 150G 30/30 全連鎖×5
       ],

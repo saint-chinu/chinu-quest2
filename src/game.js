@@ -4577,6 +4577,8 @@ export class Game {
             ? this._cpuChooseSummonCardForMuuru(pool, tile, profile, player)
           : player.name === '「彼」'
             ? this._cpuChooseSummonCardForKare(pool, tile, profile, player)
+          : player.name === 'クエ'
+            ? this._cpuChooseSummonCardForQue(pool, tile, profile, player)
             : this._cpuChooseSummonCard(pool, tile, profile, player);
       player.hand = player.hand.filter((c) => c.id !== card.id);
       this._discardUsedCard(player, card);
@@ -4768,13 +4770,21 @@ export class Game {
     );
     if (eligible.length === 0) return null;
 
+    // クエ（金融街のフィクサー）は、自分が仕込んでいるお札と同じ属性の土地を
+    // 優先して育てる。土地レベルはそのままお札の基礎価格に効くので、投資が
+    // 地価とお札評価額の両方に二重に乗る（_ofudaBasePrice参照）。連鎖優先の
+    // 判断を覆さない程度の加点に留める。
+    const ofudaBonus = (tile) => (
+      this.hasOfuda && player.name === 'クエ' && (player.ofuda?.[tile.element] || 0) > 0 ? 120 : 0
+    );
     const score = (tile) => {
       const sameElementUnit = tile.unit?.def?.element === tile.element;
       const chainCount = this._chainCount(player.id, tile.element);
-      if (sameElementUnit && chainCount >= 2) return 400 + chainCount * 10 - tile.level;
-      if (sameElementUnit && tile.level === 1) return 300;
-      if (sameElementUnit) return 200 - tile.level;
-      return 100 + chainCount * 10 - tile.level;
+      const bonus = ofudaBonus(tile);
+      if (sameElementUnit && chainCount >= 2) return 400 + chainCount * 10 - tile.level + bonus;
+      if (sameElementUnit && tile.level === 1) return 300 + bonus;
+      if (sameElementUnit) return 200 - tile.level + bonus;
+      return 100 + chainCount * 10 - tile.level + bonus;
     };
     return [...eligible].sort((a, b) => score(b) - score(a))[0];
   }
@@ -4984,6 +4994,36 @@ export class Game {
     const preferOff = onElement.length === 0 || (offElement.length > 0 && Math.random() < profile.offElementSummonChance);
     const pool = preferOff && offElement.length > 0 ? offElement : onElement.length > 0 ? onElement : offElement;
     return this._strongestCard(pool);
+  }
+
+  /**
+   * クエ専用: 世界樹のようなATK0の壁は「守る価値のある土地」にだけ据える。
+   * ATK0のモンスターは侵略してきた相手を倒せない（＝防衛は必ず引き分けになり
+   * 土地は守れるが盤面の圧力にはならない）ので、_strongestCardのATK+HP評価に
+   * 任せると、ただの空き地にHP70の置物を120Gで置いてしまう。
+   * 自分の同属性地と隣接して連鎖を伸ばせる場所、または既に育っている土地
+   * （Lv2以上）でだけ壁を選び、それ以外では殴れるカードを優先する。
+   */
+  _cpuChooseSummonCardForQue(options, tile, profile, player) {
+    const isWall = (card) => (card.atk || 0) === 0;
+    const walls = options.filter(isWall);
+    if (walls.length === 0) return this._cpuChooseSummonCard(options, tile, profile, player);
+
+    const adjacentOwnSameElement = tile.neighbors.filter((id) => {
+      const neighbor = this.tiles[id];
+      return neighbor?.owner === player.id && neighbor.element === tile.element;
+    }).length;
+    // 連鎖を伸ばせる土地か、既に育っている土地なら壁を据える価値がある。
+    // ただし土地ボーナスを受けられる属性の壁に限る（ATK0のまま属性違いの
+    // 土地に置くと、HPも伸びないただの的になる）。
+    if (tile.level >= 2 || adjacentOwnSameElement >= 1) {
+      const matched = walls.filter((card) => this._cardBenefitsFromLandElement(card, tile));
+      if (matched.length > 0) return this._strongestCard(matched);
+    }
+    // 据える価値が無い土地では壁を候補から外す。_strongestCardはATK+HPで
+    // 評価するので、外さないとHP70の置物が常に「最強」に見えてしまう。
+    const attackers = options.filter((card) => !isWall(card));
+    return this._cpuChooseSummonCard(attackers.length > 0 ? attackers : options, tile, profile, player);
   }
 
   /** Q専用: 合体素材になる列車2種を通常の雷モンスターより優先して配置する。 */
