@@ -1588,39 +1588,43 @@ export class Game {
     await this._grantGoalBonus(player);
   }
 
+  /**
+   * 資本主義の権化: 詠唱者自身の手札モンスターを、手持ちGの続く限り
+   * コストの安い順に空き地へ叩き込む（召喚条件・生贄は無視）。
+   * 以前は全プレイヤーを対象にしていたが、相手にもタダ同然で土地を配って
+   * しまい自爆スペルになっていたため、自分だけを対象にする。
+   */
   async _spellCapitalismIncarnate(caster) {
     const emptyLands = () => this.tiles.filter((tile) => tile.type === TileType.LAND && tile.owner == null && !tile.unit);
     let totalSummoned = 0;
-    for (const player of this.players.filter((p) => !p.defeated)) {
-      const candidates = (player.hand || [])
-        .filter((card) => card.type === CardType.MONSTER)
-        .sort((a, b) => (a.cost || 0) - (b.cost || 0));
-      for (const card of candidates) {
-        const pool = emptyLands();
-        if (pool.length === 0) break;
-        const cost = card.cost || 0;
-        if (player.currency < cost) continue;
-        const matching = pool.filter((tile) => tile.element === card.element);
-        const summonPool = matching.length > 0 ? matching : pool;
-        const tile = summonPool[Math.floor(Math.random() * summonPool.length)];
-        const chainGain = this._captureLandGain(player, tile);
-        player.hand = player.hand.filter((candidate) => candidate.id !== card.id);
-        // 通常召喚（_resolveLandCommand/チュートリアルCPU）と同じく捨札へ送る。
-        // ここを飛ばすとカードが山からも捨札からも消え、デッキが1枚ずつ痩せていく。
-        this._discardUsedCard(player, card);
-        player.currency -= cost;
-        this._placeUnit(tile, player, card);
-        totalSummoned += 1;
-        this.onLog(`${caster.name}の「資本主義の権化」：${player.name}の「${card.name}」が空き地へ召喚された (-${cost}G)`);
-        await this.onSummonEffect?.({ tileId: tile.id, unitName: card.name });
-        await this._presentLandGain(chainGain);
-        if (this._isCancelled) return;
-      }
+    const candidates = (caster.hand || [])
+      .filter((card) => card.type === CardType.MONSTER)
+      .sort((a, b) => (a.cost || 0) - (b.cost || 0));
+    for (const card of candidates) {
+      const pool = emptyLands();
+      if (pool.length === 0) break;
+      const cost = card.cost || 0;
+      if (caster.currency < cost) continue;
+      const matching = pool.filter((tile) => tile.element === card.element);
+      const summonPool = matching.length > 0 ? matching : pool;
+      const tile = summonPool[Math.floor(Math.random() * summonPool.length)];
+      const chainGain = this._captureLandGain(caster, tile);
+      caster.hand = caster.hand.filter((candidate) => candidate.id !== card.id);
+      // 通常召喚（_resolveLandCommand/チュートリアルCPU）と同じく捨札へ送る。
+      // ここを飛ばすとカードが山からも捨札からも消え、デッキが1枚ずつ痩せていく。
+      this._discardUsedCard(caster, card);
+      caster.currency -= cost;
+      this._placeUnit(tile, caster, card);
+      totalSummoned += 1;
+      this.onLog(`「資本主義の権化」：${caster.name}の「${card.name}」が空き地へ召喚された (-${cost}G)`);
+      await this.onSummonEffect?.({ tileId: tile.id, unitName: card.name });
+      await this._presentLandGain(chainGain);
+      if (this._isCancelled) return;
     }
     if (totalSummoned === 0) {
       this.onLog('「資本主義の権化」は空振りした。召喚できるモンスターがいない。');
     } else {
-      this.onLog(`市場の熱狂で${totalSummoned}体のモンスターが盤面へ放たれた！`);
+      this.onLog(`市場の熱狂で${caster.name}のモンスター${totalSummoned}体が盤面へ放たれた！`);
     }
     this._notifyState();
   }
@@ -2354,25 +2358,47 @@ export class Game {
     player.ofuda ||= Object.fromEntries(OFUDA_ELEMENTS.map((element) => [element, 0]));
     player.ofudaAvgCost ||= Object.fromEntries(OFUDA_ELEMENTS.map((element) => [element, 0]));
 
-    const profitCandidate = market
-      .map((entry) => ({
-        ...entry,
-        count: player.ofuda[entry.element] || 0,
-        avg: player.ofudaAvgCost[entry.element] || 0,
-      }))
-      .filter((entry) => entry.count > 1 && entry.avg > 0 && entry.price >= entry.avg + 5)
-      .sort((a, b) => (b.price - b.avg) - (a.price - a.avg))[0];
-    if (profitCandidate) {
-      const result = this._sellOfuda(player, profitCandidate.element, Math.max(1, Math.floor(profitCandidate.count / 2)));
+    // クエは金融街のフィクサー: 自分の土地でその属性の相場を吊り上げ、
+    // 吊り上げ切るまで玉を手放さない。他のCPUは従来どおりの小口売買。
+    const isFixer = player.name === 'クエ';
+    // 自分がその属性の土地を持っている ＝ まだ自分で吊り上げられる余地が
+    // あるので売らない。フィクサーが利確するのは上限に張り付いた時か、
+    // 土地を失って基礎価格そのものが落ちてきた時だけ。
+    const heldElements = new Set(this._ownedTiles(player).map((tile) => tile.element));
+    const holdings = market.map((entry) => ({
+      ...entry,
+      count: player.ofuda[entry.element] || 0,
+      avg: player.ofudaAvgCost[entry.element] || 0,
+    }));
+    const sellCandidate = isFixer
+      ? holdings
+        .filter((entry) => entry.count > 0 && entry.avg > 0
+          && (entry.price >= OFUDA_MAX_PRICE || (!heldElements.has(entry.element) && entry.price >= entry.avg + 10)))
+        .sort((a, b) => (b.price - b.avg) * b.count - (a.price - a.avg) * a.count)[0]
+      : holdings
+        .filter((entry) => entry.count > 1 && entry.avg > 0 && entry.price >= entry.avg + 5)
+        .sort((a, b) => (b.price - b.avg) - (a.price - a.avg))[0];
+    if (sellCandidate) {
+      // 上限張り付きはこれ以上伸びないので全量、それ以外は半分だけ利確する。
+      const sellCount = isFixer && sellCandidate.price >= OFUDA_MAX_PRICE
+        ? sellCandidate.count
+        : Math.max(1, Math.floor(sellCandidate.count / 2));
+      const result = this._sellOfuda(player, sellCandidate.element, sellCount);
       if (result.sold > 0) {
-        this.onLog(`${player.name}は値上がりした${ELEMENT_LABEL[profitCandidate.element]}のお札を半分売却した (+${result.revenue}G)`);
+        this.onLog(`${player.name}は値上がりした${ELEMENT_LABEL[sellCandidate.element]}のお札を${result.sold}枚売却した (+${result.revenue}G)`);
         this._notifyState();
-        await this._presentOfudaPriceChange(profitCandidate.element, result.before);
+        await this._presentOfudaPriceChange(sellCandidate.element, result.before);
         return;
       }
     }
 
-    const budget = Math.min(player.name === 'クエ' ? 700 : 350, Math.max(0, player.currency - 200));
+    // フィクサーは手元に盤面用の軍資金（大型召喚1体＋土地レベルアップ1回で
+    // 600G前後）を残し、残りの6割を相場へ突っ込む。従来の「1周につき最大
+    // 700G」では総資産15,000Gのステージに対して誤差にしかならなかったが、
+    // 全額突っ込ませると今度は召喚も投資もできない置物になる。
+    const budget = isFixer
+      ? Math.floor(Math.max(0, player.currency - 600) * 0.6)
+      : Math.min(350, Math.max(0, player.currency - 200));
     if (budget <= 0) return;
     const preferred = this._rankOfudaBuyCandidates(player, market)[0];
     if (!preferred) return;
@@ -3500,7 +3526,15 @@ export class Game {
   _rankOfudaBuyCandidates(player, market) {
     const signals = this._ofudaBoardSignals();
     const enemyBias = this._opponentDeckElementBias(player);
-    const ownedElements = new Set(this._ownedTiles(player).map((tile) => tile.element));
+    const ownedTiles = this._ownedTiles(player);
+    const ownedElements = new Set(ownedTiles.map((tile) => tile.element));
+    // クエ用: 属性ごとの自分の所有マス数。自分の土地が多い属性ほど「自分の
+    // 土地レベルアップで相場を押し上げられる」＝仕込む価値が高い。
+    const ownedCountByElement = ownedTiles.reduce((counts, tile) => {
+      counts[tile.element] = (counts[tile.element] || 0) + 1;
+      return counts;
+    }, {});
+    const isFixer = player.name === 'クエ';
     return [...market]
       .map((entry) => {
         const signal = signals[entry.element] || {};
@@ -3511,7 +3545,8 @@ export class Game {
           + (signal.occupiedRatio || 0) * 24
           + (signal.landRatio || 0) * 12
           + (ownedElements.has(entry.element) ? 8 : 0)
-          + (player.name === 'クエ' ? (enemyBias[entry.element] || 0) * 45 : 0)
+          + (isFixer ? (ownedCountByElement[entry.element] || 0) * 6 : 0)
+          + (isFixer ? (enemyBias[entry.element] || 0) * 45 : 0)
           - entry.price * 0.08;
         return { ...entry, score };
       })
@@ -4861,7 +4896,16 @@ export class Game {
       if (cost <= player.currency) affordableTargets.push({ targetLevel, cost });
     }
     if (affordableTargets.length === 0) return false;
-    const { targetLevel, cost } = affordableTargets[Math.floor(Math.random() * affordableTargets.length)];
+    // クエ（金融街のフィクサー）は、自分が仕込んでいるお札と同じ属性の土地
+    // なら抽選せず最大段階まで上げる。土地レベルはそのままお札の基礎価格に
+    // 効くので、「土地を育てる→自分の保有するお札が値上がりする→総資産が
+    // 跳ねる」というループを意図的に回させる（_ofudaBasePrice参照）。
+    const pumpsOwnOfuda = this.hasOfuda
+      && player.name === 'クエ'
+      && (player.ofuda?.[tile.element] || 0) > 0;
+    const { targetLevel, cost } = pumpsOwnOfuda
+      ? affordableTargets[affordableTargets.length - 1]
+      : affordableTargets[Math.floor(Math.random() * affordableTargets.length)];
 
     const previousLevel = tile.level;
     const tollBefore = this._tollOfTile(tile);
@@ -6615,18 +6659,23 @@ export class Game {
     const card = player.hand.find((c) => c.effect?.type === 'capitalismIncarnate');
     if (!card || player.currency < (card.cost || 0)) return false;
     const emptyLandCount = this.tiles.filter((tile) => tile.type === TileType.LAND && tile.owner == null && !tile.unit).length;
-    if (emptyLandCount < 3) return false;
-    const affordableCountOf = (target) => (target.hand || [])
-      .filter((candidate) => candidate.type === CardType.MONSTER && (candidate.cost || 0) <= target.currency)
-      .length;
-    const myCount = affordableCountOf(player);
-    const enemyMax = Math.max(0, ...this.players
-      .filter((candidate) => candidate.id !== player.id && !candidate.defeated && !this._isAllyOf(candidate, player))
-      .map((candidate) => affordableCountOf(candidate)));
-    const shouldUse = player.name === 'クエ'
-      ? myCount >= 1 || emptyLandCount >= 6
-      : myCount >= 2 && myCount >= enemyMax;
-    if (!shouldUse) return false;
+    if (emptyLandCount < 2) return false;
+    // 自分の手札モンスターだけを出すスペルになったので、相手の手札枚数との
+    // 比較は不要（以前は全員を召喚させる仕様で、相手に土地を配らないための
+    // 牽制条件が要った）。「安い順に手持ちGが尽きるまで」なので、実際に
+    // 2体以上並べられる時にだけ撃つ。
+    const affordable = player.hand
+      .filter((candidate) => candidate.type === CardType.MONSTER)
+      .map((candidate) => candidate.cost || 0)
+      .sort((a, b) => a - b);
+    let budget = player.currency - (card.cost || 0);
+    let summonable = 0;
+    for (const cost of affordable) {
+      if (cost > budget) continue;
+      budget -= cost;
+      summonable += 1;
+    }
+    if (Math.min(summonable, emptyLandCount) < 2) return false;
     return this._cpuCastSpell(player, card, {});
   }
 

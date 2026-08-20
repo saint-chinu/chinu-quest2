@@ -130,6 +130,19 @@ export const AI_PROFILES = {
     itemGambleChance: 0.8,
     highValueAvoidance: 0.25,
   },
+  // クエ（⑫海上金融街のフィクサー）: プロファイル未登録でDEFAULT
+  // （侵略0.6・回避0.5 ＝ Lv3以上への実効しきい値0.75）にフォールバックして
+  // おり、⑫のラスボスがステージ①のヒトデより弱腰になっていた。殴りの強度は
+  // ⑪勢と同格まで引き上げる。ただし芯は「金と相場で勝つ」側にあり、そちらは
+  // game.js のクエ専用分岐（お札の買い増し・保有属性の土地を優先強化）が担う。
+  // 森に寄せたデッキなので属性はほぼ厳守 - 連鎖が地価とお札の両方に効く。
+  クエ: {
+    offElementSummonChance: 0.1,
+    levelUpReserve: 300,
+    minWinProbabilityToInvade: 0.3,
+    itemGambleChance: 0.85,
+    highValueAvoidance: 0.15,
+  },
   Q: {
     offElementSummonChance: 0.8,
     levelUpReserve: 300,

@@ -274,7 +274,7 @@ export const SPELL_CATALOG = {
       30,
       'none',
       { type: 'capitalismIncarnate' },
-      '全プレイヤーの手札にあるモンスターを、各自の手持ちGの範囲でランダムな空き地へ召喚させる。召喚条件と生け贄は無視し、コストの安い順に可能な限り召喚する',
+      '自分の手札にあるモンスターを、手持ちGが尽きるまでランダムな空き地へ次々と召喚する。召喚条件と生け贄は無視し、コストの安い順に召喚する',
     ),
     imageDataUrl: assetUrl('/images/card-art/capitalismIncarnate.png'),
     rewardOnly: true,
@@ -1202,27 +1202,39 @@ export const CHARACTER_DECKS = {
       ],
     },
   },
+  // ⑫海上金融街のフィクサー。盤面は火・水・雷・森が各10マス、しかも一辺
+  // ごとに連続しているので連鎖が伸びる＝地価もお札の相場も跳ねる。
+  // 森で連鎖を固めて資産を膨らませ、金で殴る（マウントゴリラ）・通行料を
+  // 吊り上げる（森林徴税官）のが芯。避雷針侍と海賊Sはプレイヤー対策の
+  // テック枠で、属性は違うが盤面の雷／水マスに置く前提。
   que: {
     composition: {
       monsters: [
-        { def: MONSTER_CATALOG.sekaiju, count: 3 },
-        { def: MONSTER_CATALOG.hezumaDragon, count: 3 },
-        { def: MONSTER_CATALOG.kontonNoAtama, count: 4 },
-        { def: MONSTER_CATALOG.bigMermaid, count: 2 },
-        { def: MONSTER_CATALOG.classicDragon, count: 2 },
-        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 2 },
-        { def: MONSTER_CATALOG.gandamu, count: 2 },
-        { def: MONSTER_CATALOG.ninja, count: 2 },
-        { def: MONSTER_CATALOG.rainbowChameleon, count: 2 },
+        // 森: 連鎖本体。金テーマのカードが森に集中している。
+        { def: MONSTER_CATALOG.sanzokuFukurou, count: 2 },   // 20G 25/25 与ダメ×2G強奪
+        { def: MONSTER_CATALOG.abareInoshishi, count: 2 },   // 30G 40/20
+        { def: MONSTER_CATALOG.mountGorilla, count: 4 },     // 50G 30/30 Gで優位ならATK2倍
+        { def: MONSTER_CATALOG.jukaiNoOnryou, count: 2 },    // 50G 40/20 先制＋1/2即死
+        { def: MONSTER_CATALOG.nashiNashiTankentai, count: 2 }, // 50G 30/30 1/3ダメ無効
+        { def: MONSTER_CATALOG.trufuButa, count: 2 },        // 50G 30/30 1/3で150G
+        { def: MONSTER_CATALOG.shinrinChouzeikan, count: 2 }, // 90G 35/40 連鎖2 通行料1.3倍
+        { def: MONSTER_CATALOG.yamagami, count: 2 },         // 150G 連鎖2 森連鎖×7
+        // テック枠。避雷針侍は生贄1が必要なので手札が薄い時は出せない。
+        { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 }, // 雷 50G 15/30 身代わり
+        { def: MONSTER_CATALOG.kaizokuS, count: 2 },          // 水 100G 30/30 相手アイテム破壊
+        // 無属性。⑫は4属性が育つので盤面全体の連鎖数が伸びやすい。
+        { def: MONSTER_CATALOG.kontonNoAtama, count: 2 },     // 150G 30/30 全連鎖×5
       ],
       items: [
-        { def: ITEM_CATALOG.nankaNoOmamori, count: 4 },
+        { def: ITEM_CATALOG.gomuGoNoPistol, count: 2 },  // 人食い草: 森が持つとATK+50
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 2 },
+        { def: ITEM_CATALOG.morohaNoTsurugi, count: 2 },
       ],
       spells: [
-        { def: SPELL_CATALOG.homingInstinct, count: 4 },
-        { def: SPELL_CATALOG.walletVacuum, count: 4 },
-        { def: SPELL_CATALOG.iCanFly, count: 4 },
+        { def: SPELL_CATALOG.walletVacuum, count: 4 },   // 相手のGを削る＝マウントゴリラのATK2倍条件も整う
         { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },
+        { def: SPELL_CATALOG.homingInstinct, count: 2 }, // 自分に撃って周回＝お札取引の回数を稼ぐ
+        { def: SPELL_CATALOG.iCanFly, count: 2 },
       ],
     },
   },
