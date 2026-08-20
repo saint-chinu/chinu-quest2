@@ -3068,6 +3068,17 @@ function startBattle(character, storyOptions = {}) {
   currentMapId = storyOptions.mapId ?? null;
   applyMapBackground(currentMapId);
   ofudaMarketButton.classList.add('hidden');
+  // 盤面をまたいで残る表示・状態をここで必ず初期化する。#logとturn-indicatorは
+  // Gameからの通知でしか書き換わらないので、放置すると前の対戦の最後の1行
+  // （「〇〇は目標総資産15000Gを達成した！」等）が新しい盤面の開始時に居座る。
+  // showCenterStateも同様で、trueのまま次の盤面へ入るとonStateChangeの
+  // enteringShowCenter判定が成立せずresetDice()が一度も走らない。
+  logEl.textContent = '';
+  turnIndicator.textContent = '';
+  showCenterState = false;
+  centerShowsOpponent = false;
+  dicePromptDismissed = false;
+  resetDice();
   // 目標G表示（2026-08-12実装）: ストーリーの各ステージが持つgoalCurrency
   // を盤面右下に表示するだけ（表示専用、勝敗判定には使わない）。CPU戦・
   // 対人戦などgoalCurrency未指定の対戦では非表示のまま。

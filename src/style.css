@@ -2830,6 +2830,13 @@ html, body {
   text-align: center;
 }
 
+/* 文言が無い時（盤面開始直後・土地情報を閉じた後）は、min-heightぶんの
+   黒い空箱だけが浮かないように枠ごと消す。 */
+#log:empty,
+#turn-indicator:empty {
+  display: none;
+}
+
 #hand-panel {
   position: absolute;
   left: 16px;
