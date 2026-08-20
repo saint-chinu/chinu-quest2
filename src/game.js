@@ -6630,6 +6630,7 @@ export class Game {
     await this._cpuMaybeUseStealGoldSpell(this.currentPlayer);
     await this._cpuMaybeUseCurseCleanseSpell(this.currentPlayer);
     await this._cpuMaybeUseHealSpell(this.currentPlayer);
+    await this._cpuMaybeUseSanctuarySpell(this.currentPlayer);
     await this._cpuMaybeUsePhoenixCurseSpell(this.currentPlayer);
     await this._cpuMaybeUseChainStatCurseSpell(this.currentPlayer);
     await this._cpuMaybeUseGuaranteedWinSpell(this.currentPlayer);
@@ -6990,6 +6991,25 @@ export class Game {
   }
 
   /** 不死鳥の呪い: 高レベル地や高価値モンスターを1回だけ致死回避できるよう守る。 */
+  /**
+   * 聖域(curseSanctuary)のCPU使用判断: 対象の土地は侵略不能になる代わりに
+   * 通行料もゼロになる。通行料収入を捨てても守る価値があるのは「育った
+   * 連鎖の中核」だけ（連鎖倍率・地価・お札の基礎価格の土台であり、
+   * 1枚抜かれると連鎖が割れて資産全体が沈む）。Lv3以上かつ2連鎖以上の
+   * 一角で、まだ聖域でない最高価値の自分の土地に使う。
+   */
+  async _cpuMaybeUseSanctuarySpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'curseSanctuary');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const candidates = this.tiles
+      .filter((t) => t.type === TileType.LAND && t.owner === player.id && t.unit && !t.transparentCursed)
+      .filter((t) => t.level >= 3 && this._chainCount(player.id, t.element) >= 2)
+      .sort((a, b) => b.level - a.level || this._landValueOfTile(b) - this._landValueOfTile(a));
+    if (candidates.length === 0) return;
+    await this._cpuCastSpell(player, card, { targetTileId: candidates[0].id });
+  }
+
   async _cpuMaybeUsePhoenixCurseSpell(player) {
     if (player.spellUsedThisTurn) return;
     const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'surviveLethalDamageCurse');

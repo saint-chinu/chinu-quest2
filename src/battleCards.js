@@ -733,11 +733,7 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.senbonZakura, count: 2 }, { def: SPELL_CATALOG.walletVacuum, count: 2 },
         { def: SPELL_CATALOG.blueOcean, count: 1 }, { def: SPELL_CATALOG.psychokinesis, count: 2 },
         { def: SPELL_CATALOG.iCanFly, count: 1 }, { def: SPELL_CATALOG.specialAudit, count: 1 },
-        { def: SPELL_CATALOG.sideIncome, count: 3 },
-        // 増税通知(40G): 相手の一番高い通行料を恒久的に30%減らす。
-        // 「高額地1枚で通行料破産を狙う」対クエ戦術の直接の解毒剤
-        // （CPUは減額見込みがコストを上回る土地にだけ使う既存AI）。
-        { def: SPELL_CATALOG.taxHike, count: 1 },
+        { def: SPELL_CATALOG.sideIncome, count: 2 },
         { def: SPELL_CATALOG.manaExtraction, count: 1 }, { def: SPELL_CATALOG.homingInstinct, count: 1 },
         { def: SPELL_CATALOG.divination, count: 1 },
       ],
@@ -874,11 +870,7 @@ export const CHARACTER_DECKS = {
       spells: [
         { def: SPELL_CATALOG.diceOne, count: 3 },
         { def: SPELL_CATALOG.diceThree, count: 3 },
-        { def: SPELL_CATALOG.sideIncome, count: 3 },
-        // 増税通知(40G): 相手の一番高い通行料を恒久的に30%減らす。
-        // 「高額地1枚で通行料破産を狙う」対クエ戦術の直接の解毒剤
-        // （CPUは減額見込みがコストを上回る土地にだけ使う既存AI）。
-        { def: SPELL_CATALOG.taxHike, count: 1 },
+        { def: SPELL_CATALOG.sideIncome, count: 2 },
         { def: SPELL_CATALOG.splitEvenly, count: 1 },
         { def: SPELL_CATALOG.poisonMist, count: 1 },
         { def: SPELL_CATALOG.specialAudit, count: 1 },
@@ -1220,9 +1212,8 @@ export const CHARACTER_DECKS = {
       monsters: [
         // 森: 連鎖本体。金テーマのカードが森に集中している。
         { def: MONSTER_CATALOG.sanzokuFukurou, count: 2 },   // 20G 25/25 与ダメ×2G強奪
-        { def: MONSTER_CATALOG.abareInoshishi, count: 1 },   // 30G 40/20
         // フリーランサー: 周回の基本ボーナス×1.3。倍率は基本部分にしか
-        // 乗らない（領地・お札利回りは対象外）ので単体では小粒だが、
+        // ※現仕様では総額（基本＋領地＋お札利回り）に乗る。
         // 帰巣本能の周回カウント（lapsCompletedが早く伸びる＝基本部分が
         // 育つ）と資本主義の権化（無属性でも空き地へ自動展開される）の
         // 両方と噛み合う。50Gで失っても痛くない。
@@ -1230,7 +1221,7 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.mountGorilla, count: 4 },     // 50G 30/30 Gで優位ならATK2倍
         { def: MONSTER_CATALOG.jukaiNoOnryou, count: 2 },    // 50G 40/20 先制＋1/2即死
         { def: MONSTER_CATALOG.nashiNashiTankentai, count: 2 }, // 50G 30/30 1/3ダメ無効
-        { def: MONSTER_CATALOG.trufuButa, count: 2 },        // 50G 30/30 1/3で150G
+        { def: MONSTER_CATALOG.trufuButa, count: 1 },        // 50G 30/30 1/3で150G
         { def: MONSTER_CATALOG.shinrinChouzeikan, count: 2 }, // 90G 35/40 連鎖2 通行料1.3倍
         { def: MONSTER_CATALOG.yamagami, count: 2 },         // 150G 連鎖2 森連鎖×7
         { def: MONSTER_CATALOG.sekaiju, count: 2 },          // 120G 0/70 連鎖1 防衛拠点
@@ -1263,6 +1254,12 @@ export const CHARACTER_DECKS = {
         // 「高額地1枚で通行料破産を狙う」対クエ戦術の直接の解毒剤
         // （CPUは減額見込みがコストを上回る土地にだけ使う既存AI）。
         { def: SPELL_CATALOG.taxHike, count: 1 },
+        // 土地防衛2枚: フィクサーの資産は森連鎖とその上のお札価格に集中して
+        // いるので、中核の1〜2マスさえ守れば体制が崩れない。
+        // 不死鳥の呪い(100G): 致死ダメージをHP1で耐えて土地も守る（1回限り）。
+        // 聖域(90G): 侵略不能＋通行料ゼロ。通行料を捨ててでも連鎖の中核を固定する。
+        { def: SPELL_CATALOG.phoenixCurse, count: 1 },
+        { def: SPELL_CATALOG.sanctuary, count: 1 },
         // アリジゴク（強制停止の呪い）対策の1枚。呪われた高額地は毎周
         // 通行料を搾り取ってくるうえ、壁が固いと普通の侵略では抜けない。
         // 差し押さえるように戦闘なしで奪い取り、呪いごと自分の資産へ変える。
