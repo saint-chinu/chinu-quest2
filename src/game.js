@@ -93,8 +93,10 @@ const OFUDA_ELEMENTS = [Element.FIRE, Element.WATER, Element.FOREST, Element.THU
 const OFUDA_TRADE_UNIT_G = 150;
 // 開始時価格はOFUDA_MAX_PRICE × (Lv1スコア0.5 / Lv5スコア5) = 12G。
 // 上限120Gで初期比10倍 - 早めに仕込んだ側がきちんと報われる伸び幅を確保
-// しつつ、青天井にはしない。
+// しつつ、青天井にはしない。下限5Gは「売られすぎて価値0＝二度と買えない
+// 死に市場」を防ぐ床（お札は紙くずにはならない）。
 const OFUDA_MAX_PRICE = 120;
+const OFUDA_MIN_PRICE = 5;
 const OFUDA_LEVEL_SCORE = { 1: 0.5, 2: 1.625, 3: 2.75, 4: 3.875, 5: 5 };
 // 周回ボーナスに乗るお札利回り（評価額×この率）。土地の領地ボーナスと
 // 並ぶ収入源になるよう5%→8%へ。保有2,000G分で周160G＝土地3枚弱に相当。
@@ -2359,17 +2361,18 @@ export class Game {
       const element = trade.element;
       if (!OFUDA_ELEMENTS.includes(element)) continue;
       if (trade.action === 'buy') {
-        const budget = Math.max(0, Math.floor(Number(trade.amountG) || 0));
-        const price = this._ofudaPrice(element);
-        const count = price > 0 ? Math.floor(Math.min(budget, player.currency) / price) : 0;
-        if (count <= 0) { this.onLog('購入できるお札がありません'); continue; }
-        const spent = count * price;
-        const before = this._applyOfudaTradePressure(element, spent, 'buy');
-        player.currency -= spent;
-        this._addOfudaHolding(player, element, count, spent);
-        this.onLog(`${player.name}は${ELEMENT_LABEL[element]}のお札を${count}枚購入した (-${spent}G)`);
+        const result = this._buyOfuda(player, element, Number(trade.amountG) || 0);
+        if (result.bought <= 0) { this.onLog('購入できるお札がありません'); continue; }
+        const message = `${player.name}は${ELEMENT_LABEL[element]}のお札を${result.bought}枚購入した (-${result.spent}G)`;
+        this.onLog(message);
         this._notifyState();
-        await this._presentOfudaPriceChange(element, before);
+        // 上限価格に張り付いていて相場が動かない時も、購入の演出だけは出す
+        // （無反応だと買えたのかどうか分からず連打だけが進んでしまう）。
+        if (this._ofudaPrice(element) === result.before) {
+          await this.onTargetEffect?.({ playerId: player.id, message: `${message}（相場は上限${OFUDA_MAX_PRICE}Gに張り付き）` });
+        } else {
+          await this._presentOfudaPriceChange(element, result.before);
+        }
       } else if (trade.action === 'sell') {
         const result = this._sellOfuda(player, element, Number(trade.count) || 0);
         if (result.sold <= 0) { this.onLog('売却できるお札がありません'); continue; }
@@ -2398,17 +2401,21 @@ export class Game {
       count: player.ofuda[entry.element] || 0,
       avg: player.ofudaAvgCost[entry.element] || 0,
     }));
+    // フィクサーは値上がり益を「実現」しない。総資産は保有お札の時価で
+    // 数えられるため、勝つためには売る必要がなく、逐次約定の下で大量に
+    // 売れば自分の評価額を自分で暴落させるだけ（上限で全量売る旧ロジックは
+    // 勝利目前の自傷になっていた）。売るのは、土地を失って自力で相場を
+    // 支えられなくなった属性から撤退する時だけ。
     const sellCandidate = isFixer
       ? holdings
         .filter((entry) => entry.count > 0 && entry.avg > 0
-          && (entry.price >= OFUDA_MAX_PRICE || (!heldElements.has(entry.element) && entry.price >= entry.avg + 10)))
+          && !heldElements.has(entry.element) && entry.price >= entry.avg + 10)
         .sort((a, b) => (b.price - b.avg) * b.count - (a.price - a.avg) * a.count)[0]
       : holdings
         .filter((entry) => entry.count > 1 && entry.avg > 0 && entry.price >= entry.avg + 5)
         .sort((a, b) => (b.price - b.avg) - (a.price - a.avg))[0];
     if (sellCandidate) {
-      // 上限張り付きはこれ以上伸びないので全量、それ以外は半分だけ利確する。
-      const sellCount = isFixer && sellCandidate.price >= OFUDA_MAX_PRICE
+      const sellCount = isFixer
         ? sellCandidate.count
         : Math.max(1, Math.floor(sellCandidate.count / 2));
       const result = this._sellOfuda(player, sellCandidate.element, sellCount);
@@ -2434,20 +2441,22 @@ export class Game {
     const fixerReserve = Math.max(600, Math.min(this._cpuMaxEnemyToll(player), 1200))
       + (holdsFinisher ? 800 : 0);
     const budget = isFixer
-      ? Math.floor(Math.max(0, player.currency - fixerReserve) * 0.6)
+      ? Math.floor(Math.max(0, player.currency - fixerReserve) * 0.65)
       : Math.min(350, Math.max(0, player.currency - 200));
     if (budget <= 0) return;
     const preferred = this._rankOfudaBuyCandidates(player, market)[0];
     if (!preferred) return;
-    const count = Math.floor(budget / preferred.price);
-    if (count <= 0) return;
-    const spent = count * preferred.price;
-    const before = this._applyOfudaTradePressure(preferred.element, spent, 'buy');
-    player.currency -= spent;
-    this._addOfudaHolding(player, preferred.element, count, spent);
-    this.onLog(`${player.name}は${ELEMENT_LABEL[preferred.element]}のお札を${count}枚購入した (-${spent}G)`);
+    // 逐次約定では買うほど自分の取得単価が上がる。基礎価格から10G以上
+    // 乖離している（＝すでに買い上がった後の）相場を全力で追いかけると
+    // 高値掴み＋スリッページの二重払いになるので、打診買いに抑える。
+    // 安いうちに厚く・高くなったら薄く、が公正な市場でのフィクサーの型。
+    const chase = preferred.price - preferred.basePrice;
+    const spendBudget = isFixer && chase > 10 ? Math.floor(budget * 0.3) : budget;
+    const result = this._buyOfuda(player, preferred.element, spendBudget);
+    if (result.bought <= 0) return;
+    this.onLog(`${player.name}は${ELEMENT_LABEL[preferred.element]}のお札を${result.bought}枚購入した (-${result.spent}G)`);
     this._notifyState();
-    await this._presentOfudaPriceChange(preferred.element, before);
+    await this._presentOfudaPriceChange(preferred.element, result.before);
   }
 
   async _checkGoalAchievement(player) {
@@ -3488,7 +3497,10 @@ export class Game {
 
   _ofudaPrice(element) {
     if (!this.hasOfuda || !OFUDA_ELEMENTS.includes(element)) return 0;
-    return Math.max(0, Math.min(OFUDA_MAX_PRICE, this._ofudaBasePrice(element) + Math.trunc(this.ofudaPressure[element] || 0)));
+    const base = this._ofudaBasePrice(element);
+    // その属性の土地が盤面から消えたら市場ごと消滅（価格0=売買不可）。
+    if (base <= 0) return 0;
+    return Math.max(OFUDA_MIN_PRICE, Math.min(OFUDA_MAX_PRICE, base + Math.trunc(this.ofudaPressure[element] || 0)));
   }
 
   _ofudaMarketSummary() {
@@ -3599,8 +3611,8 @@ export class Game {
 
   async _presentOfudaPriceChange(element, before) {
     const after = this._ofudaPrice(element);
-    // _applyOfudaTradePressureは取引額0（相場0Gのお札を売った等）でnullを返す。
-    // そのまま流すと「nullG→0G」と表示されるので、変動なし扱いで捨てる。
+    // _buyOfuda/_sellOfudaは取引不成立時にbefore=nullを返す。そのまま流すと
+    // 「nullG→0G」と表示されるので、変動なし扱いで捨てる。
     if (!this.hasOfuda || before == null || before === after) return;
     const message = `${ELEMENT_LABEL[element]}のお札：${before}G→${after}G`;
     this.onLog(message);
@@ -3608,23 +3620,67 @@ export class Game {
     await delay(1500);
   }
 
-  _applyOfudaTradePressure(element, amountG, direction) {
-    if (!this.hasOfuda || !OFUDA_ELEMENTS.includes(element) || !Number.isFinite(amountG) || amountG <= 0) return null;
-    const before = this._ofudaPrice(element);
-    const delta = amountG / OFUDA_TRADE_UNIT_G * (direction === 'sell' ? -1 : 1);
-    this.ofudaPressure[element] = (this.ofudaPressure[element] || 0) + delta;
-    return before;
+  /**
+   * 売買圧を1ステップ加える。加えた後の価格が[下限, 上限]に収まるよう
+   * 圧力そのものをクランプする。クランプしないと、上限到達後の買いが
+   * 「見えない圧力」として積もり続け（買っても表示が動かない・後の売りが
+   * 相場に反映されない）、下限側では負の圧力が無限に積もって市場が
+   * 死んだままになる。
+   */
+  _stepOfudaPressure(element, deltaG) {
+    if (!this.hasOfuda || !OFUDA_ELEMENTS.includes(element) || !Number.isFinite(deltaG)) return;
+    const base = this._ofudaBasePrice(element);
+    const next = (this.ofudaPressure[element] || 0) + deltaG / OFUDA_TRADE_UNIT_G;
+    this.ofudaPressure[element] = Math.max(OFUDA_MIN_PRICE - base, Math.min(OFUDA_MAX_PRICE - base, next));
   }
 
+  /**
+   * お札の購入。1枚ずつ「その時点の価格」で約定し、1枚買うごとに売買圧が
+   * 積もる（＝大口の買いは自分で価格を押し上げながら買う）。以前の
+   * 「全量を現在価格で一括購入→購入後に価格上昇」方式は、買った直後に
+   * 全量売ると自分の買いで上げた価格のまま売り抜けられ、往復するだけで
+   * Gが無限に増える増殖バグになっていた。逐次約定なら売りも同じ坂を
+   * 下りながら約定するので、往復益は消える。
+   */
+  _buyOfuda(player, element, budgetG) {
+    if (!this.hasOfuda || !OFUDA_ELEMENTS.includes(element)) return { bought: 0, spent: 0, before: null };
+    const before = this._ofudaPrice(element);
+    let budget = Math.min(Math.max(0, Math.floor(budgetG)), player.currency);
+    let bought = 0;
+    let spent = 0;
+    while (bought < 999) {
+      const price = this._ofudaPrice(element);
+      if (price <= 0 || budget < price) break;
+      budget -= price;
+      spent += price;
+      bought += 1;
+      this._stepOfudaPressure(element, price);
+    }
+    if (bought > 0) {
+      player.currency -= spent;
+      this._addOfudaHolding(player, element, bought, spent);
+    }
+    return { bought, spent, before };
+  }
+
+  /** お札の売却。購入と対称に1枚ずつ約定し、1枚売るごとに価格が下がる（下限5Gで頭打ち）。 */
   _sellOfuda(player, element, count) {
     if (!this.hasOfuda || !OFUDA_ELEMENTS.includes(element)) return { sold: 0, revenue: 0, before: null };
     const owned = player.ofuda?.[element] || 0;
     const sold = Math.max(0, Math.min(owned, Math.floor(count)));
     if (sold <= 0) return { sold: 0, revenue: 0, before: null };
-    const price = this._ofudaPrice(element);
-    const revenue = sold * price;
+    const before = this._ofudaPrice(element);
+    let revenue = 0;
+    for (let i = 0; i < sold; i++) {
+      // 先に1枚ぶんの売り圧を掛けてから、その後の価格で約定する。
+      // 買い（ステップ前の価格で支払い→圧が上がる）と対称にするための順序で、
+      // これを逆にすると「上りは各段の安い縁で買い、下りは高い縁で売る」
+      // 形になり、往復するだけで段数ぶんのGが湧く増殖バグが残る。
+      const pre = this._ofudaPrice(element);
+      this._stepOfudaPressure(element, -pre);
+      revenue += this._ofudaPrice(element);
+    }
     this._removeOfudaHolding(player, element, sold);
-    const before = this._applyOfudaTradePressure(element, revenue, 'sell');
     player.currency += revenue;
     return { sold, revenue, before };
   }
@@ -4969,7 +5025,10 @@ export class Game {
     const maxTargetLevel = Math.min(cpuLevelCap, tile.level + (this.tutorialMode ? 1 : 3));
     for (let targetLevel = tile.level + 1; targetLevel <= maxTargetLevel; targetLevel += 1) {
       const cost = LEVEL_INVESTMENT[targetLevel] - LEVEL_INVESTMENT[tile.level];
-      if (cost <= player.currency && liquidity - cost >= dangerReserve) affordableTargets.push({ targetLevel, cost });
+      // 現金フロア250G: お札を担保に現金を使い切ると、次の通行料のたびに
+      // お札の強制売却（逐次約定なので売るほど値が下がる）でポジションが
+      // 崩れる。支払い余力とは別に、現金そのものを最低限残す。
+      if (cost <= player.currency - 250 && liquidity - cost >= dangerReserve) affordableTargets.push({ targetLevel, cost });
     }
     if (affordableTargets.length === 0) return false;
     // クエ（金融街のフィクサー）は、自分が仕込んでいるお札と同じ属性の土地
