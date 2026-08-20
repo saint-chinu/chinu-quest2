@@ -1212,7 +1212,13 @@ export const CHARACTER_DECKS = {
       monsters: [
         // 森: 連鎖本体。金テーマのカードが森に集中している。
         { def: MONSTER_CATALOG.sanzokuFukurou, count: 2 },   // 20G 25/25 与ダメ×2G強奪
-        { def: MONSTER_CATALOG.abareInoshishi, count: 2 },   // 30G 40/20
+        { def: MONSTER_CATALOG.abareInoshishi, count: 1 },   // 30G 40/20
+        // フリーランサー: 周回の基本ボーナス×1.3。倍率は基本部分にしか
+        // 乗らない（領地・お札利回りは対象外）ので単体では小粒だが、
+        // 帰巣本能の周回カウント（lapsCompletedが早く伸びる＝基本部分が
+        // 育つ）と資本主義の権化（無属性でも空き地へ自動展開される）の
+        // 両方と噛み合う。50Gで失っても痛くない。
+        { def: MONSTER_CATALOG.freelancer, count: 1 },
         { def: MONSTER_CATALOG.mountGorilla, count: 4 },     // 50G 30/30 Gで優位ならATK2倍
         { def: MONSTER_CATALOG.jukaiNoOnryou, count: 2 },    // 50G 40/20 先制＋1/2即死
         { def: MONSTER_CATALOG.nashiNashiTankentai, count: 2 }, // 50G 30/30 1/3ダメ無効
