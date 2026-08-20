@@ -10,10 +10,12 @@ export const PACKS = [
   { id: 'spell', name: 'スペルパック', description: 'スペル4枚', cost: 200, count: 4, type: CardType.SPELL },
 ];
 
+// Rだけを従来の半分（10%→5%）に絞る。Sは25%のまま据え置きなので、
+// 「S以上は出るがRは当たり」という体感になる。
 const rollRarity = (random) => {
   const roll = random();
-  if (roll < 0.10) return Rarity.R;
-  if (roll < 0.35) return Rarity.S;
+  if (roll < 0.05) return Rarity.R;
+  if (roll < 0.30) return Rarity.S;
   return Rarity.N;
 };
 
@@ -31,7 +33,7 @@ export function drawPack(pack, catalog, random = Math.random) {
     if (rarity !== Rarity.N) highCount += 1;
     rarities.push(rarity);
   }
-  if (highCount === 0) rarities[rarities.length - 1] = random() < 0.3 ? Rarity.R : Rarity.S;
+  if (highCount === 0) rarities[rarities.length - 1] = random() < 0.15 ? Rarity.R : Rarity.S;
 
   return rarities.map((rarity) => ({ ...pools[rarity][Math.floor(random() * pools[rarity].length)] }));
 }

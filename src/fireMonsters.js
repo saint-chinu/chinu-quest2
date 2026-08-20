@@ -125,11 +125,11 @@ export const FIRE_MONSTER_CATALOG = {
     chainRequired: 1,
     effectDescription: '召喚条件: 1連鎖以上',
   }),
-  flameGod: fireMonster('flameGod', '炎神', Rarity.R, 30, 30, {
+  flameGod: fireMonster('flameGod', '炎神', Rarity.R, 40, 25, {
     cost: 150,
-    chainRequired: 2,
+    chainRequired: 1,
     effect: { type: 'statsPerElementChain', element: Element.FIRE, atkPerChain: 7, hpPerChain: 7 },
-    effectDescription: '召喚条件: 2連鎖以上。戦闘中、火の土地の連鎖数×7だけHP・ATKが上昇する',
+    effectDescription: '召喚条件: 1連鎖以上。戦闘中、火の土地の連鎖数×7だけHP・ATKが上昇する',
   }),
   kakouFudoumyouou: fireMonster('kakouFudoumyouou', '火口の不動明王', Rarity.R, 35, 20, {
     cost: 90,

@@ -128,11 +128,11 @@ export const WATER_MONSTER_CATALOG = {
     chainRequired: 1,
     effectDescription: '召喚条件: 1連鎖以上',
   }),
-  suijin: waterMonster('suijin', '水神', Rarity.R, 30, 30, {
+  suijin: waterMonster('suijin', '水神', Rarity.R, 40, 25, {
     cost: 150,
-    chainRequired: 2,
+    chainRequired: 1,
     effect: { type: 'statsPerElementChain', element: Element.WATER, atkPerChain: 7, hpPerChain: 7 },
-    effectDescription: '召喚条件: 2連鎖以上。戦闘中、水の土地の連鎖数×7だけHP・ATKが上昇する',
+    effectDescription: '召喚条件: 1連鎖以上。戦闘中、水の土地の連鎖数×7だけHP・ATKが上昇する',
   }),
   kaikyouSekishoKurage: waterMonster('kaikyouSekishoKurage', '海峡の関所クラゲ', Rarity.R, 30, 30, {
     cost: 80,

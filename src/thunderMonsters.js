@@ -135,11 +135,11 @@ export const THUNDER_MONSTER_CATALOG = {
     effect: { type: 'stealDamageMultiple', multiplier: 5 },
     effectDescription: '先制。攻撃成功時、与えたダメージ×5Gを相手から奪う',
   }),
-  raijin: thunderMonster('raijin', '雷神', Rarity.R, 30, 30, {
+  raijin: thunderMonster('raijin', '雷神', Rarity.R, 40, 25, {
     cost: 150,
-    chainRequired: 2,
+    chainRequired: 1,
     effect: { type: 'statsPerElementChain', element: Element.THUNDER, atkPerChain: 7, hpPerChain: 7 },
-    effectDescription: '召喚条件: 2連鎖以上。戦闘中、雷の土地の連鎖数×7だけHP・ATKが上昇する',
+    effectDescription: '召喚条件: 1連鎖以上。戦闘中、雷の土地の連鎖数×7だけHP・ATKが上昇する',
   }),
   rakuraiYohoushi: thunderMonster('rakuraiYohoushi', '落雷予報士', Rarity.R, 35, 40, {
     cost: 90,

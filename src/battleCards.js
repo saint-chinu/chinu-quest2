@@ -758,7 +758,7 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.bigMermaid, count: 2 },
         { def: MONSTER_CATALOG.sekaiju, count: 1 },
         { def: MONSTER_CATALOG.kontonNoAtama, count: 1 },
-        // フィニッシャーの神（150G・2連鎖、各1枚に抑える）。
+        // フィニッシャーの神（150G・1連鎖、各1枚に抑える）。
         { def: MONSTER_CATALOG.suijin, count: 1 },
         { def: MONSTER_CATALOG.yamagami, count: 1 },
       ],
@@ -1223,7 +1223,7 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.nashiNashiTankentai, count: 2 }, // 50G 30/30 1/3ダメ無効
         { def: MONSTER_CATALOG.trufuButa, count: 1 },        // 50G 30/30 1/3で150G
         { def: MONSTER_CATALOG.shinrinChouzeikan, count: 2 }, // 90G 35/40 連鎖2 通行料1.3倍
-        { def: MONSTER_CATALOG.yamagami, count: 2 },         // 150G 連鎖2 森連鎖×7
+        { def: MONSTER_CATALOG.yamagami, count: 2 },         // 150G 連鎖1 森連鎖×7
         { def: MONSTER_CATALOG.sekaiju, count: 2 },          // 120G 0/70 連鎖1 防衛拠点
         // テック枠。避雷針侍は生贄1が必要なので手札が薄い時は出せない。
         { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 }, // 雷 50G 15/30 身代わり

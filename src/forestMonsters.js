@@ -112,11 +112,11 @@ export const FOREST_MONSTER_CATALOG = {
     effect: { type: 'atkDoubleIfRicher' },
     effectDescription: '攻撃開始時点で手持ちGが相手を上回っている場合、ATK2倍',
   }),
-  yamagami: forestMonster('yamagami', '山神', Rarity.R, 30, 30, {
+  yamagami: forestMonster('yamagami', '山神', Rarity.R, 40, 25, {
     cost: 150,
-    chainRequired: 2,
+    chainRequired: 1,
     effect: { type: 'statsPerElementChain', element: Element.FOREST, atkPerChain: 7, hpPerChain: 7 },
-    effectDescription: '召喚条件: 2連鎖以上。戦闘中、森の土地の連鎖数×7だけHP・ATKが上昇する',
+    effectDescription: '召喚条件: 1連鎖以上。戦闘中、森の土地の連鎖数×7だけHP・ATKが上昇する',
   }),
   shinrinChouzeikan: forestMonster('shinrinChouzeikan', '森林徴税官', Rarity.R, 40, 35, {
     cost: 90,
