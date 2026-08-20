@@ -1227,8 +1227,8 @@ export const CHARACTER_DECKS = {
       ],
       items: [
         { def: ITEM_CATALOG.gomuGoNoPistol, count: 2 },  // 人食い草: 森が持つとATK+50
-        { def: ITEM_CATALOG.nankaNoOmamori, count: 2 },
-        { def: ITEM_CATALOG.morohaNoTsurugi, count: 2 },
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 3 },
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 1 }, // ATK+直前の出目×11、貫通
       ],
       spells: [
         { def: SPELL_CATALOG.walletVacuum, count: 4 },   // 相手のGを削る＝マウントゴリラのATK2倍条件も整う

@@ -5389,6 +5389,13 @@ export class Game {
         && unit?.def?.element === item.effect.wielderElement) {
       score += item.effect.atkBonus || 0;
     }
+    // イカサマのサイコロ: 素のatkBonusは0なので、加算されるATKを実際に見積もる
+    // （_applyEquippedItemBonusと同じ「直前の出目×倍率」）。これが無いと
+    // 出目6で+66という最大級の武器が、効果+15/貫通+10の25点にしか見えない。
+    if (item.effect?.type === 'atkFromLastDiceRoll') {
+      const owner = this.players.find((p) => p.id === unit?.ownerId);
+      score += (owner?.lastDiceSteps || 0) * (item.effect.multiplier || 0);
+    }
     if (item.effect) score += 15;
     if (item.traits?.includes('firstStrike')) score += 10;
     if (item.traits?.includes('pierce')) score += 10;
