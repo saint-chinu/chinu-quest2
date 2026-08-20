@@ -1381,12 +1381,21 @@ export class Game {
         this._spellAutoMatchAllTileElements();
         return false;
 
-      case 'forceTileElement':
+      case 'forceTileElement': {
         if (!targetTile) return false;
+        // 属性の付け替えはお札の基礎価格に直結する（旧属性の土地スコアが
+        // 減り、新属性のスコアが増える）。土地コマンドの属性変更と同じく
+        // 変動を演出する。
+        const oldElement = targetTile.element;
+        const oldPrice = this._ofudaPrice(oldElement);
+        const newPrice = this._ofudaPrice(effect.element);
         targetTile.element = effect.element;
         this._repaintTileToElement(targetTile);
         this.onLog(`対象の土地を${ELEMENT_LABEL[effect.element]}属性に変えた`);
+        await this._presentOfudaPriceChange(oldElement, oldPrice);
+        await this._presentOfudaPriceChange(effect.element, newPrice);
         return false;
+      }
 
       case 'swapTwoMonsters':
         this._spellSwapTwoMonsters(cast.targetTileIds);
@@ -2485,6 +2494,12 @@ export class Game {
       : 'すべてのCPを通過しました。ゴールしてください';
     this.onLog(`${player.name}はCP${tile.checkpointNumber}を通過！ +${bonus}G　${guidance}`);
     await this.onCheckpoint({ playerId: player.id, playerName: player.name, checkpointNumber: tile.checkpointNumber });
+    this._notifyState();
+    // ⑫: お札の取引所はゴールだけでなくCPにもある。1周のうち取引機会が
+    // 1回だけだと相場が動く前に決着してしまうので、CP初回通過ごとに開く
+    // （同じ周で同じCPを何度踏んでも再度は開かない - 上のearly returnと
+    // 同じ判定に乗る。CPUも同じ経路で売買する）。
+    await this._maybeTradeOfudaAtGoal(player);
     this._notifyState();
     await delay(900);
   }
@@ -6606,6 +6621,7 @@ export class Game {
     await this._cpuMaybeUseManaExtractionSpell(this.currentPlayer);
     await this._cpuMaybeUseNecromancerSpell(this.currentPlayer);
     await this._cpuMaybeUseSplitEvenlySpell(this.currentPlayer);
+    await this._cpuMaybeUseForceElementSpell(this.currentPlayer);
     await this._cpuMaybeUseStealGoldSpell(this.currentPlayer);
     await this._cpuMaybeUseCurseCleanseSpell(this.currentPlayer);
     await this._cpuMaybeUseHealSpell(this.currentPlayer);
@@ -6864,6 +6880,51 @@ export class Game {
       .sort((a, b) => a.handCount - b.handCount || priority.indexOf(a.type) - priority.indexOf(b.type));
     if (candidates.length === 0) return;
     await this._cpuCastSpell(player, card, { chosenCardType: candidates[0].type });
+  }
+
+  /**
+   * 放牧/放火/放水/放電(forceTileElement)のCPU使用判断。敵の土地を自分の
+   * 属性へ塗り替える価値は二重にある:
+   *  ①お札の基礎価格は所有者を問わず「その属性の土地のレベル合計」で決まる
+   *    ため、敵の高レベル地を塗り替えると自分の保有お札が値上がりする
+   *    （逆に元属性のお札は下がる - 自分が持っていればその分は損）。
+   *  ②敵の連鎖（地価・通行料の倍率）を折り、同属性の土地HPボーナスも剥がす。
+   * 見込み益（お札の含み益の変化＋連鎖破壊）がコストに見合う時だけ使う。
+   */
+  async _cpuMaybeUseForceElementSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL
+      && c.effect?.type === 'forceTileElement' && c.effect.element && c.effect.element !== Element.NEUTRAL);
+    if (!card || player.currency < (card.cost || 0)) return;
+    const element = card.effect.element;
+    const priceNow = this._ofudaPrice(element);
+    const priceGainOf = (tile) => {
+      if (!this.hasOfuda) return 0;
+      const scoreGain = OFUDA_LEVEL_SCORE[tile.level] ?? OFUDA_LEVEL_SCORE[1];
+      const initialCount = Math.max(1, this.ofudaInitialCounts[element] || 0);
+      const raw = (OFUDA_MAX_PRICE * scoreGain) / (initialCount * OFUDA_LEVEL_SCORE[LEVEL_CAP]);
+      return Math.min(raw, Math.max(0, OFUDA_MAX_PRICE - priceNow));
+    };
+    const candidates = this.tiles
+      .filter((tile) => {
+        if (tile.type !== TileType.LAND || tile.owner == null || tile.owner === player.id) return false;
+        if (tile.element === element) return false;
+        const owner = this.players.find((p) => p.id === tile.owner);
+        return owner && !owner.defeated && !this._isAllyOf(owner, player);
+      })
+      .map((tile) => {
+        const gainHoldings = this.hasOfuda ? (player.ofuda?.[element] || 0) : 0;
+        const lossHoldings = this.hasOfuda ? (player.ofuda?.[tile.element] || 0) : 0;
+        // 自分の含み益の増減（新属性の値上がり×保有 - 旧属性の値下がり×保有）
+        const holdingsDelta = priceGainOf(tile) * gainHoldings - priceGainOf(tile) * lossHoldings;
+        // 連鎖破壊: 2連鎖以上の一角なら、その土地の通行料の4割を毀損したとみなす
+        const chainBreak = this._chainCount(tile.owner, tile.element) >= 2 ? this._tollOfTile(tile) * 0.4 : 0;
+        return { tile, value: holdingsDelta + chainBreak + tile.level * 10 };
+      })
+      .sort((a, b) => b.value - a.value);
+    const best = candidates[0];
+    if (!best || best.value < (card.cost || 0)) return;
+    await this._cpuCastSpell(player, card, { targetTileId: best.tile.id });
   }
 
   /** 配られたら即時使うスペル。アイキャンフライを副業収入より優先する。 */

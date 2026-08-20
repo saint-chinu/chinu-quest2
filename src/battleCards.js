@@ -1231,7 +1231,11 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 1 }, // ATK+直前の出目×11、貫通
       ],
       spells: [
-        { def: SPELL_CATALOG.walletVacuum, count: 3 },   // 相手のGを削る＝マウントゴリラのATK2倍条件も整う
+        { def: SPELL_CATALOG.walletVacuum, count: 2 },   // 相手のGを削る＝マウントゴリラのATK2倍条件も整う
+        // 放牧: 敵の異属性の土地を森へ塗り替える。相手の連鎖を折りつつ、
+        // 森のお札の基礎価格（所有者を問わず土地レベル合計で決まる）を
+        // 押し上げる、フィクサーの相場操作そのもの。
+        { def: SPELL_CATALOG.grazing, count: 1 },
         { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },
         { def: SPELL_CATALOG.homingInstinct, count: 2 }, // 自分に撃って周回＝お札取引の回数を稼ぐ
         // 副業収入(0G): 純粋な収入源。捨て札が山に戻るたび再利用でき、
