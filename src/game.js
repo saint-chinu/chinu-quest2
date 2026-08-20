@@ -4600,7 +4600,23 @@ export class Game {
       return;
     }
 
-    const decision = this._cpuDecideInvasion(player, tile, options, profile);
+    // 侵略に失敗すると、召喚コストを払ったうえでこの土地の通行料も丸ごと
+    // 払う（_settleLandingTollは奪えた時しか免除しない）。手持ちが薄い時に
+    // ここへ突っ込むと、負けた瞬間にマイナス→土地とお札を叩き売り→破産まで
+    // 一直線になる。⑫はサドンデスなのでそれがそのまま敗北になる。
+    // 「負けても払い切れる」カードだけを候補に残す。どのカードでも払えない
+    // ＝見送っても通行料で詰む場合だけは、最後の望みとして従来どおり賭ける。
+    const landingToll = this._tollOfTile(tile);
+    const affordableIfLost = options.filter(
+      (card) => this._netWorthOf(player) - (card.cost || 0) - landingToll >= 0,
+    );
+    const doomedAnyway = this._netWorthOf(player) - landingToll < 0;
+    const survivableOptions = doomedAnyway ? options : affordableIfLost;
+    if (survivableOptions.length === 0) {
+      this.onLog(`${player.name}は通行料を払えなくなる恐れがあるため侵略を見送った`);
+      return;
+    }
+    const decision = this._cpuDecideInvasion(player, tile, survivableOptions, profile);
     if (!decision) {
       this.onLog(`${player.name}はこの土地への侵略を見送った`);
       return;
@@ -5210,6 +5226,22 @@ export class Game {
     return null;
   }
 
+  /**
+   * 守備側が避雷針侍の身代わりを持っているか（＝この土地のモンスターを
+   * 倒しても土地を奪えないか）。_prepareLightningRodSubstitutionと同じ条件。
+   * 勝率シミュレーションはresolveBattleしか回さず、身代わりはその後段の
+   * _maybeRedirectDeathToLightningRodで適用されるため、ここで補正しないと
+   * CPUは「倒せる＝奪える」と誤認して勝てない侵略に突っ込み、失敗して
+   * 通行料まで払う羽目になる。
+   */
+  _defenderProtectedByLightningRod(defenderTile) {
+    const defenderUnit = defenderTile?.unit;
+    if (!defenderUnit || catalogIdOf(defenderUnit.def) === 'raiheishinZamurai') return false;
+    return this.tiles.some((tile) => tile !== defenderTile
+      && tile.unit?.ownerId === defenderUnit.ownerId
+      && catalogIdOf(tile.unit.def) === 'raiheishinZamurai');
+  }
+
   /** 貫通を持つか（モンスター自身のtraits、または装備アイテム由来）。 */
   _hasPierce(unit) {
     return !!unit?.def?.traits?.includes('pierce')
@@ -5467,6 +5499,9 @@ export class Game {
    * 抑制する。
    */
   _estimateWinProbability(card, attackerOwnerId, attackerHand, defenderTile, useItem, trials = 20) {
+    // 避雷針侍が守っている土地は、相手を倒しても身代わりが立って土地を
+    // 奪えない（_maybeRedirectDeathToLightningRod）。勝てる見込みは無い。
+    if (this._defenderProtectedByLightningRod(defenderTile)) return 0;
     const savedLog = this.onLog;
     this.onLog = () => {};
     try {
@@ -5517,6 +5552,9 @@ export class Game {
    */
   _estimateUnitBattleWinProbability(attackerUnit, attackerPositionTile, defenderTile, trials = 20) {
     if (!attackerUnit || !defenderTile?.unit) return 0;
+    // 手札からの侵略側（_estimateWinProbability）と同じく、避雷針侍に
+    // 守られている土地は倒しても奪えないので勝率0として扱う。
+    if (this._defenderProtectedByLightningRod(defenderTile)) return 0;
     const savedLog = this.onLog;
     this.onLog = () => {};
     try {
