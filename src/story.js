@@ -802,9 +802,20 @@ export const STORY_STAGES = [
       intro: [
         { speaker: '闇・ホフク', text: 'また座りに来たの？ 懲りない魚ね。' },
         { speaker: '暗・少女A', text: '再戦料は身体で払うゆ。' },
+        { speaker: 'サーティー', text: '今度は最初から俺も卓につく。夢の続きといこうぜ。' },
         { speaker: '主人公', text: '麻雀じゃなくて盤面で決着つけようぜ！' },
       ],
       outro: [{ speaker: 'サーティー', text: '夢は繰り返す。だが、勝ち筋を覚えた奴は強い。' }],
+      // 本編のサーティーはmidBattleAssist（途中参戦）で来るが、あの仕組みは
+      // 再戦では発火しない（main.jsの!isReplayガード）。ここでallyを明示
+      // しないと再戦だけ恒久1vs2になってしまう（アウトロでサーティーが
+      // 喋るのに本人が盤面にいない）。再戦は最初から2vs2で戦う。
+      ally: {
+        name: 'サーティー',
+        color: 0x232323,
+        deckKey: 'thirty',
+        theme: { elements: [Element.NEUTRAL, Element.THUNDER] },
+      },
     },
   },
   {

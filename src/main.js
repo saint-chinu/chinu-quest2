@@ -5030,7 +5030,9 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
     storyMode: true,
     // ヒトデ初戦だけ短い導入用マップ。再戦は従来の長いhitodeマップを使う。
     mapId: !isReplay && stage.key === 'hitode' ? 'hitode-first' : stage.key,
-    goalCurrency: stage.goalCurrency,
+    // replay/secretReplayが独自のgoalCurrencyを持つ場合はそちらを優先する
+    // （現状の再戦データは全て本編を継承しているが、将来の再戦調整用）。
+    goalCurrency: variant.goalCurrency ?? stage.goalCurrency,
     playerConfigs,
     onStoryBattleEnd: (result) => (isReplay ? handleStoryReplayEnd(index, result, variant) : handleStoryBattleEnd(index, result)),
     onResumeCheckpoint: (state) => { latestStoryCheckpoint = state; },
