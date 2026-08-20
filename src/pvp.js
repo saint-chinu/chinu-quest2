@@ -183,11 +183,19 @@ export class HostGuestRelay {
     this.roomCode = roomCode;
     this.nextRequestId = 1;
     this.pending = null; // { requestId, resolve, reject, timer }
-    // Firestore上の要求欄は各相手につき1本しかない。演出を投げっぱなしで
-    // 連続送信すると後の要求が前を上書きするため、相手ごとに必ず直列化する。
+    // 旧: room.hostRequest 1本のレガシーチャンネル（現行コードでは未使用だが
+    // 保守のため残す）。
     this.legacyQueue = Promise.resolve();
-    this.participantQueues = new Map();
-    this.participantPending = new Set();
+    // 参加者チャンネルはprompts/{uid}へ「未ACKイベントの配列」をまとめて書く
+    // アウトボックス方式。旧実装は1文書=1イベントで、応答が返るまで次を送れず
+    // 演出1件ごとにFirestore往復1回ぶんの待ちが直列に積み上がっていた
+    // （移動1ターンで7件≈3〜6秒の純粋な通信待ち）。配列ならリスナーの
+    // スナップショット合体（連続書き込みで最新だけ届く）でも取りこぼさない。
+    // uid → { outbox, nextId, lastFlushedId, flushing, dirty,
+    //         doneWaiters:[{id,resolve,reject,timer}], valueWaiters:Map,
+    //         respUnsub }
+    this.participants = new Map();
+    this.destroyed = false;
     this.unsubscribe = listenToRoom(roomCode, (room) => {
       if (!room || !this.pending) return;
       if (room.guestResponseId === this.pending.requestId) {
@@ -218,48 +226,159 @@ export class HostGuestRelay {
     });
   }
 
-  askParticipant(uid, type, payload) {
-    const previous = this.participantQueues.get(uid) || Promise.resolve();
-    const task = previous.catch(() => {}).then(() => this._askParticipantNow(uid, type, payload));
-    this.participantQueues.set(uid, task.catch(() => {}));
-    return task;
+  _participantState(uid) {
+    let state = this.participants.get(uid);
+    if (state) return state;
+    state = {
+      outbox: [],
+      // ホストの再読込をまたいでも必ず増加するよう時刻起点で採番する
+      // （GuestActionSenderと同じ理屈。ゲスト側はid比較だけで新旧を判定する）。
+      nextId: Date.now(),
+      lastFlushedId: 0,
+      flushing: false,
+      dirty: false,
+      doneWaiters: [],
+      valueWaiters: new Map(),
+      respUnsub: null,
+    };
+    state.respUnsub = onSnapshot(promptResponseRef(this.roomCode, uid), (snap) => {
+      const data = snap.data();
+      if (!data) return;
+      // requestId = ゲストが処理し終えた最後のイベントid（単調増加の水位）。
+      // スナップショットが合体して途中の応答が飛んでも、水位比較なら安全。
+      const doneSeq = Number(data.requestId) || 0;
+      if (doneSeq > (state.ackedThrough || 0)) state.ackedThrough = doneSeq;
+      const before = state.outbox.length;
+      state.outbox = state.outbox.filter((event) => event.id > doneSeq);
+      state.doneWaiters = state.doneWaiters.filter((waiter) => {
+        if (waiter.id > doneSeq) return true;
+        clearTimeout(waiter.timer);
+        waiter.resolve();
+        return false;
+      });
+      // 対話プロンプトの回答は value = { id, v }。対話は必ず1件ずつしか
+      // 出さない（Game側がawaitする）ので上書き競合は起きない。
+      const answer = data.value;
+      if (answer && typeof answer === 'object' && state.valueWaiters.has(answer.id)) {
+        const waiter = state.valueWaiters.get(answer.id);
+        state.valueWaiters.delete(answer.id);
+        clearTimeout(waiter.timer);
+        waiter.resolve(answer.v);
+      }
+      // ACKでアウトボックスが縮んだら、書き込みサイズ上限で送り残していた
+      // 後続イベントを次のflushで届ける。
+      if (before !== state.outbox.length && state.outbox.length > 0) this._flushParticipant(uid);
+      // 全件ACKでアウトボックスが空になったら、文書に残った送信済みイベントを
+      // 掃除する（残したままだとゲストの再読込時にackedThroughが古いままの
+      // 文書から過去の演出が再放送される）。連続する演出の合間に無駄な書込を
+      // しないよう少し待ち、新規イベントが来たらキャンセルする。
+      if (before !== state.outbox.length && state.outbox.length === 0) {
+        clearTimeout(state.cleanupTimer);
+        state.cleanupTimer = setTimeout(() => {
+          if (this.destroyed || state.outbox.length > 0) return;
+          setDoc(promptRef(this.roomCode, uid), {
+            requestId: state.lastFlushedId,
+            type: '__batch',
+            payload: { events: [], ackedThrough: state.ackedThrough || 0 },
+          }).catch(() => {});
+        }, 1500);
+      }
+    });
+    this.participants.set(uid, state);
+    return state;
   }
 
-  _askParticipantNow(uid, type, payload) {
-    const requestId = this.nextRequestId++;
+  /**
+   * 参加者チャンネルへの送信。mode:
+   *  'fire'  = 投げっぱなし演出（即resolve。ゲストは順番に再生するだけ）
+   *  'done'  = ゲストの再生完了まで待つ演出（pieceMove等。値は返らない）
+   *  'value' = 対話プロンプト（回答値が返る）
+   * どのmodeも同じアウトボックスに積まれるため、ゲスト側の実行順序は
+   * 常にenqueue順と一致する（旧実装の1件ずつ直列と同じ保証）。
+   */
+  enqueueParticipant(uid, type, payload, mode = 'value') {
+    if (this.destroyed) return Promise.reject(new Error('対戦リレーが終了しました'));
+    const state = this._participantState(uid);
+    clearTimeout(state.cleanupTimer);
+    const id = state.nextId++;
+    state.outbox.push({ id, type, payload, ack: mode !== 'fire', wantValue: mode === 'value' });
+    this._flushParticipant(uid);
+    if (mode === 'fire') return Promise.resolve();
     return new Promise((resolve, reject) => {
-      const record = { uid, requestId, timer: null, stop: null, reject };
-      const finish = (fn, value) => {
-        clearTimeout(record.timer);
-        record.stop?.();
-        this.participantPending.delete(record);
-        fn(value);
-      };
-      record.timer = setTimeout(() => finish(reject, new Error('参加者の応答がタイムアウトしました')), 45000);
-      this.participantPending.add(record);
-      const stop = onSnapshot(promptResponseRef(this.roomCode, uid), (snap) => {
-        const data = snap.data();
-        if (!data || data.requestId !== requestId || !this.participantPending.has(record)) return;
-        finish(resolve, data.value);
-      });
-      record.stop = stop;
-      setDoc(promptRef(this.roomCode, uid), { requestId, type, payload }).catch((error) => finish(reject, error));
+      const timer = setTimeout(() => {
+        state.doneWaiters = state.doneWaiters.filter((waiter) => waiter.id !== id);
+        state.valueWaiters.delete(id);
+        reject(new Error('参加者の応答がタイムアウトしました'));
+      }, 45000);
+      if (mode === 'value') state.valueWaiters.set(id, { resolve, reject, timer });
+      else state.doneWaiters.push({ id, resolve, reject, timer });
     });
   }
 
+  askParticipant(uid, type, payload) {
+    return this.enqueueParticipant(uid, type, payload, 'value');
+  }
+
+  broadcastParticipant(uid, type, payload, awaitDone = false) {
+    return this.enqueueParticipant(uid, type, payload, awaitDone ? 'done' : 'fire');
+  }
+
+  _flushParticipant(uid) {
+    const state = this.participants.get(uid);
+    if (!state || this.destroyed) return;
+    if (state.flushing) { state.dirty = true; return; }
+    if (state.outbox.length === 0) return;
+    // Firestoreの1MB文書上限対策: 送信分をおおまかなJSONサイズで区切る。
+    // 送り残しはACKでアウトボックスが縮んだ時に再flushされる。
+    const events = [];
+    let size = 0;
+    for (const event of state.outbox) {
+      size += JSON.stringify(event).length;
+      if (events.length > 0 && size > 200000) break;
+      events.push(event);
+    }
+    const requestId = events[events.length - 1].id;
+    if (requestId === state.lastFlushedId && !state.dirty) return;
+    state.flushing = true;
+    state.lastFlushedId = requestId;
+    // 旧ルールのフィールド制限（requestId/type/payload）の枠内に収める:
+    // type='__batch'、payload.eventsに未ACKイベント一覧。スナップショットが
+    // 合体しても常に「未ACKの全件」が入っているので取りこぼさない。
+    // ackedThroughはゲストがACK済みの水位。ゲストの再読込直後、文書に残る
+    // 処理済みイベントをもう一度再生してしまわないための基準線になる。
+    setDoc(promptRef(this.roomCode, uid), { requestId, type: '__batch', payload: { events, ackedThrough: state.ackedThrough || 0 } })
+      .catch((error) => console.warn('PvP prompt flush failed', error))
+      .finally(() => {
+        state.flushing = false;
+        if (state.dirty) {
+          state.dirty = false;
+          this._flushParticipant(uid);
+        }
+      });
+  }
+
   destroy() {
+    this.destroyed = true;
     if (this.pending) {
       clearTimeout(this.pending.timer);
       this.pending.reject(new Error('対戦リレーが終了しました'));
       this.pending = null;
     }
-    for (const record of this.participantPending) {
-      clearTimeout(record.timer);
-      record.stop?.();
-      record.reject(new Error('対戦リレーが終了しました'));
+    for (const state of this.participants.values()) {
+      clearTimeout(state.cleanupTimer);
+      state.respUnsub?.();
+      for (const waiter of state.doneWaiters) {
+        clearTimeout(waiter.timer);
+        waiter.reject(new Error('対戦リレーが終了しました'));
+      }
+      for (const waiter of state.valueWaiters.values()) {
+        clearTimeout(waiter.timer);
+        waiter.reject(new Error('対戦リレーが終了しました'));
+      }
+      state.doneWaiters = [];
+      state.valueWaiters.clear();
     }
-    this.participantPending.clear();
-    this.participantQueues.clear();
+    this.participants.clear();
     this.unsubscribe();
   }
 }
@@ -277,6 +396,15 @@ export class GuestHostListener {
     this.handlers = handlers;
     this.lastHandledRequestId = 0;
     this.lastHandledPromptId = 0;
+    // '__batch'（アウトボックス方式）用: 受信済みイベントの最大idと、
+    // 未再生イベントのローカルキュー。ホストの1書き込みに複数イベントが
+    // 入っていても、ここで必ず1件ずつ順番にawaitして再生する（演出の
+    // 同時再生・カメラの取り合いは起こさない）。
+    this.batchLastSeenId = 0;
+    this.batchQueue = [];
+    this.batchPumping = false;
+    this.lastInteractiveAnswer = null; // { id, v } 直近の対話回答（応答文書に常に同梱）
+    this.destroyed = false;
     this.unsubscribe = listenToRoom(roomCode, (room) => {
       if (!room || !room.hostRequest) return;
       if (room.hostRequestId <= this.lastHandledRequestId) return;
@@ -285,7 +413,24 @@ export class GuestHostListener {
     });
     this.promptUnsubscribe = onSnapshot(promptRef(roomCode, uid), (snap) => {
       const prompt = snap.data();
-      if (!prompt || prompt.requestId <= this.lastHandledPromptId) return;
+      if (!prompt) return;
+      if (prompt.type === '__batch') {
+        // 再読込直後はbatchLastSeenId=0なので、ホストがACK済みと知っている
+        // 水位（ackedThrough）までは再生済みとして飛ばす（再生し直すと
+        // 過去の演出が一斉に流れてしまう）。それ以降の未ACK分は再生する＝
+        // 切断直前に届いていなかった演出・質問の自然な復元になる。
+        const base = Math.max(this.batchLastSeenId, Number(prompt.payload?.ackedThrough) || 0);
+        if (base > this.batchLastSeenId) this.batchLastSeenId = base;
+        for (const event of prompt.payload?.events || []) {
+          if (!event || !(event.id > this.batchLastSeenId)) continue;
+          this.batchLastSeenId = event.id;
+          this.batchQueue.push(event);
+        }
+        this._pumpBatch();
+        return;
+      }
+      // 旧ホスト（1文書=1イベント）との互換経路。
+      if (prompt.requestId <= this.lastHandledPromptId) return;
       this.lastHandledPromptId = prompt.requestId;
       this._handleParticipant(prompt.requestId, prompt);
     });
@@ -301,6 +446,34 @@ export class GuestHostListener {
     }
   }
 
+  async _pumpBatch() {
+    if (this.batchPumping) return;
+    this.batchPumping = true;
+    try {
+      while (this.batchQueue.length > 0 && !this.destroyed) {
+        const event = this.batchQueue.shift();
+        let result = null;
+        try {
+          result = this.handlers[event.type] ? await this.handlers[event.type](event.payload) : null;
+        } catch { /* 演出の失敗で列全体を止めない */ }
+        if (event.wantValue) this.lastInteractiveAnswer = { id: event.id, v: result ?? null };
+        // 応答文書は {requestId: 処理済み水位, value: 直近の対話回答} の固定形。
+        // 毎イベント書くと往復直列化が復活するので、ホストが待つイベント
+        // （ack）とキューを飲み干した時だけ書く。valueを常に同梱するのは、
+        // 連続書き込みがスナップショット合体で1回にまとまっても回答が
+        // 消えないようにするため。
+        if (event.ack || this.batchQueue.length === 0) {
+          const body = { requestId: event.id, value: this.lastInteractiveAnswer };
+          await setDoc(promptResponseRef(this.roomCode, this.uid), body)
+            .catch(() => setDoc(promptResponseRef(this.roomCode, this.uid), body).catch(() => {}));
+        }
+      }
+    } finally {
+      this.batchPumping = false;
+    }
+    if (this.batchQueue.length > 0) this._pumpBatch();
+  }
+
   async _handleParticipant(requestId, { type, payload }) {
     try {
       const response = this.handlers[type] ? await this.handlers[type](payload) : null;
@@ -309,6 +482,8 @@ export class GuestHostListener {
   }
 
   destroy() {
+    this.destroyed = true;
+    this.batchQueue.length = 0;
     this.unsubscribe();
     this.promptUnsubscribe?.();
   }

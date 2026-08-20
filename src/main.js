@@ -7463,18 +7463,21 @@ function relayable(type, localPrompt, { broadcast = false, awaitRemote = false }
         const remoteUids = [...new Set(Object.values(pvpMatch.uidByPlayerId || {}))]
           .filter((uid) => uid && uid !== pvpMatch.uid);
         for (const uid of remoteUids) {
-          const remotePromise = pvpMatch.relay.askParticipant(uid, type, payload).catch((error) => {
-            console.warn(`PvP broadcast failed: type=${type}, uid=${uid}`, error);
-          });
-          remotePromises.push(remotePromise);
           // pieceMoveは分岐選択や着地後メニューの前に「操作する本人」の画面だけ
           // 追いついていればよい。観戦側まで待つとホスト/本人の土地コマンド表示が
           // ラグぶん遅れるため、本人がリモート参加者の時だけその1人を待つ。
-          if (!awaitOnlyUid || uid === awaitOnlyUid) awaitedRemotePromises.push(remotePromise);
+          // 待たない演出はfire-and-forget（アウトボックスに積むだけ）にして、
+          // ホストの進行がFirestore往復に一切ブロックされないようにする。
+          const awaited = awaitRemote && (!awaitOnlyUid || uid === awaitOnlyUid);
+          const remotePromise = pvpMatch.relay.broadcastParticipant(uid, type, payload, awaited).catch((error) => {
+            console.warn(`PvP broadcast failed: type=${type}, uid=${uid}`, error);
+          });
+          remotePromises.push(remotePromise);
+          if (awaited) awaitedRemotePromises.push(remotePromise);
         }
       }
       const localResult = localPrompt(...args);
-      if (!awaitRemote || remotePromises.length === 0) return localResult;
+      if (!awaitRemote || awaitedRemotePromises.length === 0) return localResult;
       return Promise.allSettled([Promise.resolve(localResult), ...awaitedRemotePromises]);
     }
     const forPlayerId = args[args.length - 1];
@@ -7533,12 +7536,36 @@ function handlePvpSync(snapshot) {
       const job = pendingPvpSync;
       pendingPvpSync = null;
       const { hands, ...publicPart } = job.snapshot;
-      const writes = [publishPublicState(job.roomCode, publicPart)];
+      // _notifyStateは1手番に何度も発火するが、内容が前回と同一なら書かない。
+      // Firestoreの書き込み回数とゲスト側のスナップショット受信を両方減らす
+      // （最新状態は常にroom文書に載っているので、途中再接続の復元にも影響しない）。
+      // キャッシュはpvpMatchオブジェクトに持ち、対戦が変われば自然に捨てられる。
+      const cacheHolder = pvpMatch?.roomCode === job.roomCode ? pvpMatch : null;
+      const writes = [];
+      const publicJson = JSON.stringify(publicPart);
+      if (!cacheHolder || cacheHolder._lastPublicJson !== publicJson) {
+        if (cacheHolder) cacheHolder._lastPublicJson = publicJson;
+        writes.push(publishPublicState(job.roomCode, publicPart).catch((error) => {
+          // 失敗時はキャッシュを無効化して、次のnotifyで必ず再送させる。
+          if (cacheHolder) cacheHolder._lastPublicJson = null;
+          throw error;
+        }));
+      }
       for (const [playerIdStr, hand] of Object.entries(hands || {})) {
         const uid = job.uidByPlayerId[playerIdStr];
-        if (uid && uid !== job.hostUid) writes.push(publishPrivateHand(job.roomCode, uid, hand));
+        if (!uid || uid === job.hostUid) continue;
+        const handJson = JSON.stringify(hand);
+        if (cacheHolder) {
+          cacheHolder._lastHandJson ||= {};
+          if (cacheHolder._lastHandJson[uid] === handJson) continue;
+          cacheHolder._lastHandJson[uid] = handJson;
+        }
+        writes.push(publishPrivateHand(job.roomCode, uid, hand).catch((error) => {
+          if (cacheHolder?._lastHandJson) cacheHolder._lastHandJson[uid] = null;
+          throw error;
+        }));
       }
-      await Promise.allSettled(writes);
+      if (writes.length > 0) await Promise.allSettled(writes);
     }
   })().finally(() => { pvpSyncFlushRunning = false; });
 }
