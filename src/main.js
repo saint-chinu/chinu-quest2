@@ -7568,6 +7568,10 @@ function handlePvpSync(snapshot) {
     uidByPlayerId: { ...(pvpMatch.uidByPlayerId || {}) },
     snapshot,
   };
+  flushPvpSync();
+}
+
+function flushPvpSync() {
   if (pvpSyncFlushRunning) return;
   pvpSyncFlushRunning = true;
   void (async () => {
@@ -7606,7 +7610,16 @@ function handlePvpSync(snapshot) {
       }
       if (writes.length > 0) await Promise.allSettled(writes);
     }
-  })().finally(() => { pvpSyncFlushRunning = false; });
+  })().finally(() => {
+    pvpSyncFlushRunning = false;
+    // ループが「差分なし＝awaitなし」で同期的に完走した直後、この
+    // finally（マイクロタスク）が走る前に同期コードから次のhandlePvpSyncが
+    // 呼ばれると、running中と誤認してジョブが取り残される（例: スペルの
+    // 「効果適用後の無差分通知→isBusy=false通知」が連続同期実行される
+    // アイキャンフライ等で、isBusy=falseが永遠に配信されずゲストの
+    // サイコロが出ないフリーズになる）。ここで取り残しを必ず拾い直す。
+    if (pendingPvpSync) flushPvpSync();
+  });
 }
 
 /** ホスト側専用: ゲスト発の自発的アクション（本人の手番のダイス/スペル使用）を受けてローカルのGameインスタンスに反映する。 */
