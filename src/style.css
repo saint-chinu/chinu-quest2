@@ -4584,6 +4584,10 @@ html, body {
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   text-align: left;
   white-space: nowrap;
+  /* bodyに文字色の既定値が無いため、ここを省くとブラウザ既定の黒文字が
+     #101018の背景と同化して読めなくなる（進捗列・所持M/所持種類列）。
+     th/.admin-td-name/.admin-td-dateは個別の色指定でこれを上書きする。 */
+  color: #e2e8f0;
 }
 .admin-table th {
   background: rgba(255, 255, 255, 0.05);

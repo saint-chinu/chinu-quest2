@@ -4334,7 +4334,20 @@ function fmtDate(ts) {
   return '—';
 }
 
-const STORY_STAGE_LABELS = ['未着手', '①クリア', '②クリア', '③クリア', '④クリア(全)'];
+// ストーリー進捗ラベル。STORY_STAGES（story.js）の実際のステージ数から
+// 動的に組み立てる。以前は④固定の配列だったため、⑤〜⑫追加後は
+// 「undefined」表示・KPI「全ステージ制覇」が実際は④クリア人数を指す、
+// という2つのズレが生じていた。
+function buildStoryStageLabels() {
+  const labels = ['未着手'];
+  STORY_STAGES.forEach((stage, i) => {
+    const numeral = (stage.title || '').trim().split(/\s+/)[0] || `${i + 1}`;
+    const isLast = i === STORY_STAGES.length - 1;
+    labels.push(`${numeral}クリア${isLast ? '(全)' : ''}`);
+  });
+  return labels;
+}
+const STORY_STAGE_LABELS = buildStoryStageLabels();
 
 /** players コレクション全件を集計してダッシュボードHTMLを組み立てる。 */
 function buildAdminDashboardHtml(players) {
@@ -4367,7 +4380,10 @@ function buildAdminDashboardHtml(players) {
     });
   }
 
-  const clearedAll = progressCounts[4];
+  // 「全ステージ制覇」= storyProgressが最終ステージ数と一致する人数。
+  // 旧コードは4固定だったため、⑤〜⑫追加後は「④クリア人数」を
+  // 「全ステージ制覇」として表示していた。
+  const clearedAll = progressCounts[STORY_STAGES.length];
   const startedStory = total - progressCounts[0];
   const avgM = withCharacter ? Math.round(mSum / withCharacter) : 0;
 
