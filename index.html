@@ -11,6 +11,12 @@
     <title>チヌクエスト2</title>
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="apple-touch-icon" href="./icons/danballman-icon-192.png" />
+    <!-- 表示用フォント: UI=Zen Kaku Gothic New / 見得を切る演出文=Shippori Mincho B1 /
+         ダメージ数字=Anton。オフライン時は読み込みに失敗してもfont-familyの
+         後続フォールバック（Hiragino等）で従来表示になるだけで、挙動は変わらない。 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@500;700;900&family=Shippori+Mincho+B1:wght@700;800&family=Anton&display=swap" />
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>

@@ -795,7 +795,12 @@ export class Game {
         ? { x: casterTile.position.x, z: casterTile.position.z }
         : null,
     });
-    await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast, card));
+    // 単体ダメージスペルは、直後のダメージ演出（対象へズーム→火球→数字→
+    // 死亡表示）が結果まで含めて全部見せる。その前に説明文ポップアップを
+    // 同じ対象へズームして出すと、内容が重複したままカメラが2往復する。
+    if (card.effect?.type !== 'directDamage') {
+      await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast, card));
+    }
     const endedTurn = await this._applySpellEffect(player, card, cast);
     await this.onSpellComplete();
     this.onTutorialEvent('spell', { card });
@@ -1656,13 +1661,15 @@ export class Game {
     const unit = tile.unit;
     if (!unit) return;
     unit.currentHp -= amount;
-    this._notifyState();
     if (showEffect) await this.onDamageEffect?.({
       tileId: tile.id,
       damage: amount,
       targetDied: unit.currentHp <= 0,
       targetName: unit.def.name,
     });
+    // 状態通知は演出の後。先に流すと、火球が着弾する前に盤面のHPバーだけが
+    // 減る（演出と結果の前後逆転）。
+    this._notifyState();
 
     if (unit.currentHp <= 0) {
       const owner = this.players.find((p) => p.id === tile.owner);
@@ -1680,11 +1687,13 @@ export class Game {
   /** 小隕石/洪水/干ばつ/断線事故/森林火災用: 条件に合う盤面全モンスターへ一律ダメージ。演出は1体ずつだと冗長になるので省略し、まとめて1行ログする。 */
   async _spellDamageAllUnits(predicate, amount) {
     const targets = this.tiles.filter((t) => t.unit && predicate(t));
+    // 要約ログは適用前に出す。後に出すと「Xは倒された」→「3体に50ダメージ！」
+    // と因果が逆順に並んでしまう。
+    this.onLog(`${targets.length}体のモンスターに${amount}ダメージ！`);
     for (const t of targets) {
       if (!t.unit) continue; // 既に別の対象として倒れている場合はスキップ
       await this._spellDamageUnit(t, amount, { showEffect: false });
     }
-    this.onLog(`${targets.length}体のモンスターに${amount}ダメージ！`);
   }
 
   /** 毒霧: 選んだマスとその隣接マス（前後左右1マス相当）にいる全モンスターを毒状態にする。 */
@@ -7794,7 +7803,9 @@ export class Game {
         ? { x: casterTile.position.x, z: casterTile.position.z }
         : null,
     });
-    await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast, card));
+    if (card.effect?.type !== 'directDamage') {
+      await this.onSpellCastEffect?.(this._buildSpellCastEffectPayload(player, cast, card));
+    }
     const endedTurn = await this._applySpellEffect(player, card, cast);
     await this.onSpellComplete();
     this._notifyState();
