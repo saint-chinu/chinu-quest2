@@ -813,6 +813,14 @@ export const STORY_STAGES = [
     format: '1vs1',
     goalCurrency: 15000,
     boardDialogue: true,
+    // boardDialogueのオーバーレイ会話は、overlayNpcかこのマップが無いと
+    // どちらの立ち絵も出ない（playOverlayDialogueLines参照）。話者名は
+    // NPC_PORTRAIT_URL/主人公アイコンの引き当てキーも兼ねる。
+    // 「???」はここに載せない = 地の文なので立ち絵なし・吹き出し中央。
+    overlaySpeakerSides: {
+      主人公: 'right',
+      クエ: 'left',
+    },
     intro: [
       { speaker: '???', text: '海底都市を抜けた主人公は、激しい水流に巻き上げられ、きらびやかな海上大都会へ放り出された。' },
       { speaker: '主人公', text: 'うおっ……なんだここ。ビルも船もピカピカで、歩いてる奴ら全員ビジネスマンみたいだぞ。' },
