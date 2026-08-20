@@ -846,7 +846,9 @@ export const STORY_STAGES = [
       { speaker: '主人公', text: 'あいつ負けを認めねえなぁ、もし破産させたらどうなるんだろ...？' },
     ],
     opponents: [
-      { name: 'クエ', color: 0xc0c0c0, deckKey: 'que', theme: { elements: [Element.FOREST, Element.FIRE, Element.NEUTRAL] } },
+      // themeはdeckKey持ちのNPCでは表示・保険用のメタ情報（デッキはdeckKeyの
+      // 固定40枚）。森軸＋避雷針侍(雷)＋混沌の頭(無)の現デッキに合わせておく。
+      { name: 'クエ', color: 0xc0c0c0, deckKey: 'que', theme: { elements: [Element.FOREST, Element.THUNDER, Element.NEUTRAL] } },
     ],
     replay: {
       intro: [
