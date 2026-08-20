@@ -778,6 +778,11 @@ function promptPickSellLandForDebt({ tiles, deficit }) {
   });
 }
 
+// お札は5枚単位で売買し、1回の購入は30枚まで（game.jsのOFUDA_TRADE_LOT /
+// OFUDA_MAX_BUY_PER_TRADEと対応。表示用にこちらでも持つ）。
+const OFUDA_TRADE_LOT = 5;
+const OFUDA_BUY_CHOICES = [5, 10, 30];
+
 function buildOfudaRows({ market = [], holdings = {}, currency = 0, interactive = false, resolve = null } = {}) {
   ofudaMarketChoices.replaceChildren();
   for (const entry of market) {
@@ -789,21 +794,27 @@ function buildOfudaRows({ market = [], holdings = {}, currency = 0, interactive 
     info.innerHTML = `<strong>${entry.label}のお札</strong><span>${entry.price}G / 枚　所持${owned}枚</span>`;
     row.appendChild(info);
     if (interactive) {
-      // 相場が上がると200Gでは1〜2枚しか買えなくなるので、まとめ買いの
-      // 選択肢も出す（値付け強化に合わせてプレイヤーも仕込みやすくする）。
-      for (const amountG of [200, 500]) {
+      // 売買は5枚単位、1回の購入は30枚まで。枚数を指定して買う形にして、
+      // 「何枚買えるのか・いくら掛かるのか」を押す前に分かるようにする
+      // （相場が動くので表示額は概算＝押し上げ前の単価×枚数）。
+      for (const sheets of OFUDA_BUY_CHOICES) {
         const buy = document.createElement('button');
-        buy.textContent = `${amountG}G買う`;
-        buy.disabled = currency < Math.min(amountG, entry.price) || entry.price <= 0 || currency < entry.price;
-        buy.addEventListener('click', () => resolve?.({ action: 'buy', element: entry.element, amountG }));
+        const estimate = entry.price * sheets;
+        buy.textContent = `${sheets}枚買う`;
+        buy.title = `目安 約${estimate}G（買うほど値上がりします）`;
+        buy.disabled = entry.price <= 0 || currency < estimate;
+        buy.addEventListener('click', () => resolve?.({
+          action: 'buy', element: entry.element, sheets, amountG: currency,
+        }));
         row.append(buy);
       }
+      const sellable = Math.floor(owned / OFUDA_TRADE_LOT) * OFUDA_TRADE_LOT;
       const sell = document.createElement('button');
-      sell.textContent = '売る';
-      sell.disabled = owned <= 0;
+      sell.textContent = sellable > 0 ? `${sellable}枚売る` : '売る';
+      sell.disabled = sellable <= 0;
       sell.addEventListener('click', async () => {
-        const ok = await confirmYesNo(`${entry.label}のお札を売却しますか？（${entry.price}G/枚）`);
-        if (ok) resolve?.({ action: 'sell', element: entry.element, count: owned });
+        const ok = await confirmYesNo(`${entry.label}のお札を${sellable}枚売却しますか？（現在${entry.price}G/枚・売るほど値下がりします）`);
+        if (ok) resolve?.({ action: 'sell', element: entry.element, count: sellable });
       });
       row.append(sell);
     }
@@ -825,8 +836,8 @@ function promptOfudaMarket(payload, forcedPlayerId = null) {
     function cancelSelf() { cleanup({ action: 'close' }); }
     ofudaMarketTitle.textContent = 'お札相場';
     ofudaMarketNote.textContent = interactive
-      ? `${payload.playerName}：所持${payload.currency}G。ゴールではお札を売買できます。`
-      : '現在のお札相場です。売買はゴールでできます。';
+      ? `${payload.playerName}：所持${payload.currency}G。5枚単位で売買（1回の購入は30枚まで）、売買は1ターンに1回だけです。`
+      : '現在のお札相場です。売買はゴールとCPでできます。';
     buildOfudaRows({ ...payload, interactive, resolve: cleanup });
     ofudaMarketModal.classList.remove('hidden');
     ofudaMarketClose.addEventListener('click', onClose);
@@ -2992,6 +3003,30 @@ diceButton.addEventListener('click', () => {
   }
 });
 
+/**
+ * 対人戦の観戦側でサイコロの出目を見せる。振った本人は自分のUIで既に
+ * 回転〜確定を見ているので何もしない。ホストは自分のGameが直接
+ * cpuRollDice/クリック経由で描画済みなので、ここではゲスト側だけが働く。
+ */
+async function promptDiceResult({ playerId, steps, reverse = false }) {
+  if (!pvpMatch || pvpMatch.isHost) return;
+  if (playerId === pvpMatch.localPlayerId) return; // 自分の出目は自分の画面で見た
+  if (!Number.isFinite(steps)) return;
+  showCenterState = true;
+  centerShowsOpponent = true;
+  dicePromptDismissed = true;
+  syncCenterVisibility();
+  startDiceSpin();
+  await settleDiceSpin(Math.max(1, Math.min(6, reverse ? steps : steps > 6 ? steps % 6 || 6 : steps)));
+  // 出目が7以上（アイキャンフライの2倍等）はダイス目で表せないので数字で補う。
+  if (steps > 6 || reverse) {
+    showToast(reverse ? `${steps}マス後退！` : `${steps}マス進む！`, 1200);
+  }
+  diceState = 'idle';
+  diceMoving = true;
+  syncCenterVisibility();
+}
+
 /** CPU's roll: same spin/settle rhythm as the player's, just auto-triggered. */
 function cpuRollDice(forcedValue = null) {
   return new Promise((resolve) => {
@@ -3156,6 +3191,10 @@ function startBattle(character, storyOptions = {}) {
     onTollPayment: relayable('tollPayment', promptTollPayment, { broadcast: true }),
     onMoveDestination: relayable('moveDestination', promptMoveDestination, { broadcast: true }),
     onPieceMove: relayable('pieceMove', promptPieceMove, { broadcast: true, awaitRemote: true }),
+    // 投げっぱなしで良い。ゲストのイベントキューは直列なので、この演出は
+    // 必ず直後のpieceMove（歩行）より先に再生される。awaitすると1手番ごとに
+    // ダイス演出ぶんの通信待ちがホスト進行に上乗せされ、全体が重くなる。
+    onDiceResult: relayable('diceResult', promptDiceResult, { broadcast: true }),
     onLandLoss: relayable('landLoss', promptLandLoss, { broadcast: true }),
     onLandChain: relayable('landChain', promptLandChain, { broadcast: true }),
     onLandLevelUp: relayable('landLevelUp', promptLandLevelUp, { broadcast: true }),
@@ -3395,7 +3434,9 @@ STARTマスを通過・着地すると「基本ボーナス＋領地ボーナス
 火・水・雷・森それぞれの「お札」を売買できる、土地と並ぶもうひとつの資産です。
 ・価格: その属性の土地の数と土地レベルで決まります。土地が育つほど値上がりします。開始時は全属性1枚12G、上限は120G（最大10倍）です
 ・売買による変動: 150Gぶん買うと1G上がり、同じ額を売ると1G下がります。価格は取引の最中にも動くため、大量に買うと後半の分は高くつき、大量に売ると後半の分は安くなります（買い占めで高値を作れますが、自分で売って往復しても儲かりません）
-・価格は5G〜120Gの範囲で動きます。売られすぎても5Gを下回らないので、暴落した相場を安く仕込み直すこともできます
+・価格は3G〜120Gの範囲で動きます。売られすぎても3Gを下回らないので、暴落した相場を安く仕込み直すこともできます
+・売買の単位: 売買は5枚単位です。1回の購入は30枚までで、5枚ぶんのGに足りない場合はその5枚は成立しません（Gは減りません）
+・売買の回数: 売買できるのは1ターンにつき1回だけです。同じターンにCPとゴールの両方を通っても、取引できるのは最初の1回です
 ・取引のタイミング: ゴール通過時と、チェックポイントをその周で初めて通過した時に相場画面が開き、購入・売却ができます（ゴールはCPが揃っていなくても開きます）。相場の確認だけなら盤面右の「相場」ボタンでいつでも行えます
 ・資産への反映: 保有しているお札は時価で総資産に加算され、周回ボーナスにも評価額の8%が上乗せされます
 ・帰巣本能でゴールへ戻った場合も相場が開き、周回として数えられます
@@ -7630,12 +7671,21 @@ function flushPvpSync() {
       // キャッシュはpvpMatchオブジェクトに持ち、対戦が変われば自然に捨てられる。
       const cacheHolder = pvpMatch?.roomCode === job.roomCode ? pvpMatch : null;
       const writes = [];
-      const publicJson = JSON.stringify(publicPart);
-      if (!cacheHolder || cacheHolder._lastPublicJson !== publicJson) {
-        if (cacheHolder) cacheHolder._lastPublicJson = publicJson;
-        writes.push(publishPublicState(job.roomCode, publicPart).catch((error) => {
+      // 重いtiles（全体の9割超）と、頻繁に変わる軽い項目を別々に差分判定する。
+      // tilesが据え置きなら軽い項目だけを送るので、1回の書き込みが約10KB→1KB弱になる。
+      const { tiles: tilesPart, ...lightPart } = publicPart;
+      const lightJson = JSON.stringify(lightPart);
+      const tilesJson = JSON.stringify(tilesPart ?? []);
+      const lightChanged = !cacheHolder || cacheHolder._lastLightJson !== lightJson;
+      const tilesChanged = !cacheHolder || cacheHolder._lastTilesJson !== tilesJson;
+      if (lightChanged || tilesChanged) {
+        if (cacheHolder) {
+          cacheHolder._lastLightJson = lightJson;
+          cacheHolder._lastTilesJson = tilesJson;
+        }
+        writes.push(publishPublicState(job.roomCode, publicPart, { includeTiles: tilesChanged }).catch((error) => {
           // 失敗時はキャッシュを無効化して、次のnotifyで必ず再送させる。
-          if (cacheHolder) cacheHolder._lastPublicJson = null;
+          if (cacheHolder) { cacheHolder._lastLightJson = null; cacheHolder._lastTilesJson = null; }
           throw error;
         }));
       }
@@ -7764,6 +7814,7 @@ const pvpGuestHandlers = {
   tollPayment: serializedCamera(promptTollPayment),
   moveDestination: promptMoveDestination,
   pieceMove: promptPieceMove,
+  diceResult: promptDiceResult,
   landLoss: serializedCamera(promptLandLoss),
   landChain: serializedCamera(promptLandChain),
   landLevelUp: serializedCamera(promptLandLevelUp),
@@ -7800,6 +7851,7 @@ function clearPvpPieces() {
   }
   pvpPieces.clear();
   movingGuestPieces.clear();
+  for (const playerId of [...guestPendingWalk.keys()]) clearGuestPendingWalk(playerId);
   pieceMoveGen.clear();
   pvpPieceSnapshotTargets.clear();
   pvpTileRenderState.clear();
@@ -7830,6 +7882,7 @@ async function promptPieceMove({ playerId, from, path }) {
   const myGen = (pieceMoveGen.get(playerId) || 0) + 1;
   pieceMoveGen.set(playerId, myGen);
   pvpPieceSnapshotTargets.delete(playerId);
+  clearGuestPendingWalk(playerId); // 本物の歩行が始まるので猶予待ちは不要
   movingGuestPieces.add(playerId);
   try {
     for (let i = 1; i < points.length; i++) {
@@ -7988,9 +8041,51 @@ function applyPvpBoardState(publicState) {
     // 移動アニメーション中の駒は、後追いのpublicStateで終点へワープさせない。
     // それ以外のスナップ更新も短く補間して、正式なpieceMoveが遅れても飛びを目立たせない。
     if (!movingGuestPieces.has(p.id)) {
-      glidePvpPieceToTile(p.id, piece, tile.position);
+      applyGuestPiecePosition(p.id, piece, tile.position);
     }
   }
+}
+
+// publicState(部屋ドキュメント)と歩行イベント(prompts/{uid})は別チャンネルで、
+// 到着順の保証がない。位置だけ載ったpublicStateが先に着くと、駒は盤面を突っ切って
+// 終点へ滑り、その後で届いた歩行イベントは「もう終点にいる」と判断して丸ごと
+// 飛ばされる＝参加者側だけ瞬間移動に見える。そこで「1マス以上の移動」は
+// 歩行イベントが来るものとみなし、少しだけ待ってから位置を反映する。
+// 待っても来ない場合（ワープ等、歩行を配信しない移動）は猶予後に反映するので、
+// 駒が取り残されることはない。
+const GUEST_WALK_GRACE_MS = 900;
+const GUEST_SNAP_DISTANCE = 1.2; // これ未満のズレは即補正（微調整とみなす）
+const guestPendingWalk = new Map(); // playerId -> { timer, position }
+
+function applyGuestPiecePosition(playerId, piece, tilePosition) {
+  const distance = Math.hypot(piece.position.x - tilePosition.x, piece.position.z - tilePosition.z);
+  if (distance <= GUEST_SNAP_DISTANCE) {
+    clearGuestPendingWalk(playerId);
+    glidePvpPieceToTile(playerId, piece, tilePosition);
+    return;
+  }
+  // 大きく離れている＝歩行イベントが後から来るはず。猶予を張って待つ。
+  const pending = guestPendingWalk.get(playerId);
+  const position = { x: tilePosition.x, z: tilePosition.z };
+  if (pending) {
+    pending.position = position; // 最新の目的地に更新（タイマーは延長しない）
+    return;
+  }
+  const timer = window.setTimeout(() => {
+    const entry = guestPendingWalk.get(playerId);
+    guestPendingWalk.delete(playerId);
+    if (!entry || movingGuestPieces.has(playerId)) return;
+    const current = pvpPieces.get(playerId);
+    if (current) glidePvpPieceToTile(playerId, current, entry.position);
+  }, GUEST_WALK_GRACE_MS);
+  guestPendingWalk.set(playerId, { timer, position });
+}
+
+function clearGuestPendingWalk(playerId) {
+  const pending = guestPendingWalk.get(playerId);
+  if (!pending) return;
+  window.clearTimeout(pending.timer);
+  guestPendingWalk.delete(playerId);
 }
 
 /** ゲスト側専用: publicStateをGameのonStateChangeと同じ見た目になるようUIへ反映する。相手(ホスト)の本当の手札は届かない（別チャンネルで配られるのは自分の分だけ）ので、自分の番以外はcenterHandを伏せる。 */

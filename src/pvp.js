@@ -147,8 +147,20 @@ export function leavePvpRoom(roomCode, { isHost }) {
 
 // ---- ホスト専用: 権威状態のpublish ----
 
-export function publishPublicState(roomCode, publicState) {
-  return updateDoc(roomRef(roomCode), { publicState });
+/**
+ * 公開状態のpublish。tilesは全体の9割超（盤面が埋まると約10KB）を占める一方、
+ * 実際に変わるのは召喚・侵略・レベルアップの時だけ。対してisBusy/awaitingRoll等の
+ * 軽い項目は1手番に何度も切り替わる。毎回まるごと書くと、変わっていない盤面を
+ * 何度も送り直すことになり、通信の遅い回線では召喚・通行料・分岐のたびに
+ * 目に見えて重くなる。そこでtilesが変わっていない時はドット記法で軽い項目だけを
+ * 更新し、部屋ドキュメント自体は常に完全な状態を保つ（再接続時の復元に必要）。
+ */
+export function publishPublicState(roomCode, publicState, { includeTiles = true } = {}) {
+  const { tiles, ...light } = publicState;
+  const update = {};
+  for (const [key, value] of Object.entries(light)) update[`publicState.${key}`] = value;
+  if (includeTiles) update['publicState.tiles'] = tiles ?? [];
+  return updateDoc(roomRef(roomCode), update);
 }
 
 export function publishPrivateHand(roomCode, uid, hand) {

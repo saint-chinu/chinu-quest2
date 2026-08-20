@@ -96,7 +96,12 @@ const OFUDA_TRADE_UNIT_G = 150;
 // しつつ、青天井にはしない。下限5Gは「売られすぎて価値0＝二度と買えない
 // 死に市場」を防ぐ床（お札は紙くずにはならない）。
 const OFUDA_MAX_PRICE = 120;
-const OFUDA_MIN_PRICE = 5;
+const OFUDA_MIN_PRICE = 3;
+// 売買は5枚単位。1回の購入は30枚（=6ロット）まで。さらに売買は1ターンに
+// 1回だけ（_maybeTradeOfudaAtGoal）。逐次約定と組み合わせて、1回の取引で
+// 相場を動かせる幅に上限を設ける。
+const OFUDA_TRADE_LOT = 5;
+const OFUDA_MAX_BUY_PER_TRADE = 30;
 const OFUDA_LEVEL_SCORE = { 1: 0.5, 2: 1.625, 3: 2.75, 4: 3.875, 5: 5 };
 // 周回ボーナスに乗るお札利回り（評価額×この率）。土地の領地ボーナスと
 // 並ぶ収入源になるよう5%→8%へ。保有2,000G分で周160G＝土地3枚弱に相当。
@@ -135,6 +140,7 @@ export class Game {
     onCpuRoll,
     onMoveComplete,
     onPieceMove,
+    onDiceResult,
     onLandCommand,
     onPickMonsterCard,
     onConfirmAction,
@@ -219,6 +225,7 @@ export class Game {
     this.onCpuRoll = onCpuRoll;
     this.onMoveComplete = onMoveComplete;
     this.onPieceMove = onPieceMove || (() => {});
+    this.onDiceResult = onDiceResult || (() => {});
     this.onLandCommand = onLandCommand;
     this.onPickMonsterCard = onPickMonsterCard;
     this.onConfirmAction = onConfirmAction;
@@ -711,6 +718,7 @@ export class Game {
     this.awaitingRoll = false;
     this.turnCount += 1;
     this.currentPlayer.spellUsedThisTurn = false;
+    this.currentPlayer.ofudaTradedThisTurn = false;
     // 不動産鑑〇士: 自分の手番が来るたびに残りターン数を1つ消化する。
     if (this.currentPlayer.allTilesAccessTurnsRemaining > 0) this.currentPlayer.allTilesAccessTurnsRemaining -= 1;
     this._notifyState();
@@ -1890,6 +1898,11 @@ export class Game {
     }
     player.lastDiceSteps = steps;
     if (!reverse) this.onLog(`${player.name}のサイコロ: ${steps}`);
+    // 対人戦の他クライアントへ出目を配信する。ダイスの回転・確定は振った本人の
+    // ローカルUIだけの演出で、他の参加者にはpublicStateの
+    // 「awaitingRoll→isBusy」の切り替わりしか届かない。そのため参加者側は
+    // 出目を見ないまま駒が動き出し、移動が瞬間移動に見えていた。
+    await this.onDiceResult?.({ playerId: player.id, steps, reverse });
 
     if (reverse) {
       await this._movePlayerBackward(player, steps);
@@ -2355,7 +2368,11 @@ export class Game {
 
   async _maybeTradeOfudaAtGoal(player) {
     if (!this.hasOfuda || this._isCancelled) return;
+    // 売買は1ターンに1回だけ。ゴールとCPを同じターンに踏んだ場合や、
+    // 1回の取引所で何度も往復して相場を動かすのを防ぐ（_beginTurnでリセット）。
+    if (player.ofudaTradedThisTurn) return;
     if (player.isCPU) {
+      player.ofudaTradedThisTurn = true;
       await this._cpuMaybeTradeOfuda(player);
       return;
     }
@@ -2370,8 +2387,11 @@ export class Game {
       const element = trade.element;
       if (!OFUDA_ELEMENTS.includes(element)) continue;
       if (trade.action === 'buy') {
-        const result = this._buyOfuda(player, element, Number(trade.amountG) || 0);
-        if (result.bought <= 0) { this.onLog('購入できるお札がありません'); continue; }
+        const result = this._buyOfuda(player, element, Number(trade.amountG) || 0, {
+          maxSheets: Number(trade.sheets) || OFUDA_MAX_BUY_PER_TRADE,
+        });
+        if (result.bought <= 0) { this.onLog(`購入できるお札がありません（${OFUDA_TRADE_LOT}枚単位・所持Gが不足）`); continue; }
+        player.ofudaTradedThisTurn = true;
         const message = `${player.name}は${ELEMENT_LABEL[element]}のお札を${result.bought}枚購入した (-${result.spent}G)`;
         this.onLog(message);
         this._notifyState();
@@ -2384,11 +2404,14 @@ export class Game {
         }
       } else if (trade.action === 'sell') {
         const result = this._sellOfuda(player, element, Number(trade.count) || 0);
-        if (result.sold <= 0) { this.onLog('売却できるお札がありません'); continue; }
+        if (result.sold <= 0) { this.onLog(`売却できるお札がありません（${OFUDA_TRADE_LOT}枚単位）`); continue; }
+        player.ofudaTradedThisTurn = true;
         this.onLog(`${player.name}は${ELEMENT_LABEL[element]}のお札を${result.sold}枚売却した (+${result.revenue}G)`);
         this._notifyState();
         await this._presentOfudaPriceChange(element, result.before);
       }
+      // 1ターン1回の売買が済んだら取引所を閉じる。
+      if (player.ofudaTradedThisTurn) return;
     }
   }
 
@@ -2415,18 +2438,20 @@ export class Game {
     // 売れば自分の評価額を自分で暴落させるだけ（上限で全量売る旧ロジックは
     // 勝利目前の自傷になっていた）。売るのは、土地を失って自力で相場を
     // 支えられなくなった属性から撤退する時だけ。
+    // 売りは5枚単位なので、1ロットに満たない保有は売却候補にしない
+    // （切り捨てで0枚になり、判断だけ消費して何も起きなくなるため）。
     const sellCandidate = isFixer
       ? holdings
-        .filter((entry) => entry.count > 0 && entry.avg > 0
+        .filter((entry) => entry.count >= OFUDA_TRADE_LOT && entry.avg > 0
           && !heldElements.has(entry.element) && entry.price >= entry.avg + 10)
         .sort((a, b) => (b.price - b.avg) * b.count - (a.price - a.avg) * a.count)[0]
       : holdings
-        .filter((entry) => entry.count > 1 && entry.avg > 0 && entry.price >= entry.avg + 5)
+        .filter((entry) => entry.count >= OFUDA_TRADE_LOT && entry.avg > 0 && entry.price >= entry.avg + 5)
         .sort((a, b) => (b.price - b.avg) - (a.price - a.avg))[0];
     if (sellCandidate) {
       const sellCount = isFixer
         ? sellCandidate.count
-        : Math.max(1, Math.floor(sellCandidate.count / 2));
+        : Math.max(OFUDA_TRADE_LOT, Math.floor(sellCandidate.count / 2));
       const result = this._sellOfuda(player, sellCandidate.element, sellCount);
       if (result.sold > 0) {
         this.onLog(`${player.name}は値上がりした${ELEMENT_LABEL[sellCandidate.element]}のお札を${result.sold}枚売却した (+${result.revenue}G)`);
@@ -3651,19 +3676,35 @@ export class Game {
    * Gが無限に増える増殖バグになっていた。逐次約定なら売りも同じ坂を
    * 下りながら約定するので、往復益は消える。
    */
-  _buyOfuda(player, element, budgetG) {
+  _buyOfuda(player, element, budgetG, { maxSheets = OFUDA_MAX_BUY_PER_TRADE } = {}) {
     if (!this.hasOfuda || !OFUDA_ELEMENTS.includes(element)) return { bought: 0, spent: 0, before: null };
     const before = this._ofudaPrice(element);
+    const cap = Math.max(0, Math.min(OFUDA_MAX_BUY_PER_TRADE, Math.floor(maxSheets)));
     let budget = Math.min(Math.max(0, Math.floor(budgetG)), player.currency);
     let bought = 0;
     let spent = 0;
-    while (bought < 999) {
-      const price = this._ofudaPrice(element);
-      if (price <= 0 || budget < price) break;
-      budget -= price;
-      spent += price;
-      bought += 1;
-      this._stepOfudaPressure(element, price);
+    // 5枚1ロット単位で約定する。ロットの途中で予算が尽きたらそのロットは
+    // 買わない（端数の1〜4枚は成立させない）。
+    while (bought + OFUDA_TRADE_LOT <= cap) {
+      // 不成立時に正確へ戻せるよう、ロット開始時の売買圧を控えておく
+      // （クランプが効いた後だと差分を引くだけでは元に戻らないため）。
+      const pressureBefore = this.ofudaPressure[element] || 0;
+      let lotCost = 0;
+      let affordable = true;
+      for (let i = 0; i < OFUDA_TRADE_LOT; i++) {
+        const price = this._ofudaPrice(element);
+        if (price <= 0 || budget - lotCost < price) { affordable = false; break; }
+        lotCost += price;
+        // ロット内でも1枚ごとに相場を押し上げながら約定する（増殖対策の逐次約定）。
+        this._stepOfudaPressure(element, price);
+      }
+      if (!affordable) {
+        this.ofudaPressure[element] = pressureBefore; // ロット不成立は無かったことにする
+        break;
+      }
+      budget -= lotCost;
+      spent += lotCost;
+      bought += OFUDA_TRADE_LOT;
     }
     if (bought > 0) {
       player.currency -= spent;
@@ -3673,10 +3714,15 @@ export class Game {
   }
 
   /** お札の売却。購入と対称に1枚ずつ約定し、1枚売るごとに価格が下がる（下限5Gで頭打ち）。 */
-  _sellOfuda(player, element, count) {
+  _sellOfuda(player, element, count, { allowRemainder = false } = {}) {
     if (!this.hasOfuda || !OFUDA_ELEMENTS.includes(element)) return { sold: 0, revenue: 0, before: null };
     const owned = player.ofuda?.[element] || 0;
-    const sold = Math.max(0, Math.min(owned, Math.floor(count)));
+    const requested = Math.max(0, Math.min(owned, Math.floor(count)));
+    // 売りも5枚単位。ただし借金精算の強制売却（allowRemainder）だけは、
+    // 5枚未満の端数しか持っていない時に返済不能で詰まないよう例外にする。
+    const sold = allowRemainder
+      ? requested
+      : Math.floor(requested / OFUDA_TRADE_LOT) * OFUDA_TRADE_LOT;
     if (sold <= 0) return { sold: 0, revenue: 0, before: null };
     const before = this._ofudaPrice(element);
     let revenue = 0;
@@ -4119,7 +4165,9 @@ export class Game {
         if (ofudaCandidates.length > 0) {
           const best = ofudaCandidates.sort((a, b) => b.price - a.price)[0];
           const need = Math.ceil((-player.currency) / best.price);
-          const result = this._sellOfuda(player, best.element, need);
+          // 借金精算は5枚単位に丸めない（端数しか持っていない時に売れず、
+          // 返済もできず破産処理にも進めない無限ループになるため）。
+          const result = this._sellOfuda(player, best.element, need, { allowRemainder: true });
           this.onLog(`${player.name}は${best.label}のお札を${result.sold}枚売却した (+${result.revenue}G)`);
           this._notifyState();
           await this._presentOfudaPriceChange(best.element, result.before);
@@ -4132,7 +4180,9 @@ export class Game {
         if (ofudaCandidates.length > 0) {
           const best = ofudaCandidates.sort((a, b) => b.price - a.price)[0];
           const need = Math.ceil((-player.currency) / best.price);
-          const result = this._sellOfuda(player, best.element, need);
+          // 借金精算は5枚単位に丸めない（端数しか持っていない時に売れず、
+          // 返済もできず破産処理にも進めない無限ループになるため）。
+          const result = this._sellOfuda(player, best.element, need, { allowRemainder: true });
           this.onLog(`${player.name}は${best.label}のお札を${result.sold}枚売却した (+${result.revenue}G)`);
           this._notifyState();
           await this._presentOfudaPriceChange(best.element, result.before);
@@ -4154,7 +4204,7 @@ export class Game {
       if (choice?.type === 'ofuda') {
         const entry = ofudaCandidates.find((candidate) => candidate.element === choice.element);
         if (!entry) continue;
-        const result = this._sellOfuda(player, entry.element, Number(choice.count) || 0);
+        const result = this._sellOfuda(player, entry.element, Number(choice.count) || 0, { allowRemainder: true });
         if (result.sold <= 0) continue;
         this.onLog(`${player.name}は${entry.label}のお札を${result.sold}枚売却した (+${result.revenue}G)`);
         this._notifyState();
