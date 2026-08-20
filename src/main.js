@@ -789,10 +789,15 @@ function buildOfudaRows({ market = [], holdings = {}, currency = 0, interactive 
     info.innerHTML = `<strong>${entry.label}のお札</strong><span>${entry.price}G / 枚　所持${owned}枚</span>`;
     row.appendChild(info);
     if (interactive) {
-      const buy = document.createElement('button');
-      buy.textContent = '200G買う';
-      buy.disabled = currency < entry.price || entry.price <= 0;
-      buy.addEventListener('click', () => resolve?.({ action: 'buy', element: entry.element, amountG: 200 }));
+      // 相場が上がると200Gでは1〜2枚しか買えなくなるので、まとめ買いの
+      // 選択肢も出す（値付け強化に合わせてプレイヤーも仕込みやすくする）。
+      for (const amountG of [200, 500]) {
+        const buy = document.createElement('button');
+        buy.textContent = `${amountG}G買う`;
+        buy.disabled = currency < Math.min(amountG, entry.price) || entry.price <= 0 || currency < entry.price;
+        buy.addEventListener('click', () => resolve?.({ action: 'buy', element: entry.element, amountG }));
+        row.append(buy);
+      }
       const sell = document.createElement('button');
       sell.textContent = '売る';
       sell.disabled = owned <= 0;
@@ -800,7 +805,7 @@ function buildOfudaRows({ market = [], holdings = {}, currency = 0, interactive 
         const ok = await confirmYesNo(`${entry.label}のお札を売却しますか？（${entry.price}G/枚）`);
         if (ok) resolve?.({ action: 'sell', element: entry.element, count: owned });
       });
-      row.append(buy, sell);
+      row.append(sell);
     }
     ofudaMarketChoices.appendChild(row);
   }
@@ -3388,10 +3393,11 @@ STARTマスを通過・着地すると「基本ボーナス＋領地ボーナス
 
 【お札（⑫海上金融街のみ）】
 火・水・雷・森それぞれの「お札」を売買できる、土地と並ぶもうひとつの資産です。
-・価格: その属性の土地の数と土地レベルで決まります。土地が育つほど値上がりします。開始時は全属性1枚10G、上限は100Gです
-・売買による変動: 200Gぶん買うと1G上がり、同じ額を売ると1G下がります。買い占めて自分で高値を作ることもできます
+・価格: その属性の土地の数と土地レベルで決まります。土地が育つほど値上がりします。開始時は全属性1枚12G、上限は120G（最大10倍）です
+・売買による変動: 150Gぶん買うと1G上がり、同じ額を売ると1G下がります。買い占めて自分で高値を作ることもできます
 ・取引のタイミング: ゴールを通過するたびに相場画面が開き、購入・売却ができます（チェックポイントが揃っていなくても開きます）。相場の確認だけなら盤面右の「相場」ボタンでいつでも行えます
-・資産への反映: 保有しているお札は時価で総資産に加算され、周回ボーナスにも評価額の5%が上乗せされます
+・資産への反映: 保有しているお札は時価で総資産に加算され、周回ボーナスにも評価額の8%が上乗せされます
+・帰巣本能でゴールへ戻った場合も相場が開き、周回として数えられます
 ・所持Gがマイナスになった時は、土地の代わりにお札を売って穴埋めすることもできます
 ※このステージはサドンデスです。破産した時点で敗北が確定します。
 

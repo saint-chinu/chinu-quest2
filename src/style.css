@@ -3265,7 +3265,7 @@ html, body {
 
 .ofuda-market-row {
   display: grid;
-  grid-template-columns: 1fr auto auto;
+  grid-template-columns: 1fr auto auto auto; /* 情報+200G買う+500G買う+売る */
   gap: 8px;
   align-items: center;
   padding: 10px;

@@ -88,10 +88,17 @@ const ELEMENT_CHANGE_COST_PER_LEVEL = 100;
 const NEUTRAL_ELEMENT_CHANGE_DISCOUNT = 0.5;
 const CHANGEABLE_ELEMENTS = [Element.FIRE, Element.WATER, Element.THUNDER, Element.FOREST, Element.NEUTRAL];
 const OFUDA_ELEMENTS = [Element.FIRE, Element.WATER, Element.FOREST, Element.THUNDER];
-const OFUDA_TRADE_UNIT_G = 200;
-const OFUDA_INITIAL_PRICE = 10;
-const OFUDA_MAX_PRICE = 100;
+// 150Gぶんの売買で相場が1G動く。小さくするほど「買い」が自己成就的に
+// 価格を押し上げ、先回り買いの旨味が増す（大きくすると土地レベル一辺倒になる）。
+const OFUDA_TRADE_UNIT_G = 150;
+// 開始時価格はOFUDA_MAX_PRICE × (Lv1スコア0.5 / Lv5スコア5) = 12G。
+// 上限120Gで初期比10倍 - 早めに仕込んだ側がきちんと報われる伸び幅を確保
+// しつつ、青天井にはしない。
+const OFUDA_MAX_PRICE = 120;
 const OFUDA_LEVEL_SCORE = { 1: 0.5, 2: 1.625, 3: 2.75, 4: 3.875, 5: 5 };
+// 周回ボーナスに乗るお札利回り（評価額×この率）。土地の領地ボーナスと
+// 並ぶ収入源になるよう5%→8%へ。保有2,000G分で周160G＝土地3枚弱に相当。
+const OFUDA_LAP_YIELD = 0.08;
 
 // 速度違反はご愛嬌（ほこら効果）で強制されるサイコロ目。
 const FORCED_DICE_STEPS = 10;
@@ -1585,7 +1592,7 @@ export class Game {
     player.currency += reward;
     this.onLog(`${player.name}は「帰巣本能」でゴールに戻り、+${reward}Gを獲得した！`);
     this._notifyState();
-    await this._grantGoalBonus(player);
+    await this._grantGoalBonus(player, { viaHoming: true });
   }
 
   /**
@@ -2266,18 +2273,25 @@ export class Game {
     const base = freelancerTile ? Math.round(baseBonus * freelancerTile.unit.def.effect.multiplier) : baseBonus;
     const landRate = this.players.length >= 3 ? LAND_BONUS_RATE_MULTI : LAND_BONUS_RATE;
     const land = this._summonCountOf(player.id) * landRate;
-    const ofuda = this.hasOfuda ? Math.round(this._ofudaValueOf(player) * 0.05) : 0;
+    const ofuda = this.hasOfuda ? Math.round(this._ofudaValueOf(player) * OFUDA_LAP_YIELD) : 0;
     return { base, land, ofuda, total: base + land + ofuda };
   }
 
   /** ゴール(START)着地/通過どちらからも呼ぶ: このマップにrequireAllCheckpointsが立っていれば全チェックポイント通過済みの時だけボーナスを渡し、渡したらこのラップ分の通過記録をクリアする。立っていなければ無条件で渡す（従来通り）。 */
-  async _grantGoalBonus(player) {
+  async _grantGoalBonus(player, { viaHoming = false } = {}) {
     this._healOwnedUnitsOnLap(player);
     if (this.requireAllCheckpoints && !this._hasPassedAllCheckpoints(player)) {
       const remaining = this.tiles
         .filter((tile) => tile.type === TileType.EVENT && !player.passedCheckpoints.has(tile.id))
         .map((tile) => tile.checkpointNumber);
       this.onLog(`${player.name}はゴールを通過（ボーナスなし）　残りのCPは${remaining.map((number) => `${number}番`).join('、')}です`);
+      // 帰巣本能によるゴール帰還は、CPが揃っていなくても周回として数える
+      // （ボーナスは従来どおり出ない）。周回数は基本ボーナスの伸び・
+      // 副業収入・フリーランサー倍率に効く。通常の徒歩通過は対象外。
+      if (viaHoming) {
+        player.lapsCompleted += 1;
+        this.onLog(`${player.name}の帰還は${player.lapsCompleted}周目として数えられた`);
+      }
       this._notifyState();
       // お札の売買はチェックポイント完走とは切り離す。周回ボーナスと違って
       // 「ゴールを通過したら取引できる」のが仕様なので、CP未通過のこの分岐でも
