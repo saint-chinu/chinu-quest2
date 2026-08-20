@@ -5083,10 +5083,45 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
   }
 }
 
-/** playStoryReplay()の決着後: 進行度・固有カード報酬は変えず、勝敗を問わず総資産報酬Mだけ付与する。 */
-async function handleStoryReplayEnd(index, { won }, replayVariant) {
+/**
+ * 海上金融街でクエを破産させた時の隠しイベントと一度きりのEX報酬。
+ * 初回攻略と再戦は終了ハンドラが別なので、どちらからも必ずこの共通処理を通す。
+ */
+function claimQueBankruptcyReward(stage, result = {}) {
+  const defeatedByBankruptcy = stage.key === 'ofuda-field'
+    && Array.isArray(result.alivePlayerIds)
+    && !result.alivePlayerIds.includes(1);
+  if (!defeatedByBankruptcy) return null;
+
+  const newlyRewarded = !currentCharacter.receivedCapitalismIncarnateReward;
+  if (newlyRewarded) {
+    const key = cardKey(SPELL_CATALOG.capitalismIncarnate);
+    currentCharacter.ownedCards[key] = (currentCharacter.ownedCards[key] || 0) + 1;
+    currentCharacter.receivedCapitalismIncarnateReward = true;
+  }
+  return {
+    newlyRewarded,
+    lines: [
+      { speaker: 'クエ', text: '破産……このワイが、ほんまに破産……。もう金融業は廃業や。' },
+      { speaker: 'クエ', text: 'これからはイカを釣って暮らすわ。チャートより潮目を読む人生や……。' },
+      ...(newlyRewarded ? [
+        { speaker: '???', text: 'クエが去った跡に、金色に光る契約書のようなカードが残されていた。' },
+        { speaker: '主人公', text: '……資本主義の権化？ 金融業を廃業した奴が置いていくカード名じゃないだろ。' },
+        { speaker: '???', text: 'EXカード「資本主義の権化」を手に入れた！' },
+      ] : [
+        { speaker: '主人公', text: '二度目でも廃業宣言するのかよ。イカ釣りの方も心配になってきたな……。' },
+      ]),
+    ],
+  };
+}
+
+/** playStoryReplay()の決着後: 進行度は変えず、勝敗を問わず総資産報酬Mを付与する。 */
+async function handleStoryReplayEnd(index, result = {}, replayVariant) {
+  const { won } = result;
   const stage = STORY_STAGES[index];
   const mReward = grantStoryBattleReward();
+  const queBankruptcy = won ? claimQueBankruptcyReward(stage, result) : null;
+  if (queBankruptcy) saveCharacter(currentUserId, currentCharacter);
   clearStoryResume();
   game = undefined;
   stopMusic();
@@ -5099,7 +5134,10 @@ async function handleStoryReplayEnd(index, { won }, replayVariant) {
   showScreen(storyDialogueScreen);
   const dialogueOptions = { background: getMapBackground(stage.key), stageBadgeText: `STORY${stage.title}（再戦）` };
   if (won) {
-    await playDialogueLines(replayVariant.outro || [{ speaker: '???', text: 'また挑みに来てくれ！' }], dialogueOptions);
+    await playDialogueLines(
+      queBankruptcy?.lines || replayVariant.outro || [{ speaker: '???', text: 'また挑みに来てくれ！' }],
+      dialogueOptions,
+    );
   } else {
     await playDialogueLines([{ speaker: '???', text: '力及ばず、敗れてしまった……もう一度挑もう。' }], dialogueOptions);
   }
@@ -5166,32 +5204,8 @@ async function handleStoryBattleEnd(index, result = {}) {
   if (stage.key === 'chin-harbor') {
     markCatalogSeen(MONSTER_CATALOG.su);
   }
-  const queDefeatedByBankruptcy = stage.key === 'ofuda-field'
-    && Array.isArray(result.alivePlayerIds)
-    && !result.alivePlayerIds.includes(1);
-  let secretOutroLines = [];
-  let replaceOutroWithSecret = false;
-  if (queDefeatedByBankruptcy) {
-    const newlyRewarded = !currentCharacter.receivedCapitalismIncarnateReward;
-    if (newlyRewarded) {
-      const key = cardKey(SPELL_CATALOG.capitalismIncarnate);
-      currentCharacter.ownedCards[key] = (currentCharacter.ownedCards[key] || 0) + 1;
-      currentCharacter.receivedCapitalismIncarnateReward = true;
-    }
-    secretOutroLines = [
-      { speaker: 'クエ', text: '破産……このワイが、ほんまに破産……。もう金融業は廃業や。' },
-      { speaker: 'クエ', text: 'これからはイカを釣って暮らすわ。チャートより潮目を読む人生や……。' },
-      ...(newlyRewarded ? [
-        { speaker: '???', text: 'クエが去った跡に、金色に光る契約書のようなカードが残されていた。' },
-        { speaker: '主人公', text: '……資本主義の権化？ 金融業を廃業した奴が置いていくカード名じゃないだろ。' },
-        { speaker: '???', text: 'EXカード「資本主義の権化」を手に入れた！' },
-      ] : [
-        { speaker: '主人公', text: '二度目でも廃業宣言するのかよ。イカ釣りの方も心配になってきたな……。' },
-      ]),
-    ];
-    replaceOutroWithSecret = true;
-  }
-  const outroLines = replaceOutroWithSecret ? secretOutroLines : [...(stage.outro || []), ...secretOutroLines];
+  const queBankruptcy = claimQueBankruptcyReward(stage, result);
+  const outroLines = queBankruptcy?.lines || stage.outro || [];
   if (index + 1 > (currentCharacter.storyProgress || 0)) {
     currentCharacter.storyProgress = index + 1;
   }
