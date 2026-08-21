@@ -701,6 +701,15 @@ export function buildStarterDeckList(bookId = 'fireForest') {
  * list with no generic/random filler - but keyed by a story.js `deckKey`
  * instead of a book id. Characters without an entry here still fall back to
  * buildThemedDeckList's themed-random deck (see main.js buildBattlePlayerConfigs).
+ *
+ * アイテム枠について: CPUは「装備した方が結果が良くなる時だけ装備する」
+ * （game.jsの_chooseBattleItemByOutcome）ようになり、実測の装備率が
+ * 66〜96%から23〜37%へ下がった。余ったアイテム枠は手札で腐るだけなので、
+ * 各デッキから最も装備されなかったアイテムを1枚抜き、モンスター／スペルへ
+ * 振り替えてある。特に真剣白刃取り（相手のアイテムを奪う、ATK+0/HP+0）は
+ * CPUの勝率シミュレーションが「相手はアイテムを使わない」前提で回る以上
+ * 効果が常にゼロで、実測でも236回手札にあって装備1回だった完全な死に札
+ * だったため、闇・ホフクの4枚を含めて全デッキから撤去した。
  */
 export const CHARACTER_DECKS = {
   chin: {
@@ -709,7 +718,7 @@ export const CHARACTER_DECKS = {
         // ボス強化: 最弱の半魚人(N 30/30)2枚を、嵐を呼ぶ〇女(R 50/50)と
         // 煉獄の門番兵(S 25/40・先制・60G)へ差し替え。水・火テーマは維持。
         { def: MONSTER_CATALOG.su, count: 2 }, { def: MONSTER_CATALOG.fireworksMaster, count: 3 },
-        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 1 }, { def: MONSTER_CATALOG.rengokuMonbanhei, count: 1 },
+        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 1 }, { def: MONSTER_CATALOG.rengokuMonbanhei, count: 2 },
         { def: MONSTER_CATALOG.kaikyouSekishoKurage, count: 2 },
         { def: MONSTER_CATALOG.mizuburoShugyoso, count: 2 }, { def: MONSTER_CATALOG.uminoieTencho, count: 2 },
         { def: MONSTER_CATALOG.bigMermaid, count: 2 }, { def: MONSTER_CATALOG.kyousenshi, count: 1 },
@@ -719,7 +728,7 @@ export const CHARACTER_DECKS = {
         // ハリネズミの服1枚を斬〇剣（後攻・貫通・50%即死）へ。itemGambleChance
         // 0.9と合わせて、侵略・迎撃どちらでも一撃の脅威を作る。
         { def: ITEM_CATALOG.fushichoNoTate, count: 1 }, { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
-        { def: ITEM_CATALOG.shinkenShirahadori, count: 1 }, { def: ITEM_CATALOG.lifeJacket, count: 1 },
+        { def: ITEM_CATALOG.lifeJacket, count: 1 },
         { def: ITEM_CATALOG.iceSlugger, count: 1 }, { def: ITEM_CATALOG.osafune, count: 1 },
         { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 }, { def: ITEM_CATALOG.zangokuKen, count: 1 },
       ],
@@ -765,7 +774,6 @@ export const CHARACTER_DECKS = {
       items: [
         { def: ITEM_CATALOG.fushichoNoTate, count: 1 },
         { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
-        { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
         { def: ITEM_CATALOG.kaenHoushakiki, count: 1 },
         { def: ITEM_CATALOG.iceSlugger, count: 1 },
         // 強めの武器: 斬〇剣（後攻・貫通・50%即死）。侵略の決定力を底上げする。
@@ -779,7 +787,7 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.divination, count: 2 },
         { def: SPELL_CATALOG.specialAudit, count: 1 },
         { def: SPELL_CATALOG.disclosureRequest, count: 1 },
-        { def: SPELL_CATALOG.senbonZakura, count: 1 },
+        { def: SPELL_CATALOG.senbonZakura, count: 2 },
         { def: SPELL_CATALOG.blueOcean, count: 1 },
         { def: SPELL_CATALOG.manaExtraction, count: 2 },
         { def: SPELL_CATALOG.homingInstinct, count: 2 },
@@ -792,7 +800,7 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.minatoJoshi, count: 4 },
         { def: MONSTER_CATALOG.hangyojin, count: 1 },
         { def: MONSTER_CATALOG.amoeba, count: 1 },
-        { def: MONSTER_CATALOG.suikenKurage, count: 1 },
+        { def: MONSTER_CATALOG.suikenKurage, count: 2 },
         { def: MONSTER_CATALOG.redEi, count: 1 },
         { def: MONSTER_CATALOG.penpen, count: 4 },
         { def: MONSTER_CATALOG.shinkaigyoX, count: 4 },
@@ -803,7 +811,6 @@ export const CHARACTER_DECKS = {
       items: [
         { def: ITEM_CATALOG.kombo, count: 4 },
         { def: ITEM_CATALOG.boudanChokki, count: 3 },
-        { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 },
       ],
       spells: [
         { def: SPELL_CATALOG.diceOne, count: 1 },
@@ -826,11 +833,11 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.hatsudenNezumi, count: 2 },
         { def: MONSTER_CATALOG.tetsuo, count: 2 },
         { def: MONSTER_CATALOG.hatsudenOni, count: 2 },
-        { def: MONSTER_CATALOG.raiun, count: 1 },
+        { def: MONSTER_CATALOG.raiun, count: 2 },
       ],
       items: [
         { def: ITEM_CATALOG.kombo, count: 2 },
-        { def: ITEM_CATALOG.tetsuPipe, count: 2 },
+        { def: ITEM_CATALOG.tetsuPipe, count: 1 },
         { def: ITEM_CATALOG.morohaNoTsurugi, count: 2 },
         { def: ITEM_CATALOG.pegasusSword, count: 1 },
         { def: ITEM_CATALOG.zangokuKen, count: 1 },
@@ -851,7 +858,7 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.takenokoha, count: 3 },
         { def: MONSTER_CATALOG.kinokoha, count: 3 },
         { def: MONSTER_CATALOG.moriNoYousei, count: 2 },
-        { def: MONSTER_CATALOG.matagiNoKoshirou, count: 2 },
+        { def: MONSTER_CATALOG.matagiNoKoshirou, count: 3 },
         { def: MONSTER_CATALOG.yamamba, count: 1 },
         { def: MONSTER_CATALOG.sekaiju, count: 1 },
         { def: MONSTER_CATALOG.salarymander, count: 2 },
@@ -864,7 +871,6 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.tetsuNoYoroi, count: 2 },
         { def: ITEM_CATALOG.boudanChokki, count: 3 },
         { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
-        { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 },
         { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
       ],
       spells: [
@@ -886,12 +892,12 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.nashiNashiTankentai, count: 2 }, { def: MONSTER_CATALOG.matagiNoKoshirou, count: 2 },
         { def: MONSTER_CATALOG.yamamba, count: 2 }, { def: MONSTER_CATALOG.jinmenchou, count: 1 },
         { def: MONSTER_CATALOG.jukaiNoOnryou, count: 2 }, { def: MONSTER_CATALOG.mountGorilla, count: 1 },
-        { def: MONSTER_CATALOG.yamagami, count: 1 }, { def: MONSTER_CATALOG.rainbowChameleon, count: 3 },
+        { def: MONSTER_CATALOG.yamagami, count: 1 }, { def: MONSTER_CATALOG.rainbowChameleon, count: 4 },
       ],
       items: [
         { def: ITEM_CATALOG.kombo, count: 1 }, { def: ITEM_CATALOG.denryuMuchi, count: 1 },
         { def: ITEM_CATALOG.potLid, count: 1 }, { def: ITEM_CATALOG.stegoro, count: 2 },
-        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 1 }, { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 1 },
         { def: ITEM_CATALOG.zangokuKen, count: 1 },
       ],
       spells: [
@@ -907,14 +913,14 @@ export const CHARACTER_DECKS = {
       monsters: [
         { def: MONSTER_CATALOG.hatsudenNezumi, count: 2 }, { def: MONSTER_CATALOG.tetsuo, count: 2 },
         { def: MONSTER_CATALOG.ironWool, count: 2 }, { def: MONSTER_CATALOG.mechanicMaso, count: 1 },
-        { def: MONSTER_CATALOG.raiheishinZamurai, count: 3 }, { def: MONSTER_CATALOG.raiun, count: 2 },
+        { def: MONSTER_CATALOG.raiheishinZamurai, count: 4 }, { def: MONSTER_CATALOG.raiun, count: 2 },
         { def: MONSTER_CATALOG.erekiKagayaki, count: 2 }, { def: MONSTER_CATALOG.gandamu, count: 2 },
         { def: MONSTER_CATALOG.raijin, count: 2 }, { def: MONSTER_CATALOG.rainbowChameleon, count: 3 },
       ],
       items: [
         { def: ITEM_CATALOG.boudanChokki, count: 1 }, { def: ITEM_CATALOG.tetsuNoYoroi, count: 1 },
         { def: ITEM_CATALOG.danboorNoYoroi, count: 1 }, { def: ITEM_CATALOG.nankaNoOmamori, count: 2 },
-        { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 }, { def: ITEM_CATALOG.fushichoNoKen, count: 2 },
+        { def: ITEM_CATALOG.fushichoNoKen, count: 2 },
       ],
       spells: [
         { def: SPELL_CATALOG.realEstateAppraiser, count: 1 }, { def: SPELL_CATALOG.manaExtraction, count: 1 },
@@ -951,12 +957,11 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.fushichoNoTate, count: 1 },
         { def: ITEM_CATALOG.lifeJacket, count: 1 },
         { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
-        { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
       ],
       spells: [
         { def: SPELL_CATALOG.toughness, count: 2 },
         { def: SPELL_CATALOG.waterRelease, count: 2 },
-        { def: SPELL_CATALOG.waterMagicCircle, count: 2 },
+        { def: SPELL_CATALOG.waterMagicCircle, count: 3 },
         { def: SPELL_CATALOG.blueOcean, count: 1 },
         { def: SPELL_CATALOG.specialAudit, count: 1 },
         { def: SPELL_CATALOG.manaExtraction, count: 1 },
@@ -976,7 +981,7 @@ export const CHARACTER_DECKS = {
   investigatorA: {
     composition: {
       monsters: [
-        { def: MONSTER_CATALOG.tenhou, count: 2 },
+        { def: MONSTER_CATALOG.tenhou, count: 3 },
         { def: MONSTER_CATALOG.thunderbird, count: 2 },
         { def: MONSTER_CATALOG.kadenryuuCheetah, count: 2 },
         { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 },
@@ -993,7 +998,6 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.raijinKen, count: 2 },
         { def: ITEM_CATALOG.gomuGoNoPistol, count: 1 },
         { def: ITEM_CATALOG.pegasusSword, count: 1 },
-        { def: ITEM_CATALOG.zangokuKen, count: 1 },
         { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
         { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
         { def: ITEM_CATALOG.lifeJacket, count: 1 },
@@ -1029,6 +1033,8 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.fushichoNoTate, count: 1 },
       ],
       spells: [
+        // 侵略専用デッキなのでアイテムを削る余地が無い（1枚抜くとどのカードでも
+        // 勝率が落ちた）。ここだけは10枚のまま維持する。
         { def: SPELL_CATALOG.forcedAscension, count: 3 },
         { def: SPELL_CATALOG.homingInstinct, count: 2 },
         { def: SPELL_CATALOG.realEstateAppraiser, count: 1 },
@@ -1046,7 +1052,7 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.penpen, count: 2 }, { def: MONSTER_CATALOG.shinkaigyoX, count: 1 },
         { def: MONSTER_CATALOG.kaizokuS, count: 1 }, { def: MONSTER_CATALOG.aoriika, count: 2 },
         { def: MONSTER_CATALOG.tsurara, count: 1 }, { def: MONSTER_CATALOG.azarashisan, count: 2 },
-        { def: MONSTER_CATALOG.mizuburoShugyoso, count: 1 }, { def: MONSTER_CATALOG.bigMermaid, count: 2 },
+        { def: MONSTER_CATALOG.mizuburoShugyoso, count: 1 }, { def: MONSTER_CATALOG.bigMermaid, count: 3 },
         { def: MONSTER_CATALOG.suijin, count: 1 }, { def: MONSTER_CATALOG.uminoieTencho, count: 1 },
         { def: MONSTER_CATALOG.rainbowChameleon, count: 3 },
       ],
@@ -1054,7 +1060,7 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.kombo, count: 1 }, { def: ITEM_CATALOG.boudanChokki, count: 1 },
         { def: ITEM_CATALOG.nyoBou, count: 1 }, { def: ITEM_CATALOG.pegasusSword, count: 1 },
         { def: ITEM_CATALOG.lifeJacket, count: 1 }, { def: ITEM_CATALOG.twinHammer, count: 1 },
-        { def: ITEM_CATALOG.gomuGoNoPistol, count: 1 }, { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
+        { def: ITEM_CATALOG.gomuGoNoPistol, count: 1 },
         { def: ITEM_CATALOG.peeStaff, count: 1 },
       ],
       spells: [
@@ -1070,7 +1076,7 @@ export const CHARACTER_DECKS = {
       monsters: [
         { def: MONSTER_CATALOG.battleTrain, count: 4 },
         { def: MONSTER_CATALOG.sacrificeCar, count: 4 },
-        { def: MONSTER_CATALOG.hatsudenNezumi, count: 3 },
+        { def: MONSTER_CATALOG.hatsudenNezumi, count: 4 },
         { def: MONSTER_CATALOG.tetsuo, count: 2 },
         { def: MONSTER_CATALOG.ironWool, count: 2 },
         { def: MONSTER_CATALOG.mechanicMaso, count: 2 },
@@ -1085,7 +1091,6 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.boudanChokki, count: 1 },
         { def: ITEM_CATALOG.lifeJacket, count: 1 },
         { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 1 },
-        { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
       ],
       spells: [
         { def: SPELL_CATALOG.diceOne, count: 3 },
@@ -1098,16 +1103,16 @@ export const CHARACTER_DECKS = {
   darkHofuku: {
     composition: {
       monsters: [
-        { def: MONSTER_CATALOG.rengokuMonbanhei, count: 2 },
+        { def: MONSTER_CATALOG.rengokuMonbanhei, count: 3 },
         { def: MONSTER_CATALOG.flameGod, count: 1 },
-        { def: MONSTER_CATALOG.classicDragon, count: 2 },
-        { def: MONSTER_CATALOG.hezumaDragon, count: 2 },
+        { def: MONSTER_CATALOG.classicDragon, count: 3 },
+        { def: MONSTER_CATALOG.hezumaDragon, count: 3 },
         { def: MONSTER_CATALOG.ironChef, count: 2 },
         { def: MONSTER_CATALOG.fireKick, count: 2 },
         { def: MONSTER_CATALOG.kaentake, count: 1 },
         { def: MONSTER_CATALOG.molotovMan, count: 1 },
         { def: MONSTER_CATALOG.flamingYoutuber, count: 1 },
-        { def: MONSTER_CATALOG.kakouFudoumyouou, count: 2 },
+        { def: MONSTER_CATALOG.kakouFudoumyouou, count: 3 },
         { def: MONSTER_CATALOG.kontonNoAtama, count: 2 },
         { def: MONSTER_CATALOG.mysteriousInvader, count: 1 },
         { def: MONSTER_CATALOG.kyousenshi, count: 1 },
@@ -1116,7 +1121,6 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.peeStaff, count: 1 },
         { def: ITEM_CATALOG.fushichoNoTate, count: 1 },
         { def: ITEM_CATALOG.twinHammer, count: 2 },
-        { def: ITEM_CATALOG.shinkenShirahadori, count: 4 },
         { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 2 },
       ],
       spells: [
@@ -1145,7 +1149,6 @@ export const CHARACTER_DECKS = {
       items: [
         { def: ITEM_CATALOG.zangokuKen, count: 3 },
         { def: ITEM_CATALOG.fushichoNoTate, count: 1 },
-        { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
         { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
         { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 },
         { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 1 },
@@ -1153,7 +1156,7 @@ export const CHARACTER_DECKS = {
       spells: [
         { def: SPELL_CATALOG.kokushiMusou, count: 2 },
         { def: SPELL_CATALOG.psychokinesis, count: 2 },
-        { def: SPELL_CATALOG.electrify, count: 2 },
+        { def: SPELL_CATALOG.electrify, count: 3 },
         { def: SPELL_CATALOG.homingInstinct, count: 1 },
         { def: SPELL_CATALOG.backfire, count: 1 },
         { def: SPELL_CATALOG.manaExtraction, count: 1 },
@@ -1188,13 +1191,12 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.raijinKen, count: 1 },
         { def: ITEM_CATALOG.gomuGoNoPistol, count: 1 },
         { def: ITEM_CATALOG.iceSlugger, count: 1 },
-        { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
         { def: ITEM_CATALOG.zangokuKen, count: 1 },
       ],
       spells: [
         { def: SPELL_CATALOG.phoenixCurse, count: 1 },
         { def: SPELL_CATALOG.walletVacuum, count: 2 },
-        { def: SPELL_CATALOG.senbonZakura, count: 3 },
+        { def: SPELL_CATALOG.senbonZakura, count: 4 },
         { def: SPELL_CATALOG.dieWithMe, count: 1 },
         { def: SPELL_CATALOG.optimize, count: 1 },
         { def: SPELL_CATALOG.psychokinesis, count: 2 },
@@ -1223,7 +1225,7 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.nashiNashiTankentai, count: 2 }, // 50G 30/30 1/3ダメ無効
         { def: MONSTER_CATALOG.trufuButa, count: 1 },        // 50G 30/30 1/3で150G
         { def: MONSTER_CATALOG.shinrinChouzeikan, count: 2 }, // 90G 35/40 連鎖2 通行料1.3倍
-        { def: MONSTER_CATALOG.yamagami, count: 2 },         // 150G 連鎖1 森連鎖×7
+        { def: MONSTER_CATALOG.yamagami, count: 3 },         // 150G 連鎖1 森連鎖×7
         { def: MONSTER_CATALOG.sekaiju, count: 2 },          // 120G 0/70 連鎖1 防衛拠点
         // テック枠。避雷針侍は生贄1が必要なので手札が薄い時は出せない。
         { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 }, // 雷 50G 15/30 身代わり
@@ -1232,7 +1234,7 @@ export const CHARACTER_DECKS = {
       ],
       items: [
         { def: ITEM_CATALOG.gomuGoNoPistol, count: 2 },  // 人食い草: 森が持つとATK+50
-        { def: ITEM_CATALOG.nankaNoOmamori, count: 3 },
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 2 },
         { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 1 }, // ATK+直前の出目×11、貫通
       ],
       spells: [
@@ -1283,11 +1285,11 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.morohaNoTsurugi, count: 1 }, { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 },
         { def: ITEM_CATALOG.stegoro, count: 1 }, { def: ITEM_CATALOG.twinHammer, count: 1 },
         { def: ITEM_CATALOG.fushichoNoKen, count: 1 }, { def: ITEM_CATALOG.heikeNoYoroi, count: 1 },
-        { def: ITEM_CATALOG.zangokuKen, count: 1 }, { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
+        { def: ITEM_CATALOG.zangokuKen, count: 1 },
         { def: ITEM_CATALOG.peeStaff, count: 1 }, { def: ITEM_CATALOG.pegasusSword, count: 1 },
       ],
       spells: [
-        { def: SPELL_CATALOG.twitterLand, count: 1 }, { def: SPELL_CATALOG.senbonZakura, count: 2 },
+        { def: SPELL_CATALOG.twitterLand, count: 1 }, { def: SPELL_CATALOG.senbonZakura, count: 3 },
         { def: SPELL_CATALOG.sideIncome, count: 1 }, { def: SPELL_CATALOG.neutralMagicCircle, count: 1 },
         { def: SPELL_CATALOG.necromancer, count: 1 }, { def: SPELL_CATALOG.encounterUnknown, count: 1 },
       ],
