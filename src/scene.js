@@ -1032,6 +1032,28 @@ export class GameScene {
     });
   }
 
+  /**
+   * 土地売却時、配置モンスターのアイコンをマスの下へ沈めながら消す。
+   * 借金精算の強制売却は「モンスターが手札へ戻らず消滅する」処理なので、
+   * 撃破（崩れる）とは違う"引き払う"見え方にしている。
+   * スプライトは呼び出し側が後で破棄する（_syncUnitIconsが盤面と同期する）ため、
+   * ここでは位置と不透明度だけを動かし、終了後に元の値へ戻しておく。
+   */
+  sinkUnitIcon(sprite, duration = 700) {
+    if (!sprite) return Promise.resolve();
+    const baseY = sprite.position.y;
+    const material = sprite.material;
+    const baseOpacity = material?.opacity ?? 1;
+    return tween(duration, (t) => {
+      const e = t * t; // 後半ほど速く沈む
+      sprite.position.y = baseY - e * (UNIT_ICON_HEIGHT + 0.6);
+      if (material) material.opacity = baseOpacity * Math.max(0, 1 - t * 1.15);
+    }).finally(() => {
+      sprite.position.y = baseY;
+      if (material) material.opacity = baseOpacity;
+    });
+  }
+
   /** 目標達成時、金色の祝福光を上空からプレイヤーへ降らせる。 */
   playBlessingLight(position) {
     const group = new THREE.Group();

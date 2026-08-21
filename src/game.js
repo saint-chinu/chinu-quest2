@@ -132,6 +132,7 @@ export class Game {
     onTollPayment,
     onMoveDestination,
     onLandLoss,
+    onLandSale,
     onLandChain,
     onLandLevelUp,
     onCheckpoint,
@@ -218,6 +219,7 @@ export class Game {
     this.onTollPayment = onTollPayment || (() => Promise.resolve());
     this.onMoveDestination = onMoveDestination || (() => {});
     this.onLandLoss = onLandLoss || (() => Promise.resolve());
+    this.onLandSale = onLandSale || (() => Promise.resolve());
     this.onLandChain = onLandChain || (() => Promise.resolve());
     this.onLandLevelUp = onLandLevelUp || (() => Promise.resolve());
     this.onCheckpoint = onCheckpoint || (() => Promise.resolve());
@@ -4107,6 +4109,15 @@ export class Game {
   async _sellLandTile(player, tile) {
     const salePrice = Math.round(this._landValueOfTile(tile) / 2);
     const ofudaPriceBefore = this._ofudaPrice(tile.element);
+    // 盤面を書き換える"前"に演出する。_notifyStateの_syncUnitIconsが
+    // アイコンを消した後では、沈んで消えるモンスターがもう存在しない。
+    await this.onLandSale?.({
+      tileId: tile.id,
+      position: { x: tile.position.x, z: tile.position.z },
+      salePrice,
+      unitName: tile.unit?.def?.name ?? '',
+      playerName: player.name,
+    });
     // G不足による強制売却では、配置モンスターは手札へ戻らず消滅する。
     tile.unit = null;
     tile.owner = null;
@@ -5680,6 +5691,85 @@ export class Game {
     return this._bestBattleItemFromHand(player.hand, unit, { preferStandardItems: player.name === 'Q' });
   }
 
+  /**
+   * この戦闘だけを、指定のアイテム構成で実際に解決してみる（本物の状態には
+   * 触れない使い捨て複製 + 使い捨てGoldLedger）。戻り値は攻守の生存フラグ。
+   * _runBattleScene本体と同じ手順でボーナスを組むので、見積もりと本番の
+   * 挙動がずれない。
+   */
+  _simulateBattleOnce(attackerUnit, defenderUnit, tile, attackerItem, defenderItem) {
+    const a = this._cloneFieldUnitForSim(attackerUnit);
+    const d = this._cloneFieldUnitForSim(defenderUnit);
+    for (const [unit, item] of [[a, attackerItem], [d, defenderItem]]) {
+      if (!item) continue;
+      const fusionDef = this._trainFusionDef(unit, item);
+      if (fusionDef) unit.def = fusionDef;
+      else equipItem(unit, { ...item });
+    }
+    // 攻撃側は土地を離れて戦うので土地HPが乗らない（tile=null）。
+    const attackerBonus = this._battleBonus(a, null, tile);
+    const defenderBonus = this._battleBonus(d, tile, tile);
+    this._applyEffectBonus(a, d, attackerBonus);
+    this._applyEffectBonus(d, a, defenderBonus);
+    this._applyEquippedItemBonus(a, attackerBonus);
+    this._applyEquippedItemBonus(d, defenderBonus);
+    const battleDefenderBonus = this._pierceAdjustedBonus(
+      defenderBonus,
+      this._hasPierce(a) ? this._elementHpBonus(d, tile) : 0,
+    );
+    const result = resolveBattle(a, d, new GoldLedger(), attackerBonus, battleDefenderBonus);
+    return { attackerSurvived: result.attackerSurvived, defenderSurvived: result.defenderSurvived };
+  }
+
+  /**
+   * 相手を見たうえでのCPUのバトルアイテム選択。
+   *
+   * 従来は「手札で一番強いアイテム」を相手と無関係に必ず装備していた。その結果、
+   * 先制持ち同士で相手が先に殴ってきて先に落ちる（＝こちらは一度も攻撃できない）
+   * 局面でも武器を装備し、勝敗が1ミリも変わらないままカードだけ失っていた。
+   *
+   * ここでは「装備しない」も含めた候補を実際に戦闘解決して比べ、結果が変わらない
+   * なら装備しない（カードを温存する）。効果に乱数を含むカードがあるので複数回
+   * 試行して平均で判断する。相手のアイテム使用は考慮しない
+   * （_estimateWinProbabilityと同じ簡略化。互いに伏せて同時に選ぶため）。
+   */
+  _cpuChooseBattleItem(player, unit, opponentUnit, tile, isDefender, trials = 12) {
+    const gear = (player.hand || []).filter(isBattleItemCard);
+    if (gear.length === 0) return null;
+    const savedLog = this.onLog;
+    this.onLog = () => {};
+    try {
+      // 従来ロジックが選ぶ本命に加え、残りも候補に入れる（本命が無駄でも、
+      // 別のアイテムなら結果を変えられることがある）。
+      const preferred = this._bestBattleItemFromHand(player.hand, unit, { preferStandardItems: player.name === 'Q' });
+      const candidates = [null, ...(preferred ? [preferred] : []), ...gear.filter((c) => c !== preferred)];
+      const scoreOf = (item) => {
+        let good = 0;
+        for (let i = 0; i < trials; i++) {
+          const r = isDefender
+            ? this._simulateBattleOnce(opponentUnit, unit, tile, null, item)
+            : this._simulateBattleOnce(unit, opponentUnit, tile, item, null);
+          // 守備側は「土地を守れたか（自分が生き残ったか）」、攻撃側は
+          // 「土地を奪えたか（相手を倒して自分が生き残ったか）」で評価する。
+          if (isDefender ? r.defenderSurvived : (r.attackerSurvived && !r.defenderSurvived)) good++;
+        }
+        return good / trials;
+      };
+      const noItemScore = scoreOf(null);
+      let best = null;
+      let bestScore = noItemScore;
+      for (const item of candidates) {
+        if (!item) continue;
+        const score = scoreOf(item);
+        // 明確に良くなる時だけ装備する。誤差レベルの改善でカードを捨てない。
+        if (score > bestScore + 0.001) { best = item; bestScore = score; }
+      }
+      return best;
+    } finally {
+      this.onLog = savedLog;
+    }
+  }
+
   /** シミュレーション専用: 本物のユニットには一切触れず、items/cursesだけ独立コピーした複製を作る（resolveBattleは渡された引数を直接書き換えるため、実物を渡すと本当に装備/呪いが消し飛んでしまう）。 */
   _cloneFieldUnitForSim(unit) {
     return {
@@ -5887,7 +5977,7 @@ export class Game {
     // "後" にまとめて再生する - 選択中に相手の装備が画面上に見えることは
     // ない。
     const attackerItem = attackerPlayer.isCPU
-      ? this._cpuPickBattleItem(attackerPlayer, attackerUnit)
+      ? this._cpuChooseBattleItem(attackerPlayer, attackerUnit, defenderUnit, battleTile, false)
       : await this.onPickBattleItem(
           {
             hand: attackerPlayer.hand.filter(isBattleItemCard),
@@ -5900,7 +5990,7 @@ export class Game {
           attackerPlayer.id,
         );
     const defenderItem = defenderPlayer.isCPU
-      ? this._cpuPickBattleItem(defenderPlayer, defenderUnit)
+      ? this._cpuChooseBattleItem(defenderPlayer, defenderUnit, attackerUnit, battleTile, true)
       : await this.onPickBattleItem(
           {
             hand: defenderPlayer.hand.filter(isBattleItemCard),

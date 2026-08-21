@@ -418,6 +418,16 @@ html, body {
   to { transform: translate(-50%, -50%) scale(1); opacity: 1; }
 }
 
+/* 換金額のポップ。ダメージ数値と同じ跳ね方（fx-damage-pop）を共有し、
+   色だけ金貨色へ差し替える。 */
+.fx-damage-number.fx-gold-number {
+  background: linear-gradient(180deg, #fff6c9 0%, #ffd45e 45%, #e08a12 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-stroke: 1.5px rgba(72, 40, 4, 0.9);
+  filter: drop-shadow(0 3px 0 rgba(90, 52, 6, 0.55)) drop-shadow(0 0 14px rgba(255, 205, 88, 0.7));
+}
+
 @keyframes fx-damage-pop {
   0% {
     transform: translate(-50%, 0) scale(0.4);

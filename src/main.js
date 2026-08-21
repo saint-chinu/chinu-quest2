@@ -2700,6 +2700,39 @@ function showDamageNumber(tile, damage) {
   });
 }
 
+/**
+ * 土地売却（G不足の強制売却）の演出。以前はログ1行だけで、盤面から土地と
+ * モンスターが無言で消え、所持Gだけ増えていた。対象マスへ寄り、配置
+ * モンスターをマスの下へ沈めて消し、生まれた現金をマスの上へ跳ねさせる。
+ * 盤面を書き換える"前"に呼ぶ必要がある（_syncUnitIconsがアイコンを消す前）。
+ */
+async function promptLandSale({ tileId, salePrice = 0, unitName = '' }) {
+  const tile = tiles?.find((t) => t.id === tileId);
+  if (!tile || !scene) return;
+  playSfx('coin');
+  const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+  await scene.focusAndZoom(tile.position.x, tile.position.z, 1.35, pvpWaitCut(320));
+  if (tile.unitMesh) await scene.sinkUnitIcon(tile.unitMesh, pvpWaitCut(700));
+  if (unitName) await showTargetEffectMessage(tile.position, `${unitName}は土地とともに手放された`, pvpWaitCut(900));
+  await showGoldPopNumber(tile, salePrice);
+  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, pvpWaitCut(320));
+}
+
+/** 換金額のポップアップ。ダメージ数値と同じ跳ね方で、色だけ金貨色にした版。 */
+function showGoldPopNumber(tile, amount) {
+  return new Promise((resolve) => {
+    if (!scene) { resolve(); return; }
+    const pos = scene.worldToScreen(tile.position.x, PIECE_REST_Y + 1.2, tile.position.z);
+    const el = document.createElement('div');
+    el.className = 'fx-damage-number fx-gold-number';
+    el.textContent = `+${amount}G`;
+    el.style.left = `${pos.x}px`;
+    el.style.top = `${pos.y}px`;
+    fxLayer.appendChild(el);
+    waitForVisualAnimation(el, resolve, 1800);
+  });
+}
+
 /** 引き分け（両者生存）専用の演出: 決着メッセージの前に、両陣営のカードをそれぞれ自分の側の画面外へ退避させる。 */
 function promptBattleRetreat() {
   return new Promise((resolve) => {
@@ -3200,6 +3233,7 @@ function startBattle(character, storyOptions = {}) {
     // ダイス演出ぶんの通信待ちがホスト進行に上乗せされ、全体が重くなる。
     onDiceResult: relayable('diceResult', promptDiceResult, { broadcast: true }),
     onLandLoss: relayable('landLoss', promptLandLoss, { broadcast: true }),
+    onLandSale: relayable('landSale', promptLandSale, { broadcast: true }),
     onLandChain: relayable('landChain', promptLandChain, { broadcast: true }),
     onLandLevelUp: relayable('landLevelUp', promptLandLevelUp, { broadcast: true }),
     onCheckpoint: relayable('checkpoint', promptCheckpointSound, { broadcast: true }),
@@ -7870,6 +7904,7 @@ const pvpGuestHandlers = {
   pieceStep: promptPieceStep,
   diceResult: promptDiceResult,
   landLoss: serializedCamera(promptLandLoss),
+  landSale: serializedCamera(promptLandSale),
   landChain: serializedCamera(promptLandChain),
   landLevelUp: serializedCamera(promptLandLevelUp),
   checkpoint: promptCheckpointSound,
