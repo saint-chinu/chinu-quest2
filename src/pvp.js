@@ -155,11 +155,14 @@ export function leavePvpRoom(roomCode, { isHost }) {
  * 目に見えて重くなる。そこでtilesが変わっていない時はドット記法で軽い項目だけを
  * 更新し、部屋ドキュメント自体は常に完全な状態を保つ（再接続時の復元に必要）。
  */
-export function publishPublicState(roomCode, publicState, { includeTiles = true } = {}) {
-  const { tiles, ...light } = publicState;
+export function publishPublicState(roomCode, publicState, { includeTiles = true, includeTurnHand = true } = {}) {
+  const { tiles, turnHand, ...light } = publicState;
   const update = {};
   for (const [key, value] of Object.entries(light)) update[`publicState.${key}`] = value;
   if (includeTiles) update['publicState.tiles'] = tiles ?? [];
+  // turnHand（手番プレイヤーの公開手札）はカード定義まるごとで3〜5KBある割に
+  // 変わるのはドロー・使用時だけ。tilesと同じく据え置き時は送らない。
+  if (includeTurnHand) update['publicState.turnHand'] = turnHand ?? [];
   return updateDoc(roomRef(roomCode), update);
 }
 
@@ -334,13 +337,10 @@ export class HostGuestRelay {
     clearTimeout(state.cleanupTimer);
     const id = state.nextId++;
     state.outbox.push({ id, type, payload: stripUndefined(payload), ack: mode !== 'fire', wantValue: mode === 'value' });
-    // 送信の失敗で呼び出し元（進行中の戦闘・移動処理）を巻き込まない。
-    // 同期throwはPromiseの外で飛ぶため、relayable側の.catchでは受けられない。
-    try {
-      this._flushParticipant(uid);
-    } catch (error) {
-      console.warn('PvP prompt flush threw synchronously', error);
-    }
+    // 投げっぱなし演出は50msだけ待ってまとめて送る（手番開始時のturnFocus/
+    // diceResult/moveDestination等の連発を1書き込みに束ね、未ACK再送の重複も
+    // 減らす）。応答を待つ質問・完了待ちは即時送信。
+    this._scheduleFlush(uid, mode !== 'fire');
     if (mode === 'fire') return Promise.resolve();
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -359,6 +359,22 @@ export class HostGuestRelay {
 
   broadcastParticipant(uid, type, payload, awaitDone = false) {
     return this.enqueueParticipant(uid, type, payload, awaitDone ? 'done' : 'fire');
+  }
+
+  _scheduleFlush(uid, urgent) {
+    const state = this._participantState(uid);
+    if (urgent) {
+      if (state.flushTimer) { clearTimeout(state.flushTimer); state.flushTimer = null; }
+      // 送信の失敗で呼び出し元（進行中の戦闘・移動処理）を巻き込まない。
+      // 同期throwはPromiseの外で飛ぶため、relayable側の.catchでは受けられない。
+      try { this._flushParticipant(uid); } catch (error) { console.warn('PvP prompt flush threw synchronously', error); }
+      return;
+    }
+    if (state.flushTimer) return;
+    state.flushTimer = setTimeout(() => {
+      state.flushTimer = null;
+      try { this._flushParticipant(uid); } catch (error) { console.warn('PvP prompt flush threw synchronously', error); }
+    }, 50);
   }
 
   _flushParticipant(uid) {
@@ -405,6 +421,7 @@ export class HostGuestRelay {
     }
     for (const state of this.participants.values()) {
       clearTimeout(state.cleanupTimer);
+      if (state.flushTimer) clearTimeout(state.flushTimer);
       state.respUnsub?.();
       for (const waiter of state.doneWaiters) {
         clearTimeout(waiter.timer);
@@ -498,13 +515,25 @@ export class GuestHostListener {
         if (event.wantValue) this.lastInteractiveAnswer = { id: event.id, v: result ?? null };
         // 応答文書は {requestId: 処理済み水位, value: 直近の対話回答} の固定形。
         // 毎イベント書くと往復直列化が復活するので、ホストが待つイベント
-        // （ack）とキューを飲み干した時だけ書く。valueを常に同梱するのは、
-        // 連続書き込みがスナップショット合体で1回にまとまっても回答が
-        // 消えないようにするため。
+        // （ack）とキューを飲み干した時だけ「待つ書き込み」をする。valueを
+        // 常に同梱するのは、連続書き込みがスナップショット合体で1回に
+        // まとまっても回答が消えないようにするため。
         if (event.ack || this.batchQueue.length === 0) {
+          // 書き込み完了は待たない。ホストは応答スナップショットの到着だけを
+          // 見ており、同一クライアントの書き込みは順序保証されるので、ここで
+          // awaitして次の演出（歩行の次の1歩等）を遅らせる意味がない。
           const body = { requestId: event.id, value: this.lastInteractiveAnswer };
-          await setDoc(promptResponseRef(this.roomCode, this.uid), body)
+          void setDoc(promptResponseRef(this.roomCode, this.uid), body)
             .catch(() => setDoc(promptResponseRef(this.roomCode, this.uid), body).catch(() => {}));
+          this._lastAckWriteAt = performance.now();
+        } else if (performance.now() - (this._lastAckWriteAt || 0) > 400) {
+          // 演出ラッシュ中の中間ACK（投げっぱなし・再生は止めない）。これが無いと
+          // 長い演出列の間ホストのアウトボックスが痩せず、フラッシュのたびに
+          // 送信済みイベントまで全部再送されて書き込み量が雪だるま式に膨らむ
+          // （実測で1ターン36KB。歩行ストリーミング化で件数も増えるため必須）。
+          this._lastAckWriteAt = performance.now();
+          const body = { requestId: event.id, value: this.lastInteractiveAnswer };
+          void setDoc(promptResponseRef(this.roomCode, this.uid), body).catch(() => {});
         }
       }
     } finally {

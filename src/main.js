@@ -1654,7 +1654,7 @@ function promptCardReveal(card) {
         cardRevealModal.classList.add('hidden');
         resolve();
       }, REVEAL_SHRINK_MS);
-    }, REVEAL_GROW_MS + REVEAL_HOLD_MS);
+    }, REVEAL_GROW_MS + pvpWaitCut(REVEAL_HOLD_MS)); // 保持時間だけ対人戦の待機カット対象（ローカル戦は不変）
   });
 }
 
@@ -3194,6 +3194,7 @@ function startBattle(character, storyOptions = {}) {
     onTollPayment: relayable('tollPayment', promptTollPayment, { broadcast: true }),
     onMoveDestination: relayable('moveDestination', promptMoveDestination, { broadcast: true }),
     onPieceMove: relayable('pieceMove', promptPieceMove, { broadcast: true, awaitRemote: true }),
+    onPieceStep: relayable('pieceStep', promptPieceStep, { broadcast: true }),
     // 投げっぱなしで良い。ゲストのイベントキューは直列なので、この演出は
     // 必ず直後のpieceMove（歩行）より先に再生される。awaitすると1手番ごとに
     // ダイス演出ぶんの通信待ちがホスト進行に上乗せされ、全体が重くなる。
@@ -3315,7 +3316,10 @@ gameMenuSpeed.addEventListener('click', () => {
 
 // 対人戦専用: 固定待機時間を何%削るかを選ぶ。0%は従来どおり。
 const PVP_WAIT_CUT_CYCLE = [0, 0.3, 0.5, 0.7];
-let selectedPvpWaitCutRate = 0;
+// 対人戦の既定は30%カット。0%は1手番あたりの固定待ち（着地後400ms・CP900ms等）が
+// 素通しで、体感がもっさりするというフィードバックが続いたため。ホストがメニューで
+// いつでも変更でき、その値が全参加者へ同期される仕組みは従来どおり。
+let selectedPvpWaitCutRate = 0.3;
 function syncPvpWaitButtonLabel() {
   gameMenuPvpWait.textContent = `⏱ 待機カット: ${Math.round(selectedPvpWaitCutRate * 100)}%`;
 }
@@ -7691,25 +7695,29 @@ function flushPvpSync() {
       // キャッシュはpvpMatchオブジェクトに持ち、対戦が変われば自然に捨てられる。
       const cacheHolder = pvpMatch?.roomCode === job.roomCode ? pvpMatch : null;
       const writes = [];
-      // 重いtiles（全体の9割超）と、頻繁に変わる軽い項目を別々に差分判定する。
-      // tilesが据え置きなら軽い項目だけを送るので、1回の書き込みが約10KB→1KB弱になる。
-      const { tiles: tilesPart, ...lightPart } = publicPart;
+      // 重いtiles（全体の9割超）・かさばるturnHand（公開手札3〜5KB）・頻繁に
+      // 変わる軽い項目を別々に差分判定し、変わった層だけ送る。全部まとめて
+      // 差分判定すると、isBusyが切り替わるたびに据え置きの手札まで再送される。
+      const { tiles: tilesPart, turnHand: turnHandPart, ...lightPart } = publicPart;
       const lightJson = JSON.stringify(lightPart);
       const tilesJson = JSON.stringify(tilesPart ?? []);
+      const turnHandJson = JSON.stringify(turnHandPart ?? []);
       const lightChanged = !cacheHolder || cacheHolder._lastLightJson !== lightJson;
       const tilesChanged = !cacheHolder || cacheHolder._lastTilesJson !== tilesJson;
-      if (lightChanged || tilesChanged) {
+      const turnHandChanged = !cacheHolder || cacheHolder._lastTurnHandJson !== turnHandJson;
+      if (lightChanged || tilesChanged || turnHandChanged) {
         if (cacheHolder) {
           cacheHolder._lastLightJson = lightJson;
           cacheHolder._lastTilesJson = tilesJson;
+          cacheHolder._lastTurnHandJson = turnHandJson;
         }
         // JSON文字列は差分判定で既に作ってあるので、それを戻して送る。
         // JSON.stringifyはundefinedのプロパティを落とすため、この経路を通せば
         // Firestoreが拒否するundefinedが混ざる余地がなくなる（追加コストなし）。
-        const safePart = { ...JSON.parse(lightJson), tiles: JSON.parse(tilesJson) };
-        writes.push(publishPublicState(job.roomCode, safePart, { includeTiles: tilesChanged }).catch((error) => {
+        const safePart = { ...JSON.parse(lightJson), tiles: JSON.parse(tilesJson), turnHand: JSON.parse(turnHandJson) };
+        writes.push(publishPublicState(job.roomCode, safePart, { includeTiles: tilesChanged, includeTurnHand: turnHandChanged }).catch((error) => {
           // 失敗時はキャッシュを無効化して、次のnotifyで必ず再送させる。
-          if (cacheHolder) { cacheHolder._lastLightJson = null; cacheHolder._lastTilesJson = null; }
+          if (cacheHolder) { cacheHolder._lastLightJson = null; cacheHolder._lastTilesJson = null; cacheHolder._lastTurnHandJson = null; }
           throw error;
         }));
       }
@@ -7838,6 +7846,7 @@ const pvpGuestHandlers = {
   tollPayment: serializedCamera(promptTollPayment),
   moveDestination: promptMoveDestination,
   pieceMove: promptPieceMove,
+  pieceStep: promptPieceStep,
   diceResult: promptDiceResult,
   landLoss: serializedCamera(promptLandLoss),
   landChain: serializedCamera(promptLandChain),
@@ -7896,12 +7905,23 @@ async function promptPieceMove({ playerId, from, path }) {
   if (!scene || !Array.isArray(path) || path.length === 0) return;
   const piece = pvpPieces.get(playerId);
   if (!piece) return; // まだ駒が生成されていなければ次のスナップに任せる
-  const points = (from ? [from, ...path] : path).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.z));
+  let points = (from ? [from, ...path] : path).filter((p) => p && Number.isFinite(p.x) && Number.isFinite(p.z));
   if (points.length < 2) return;
 
   // 最終座標のpublicStateが先着済みなら、出発地点へ逆ワープさせない。
   const lastPoint = points[points.length - 1];
   if (Math.hypot(piece.position.x - lastPoint.x, piece.position.z - lastPoint.z) < 0.05) return;
+
+  // pieceStepで途中まで（または全部）歩行済みの場合、現在位置に最も近い
+  // 経路点から再開する。先頭から歩き直すと駒が出発点へ逆ワープしてしまう。
+  let nearest = 0;
+  let nearestDist = Infinity;
+  for (let i = 0; i < points.length; i++) {
+    const d = Math.hypot(piece.position.x - points[i].x, piece.position.z - points[i].z);
+    if (d < nearestDist) { nearestDist = d; nearest = i; }
+  }
+  if (nearest > 0 && nearestDist < 3.0) points = points.slice(nearest);
+  if (points.length < 2) return;
 
   const myGen = (pieceMoveGen.get(playerId) || 0) + 1;
   pieceMoveGen.set(playerId, myGen);
@@ -7925,6 +7945,40 @@ async function promptPieceMove({ playerId, from, path }) {
     piece.position.set(last.x, PIECE_REST_Y, last.z);
   } finally {
     // 自分が最新世代のときだけ移動中フラグを解除（後発アニメを邪魔しない）。
+    if (pieceMoveGen.get(playerId) === myGen) movingGuestPieces.delete(playerId);
+  }
+}
+
+/**
+ * 対人戦: ホストから1歩ぶんずつ届く歩行イベント（onPieceStep）を再生する。
+ * ホストの盤面と並行してほぼ同時に歩かせるためのもの。従来のpieceMove
+ * （セグメントまとめ）は同期バリア兼補修として後から届く - 全歩再生済み
+ * なら「もう到着済み」で即終わる。イベントは直列キューで届くので、
+ * 1歩tweenが重なって走ることはない。
+ */
+async function promptPieceStep({ playerId, from, to }) {
+  if (!(pvpMatch && !pvpMatch.isHost)) return;
+  if (!scene || !to || !Number.isFinite(to.x) || !Number.isFinite(to.z)) return;
+  const piece = pvpPieces.get(playerId);
+  if (!piece) return;
+  const myGen = (pieceMoveGen.get(playerId) || 0) + 1;
+  pieceMoveGen.set(playerId, myGen);
+  pvpPieceSnapshotTargets.delete(playerId);
+  clearGuestPendingWalk(playerId);
+  movingGuestPieces.add(playerId);
+  try {
+    // 直前のイベントが欠落して現在位置がfromから離れている場合は、
+    // 現在位置からtoへ歩く（ワープさせない。最終位置はpieceMove/スナップが正す）。
+    const a = { x: piece.position.x, z: piece.position.z };
+    if (scene.isOutsideSafeView(to.x, to.z)) scene.panTo(to.x, to.z);
+    await tween(GUEST_STEP_DURATION_MS, (t) => {
+      if (pieceMoveGen.get(playerId) !== myGen) return;
+      const e = easeInOutQuad(t);
+      const hop = Math.sin(Math.PI * t) * GUEST_STEP_HOP;
+      piece.position.set(a.x + (to.x - a.x) * e, PIECE_REST_Y + hop, a.z + (to.z - a.z) * e);
+    });
+    if (pieceMoveGen.get(playerId) === myGen) piece.position.set(to.x, PIECE_REST_Y, to.z);
+  } finally {
     if (pieceMoveGen.get(playerId) === myGen) movingGuestPieces.delete(playerId);
   }
 }

@@ -140,6 +140,7 @@ export class Game {
     onCpuRoll,
     onMoveComplete,
     onPieceMove,
+    onPieceStep,
     onDiceResult,
     onLandCommand,
     onPickMonsterCard,
@@ -225,6 +226,7 @@ export class Game {
     this.onCpuRoll = onCpuRoll;
     this.onMoveComplete = onMoveComplete;
     this.onPieceMove = onPieceMove || (() => {});
+    this.onPieceStep = onPieceStep || (() => {});
     this.onDiceResult = onDiceResult || (() => {});
     this.onLandCommand = onLandCommand;
     this.onPickMonsterCard = onPickMonsterCard;
@@ -2092,6 +2094,7 @@ export class Game {
       // バックファイア用の着地履歴（直近20マスだけ保持すれば十分）。
       player.tileHistory.unshift(nextId);
       if (player.tileHistory.length > 20) player.tileHistory.length = 20;
+      this._emitPieceStep(player, fromTile.position, toTile.position);
       await this._stepWithCamera(player, fromTile.position, toTile.position);
 
       // 分岐直後の移動中と着地後の短い猶予だけ、選択を取り消せる。
@@ -2100,6 +2103,7 @@ export class Game {
         await delay(600);
         this.onBranchUndo({ active: false, playerId: player.id });
         if (branchUndoRequested) {
+          this._emitPieceStep(player, toTile.position, fromTile.position);
           await this._stepWithCamera(player, toTile.position, fromTile.position);
           player.tileId = fromTile.id;
           player.previousTileId = branchPreviousTileId;
@@ -2269,6 +2273,7 @@ export class Game {
       player.tileId = backId;
       this._turnPathIds.push(backId);
       this._segmentPathIds.push(backId);
+      this._emitPieceStep(player, fromTile.position, toTile.position);
       await this._stepWithCamera(player, fromTile.position, toTile.position);
 
       if (toTile.type === TileType.EVENT) await this._visitCheckpoint(player, toTile);
@@ -2840,6 +2845,22 @@ export class Game {
    * any) is fired off in the background and never awaited, so a slower
    * multi-hundred-ms pan can never stall the next tile's step.
    */
+  /**
+   * 対人戦: 1歩ぶんの移動を即時配信する（投げっぱなし）。従来はホストが
+   * 自分の画面で歩行アニメを全部流し終えてから経路をまとめて配信していた
+   * ため、参加者側は「しばらく無反応→遅れて一気に歩く」二重再生になって
+   * いた。1歩ごとに流せば参加者の駒もほぼ同時に歩き出す。セグメント末尾の
+   * onPieceMove（経路まとめ）は同期バリア兼取りこぼし補修として残る -
+   * 全歩が届いていれば参加者側は「もう到着済み」で即ACKするだけになる。
+   */
+  _emitPieceStep(player, from, to) {
+    this.onPieceStep?.({
+      playerId: player.id,
+      from: { x: from.x, z: from.z },
+      to: { x: to.x, z: to.z },
+    });
+  }
+
   _stepWithCamera(player, from, to) {
     if (this.scene.isOutsideSafeView(to.x, to.z)) {
       this.scene.panTo(to.x, to.z);
@@ -8016,7 +8037,12 @@ export class Game {
       spellUsedThisTurn: this.currentPlayer.spellUsedThisTurn,
       fixedDiceValue: this.currentPlayer.diceCurse?.type === 'fixed' ? this.currentPlayer.diceCurse.value : null,
       waitCutRate: getWaitCutRate(),
-      turnHand: this.awaitingRoll && !this.isBusy ? this.currentPlayer.hand : [],
+      // 常に手番プレイヤーの手札を入れる。以前は「選択中だけ手札・それ以外は[]」
+      // で、isBusyが切り替わるたびに内容が [] ⇔ 手札 と往復して差分送信が毎回
+      // 発火し、3〜5KBの手札が1手番に何度も再送されていた。表示の出し分けは
+      // ゲスト側がshowCenterで行っており（選択中以外は伏せる）、同一手番中の
+      // 手札は選択時点と同じものなので公開範囲も実質変わらない。
+      turnHand: this.currentPlayer.hand,
       checkpointNumbers: this.checkpointNumbers,
       ofudaMarket: this.hasOfuda ? this._ofudaMarketSummary() : null,
       players: playersPayload,
