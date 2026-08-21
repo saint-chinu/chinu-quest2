@@ -251,6 +251,26 @@ const OFUDA_FIELD_ROWS = [
   'CMMMMMMMC',
 ];
 
+// ⑬最終決算。海上金融街の中央区画。⑪と同じ「外周＋中央の小さな四角＋
+// 左右2本の橋」の実証済みトポロジーを流用しつつ、Gを外周の左上角に置き、
+// CPは両方の橋の中ほどに置く（＝毎周、中央の取引区画を横断させる）。
+// お札ステージなので属性はやや厚めに配り、火12・水11・雷14・森10・無4。
+// 雷がやや多いのは意図的: 調査官側の主戦場だが、プレイヤーも雷のお札を
+// 買って相乗りできる（敵の吊り上げを逆利用する）カウンターの余地になる。
+const KESSAN_ROWS = [
+  'GFFFFWWWWWN',
+  'F.........W',
+  'F.........W',
+  'F.........W',
+  'F...TNW...W',
+  'FFCFM.WTCTT',
+  'F...MNT...T',
+  'M.........T',
+  'M.........T',
+  'M.........T',
+  'NMMMMMTTTTT',
+];
+
 // 対人戦のマップ選択・ストーリーモードの各ステージ盤面として使う一覧。
 // idはstory.jsの各ステージ`key`と揃えてある - ストーリーモードは自ステージ
 // のkeyをそのままmapIdとしてcreateBoard()へ渡すだけで対応する専用マップに
@@ -277,6 +297,7 @@ export const MAPS = [
   { id: 'hitodemaso', name: '⑩ 成れの果て', rows: HITODEMASO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage10-trench-temple.png'), spacing: 2.8 },
   { id: 'mahjong-duo', name: '⑪ ふたりは○○', rows: MAHJONG_DUO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage11-mahjong.png'), spacing: 2.8 },
   { id: 'ofuda-field', name: '⑫ 海上金融街', rows: OFUDA_FIELD_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage12-financial-city.png'), spacing: 2.8 },
+  { id: 'kessan', name: '⑬ 最終決算', rows: KESSAN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage12-financial-city.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {

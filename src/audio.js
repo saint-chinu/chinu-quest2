@@ -40,6 +40,8 @@ const MAP_TRACK = {
   hitodemaso: 'hitodemaso',
   'mahjong-duo': 'mahjongDuo',
   'ofuda-field': 'ofudaField',
+  // ⑬は税務調査コンビの再登場なので⑨のテーマを流用する。
+  kessan: 'taxAudit',
 };
 
 const VOLUME = 0.5;

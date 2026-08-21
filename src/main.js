@@ -5065,6 +5065,7 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
       deckList: allyDef.deckKey ? buildCharacterDeckList(allyDef.deckKey) : buildThemedDeckList(allyDef.theme),
       iconImage: await loadNpcTokenImage(allyDef.name),
       elements: allyDef.theme.elements,
+      aiProfile: allyDef.aiProfile,
       startGoalIndex: allyDef.startGoalIndex,
     });
   }
@@ -5079,6 +5080,10 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
         : opponent.deckKey ? buildCharacterDeckList(opponent.deckKey) : buildThemedDeckList(opponent.theme),
       iconImage: await loadNpcTokenImage(opponent.name),
       elements: opponent.theme.elements,
+      // ステージ固有のAI性格の部分上書き（story.jsのopponent.aiProfile）。
+      // 同名キャラをステージごとに別の戦い方で出すために使う。
+      aiProfile: opponent.aiProfile,
+      startingCurrency: opponent.startingCurrency,
       startGoalIndex: opponent.startGoalIndex,
     });
   }

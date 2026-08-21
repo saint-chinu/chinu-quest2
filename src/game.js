@@ -369,7 +369,8 @@ export class Game {
       id,
       name: cfg.name,
       isCPU: !!cfg.isCPU,
-      currency: 500,
+      // ステージ側からボス補正などで初期資金を上書きできる（既定500G）。
+      currency: cfg.startingCurrency ?? 500,
       tileId: startingTileId,
       homeGoalTileId: startingTileId,
       previousTileId: null,
@@ -410,7 +411,12 @@ export class Game {
       // CPUの意思決定に使う性格パラメータ（aiProfiles.js）。人間プレイヤーでも
       // 持たせておくが参照されない。cfg.elements（story.jsのtheme.elements）が
       // あればそのキャラの得意属性として反映される。
-      aiProfile: resolveAiProfile(cfg.name, cfg.elements ?? null),
+      // ステージ側（story.jsのopponent/ally定義のaiProfile）から名前ベースの
+      // プロファイルを部分上書きできる。同名キャラをステージごとに違う性格で
+      // 出すための仕組み（⑨のムールと⑬のムール等）。上書き差分はplayerに
+      // そのまま持たせ、セーブ・復元後も_restoreStateで再適用される。
+      aiProfile: { ...resolveAiProfile(cfg.name, cfg.elements ?? null), ...(cfg.aiProfile || {}) },
+      aiProfileOverride: cfg.aiProfile || null,
       // ここから下はスペル効果用の状態（chinu-quest2-spells-final_1.md参照）。
       // diceCurse: 次の自分のサイコロにだけ効く一度きりの呪い
       // ({type:'fixed',value}/{type:'reverse'}/{type:'double'})。nullなら無し。
@@ -498,7 +504,8 @@ export class Game {
       id,
       name: cfg.name,
       isCPU: !!cfg.isCPU,
-      currency: 500,
+      // ステージ側からボス補正などで初期資金を上書きできる（既定500G）。
+      currency: cfg.startingCurrency ?? 500,
       tileId: startId,
       homeGoalTileId: startId,
       previousTileId: null,
@@ -521,7 +528,12 @@ export class Game {
       passedCheckpoints: new Set(),
       hasteTurnsRemaining: 0,
       lastDiceSteps: 0,
-      aiProfile: resolveAiProfile(cfg.name, cfg.elements ?? null),
+      // ステージ側（story.jsのopponent/ally定義のaiProfile）から名前ベースの
+      // プロファイルを部分上書きできる。同名キャラをステージごとに違う性格で
+      // 出すための仕組み（⑨のムールと⑬のムール等）。上書き差分はplayerに
+      // そのまま持たせ、セーブ・復元後も_restoreStateで再適用される。
+      aiProfile: { ...resolveAiProfile(cfg.name, cfg.elements ?? null), ...(cfg.aiProfile || {}) },
+      aiProfileOverride: cfg.aiProfile || null,
       diceCurse: null,
       lapsCompleted: 0,
       tollWaiverCharges: 0,
@@ -703,7 +715,7 @@ export class Game {
       player.drawnCatalogIds = new Set(drawnCatalogIds || []);
       player.deck.drawPile = drawPile || [];
       player.deck.discardPile = discardPile || [];
-      player.aiProfile = resolveAiProfile(player.name, player.aiProfile?.preferredElements ?? null);
+      player.aiProfile = { ...resolveAiProfile(player.name, player.aiProfile?.preferredElements ?? null), ...(player.aiProfileOverride || {}) };
     });
     // 旧不具合や境界タイミングの保存データでも、脱落済みプレイヤーの手番を
     // 再開して永久停止しないよう、生存している次のプレイヤーへ補正する。
@@ -2444,7 +2456,10 @@ export class Game {
 
     // クエは金融街のフィクサー: 自分の土地でその属性の相場を吊り上げ、
     // 吊り上げ切るまで玉を手放さない。他のCPUは従来どおりの小口売買。
-    const isFixer = player.name === 'クエ';
+    // fixer型のお札運用はクエ固有だったが、⑬の専門調査官・A（周回屋）も同じ
+    // 「買い集めて自分の属性で吊り上げる」型なので、aiProfile.ofudaStyle:
+    // 'fixer' でも有効化できるようにした。
+    const isFixer = player.name === 'クエ' || player.aiProfile?.ofudaStyle === 'fixer';
     // 自分がその属性の土地を持っている ＝ まだ自分で吊り上げられる余地が
     // あるので売らない。フィクサーが利確するのは上限に張り付いた時か、
     // 土地を失って基礎価格そのものが落ちてきた時だけ。
@@ -3660,7 +3675,10 @@ export class Game {
       counts[tile.element] = (counts[tile.element] || 0) + 1;
       return counts;
     }, {});
-    const isFixer = player.name === 'クエ';
+    // fixer型のお札運用はクエ固有だったが、⑬の専門調査官・A（周回屋）も同じ
+    // 「買い集めて自分の属性で吊り上げる」型なので、aiProfile.ofudaStyle:
+    // 'fixer' でも有効化できるようにした。
+    const isFixer = player.name === 'クエ' || player.aiProfile?.ofudaStyle === 'fixer';
     return [...market]
       .map((entry) => {
         const signal = signals[entry.element] || {};
@@ -3673,6 +3691,9 @@ export class Game {
           + (ownedElements.has(entry.element) ? 8 : 0)
           + (isFixer ? (ownedCountByElement[entry.element] || 0) * 6 : 0)
           + (isFixer ? (enemyBias[entry.element] || 0) * 45 : 0)
+          // fixer型は自分の得意属性へ資金を集中させる。分散して安値を漁ると
+          // 「自分の土地・塗り替えで吊り上げる」相乗りが効かなくなるため。
+          + (isFixer && player.aiProfile?.preferredElements?.includes(entry.element) ? 30 : 0)
           - entry.price * 0.08;
         return { ...entry, score };
       })
@@ -6953,6 +6974,7 @@ export class Game {
     await this._cpuMaybeUseCurseCleanseSpell(this.currentPlayer);
     await this._cpuMaybeUseHealSpell(this.currentPlayer);
     await this._cpuMaybeUseSanctuarySpell(this.currentPlayer);
+    await this._cpuMaybeUseAntlionSpell(this.currentPlayer);
     await this._cpuMaybeUsePhoenixCurseSpell(this.currentPlayer);
     await this._cpuMaybeUseChainStatCurseSpell(this.currentPlayer);
     await this._cpuMaybeUseGuaranteedWinSpell(this.currentPlayer);
@@ -7129,6 +7151,16 @@ export class Game {
     if (player.currency <= 300 && ownRemaining.length !== 1) {
       await this._cpuCastSpell(player, card, { targetPlayerId: player.id });
       return true;
+    }
+    // 周回屋（aiProfile.lapRacer）: 帰巣本能は移動短縮そのもの。全CPを
+    // 通過済み（＝戻れば周回ボーナスとお札取引が確定）でゴールまでまだ
+    // 距離がある時は、資金に関係なく自分へ撃って周回を回す。
+    if (player.aiProfile?.lapRacer && ownRemaining.length === 0) {
+      const goal = this.tiles.find((tile) => tile.type === TileType.START);
+      if (goal && this._forwardTileDistance(player.tileId, player.previousTileId, goal.id) > 4) {
+        await this._cpuCastSpell(player, card, { targetPlayerId: player.id });
+        return true;
+      }
     }
     return false;
   }
@@ -7320,12 +7352,38 @@ export class Game {
    * 1枚抜かれると連鎖が割れて資産全体が沈む）。Lv3以上かつ2連鎖以上の
    * 一角で、まだ聖域でない最高価値の自分の土地に使う。
    */
+  /**
+   * アリジゴク(curseForcedStop)のCPU使用判断。自分の配置済みモンスターの
+   * 土地に「使用者・同盟者以外は必ず停止」の呪いをかけ、通行料の徴収装置に
+   * 変える。価値が出るのは通行料がスペル代を上回る育った土地だけなので、
+   * 自分の土地のうち通行料が最も高いものを選ぶ。聖域（通行料ゼロ）とは
+   * 役割が真逆なので、聖域済み・アリジゴク済みの土地は対象にしない。
+   */
+  async _cpuMaybeUseAntlionSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'curseForcedStop');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const candidates = this.tiles
+      .filter((t) => t.type === TileType.LAND && t.owner === player.id && t.unit
+        && !t.transparentCursed && !t.forcedStopCursed
+        // 関所クラゲ等は素で強制停止させるので、重ね掛けは丸ごと無駄。
+        && !t.unit.def?.traits?.includes('permanentForcedStop'))
+      .map((t) => ({ tile: t, toll: this._tollOfTile(t) }))
+      .filter(({ toll }) => toll >= (card.cost || 0))
+      .sort((a, b) => b.toll - a.toll);
+    if (candidates.length === 0) return;
+    await this._cpuCastSpell(player, card, { targetTileId: candidates[0].tile.id });
+  }
+
   async _cpuMaybeUseSanctuarySpell(player) {
     if (player.spellUsedThisTurn) return;
     const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'curseSanctuary');
     if (!card || player.currency < (card.cost || 0)) return;
     const candidates = this.tiles
       .filter((t) => t.type === TileType.LAND && t.owner === player.id && t.unit && !t.transparentCursed)
+      // アリジゴク済みの土地は除外（聖域は通行料ゼロ化なので、強制停止で
+      // 搾る土地にかけると互いに台無しになる）。
+      .filter((t) => !t.forcedStopCursed)
       .filter((t) => t.level >= 3 && this._chainCount(player.id, t.element) >= 2)
       .sort((a, b) => b.level - a.level || this._landValueOfTile(b) - this._landValueOfTile(a));
     if (candidates.length === 0) return;
