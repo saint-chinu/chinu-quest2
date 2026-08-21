@@ -2354,7 +2354,15 @@ export class Game {
     player.lapsCompleted += 1;
     const detail = `基本${base}G＋領地${land}G${ofuda > 0 ? `＋お札利回り${ofuda}G` : ''}`;
     this.onLog(`${player.name}はゴールを通過！ +${total}G（${detail}）`);
-    await this.onGoalBonus({ playerId: player.id, playerName: player.name, amount: total });
+    // 位置を渡すのは、参加者側（Gameを持たない）でも駒の上へ演出を出せるようにするため。
+    const goalPos = this.tiles[player.tileId]?.position ?? null;
+    await this.onGoalBonus({
+      playerId: player.id,
+      playerName: player.name,
+      amount: total,
+      detail,
+      position: goalPos ? { x: goalPos.x, z: goalPos.z } : null,
+    });
     if (this.requireAllCheckpoints) player.passedCheckpoints.clear();
 
     // 宝くじ: 次のゴール通過で0〜500Gをランダム獲得する権利（100G刻み、500Gだけ確率10%）。

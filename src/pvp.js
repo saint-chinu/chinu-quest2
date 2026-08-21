@@ -275,6 +275,7 @@ export class HostGuestRelay {
       doneWaiters: [],
       valueWaiters: new Map(),
       respUnsub: null,
+      degraded: false,
     };
     state.respUnsub = onSnapshot(promptResponseRef(this.roomCode, uid), (snap) => {
       const data = snap.data();
@@ -283,6 +284,7 @@ export class HostGuestRelay {
       // スナップショットが合体して途中の応答が飛んでも、水位比較なら安全。
       const doneSeq = Number(data.requestId) || 0;
       if (doneSeq > (state.ackedThrough || 0)) state.ackedThrough = doneSeq;
+      state.degraded = false; // 応答が来た＝追いついたので演出同期の待機を再開する
       const before = state.outbox.length;
       state.outbox = state.outbox.filter((event) => event.id > doneSeq);
       state.doneWaiters = state.doneWaiters.filter((waiter) => {
@@ -335,6 +337,11 @@ export class HostGuestRelay {
     if (this.destroyed) return Promise.reject(new Error('対戦リレーが終了しました'));
     const state = this._participantState(uid);
     clearTimeout(state.cleanupTimer);
+    // 応答が滞っている相手('done'が一度時間切れした相手)には、以後の演出同期を
+    // 待たない。相手のイベント列が人間の入力待ち等で止まっている間、こちらは
+    // 演出のたびに待ち時間を丸ごと積み増して盤面全体が固まってしまうため。
+    // 配信自体は続けるので、相手が追いついた時点（応答受信）で自動復帰する。
+    if (mode === 'done' && state.degraded) mode = 'fire';
     const id = state.nextId++;
     state.outbox.push({ id, type, payload: stripUndefined(payload), ack: mode !== 'fire', wantValue: mode === 'value' });
     // 投げっぱなし演出は50msだけ待ってまとめて送る（手番開始時のturnFocus/
@@ -342,12 +349,18 @@ export class HostGuestRelay {
     // 減らす）。応答を待つ質問・完了待ちは即時送信。
     this._scheduleFlush(uid, mode !== 'fire');
     if (mode === 'fire') return Promise.resolve();
+    // 'value'（人間への質問）は考える時間が要るので長め。'done'（演出の同期待ち）は
+    // 人の入力を待たない画面合わせでしかないので、届かなければ短時間で見切る。
+    // ここを質問と同じ45秒にしていたため、相手の画面が何かで止まると1演出ごとに
+    // 45秒積み上がり、ホスト側の進行が数十秒単位で凍りついていた。
+    const timeoutMs = mode === 'value' ? 45000 : 4000;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         state.doneWaiters = state.doneWaiters.filter((waiter) => waiter.id !== id);
         state.valueWaiters.delete(id);
+        if (mode === 'done') state.degraded = true;
         reject(new Error('参加者の応答がタイムアウトしました'));
-      }, 45000);
+      }, timeoutMs);
       if (mode === 'value') state.valueWaiters.set(id, { resolve, reject, timer });
       else state.doneWaiters.push({ id, resolve, reject, timer });
     });

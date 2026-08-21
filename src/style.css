@@ -154,6 +154,19 @@ html, body {
   to { transform: translate(-50%, -100%) scale(1); opacity: 1; }
 }
 
+/* ゴール通過（周回ボーナス）: 収入イベントなので金貨色で大きめに見せる。
+   内訳を2行目に出すためpre-lineで改行を活かす。 */
+.fx-target-effect-message.fx-target-effect-goal {
+  color: #fff3c9;
+  white-space: pre-line;
+  font-size: 20px;
+  line-height: 1.45;
+  border: 2px solid rgba(255, 214, 102, 0.95);
+  background: radial-gradient(circle at 50% 15%, rgba(120, 84, 18, 0.96), rgba(18, 14, 8, 0.96));
+  box-shadow: 0 0 34px rgba(255, 205, 88, 0.72), 0 8px 26px rgba(0, 0, 0, 0.7);
+  animation: shrine-message-arrive 420ms cubic-bezier(0.18, 1.35, 0.34, 1);
+}
+
 .fx-toll-payment {
   position: absolute;
   z-index: 46;

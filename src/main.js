@@ -3203,7 +3203,7 @@ function startBattle(character, storyOptions = {}) {
     onLandChain: relayable('landChain', promptLandChain, { broadcast: true }),
     onLandLevelUp: relayable('landLevelUp', promptLandLevelUp, { broadcast: true }),
     onCheckpoint: relayable('checkpoint', promptCheckpointSound, { broadcast: true }),
-    onGoalBonus: relayable('goalBonus', promptGoalBonusSound, { broadcast: true }),
+    onGoalBonus: relayable('goalBonus', promptGoalBonus, { broadcast: true }),
     onGoalAchieved: relayable('goalAchieved', promptGoalAchieved, { broadcast: true }),
     onCpuRoll: cpuRollDice,
     onMoveComplete,
@@ -4652,8 +4652,29 @@ function promptCheckpointSound() {
   playSfx('checkpoint');
 }
 
-function promptGoalBonusSound() {
+/**
+ * ゴール通過（周回ボーナス）の演出。以前は効果音を鳴らすだけで画面に何も出さず、
+ * 内訳はログ欄に1行流れるのみだった。ログ欄は最新1件しか表示しないため次の行で
+ * すぐ消え、結果として「演出が無いのに所持Gだけ増えている」状態になっていた。
+ * ゲームで最大の収入イベントなので、駒の上へ金額を明示する。
+ */
+async function promptGoalBonus({ playerId, playerName, amount, detail, position } = {}) {
   playSfx('goal');
+  if (!(amount > 0)) return;
+  const isPvpGuest = pvpMatch && !pvpMatch.isHost;
+  const fallbackTile = !isPvpGuest && playerId != null
+    ? tiles?.[game?.players?.find((p) => p.id === playerId)?.tileId]?.position
+    : null;
+  const pos = position || fallbackTile;
+  const message = `ゴール通過！ +${amount}G${detail ? `\n${detail}` : ''}`;
+  if (!pos || !scene) { showToast(`${playerName || ''} ${message.replace('\n', ' ')}`, 2200); return; }
+  const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+  await scene.focusAndZoom(pos.x, pos.z, 1.3, pvpWaitCut(300));
+  await Promise.all([
+    scene.playBlessingLight?.(pos) ?? Promise.resolve(),
+    showTargetEffectMessage(pos, message, pvpWaitCut(1700), 'goal'),
+  ]);
+  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, pvpWaitCut(300));
 }
 
 function loadStoryResume(stageIndex, isReplay = false) {
@@ -7852,7 +7873,7 @@ const pvpGuestHandlers = {
   landChain: serializedCamera(promptLandChain),
   landLevelUp: serializedCamera(promptLandLevelUp),
   checkpoint: promptCheckpointSound,
-  goalBonus: promptGoalBonusSound,
+  goalBonus: serializedCamera(promptGoalBonus),
   goalAchieved: serializedCamera(promptGoalAchieved),
 };
 
@@ -7884,6 +7905,7 @@ function clearPvpPieces() {
   }
   pvpPieces.clear();
   movingGuestPieces.clear();
+  guestWalkWindow.clear();
   for (const playerId of [...guestPendingWalk.keys()]) clearGuestPendingWalk(playerId);
   pieceMoveGen.clear();
   pvpPieceSnapshotTargets.clear();
@@ -7945,7 +7967,10 @@ async function promptPieceMove({ playerId, from, path }) {
     piece.position.set(last.x, PIECE_REST_Y, last.z);
   } finally {
     // 自分が最新世代のときだけ移動中フラグを解除（後発アニメを邪魔しない）。
-    if (pieceMoveGen.get(playerId) === myGen) movingGuestPieces.delete(playerId);
+    if (pieceMoveGen.get(playerId) === myGen) {
+      movingGuestPieces.delete(playerId);
+      guestWalkWindow.delete(playerId); // 経路まとめ＝この区間の歩行は完了
+    }
   }
 }
 
@@ -7965,6 +7990,7 @@ async function promptPieceStep({ playerId, from, to }) {
   pieceMoveGen.set(playerId, myGen);
   pvpPieceSnapshotTargets.delete(playerId);
   clearGuestPendingWalk(playerId);
+  guestWalkWindow.set(playerId, Date.now() + GUEST_STEP_WINDOW_MS);
   movingGuestPieces.add(playerId);
   try {
     // 直前のイベントが欠落して現在位置がfromから離れている場合は、
@@ -8134,8 +8160,26 @@ function applyPvpBoardState(publicState) {
 const GUEST_WALK_GRACE_MS = 900;
 const GUEST_SNAP_DISTANCE = 1.2; // これ未満のズレは即補正（微調整とみなす）
 const guestPendingWalk = new Map(); // playerId -> { timer, position }
+// 1歩ずつ届く歩行(pieceStep)は、tween中だけでなく「次の1歩が届くまでの間」も
+// 歩行中として扱う必要がある。マスの間隔は3.2でスナップ閾値1.2より広いため、
+// 歩行の合間に届いたpublicStateは常に「大きくズレている」と判定され、猶予
+// タイマーが歩行の途中で発火して駒を終点へ飛ばし、その直後に次の1歩が届いて
+// 経路上へ戻る——これが「ワープしてすぐ戻る」の正体だった。
+const GUEST_STEP_WINDOW_MS = 1400; // 1歩(300ms)＋通信ゆらぎの余裕
+const guestWalkWindow = new Map(); // playerId -> 歩行中とみなす期限(ms)
+
+function guestIsWalking(playerId) {
+  if (movingGuestPieces.has(playerId)) return true;
+  const until = guestWalkWindow.get(playerId);
+  if (until == null) return false;
+  if (Date.now() <= until) return true;
+  guestWalkWindow.delete(playerId);
+  return false;
+}
 
 function applyGuestPiecePosition(playerId, piece, tilePosition) {
+  // 歩行シーケンスの最中はスナップショットで駒に触らない（上記コメント参照）。
+  if (guestIsWalking(playerId)) return;
   const distance = Math.hypot(piece.position.x - tilePosition.x, piece.position.z - tilePosition.z);
   if (distance <= GUEST_SNAP_DISTANCE) {
     clearGuestPendingWalk(playerId);
