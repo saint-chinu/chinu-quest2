@@ -4857,6 +4857,12 @@ export class Game {
       }
     }
 
+    // ダメージ能力（火炎瓶男／マタギの小四郎、50Gで10ダメージ）を土地コマンドの
+    // 最優先に置いている。「倒しきれる時だけ撃ち、削りだけならレベルアップを
+    // 優先する」方が得に見えたので実際に検証したが、ステージ③を各24戦させた
+    // ところ敵側の勝率は10/24→6/24へ落ちた。このゲームのモンスターは自然回復
+    // しないため、50Gの削りは次の侵略・次の同じコマンドへそのまま効き続ける
+    // ＝レベルアップより投資効率が良い。結論として、この優先順位は変えない。
     for (const tile of accessible) {
       if (await this._cpuMaybeUseDamageAbility(player, tile)) return true;
     }
@@ -5686,11 +5692,6 @@ export class Game {
     return gear.reduce((best, c) => (this._itemPowerScore(c, unit) > this._itemPowerScore(best, unit) ? c : best));
   }
 
-  /** CPUの実際のバトルアイテム選択。シミュレーション（_estimateWinProbability）と同じ_bestBattleItemFromHandを使うので、事前に見積もった勝率と実際の挙動がずれない。 */
-  _cpuPickBattleItem(player, unit) {
-    return this._bestBattleItemFromHand(player.hand, unit, { preferStandardItems: player.name === 'Q' });
-  }
-
   /**
    * この戦闘だけを、指定のアイテム構成で実際に解決してみる（本物の状態には
    * 触れない使い捨て複製 + 使い捨てGoldLedger）。戻り値は攻守の生存フラグ。
@@ -5734,14 +5735,25 @@ export class Game {
    * （_estimateWinProbabilityと同じ簡略化。互いに伏せて同時に選ぶため）。
    */
   _cpuChooseBattleItem(player, unit, opponentUnit, tile, isDefender, trials = 12) {
-    const gear = (player.hand || []).filter(isBattleItemCard);
+    return this._chooseBattleItemByOutcome(player.hand, player.name, unit, opponentUnit, tile, isDefender, trials);
+  }
+
+  /**
+   * `_cpuChooseBattleItem`の実体。侵略前の勝率見積もり
+   * （_estimateWinProbability）からも同じ関数を呼ぶことで、「見積もりでは
+   * アイテムを使う前提だったのに、本番では使わない（またはその逆）」という
+   * ズレが起きないようにしている。playerオブジェクトではなく手札を受け取るのは、
+   * 見積もり側が仮のユニットに対して呼ぶため。
+   */
+  _chooseBattleItemByOutcome(hand, playerName, unit, opponentUnit, tile, isDefender, trials = 12) {
+    const gear = (hand || []).filter(isBattleItemCard);
     if (gear.length === 0) return null;
     const savedLog = this.onLog;
     this.onLog = () => {};
     try {
       // 従来ロジックが選ぶ本命に加え、残りも候補に入れる（本命が無駄でも、
       // 別のアイテムなら結果を変えられることがある）。
-      const preferred = this._bestBattleItemFromHand(player.hand, unit, { preferStandardItems: player.name === 'Q' });
+      const preferred = this._bestBattleItemFromHand(hand, unit, { preferStandardItems: playerName === 'Q' });
       const candidates = [null, ...(preferred ? [preferred] : []), ...gear.filter((c) => c !== preferred)];
       const scoreOf = (item) => {
         let good = 0;
@@ -5800,15 +5812,27 @@ export class Game {
     try {
       // 完成ギアで侵略する場合は合体先ガシャーン(70/70)の想定で勝算を見積もる。
       const attackerDef = this._gashaanDefIfCompleting(card, attackerOwnerId);
+      // 装備は試行ごとではなく1回だけ決める。本番の戦闘と同じ
+      // 「結果で選ぶ」ロジック（_chooseBattleItemByOutcome）を通すので、
+      // 「見積もりでは装備前提だったのに本番では装備しない」ズレが出ない。
+      let plannedItem = null;
+      if (useItem) {
+        const attackerPlayer = this.players.find((candidate) => candidate.id === attackerOwnerId);
+        plannedItem = this._chooseBattleItemByOutcome(
+          attackerHand,
+          attackerPlayer?.name,
+          createFieldUnit(attackerDef, attackerOwnerId),
+          this._cloneFieldUnitForSim(defenderTile.unit),
+          defenderTile,
+          false,
+        );
+      }
       let wins = 0;
       for (let i = 0; i < trials; i++) {
         const attackerUnit = createFieldUnit(attackerDef, attackerOwnerId);
         const defenderUnit = this._cloneFieldUnitForSim(defenderTile.unit);
         if (useItem) {
-          const attackerPlayer = this.players.find((candidate) => candidate.id === attackerOwnerId);
-          const item = this._bestBattleItemFromHand(attackerHand, attackerUnit, {
-            preferStandardItems: attackerPlayer?.name === 'Q',
-          });
+          const item = plannedItem;
           if (item) {
             const fusionDef = this._trainFusionDef(attackerUnit, item);
             if (fusionDef) attackerUnit.def = fusionDef;
@@ -5851,10 +5875,32 @@ export class Game {
     const savedLog = this.onLog;
     this.onLog = () => {};
     try {
+      // 実際の移動侵略でもCPUは手札のアイテムを装備する（_runBattleScene →
+      // _cpuChooseBattleItem）。ここで無装備前提のまま見積もると、装備すれば
+      // 勝てる攻撃まで「勝率が足りない」と見送ってしまう。本番と同じ
+      // 「結果で選ぶ」ロジックで装備を1回決めてから試行する。
+      // 人間所有のユニットが引き摺り出される場合（サイコキネシス等）は本人が
+      // 選ぶので、従来どおり無装備前提のままにする。
+      const owner = this.players.find((p) => p.id === attackerUnit.ownerId);
+      const plannedItem = owner?.isCPU
+        ? this._chooseBattleItemByOutcome(
+            owner.hand,
+            owner.name,
+            this._cloneFieldUnitForSim(attackerUnit),
+            this._cloneFieldUnitForSim(defenderTile.unit),
+            defenderTile,
+            false,
+          )
+        : null;
       let wins = 0;
       for (let i = 0; i < trials; i++) {
         const atk = this._cloneFieldUnitForSim(attackerUnit);
         const def = this._cloneFieldUnitForSim(defenderTile.unit);
+        if (plannedItem) {
+          const fusionDef = this._trainFusionDef(atk, plannedItem);
+          if (fusionDef) atk.def = fusionDef;
+          else equipItem(atk, plannedItem);
+        }
         const attackerBonus = this._battleBonus(atk, null, defenderTile);
         const defenderBonus = this._battleBonus(def, defenderTile, defenderTile);
         this._applyEffectBonus(atk, def, attackerBonus);
