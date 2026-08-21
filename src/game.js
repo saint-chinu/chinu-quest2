@@ -52,6 +52,12 @@ const CPU_PSYCHOKINESIS_MAX_ATTACKER_WIN_RATE = 0.4;
 // ユニットと移動元の土地を両方失うため、手札からの侵略しきい値
 // （aiProfile.minWinProbabilityToInvade）より慎重にこの下限を敷く。
 const CPU_MOVE_INVASION_MIN_WIN_RATE = 0.5;
+// 装備を選ぶ時、相手が何割の確率で武装していると仮定するか
+// （_chooseBattleItemByOutcome / _assumedOpponentItem）。CPU同士を戦わせて
+// 計測した実際の装備率が3割前後だったので、それに合わせている。
+// 0にすると「相手のアイテムを奪う／壊す」カードの効果が常にゼロと評価され、
+// どれだけ強いカードでも一生選ばれなくなる。
+const CPU_OPPONENT_ARMED_CHANCE = 0.35;
 
 const STARTING_HAND_SIZE = 4;
 const HAND_LIMIT = 6;
@@ -5731,8 +5737,7 @@ export class Game {
    *
    * ここでは「装備しない」も含めた候補を実際に戦闘解決して比べ、結果が変わらない
    * なら装備しない（カードを温存する）。効果に乱数を含むカードがあるので複数回
-   * 試行して平均で判断する。相手のアイテム使用は考慮しない
-   * （_estimateWinProbabilityと同じ簡略化。互いに伏せて同時に選ぶため）。
+   * 試行して平均で判断する。
    */
   _cpuChooseBattleItem(player, unit, opponentUnit, tile, isDefender, trials = 12) {
     return this._chooseBattleItemByOutcome(player.hand, player.name, unit, opponentUnit, tile, isDefender, trials);
@@ -5744,6 +5749,12 @@ export class Game {
    * アイテムを使う前提だったのに、本番では使わない（またはその逆）」という
    * ズレが起きないようにしている。playerオブジェクトではなく手札を受け取るのは、
    * 見積もり側が仮のユニットに対して呼ぶため。
+   *
+   * 相手のアイテムは「CPU_OPPONENT_ARMED_CHANCEの確率で武装している」と仮定して
+   * 重み付けする。以前は完全に無視していたため、真剣白刃取り（相手のアイテムを
+   * 奪って自分が装備する）やステゴロ（相手のアイテムを破壊する）のような
+   * 相手の装備を前提にしたカードは、シミュレーション上の効果が常にゼロになり、
+   * どれだけ強くても絶対に選ばれない死に札になっていた。
    */
   _chooseBattleItemByOutcome(hand, playerName, unit, opponentUnit, tile, isDefender, trials = 12) {
     const gear = (hand || []).filter(isBattleItemCard);
@@ -5755,17 +5766,25 @@ export class Game {
       // 別のアイテムなら結果を変えられることがある）。
       const preferred = this._bestBattleItemFromHand(hand, unit, { preferStandardItems: playerName === 'Q' });
       const candidates = [null, ...(preferred ? [preferred] : []), ...gear.filter((c) => c !== preferred)];
+      const assumedOpponentItem = this._assumedOpponentItem(hand, opponentUnit);
+      // 「相手が無装備の世界」と「相手が武装している世界」を別々に回して
+      // 確率で重み付けする。試行の中で乱数的に武装させると、奪取・破壊系の
+      // 差が数試行ぶんのブレに埋もれて安定しないため、決定的に分けている。
       const scoreOf = (item) => {
-        let good = 0;
-        for (let i = 0; i < trials; i++) {
-          const r = isDefender
-            ? this._simulateBattleOnce(opponentUnit, unit, tile, null, item)
-            : this._simulateBattleOnce(unit, opponentUnit, tile, item, null);
-          // 守備側は「土地を守れたか（自分が生き残ったか）」、攻撃側は
-          // 「土地を奪えたか（相手を倒して自分が生き残ったか）」で評価する。
-          if (isDefender ? r.defenderSurvived : (r.attackerSurvived && !r.defenderSurvived)) good++;
-        }
-        return good / trials;
+        const runWith = (opponentItem) => {
+          let good = 0;
+          for (let i = 0; i < trials; i++) {
+            const r = isDefender
+              ? this._simulateBattleOnce(opponentUnit, unit, tile, opponentItem, item)
+              : this._simulateBattleOnce(unit, opponentUnit, tile, item, opponentItem);
+            // 守備側は「土地を守れたか（自分が生き残ったか）」、攻撃側は
+            // 「土地を奪えたか（相手を倒して自分が生き残ったか）」で評価する。
+            if (isDefender ? r.defenderSurvived : (r.attackerSurvived && !r.defenderSurvived)) good++;
+          }
+          return good / trials;
+        };
+        return (1 - CPU_OPPONENT_ARMED_CHANCE) * runWith(null)
+          + CPU_OPPONENT_ARMED_CHANCE * runWith(assumedOpponentItem);
       };
       const noItemScore = scoreOf(null);
       let best = null;
@@ -5780,6 +5799,26 @@ export class Game {
     } finally {
       this.onLog = savedLog;
     }
+  }
+
+  /**
+   * 装備を選ぶ時に「相手はこれを着けてくるだろう」と仮定する1枚。
+   *
+   * 相手の手札は覗かない（人間が相手の時に不公平になるうえ、互いに伏せて
+   * 同時に選ぶという戦闘の建て付けにも反する）。代わりに自分の手札の中で
+   * 一番強い通常装備を「相手も同程度には武装している」代表として使う。
+   * 奪取・破壊系そのものは除く（相手も真剣白刃取りを構えている前提にすると
+   * 奪い合いの読み合いになり、1手先の見積もりでは収束しない）。
+   * 手札に通常装備が無い時は、標準的な武器としてオサフネ(ATK+30/HP+10)を置く。
+   */
+  _assumedOpponentItem(hand, opponentUnit) {
+    const plain = (hand || []).filter(isBattleItemCard).filter((card) => (
+      card.effect?.type !== 'stealItemBeforeAttack' && card.effect?.type !== 'destroyItemBeforeAttack'
+    ));
+    if (plain.length === 0) return ITEM_CATALOG.osafune;
+    return plain.reduce((best, card) => (
+      this._itemPowerScore(card, opponentUnit) > this._itemPowerScore(best, opponentUnit) ? card : best
+    ));
   }
 
   /** シミュレーション専用: 本物のユニットには一切触れず、items/cursesだけ独立コピーした複製を作る（resolveBattleは渡された引数を直接書き換えるため、実物を渡すと本当に装備/呪いが消し飛んでしまう）。 */
