@@ -4902,6 +4902,22 @@ storyBackButton.addEventListener('click', showHubScreen);
  * `background`未指定時は前回設定した背景を維持する（呼び出し側が毎回
  * ステージ画像を渡す前提だが、念のための保険）。
  */
+/**
+ * ストーリーの台詞に出てくる「主人公」を、プレイヤーが付けたキャラクター名へ
+ * 置き換える。story.jsのデータ側は'主人公'のままにしておく（話者判定・
+ * 立ち絵の割り当て・overlaySpeakerSidesのキーが全てこの名前で引かれているため、
+ * データを書き換えると盤面の演出まで壊れる）。表示する直前の文字列だけを
+ * 差し替えるのが唯一安全な差し込み口。
+ */
+function storyHeroName() {
+  return currentCharacter?.name?.trim() || '主人公';
+}
+function withHeroName(text) {
+  const name = storyHeroName();
+  if (name === '主人公' || text == null) return text;
+  return String(text).replaceAll('主人公', name);
+}
+
 function playDialogueLines(lines, { background, stageBadgeText } = {}) {
   if (background) storyDialogueScreen.style.backgroundImage = `url('${background}')`;
   storyDialogueStageBadge.textContent = stageBadgeText || '';
@@ -4930,8 +4946,8 @@ function playDialogueLines(lines, { background, stageBadgeText } = {}) {
       const line = lines[i];
       storyDialoguePortraitLeft.classList.remove('story-portrait-vertical-exit');
       storyDialoguePortraitRight.classList.remove('story-portrait-vertical-exit');
-      storyDialogueSpeaker.textContent = line.speaker;
-      storyDialogueText.textContent = line.text;
+      storyDialogueSpeaker.textContent = withHeroName(line.speaker);
+      storyDialogueText.textContent = withHeroName(line.text);
 
       if (line.speaker === '主人公') {
         const heroIcon = await heroPortraitPromise;
@@ -5005,9 +5021,9 @@ function playOverlayDialogueLines(lines, {
   };
   storyOverlayDialogue.dataset.stage = stageKey || '';
   storyOverlayImgLeft.src = leftPortraitUrl || '';
-  storyOverlayNameLeft.textContent = leftName;
+  storyOverlayNameLeft.textContent = withHeroName(leftName);
   storyOverlayImgRight.src = rightPortraitUrl || '';
-  storyOverlayNameRight.textContent = rightName;
+  storyOverlayNameRight.textContent = withHeroName(rightName);
   markHero(storyOverlayPortraitLeft, leftPortraitUrl);
   markHero(storyOverlayPortraitRight, rightPortraitUrl);
 
@@ -5035,12 +5051,12 @@ function playOverlayDialogueLines(lines, {
         const portraitUrl = speakerPortraitUrls?.[line.speaker] || '';
         if (dynamicSide === 'left') {
           storyOverlayImgLeft.src = portraitUrl;
-          storyOverlayNameLeft.textContent = line.speaker;
+          storyOverlayNameLeft.textContent = withHeroName(line.speaker);
           storyOverlayPortraitLeft.dataset.character = line.speaker;
           markHero(storyOverlayPortraitLeft, portraitUrl);
         } else {
           storyOverlayImgRight.src = portraitUrl;
-          storyOverlayNameRight.textContent = line.speaker;
+          storyOverlayNameRight.textContent = withHeroName(line.speaker);
           storyOverlayPortraitRight.dataset.character = line.speaker;
           markHero(storyOverlayPortraitRight, portraitUrl);
         }
@@ -5053,11 +5069,11 @@ function playOverlayDialogueLines(lines, {
         displayedRightName = showNpc ? rightNpcOnSpeaker : rightName;
         const rightUrl = (showNpc ? rightNpcPortraitUrl : rightPortraitUrl) || '';
         storyOverlayImgRight.src = rightUrl;
-        storyOverlayNameRight.textContent = displayedRightName;
+        storyOverlayNameRight.textContent = withHeroName(displayedRightName);
         markHero(storyOverlayPortraitRight, rightUrl);
       }
-      storyOverlaySpeaker.textContent = line.speaker;
-      storyOverlayText.textContent = line.text;
+      storyOverlaySpeaker.textContent = withHeroName(line.speaker);
+      storyOverlayText.textContent = withHeroName(line.text);
       const isRightSpeaker = line.speaker === rightName || line.speaker === rightNpcOnSpeaker;
       const side = speakerSides?.[line.speaker]
         || (line.speaker === leftName ? 'left' : isRightSpeaker ? 'right' : null);

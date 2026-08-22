@@ -251,7 +251,7 @@ const OFUDA_FIELD_ROWS = [
   'CMMMMMMMC',
 ];
 
-// ⑬最終決算。4つの島を選択式ワープ(X)だけで往き来する、このゲームで
+// ⑬船上のロンド。4つの島を選択式ワープ(X)だけで往き来する、このゲームで
 // 唯一の「陸続きでない」盤面。
 //
 //  ・上段の3島は全て同じ形（縦2本の通りを4本の横棒でつないだ梯子形）。
@@ -332,7 +332,7 @@ export const MAPS = [
   { id: 'hitodemaso', name: '⑩ 成れの果て', rows: HITODEMASO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage10-trench-temple.png'), spacing: 2.8 },
   { id: 'mahjong-duo', name: '⑪ ふたりは○○', rows: MAHJONG_DUO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage11-mahjong.png'), spacing: 2.8 },
   { id: 'ofuda-field', name: '⑫ 海上金融街', rows: OFUDA_FIELD_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage12-financial-city.png'), spacing: 2.8 },
-  { id: 'kessan', name: '⑬ 最終決算', rows: KESSAN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage12-financial-city.png'), spacing: 2.8 },
+  { id: 'kessan', name: '⑬ 船上のロンド', rows: KESSAN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage12-financial-city.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {
