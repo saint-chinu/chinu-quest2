@@ -102,7 +102,7 @@ export const NEUTRAL_MONSTER_CATALOG = {
     cost: 10,
     traits: ['reflectHalfDamage'],
     effect: { type: 'fusionSummon', partners: ['kodaiNoGearB', 'kodaiNoGearC'] },
-    effectDescription: '受けるダメージを半減し、半減した分を相手に反射。ほかのギアが2種類配置された状態で召喚すると…',
+    effectDescription: '受けたダメージの1/2を相手に反射。ほかのギアが2種類配置された状態で召喚すると…',
     imageDataUrl: assetUrl('/images/card-art/gearA.png'),
   }),
   kodaiNoGearB: neutralMonster('kodaiNoGearB', '古代のギアB', Rarity.S, 25, 10, {

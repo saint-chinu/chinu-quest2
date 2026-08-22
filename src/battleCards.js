@@ -100,7 +100,7 @@ export const ITEM_CATALOG = {
   }),
   harinezumiNoFuku: item('harinezumiNoFuku', 'ハリネズミの服', Rarity.S, ItemType.ARMOR, 50, 0, 0, {
     effect: { type: 'reflectHalfDamage' },
-    effectDescription: '受けるダメージを半減し、半減した分を相手に反射する',
+    effectDescription: '受けるダメージの1/2を相手に反射する',
   }),
   morohaNoTsurugi: item('morohaNoTsurugi', '諸刃の剣', Rarity.S, ItemType.WEAPON, 60, 40, -20),
   stegoro: item('stegoro', 'ステゴロ', Rarity.S, ItemType.WEAPON, 50, 0, 0, {
@@ -1278,79 +1278,6 @@ export const CHARACTER_DECKS = {
         // 通行料を搾り取ってくるうえ、壁が固いと普通の侵略では抜けない。
         // 差し押さえるように戦闘なしで奪い取り、呪いごと自分の資産へ変える。
         { def: SPELL_CATALOG.dieWithMe, count: 1 },
-      ],
-    },
-  },
-  /**
-   * ⑬最終決算のムール（本部決算担当）。⑨のmuuruデッキの発展形だが、狙いは
-   * 「戦って勝つ」から「触れない資産を作る」へ完全に振り切った純粋な籠城型。
-   * モンスターは壁と経済ユーティリティのみで、武器はゼロ。核となる関所クラゲの
-   * 水連鎖を聖域・不死鳥・アリジゴクで固め、通行料と土地評価額＋水のお札で
-   * 総資産を積む。力押しでは崩せず、塗り替え・相場・呪い対策を要求する。
-   */
-  muuruKessan: {
-    composition: {
-      monsters: [
-        { def: MONSTER_CATALOG.kaikyouSekishoKurage, count: 4 },
-        { def: MONSTER_CATALOG.bigMermaid, count: 2 },
-        { def: MONSTER_CATALOG.shinkaiCleaner, count: 2 },
-        { def: MONSTER_CATALOG.azarashisan, count: 2 },
-        { def: MONSTER_CATALOG.mizuburoShugyoso, count: 2 },
-        { def: MONSTER_CATALOG.suijin, count: 2 },
-      ],
-      items: [
-        { def: ITEM_CATALOG.fushichoNoTate, count: 1 },
-        { def: ITEM_CATALOG.nankaNoOmamori, count: 2 },
-        { def: ITEM_CATALOG.lifeJacket, count: 1 },
-      ],
-      spells: [
-        { def: SPELL_CATALOG.sanctuary, count: 3 },
-        { def: SPELL_CATALOG.phoenixCurse, count: 3 },
-        { def: SPELL_CATALOG.antlion, count: 2 },
-        { def: SPELL_CATALOG.specialAudit, count: 2 },
-        { def: SPELL_CATALOG.toughness, count: 2 },
-        { def: SPELL_CATALOG.waterMagicCircle, count: 3 },
-        // 放水2枚は脱税へ差し替え。籠城側の最大の資金流出は「自分も盤面を
-        // 歩いて敵の通行料を払うこと」で、計測では受け取りとほぼ同額を
-        // 払い戻していた。塗り替えは機動班（放電）の役割に寄せる。
-        { def: SPELL_CATALOG.taxEvasion, count: 2 },
-        { def: SPELL_CATALOG.taxHike, count: 2 },
-        { def: SPELL_CATALOG.sideIncome, count: 2 },
-        { def: SPELL_CATALOG.specialAudit, count: 1 },
-      ],
-    },
-  },
-  /**
-   * ⑬最終決算の専門調査官・A（機動調査班）。戦闘をほぼ放棄した周回・相場特化。
-   * モンスターは差し押さえ拠点の維持要員（避雷針侍の身代わり・カメレオンの壁）
-   * だけで、武器はゼロ。ダイス・帰巣本能で周回を回し、副業収入と周回ボーナスを
-   * 雷のお札へ注ぎ込み、放電で盤面を雷に塗り替えて保有お札を自分で吊り上げる
-   * （aiProfile.ofudaStyle:'fixer' + lapRacer 前提のデッキ）。戦闘で止められず、
-   * 財布チューチューが現金の持ちすぎを咎める。
-   */
-  investigatorKessan: {
-    composition: {
-      monsters: [
-        { def: MONSTER_CATALOG.hatsudenNezumi, count: 4 },
-        { def: MONSTER_CATALOG.raiheishinZamurai, count: 3 },
-        { def: MONSTER_CATALOG.raiun, count: 2 },
-        { def: MONSTER_CATALOG.erekiKagayaki, count: 2 },
-        { def: MONSTER_CATALOG.rainbowChameleon, count: 2 },
-      ],
-      items: [
-        { def: ITEM_CATALOG.lifeJacket, count: 2 },
-        { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
-      ],
-      spells: [
-        { def: SPELL_CATALOG.diceSix, count: 3 },
-        { def: SPELL_CATALOG.homingInstinct, count: 3 },
-        { def: SPELL_CATALOG.sideIncome, count: 4 },
-        { def: SPELL_CATALOG.electrify, count: 3 },
-        { def: SPELL_CATALOG.walletVacuum, count: 3 },
-        { def: SPELL_CATALOG.taxEvasion, count: 2 },
-        { def: SPELL_CATALOG.specialAudit, count: 2 },
-        { def: SPELL_CATALOG.divination, count: 2 },
-        { def: SPELL_CATALOG.taxHike, count: 2 },
       ],
     },
   },
