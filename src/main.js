@@ -2140,7 +2140,7 @@ function promptBattleSceneEnter({ attacker, defender }) {
  */
 let cancelActiveBattleItemPicker = null;
 
-function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, opponentName = '相手', unitName }) {
+function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, opponentName = '相手', unitName, currency = Infinity }) {
   return new Promise((resolve) => {
     let settled = false;
     let confirming = false;
@@ -2153,8 +2153,15 @@ function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, oppone
       ? guidedStep.requireItem : null;
     if (guidedItemId) hand = hand.filter((c) => catalogIdOf(c) === guidedItemId);
     battleItemPickerSkip.disabled = !!guidedItemId;
-    battleItemPickerTitle.textContent =
-      hand.length > 0 ? `${ownerName}の${unitName}: 使うアイテムを選んでください` : `${ownerName}の${unitName}: アイテムがありません`;
+    // 装備にはカードのコスト(G)がかかる。払えないアイテムは選べないので、
+    // カードを灰色にして必要Gを赤字で重ねる。
+    const canAfford = (card) => (card.cost || 0) <= currency;
+    const affordableCount = hand.filter(canAfford).length;
+    battleItemPickerTitle.textContent = hand.length === 0
+      ? `${ownerName}の${unitName}: アイテムがありません`
+      : affordableCount === 0
+        ? `${ownerName}の${unitName}: 所持${currency}Gでは装備できるアイテムがありません`
+        : `${ownerName}の${unitName}: 使うアイテムを選んでください（所持${currency}G）`;
     battleItemPickerChoices.replaceChildren();
     for (const card of hand) {
       const choice = document.createElement('div');
@@ -2162,9 +2169,22 @@ function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, oppone
       choice.tabIndex = 0;
       choice.setAttribute('role', 'button');
       choice.setAttribute('aria-label', `${card.name}の詳細を確認して装備する`);
+      const affordable = canAfford(card);
+      if (!affordable) choice.classList.add('unaffordable');
       const el = document.createElement('div');
       el.className = 'card';
       renderCardEl(el, card);
+      if (!affordable) {
+        // 必要Gの赤字はカードの外側（.battle-item-choice直下）へ置く。
+        // カード側にはgrayscaleフィルタを掛けるが、CSSのfilterは子孫にも
+        // 効くため、カードの中に入れると赤字まで灰色になってしまう。
+        const need = document.createElement('div');
+        need.className = 'battle-item-need-gold';
+        need.textContent = `${card.cost || 0}G`;
+        choice.appendChild(need);
+        choice.setAttribute('aria-label', `${card.name}は${card.cost || 0}G必要で装備できない`);
+        choice.setAttribute('aria-disabled', 'true');
+      }
       const bonus = document.createElement('div');
       bonus.className = 'battle-item-bonus';
       bonus.textContent = battleItemBonusText(card);
@@ -2179,6 +2199,10 @@ function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, oppone
       }
       const chooseItem = () => {
         if (confirming) return;
+        if (!affordable) {
+          showToast(`「${card.name}」の装備には${card.cost || 0}G必要です（所持${currency}G）`, 2000);
+          return;
+        }
         confirming = true;
         choice.classList.add('blinking');
         setTimeout(async () => {

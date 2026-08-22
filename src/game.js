@@ -5766,7 +5766,9 @@ export class Game {
    * 試行して平均で判断する。
    */
   _cpuChooseBattleItem(player, unit, opponentUnit, tile, isDefender, trials = 12) {
-    return this._chooseBattleItemByOutcome(player.hand, player.name, unit, opponentUnit, tile, isDefender, trials);
+    return this._chooseBattleItemByOutcome(
+      player.hand, player.name, unit, opponentUnit, tile, isDefender, trials, player.currency,
+    );
   }
 
   /**
@@ -5782,15 +5784,16 @@ export class Game {
    * 相手の装備を前提にしたカードは、シミュレーション上の効果が常にゼロになり、
    * どれだけ強くても絶対に選ばれない死に札になっていた。
    */
-  _chooseBattleItemByOutcome(hand, playerName, unit, opponentUnit, tile, isDefender, trials = 12) {
-    const gear = (hand || []).filter(isBattleItemCard);
+  _chooseBattleItemByOutcome(hand, playerName, unit, opponentUnit, tile, isDefender, trials = 12, budgetG = Infinity) {
+    // 装備にはコスト(G)がかかるので、今払えるアイテムだけを候補にする。
+    const gear = (hand || []).filter(isBattleItemCard).filter((card) => (card.cost || 0) <= budgetG);
     if (gear.length === 0) return null;
     const savedLog = this.onLog;
     this.onLog = () => {};
     try {
       // 従来ロジックが選ぶ本命に加え、残りも候補に入れる（本命が無駄でも、
       // 別のアイテムなら結果を変えられることがある）。
-      const preferred = this._bestBattleItemFromHand(hand, unit, { preferStandardItems: playerName === 'Q' });
+      const preferred = this._bestBattleItemFromHand(gear, unit, { preferStandardItems: playerName === 'Q' });
       const candidates = [null, ...(preferred ? [preferred] : []), ...gear.filter((c) => c !== preferred)];
       const assumedOpponentItem = this._assumedOpponentItem(hand, opponentUnit);
       // 「相手が無装備の世界」と「相手が武装している世界」を別々に回して
@@ -5883,6 +5886,8 @@ export class Game {
       let plannedItem = null;
       if (useItem) {
         const attackerPlayer = this.players.find((candidate) => candidate.id === attackerOwnerId);
+        // 侵略では先に召喚コストを払うので、その残りで装備できる物だけを想定する。
+        const budgetAfterSummon = Math.max(0, (attackerPlayer?.currency ?? 0) - (card?.cost || 0));
         plannedItem = this._chooseBattleItemByOutcome(
           attackerHand,
           attackerPlayer?.name,
@@ -5890,6 +5895,8 @@ export class Game {
           this._cloneFieldUnitForSim(defenderTile.unit),
           defenderTile,
           false,
+          12,
+          budgetAfterSummon,
         );
       }
       let wins = 0;
@@ -5955,6 +5962,8 @@ export class Game {
             this._cloneFieldUnitForSim(defenderTile.unit),
             defenderTile,
             false,
+            12,
+            owner.currency,
           )
         : null;
       let wins = 0;
@@ -5985,13 +5994,28 @@ export class Game {
     }
   }
 
-  /** Equips + permanently consumes the chosen item (removed from hand, discarded) - a no-op if the side skipped. */
+  /**
+   * Equips + permanently consumes the chosen item (removed from hand, discarded) - a no-op if the side skipped.
+   * 装備にはカードのコスト(G)がかかる。払えない場合は装備自体を取りやめる
+   * （選択UI・CPUの判断側で払える物だけに絞っているので通常ここは通らないが、
+   * 選択から装備までの間に通行料等でGが減る経路があるため最後の砦として残す）。
+   */
   _consumeBattleItem(player, unit, item) {
     if (!item) return null;
+    const cost = item.cost || 0;
+    if (player.currency < cost) {
+      this.onLog(`${player.name}は${cost}Gを払えず「${item.name}」を装備できなかった`);
+      return null;
+    }
     this.onCardSeen?.(item);
     const equipped = equipItem(unit, item);
     player.hand = player.hand.filter((c) => c.id !== item.id);
     this._discardUsedCard(player, item);
+    if (cost > 0) {
+      player.currency -= cost;
+      this.onLog(`${player.name}は「${item.name}」を装備した (-${cost}G)`);
+      this._notifyState();
+    }
     return equipped;
   }
 
@@ -6097,6 +6121,8 @@ export class Game {
             ownerName: attackerPlayer.name,
             opponentName: defenderPlayer.name,
             unitName: attackerUnit.def.name,
+            // 装備にはコスト(G)がかかるので、選択UIで払えるかどうかを出し分ける。
+            currency: attackerPlayer.currency,
           },
           attackerPlayer.id,
         );
@@ -6110,6 +6136,7 @@ export class Game {
             ownerName: defenderPlayer.name,
             opponentName: attackerPlayer.name,
             unitName: defenderUnit.def.name,
+            currency: defenderPlayer.currency,
           },
           defenderPlayer.id,
         );
