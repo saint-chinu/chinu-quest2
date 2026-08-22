@@ -5315,6 +5315,30 @@ async function handleStoryReplayEnd(index, result = {}, replayVariant) {
   showToast(`再戦報酬として${mReward.earnedM}M獲得しました`, 2400);
 }
 
+/** 決着後、盤面の上に重ねて流す終幕会話（overlayNpc/boardDialogue持ちのステージの勝利時）。 */
+async function playStoryOutroOverlay(stage, outroLines) {
+  const characterIcon = await resolveCharacterIcon(currentCharacter);
+  const heroPortraitUrl = characterIcon?.dataUrl ?? null;
+  const speakerPortraitUrls = stage.overlaySpeakerSides
+    ? Object.fromEntries(Object.keys(stage.overlaySpeakerSides).map((speaker) => [
+        speaker,
+        speaker === '主人公' ? heroPortraitUrl : NPC_PORTRAIT_URL[speaker],
+      ]))
+    : null;
+  await playOverlayDialogueLines(outroLines, {
+    leftName: stage.overlayNpc,
+    leftPortraitUrl: NPC_PORTRAIT_URL[stage.overlayNpc],
+    rightName: currentCharacter.name,
+    rightPortraitUrl: heroPortraitUrl,
+    rightNpcOnSpeaker: stage.overlayRightNpcOnSpeaker,
+    rightNpcPortraitUrl: NPC_PORTRAIT_URL[stage.overlayRightNpcOnSpeaker],
+    speakerSides: stage.overlaySpeakerSides,
+    speakerPortraitUrls,
+    heroPortraitUrl,
+    stageKey: stage.key,
+  });
+}
+
 async function handleStoryBattleEnd(index, result = {}) {
   const { won } = result;
   const stage = STORY_STAGES[index];
@@ -5382,25 +5406,15 @@ async function handleStoryBattleEnd(index, result = {}) {
   saveCharacter(currentUserId, currentCharacter);
 
   if (useBoardOverlay) {
-    const characterIcon = await resolveCharacterIcon(currentCharacter);
-    const speakerPortraitUrls = stage.overlaySpeakerSides
-      ? Object.fromEntries(Object.keys(stage.overlaySpeakerSides).map((speaker) => [
-          speaker,
-          speaker === '主人公' ? characterIcon?.dataUrl ?? null : NPC_PORTRAIT_URL[speaker],
-        ]))
-      : null;
-    await playOverlayDialogueLines(outroLines, {
-      leftName: stage.overlayNpc,
-      leftPortraitUrl: NPC_PORTRAIT_URL[stage.overlayNpc],
-      rightName: currentCharacter.name,
-      rightPortraitUrl: characterIcon?.dataUrl ?? null,
-      rightNpcOnSpeaker: stage.overlayRightNpcOnSpeaker,
-      rightNpcPortraitUrl: NPC_PORTRAIT_URL[stage.overlayRightNpcOnSpeaker],
-      speakerSides: stage.overlaySpeakerSides,
-      speakerPortraitUrls,
-      heroPortraitUrl: iconDataUrl,
-      stageKey: stage.key,
-    });
+    // 決着後の終幕演出。ここで例外が出ても、盤面を閉じてストーリー画面へ
+    // 戻すところまでは必ずやり切る。報酬とクリア記録はこの手前で保存済み
+    // なので、演出だけ失敗して盤面に取り残されると「勝ったのに操作不能」に
+    // なってしまう（実際に立ち絵の追加でその不具合を出した）。
+    try {
+      await playStoryOutroOverlay(stage, outroLines);
+    } catch (error) {
+      console.error('終幕演出に失敗しました', error);
+    }
     game = undefined;
     blockMusicPlayback();
     appEl.classList.add('hidden');
