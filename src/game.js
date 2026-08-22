@@ -3279,16 +3279,39 @@ export class Game {
     const needed = this._remainingCheckpointTiles(player);
     const scoreOf = (destination) => {
       const reach = this._reachableTileIds(destination.id);
+      // ①周回最優先。まだ必要なCPがある島、全CP済みならゴールのある島。
       const hasNeededCheckpoint = needed.some((checkpoint) => reach.has(checkpoint.id));
       const hasGoal = this.tiles.some((t) => t.type === TileType.START && reach.has(t.id));
-      const enemyToll = this.tiles.reduce((sum, t) => {
-        if (!reach.has(t.id) || t.owner == null || t.owner === player.id) return sum;
+
+      // ②空き地の多さ。「まだ誰も取っていないマス」だけを数える＝仲間が
+      // 既に押さえた分は空きに数えない。そうしないとクエとQが同じ島に
+      // 固まってしまい、盤面を広く取るという狙いが崩れる。
+      let emptyLands = 0;
+      let enemyToll = 0;
+      for (const t of this.tiles) {
+        if (!reach.has(t.id) || t.type !== TileType.LAND) continue;
+        if (t.owner == null) { emptyLands += 1; continue; }
+        if (t.owner === player.id) continue;
         const owner = this.players.find((p) => p.id === t.owner);
-        if (!owner || this._isAllyOf(owner, player)) return sum;
-        return sum + this._tollOfTile(t);
-      }, 0);
-      return (hasNeededCheckpoint ? 1000 : 0)
-        + (needed.length === 0 && hasGoal ? 1000 : 0)
+        if (!owner || this._isAllyOf(owner, player)) continue;
+        enemyToll += this._tollOfTile(t);
+      }
+
+      // ③先に行かれた島は避ける。1周目は特に強く効かせる（開幕でわざわざ
+      // 相手と同じ島へ飛び込んでも、取れる土地を取り合うだけで得がない）。
+      const firstLap = (player.lapsCompleted || 0) === 0;
+      let occupied = 0;
+      for (const other of this.players) {
+        if (other.id === player.id || other.defeated) continue;
+        if (!reach.has(other.tileId)) continue;
+        const isAlly = this._isAllyOf(other, player);
+        occupied += isAlly ? (firstLap ? 120 : 60) : (firstLap ? 400 : 150);
+      }
+
+      return (hasNeededCheckpoint ? 100000 : 0)
+        + (needed.length === 0 && hasGoal ? 100000 : 0)
+        + emptyLands * 25
+        - occupied
         - enemyToll * 0.05;
     };
     const recommended = choices.reduce((best, destination) => (
