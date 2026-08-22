@@ -88,8 +88,15 @@ function getAudioEl(track) {
 /**
  * Safari/iOSでは、盤面BGMとは別のAudio要素をCPU戦開始時に初めてplayすると、
  * 直前のユーザー操作から時間が空いているため自動再生として拒否されることが
- * ある。最初のタップ時に全BGM要素を無音で一度だけ起動し、CPU同士の戦闘でも
- * 後から戦闘曲へ切り替えられる状態にしておく。
+ * ある。最初のタップ時に全BGM要素へ一度だけ触れて、後から任意の曲へ
+ * 切り替えられる状態にしておく。
+ *
+ * 重要: play()の解決を待ってからpause()してはいけない。解決までの数百ms、
+ * 全13曲が同時に再生状態になり、iOS Safariではmuted/volume=0の反映が
+ * 間に合わずタイトル画面で全曲が一斉に鳴る（実測: 同時再生13曲）。
+ * iOSのアンロックは「ユーザー操作の中でplay()を呼んだ」時点で成立するので
+ * 解決を待つ必要はなく、同じ同期タスク内で即座にpause()すれば
+ * 音声出力は一切始まらない。
  */
 function unlockAudioElements() {
   if (unlockAttempted) return;
@@ -97,23 +104,17 @@ function unlockAudioElements() {
   startSilentAnchor();
   for (const track of Object.keys(TRACK_SRC)) {
     const el = getAudioEl(track);
-    // iOS Safariではvolume=0が即時反映されず、一瞬だけ実音が出る場合がある。
-    // 要素自体もmutedにしてから事前再生し、停止後にだけ通常状態へ戻す。
+    // 既に鳴らすべき曲が決まっている場合、その曲だけは止めない。
+    if (currentTrack === track && !muted) continue;
     el.muted = true;
     el.volume = 0;
-    el.play()
-      .then(() => {
-        if (muted || currentTrack !== track) {
-          el.pause();
-          if (currentTrack !== track) el.currentTime = 0;
-        }
-        el.muted = muted;
-        el.volume = muted ? 0 : VOLUME;
-      })
-      .catch(() => {
-        el.muted = muted;
-        el.volume = muted ? 0 : VOLUME;
-      });
+    const started = el.play();
+    // 同期的にpauseするとplay()のPromiseはAbortErrorでrejectする（想定内）。
+    if (started && typeof started.catch === 'function') started.catch(() => {});
+    el.pause();
+    el.currentTime = 0;
+    el.muted = muted;
+    el.volume = muted ? 0 : VOLUME;
   }
 }
 
