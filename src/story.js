@@ -906,6 +906,100 @@ export const STORY_STAGES = [
       goalCurrency: 20000,
     },
   },
+  {
+    key: 'kessan',
+    title: '⑬ 最終決算',
+    format: '2vs2',
+    // 同盟合算の目標。長丁場ほど敵側の複利（通行料網・お札の含み益・
+    // 周回収入）が効く、という設計なのでやや高めにしてある。
+    goalCurrency: 20000,
+    heroAllianceId: 'gold',
+    enemyAllianceId: 'audit',
+    boardDialogue: true,
+    overlaySpeakerSides: {
+      主人公: 'right',
+      'お肉': 'right',
+      クエ: 'left',
+      Q: 'left',
+    },
+    intro: [
+      { speaker: '???', text: '海上金融街を出た主人公は、しばらく旅を続けたのち、ふとしたことでまたこの街へ舞い戻った。' },
+      { speaker: 'クエ', text: '待っとったで、魚ァ。あの日の借りを返させてもらうで。' },
+      { speaker: '主人公', text: 'まだやる気か。何度でも相手してやるよ。' },
+      { speaker: 'クエ', text: '一人でとは言うとらん。おい、出てこい！' },
+      { speaker: 'Q', text: 'お待たせしました。定刻通りに到着しました。' },
+      { speaker: '主人公', text: 'あんたは……列車の！ まさかクエと組んでるのか？' },
+      { speaker: 'Q', text: 'クエ氏の申し出は実に精密でした。「確実に勝てる編成を組みたい」――鉄道屋として、その几帳面さに共感しました。' },
+      { speaker: 'クエ', text: 'せや。今度は殴り合いやない。数字と土地でじわじわ締め上げたる。' },
+      { speaker: '???', text: 'そこへ通りがかったお肉が、たまたま話を聞きつけて割り込んできた。' },
+      { speaker: 'お肉', text: '面白そうな話しとるなあ。ワイも混ぜてーや。' },
+      { speaker: '主人公', text: 'お肉！ ちょうどいい、手を貸してくれ！' },
+      { speaker: 'お肉', text: 'ええで。腹減っとったところや、ちょうどええ運動になるわ。' },
+      { speaker: 'Q', text: '結構。では二対二、正式な対戦ダイヤを組みましょう。' },
+      { speaker: 'クエ', text: '言うとくけど、Qは殴らへんで。あいつは土地を積むだけ積んで、絶対に崩れへん壁になる。' },
+      { speaker: 'クエ', text: 'ワイは逆にひたすら周回してお札を買い占める。相場も盤面もワイの色に染めたる。' },
+      { speaker: '主人公', text: 'モンスターの強さで殴り勝てる相手じゃないってことか……。' },
+      { speaker: 'お肉', text: 'ええやん、腕っぷしだけやないところ見せたろうや。' },
+      { speaker: '???', text: '金色同盟と監査同盟、金融街の頂上決算が始まった。目標は同盟合わせて総資産20,000G！' },
+    ],
+    outro: [
+      { speaker: 'クエ', text: 'ハァ……まさか二回連続で負けるとはな……。' },
+      { speaker: 'Q', text: '想定外です。ダイヤが乱れました。次は組み直しましょう。' },
+      { speaker: '主人公', text: 'モンスターの強さだけじゃなかったな。土地とお札、どっちも見てないと勝てなかった。' },
+      { speaker: 'お肉', text: 'ワイの見せ場、あったか？' },
+      { speaker: '主人公', text: 'あったあった、ちゃんと見てたぞ。' },
+      { speaker: 'クエ', text: '次に会う時は、もっと固い編成組んだるからな。覚えとけ！' },
+      { speaker: '???', text: '因縁の二人を退けた主人公は、お肉と共に金融街をあとにした。' },
+    ],
+    ally: {
+      name: 'お肉',
+      color: 0x8e5ce6,
+      deckKey: 'oniku',
+      theme: { elements: [Element.FOREST, Element.FIRE] },
+    },
+    opponents: [
+      {
+        name: 'クエ',
+        color: 0xc0c0c0,
+        deckKey: 'que',
+        theme: { elements: [Element.FOREST, Element.THUNDER, Element.NEUTRAL] },
+        // 高速周回・お札の買い占め特化（aiProfile.ofudaStyle:'fixer' +
+        // lapRacer）。⑫と同じ経済エンジンを、コンビ戦用に少し積極化する。
+        aiProfile: {
+          lapRacer: true,
+        },
+        startingCurrency: 900,
+      },
+      {
+        name: 'Q',
+        color: 0xc62828,
+        deckKey: 'qKessan',
+        theme: { elements: [Element.THUNDER, Element.NEUTRAL] },
+        // 「土地をあげていく」純粋な籠城型。侵略はほぼ放棄し、聖域・不死鳥・
+        // アリジゴクで固めた土地のレベルアップだけで資産を積む。
+        aiProfile: {
+          minWinProbabilityToInvade: 0.85,
+          itemGambleChance: 0.1,
+          highValueAvoidance: 0.85,
+          offElementSummonChance: 0.05,
+        },
+        startingCurrency: 900,
+      },
+    ],
+    replay: {
+      intro: [
+        { speaker: 'クエ', text: 'また来たんか。今度こそ、もっと固い編成組んできたで。' },
+        { speaker: 'Q', text: '今回の目標は22,000Gです。長期戦になるほど、私たちに分があります。' },
+        { speaker: 'お肉', text: '望むところや、何回でも相手したるわ！' },
+      ],
+      outro: [
+        { speaker: 'クエ', text: '……また負けか。おかしいな、今度こそ完璧なはずやったのに。' },
+        { speaker: 'Q', text: '記録しておきます。次のダイヤ改正で修正します。' },
+      ],
+      // 長期戦ほど相場と周回が効く敵側有利の条件で、再戦を本気の決算戦にする。
+      goalCurrency: 22000,
+    },
+  },
 ];
 
 export function isStageUnlocked(character, index) {

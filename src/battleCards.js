@@ -1281,6 +1281,46 @@ export const CHARACTER_DECKS = {
       ],
     },
   },
+  /**
+   * ⑬最終決算のQ（暴走列車Q号の再登場）。「土地をあげていく」＝殴りでは
+   * なくレベルアップで資産を積む純粋な籠城型。武器はほぼゼロで、代わりに
+   * 身代わり（避雷針侍）・生存収入（発電ネズミ）・聖域/不死鳥/アリジゴクで
+   * 固めた土地を守り抜く。電柱を植える男の土地能力（雷モンスター全体
+   * HP+10）と不動産鑑〇士を組み合わせ、殴らずに盤面全体を底上げする。
+   * 戦闘列車・供物車両（合体ギミック）も、Qらしい鉄道要素として残す。
+   */
+  qKessan: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.battleTrain, count: 2 },
+        { def: MONSTER_CATALOG.sacrificeCar, count: 2 },
+        { def: MONSTER_CATALOG.raiheishinZamurai, count: 3 },
+        { def: MONSTER_CATALOG.hatsudenNezumi, count: 2 },
+        { def: MONSTER_CATALOG.gandamu, count: 2 },
+        { def: MONSTER_CATALOG.ironWool, count: 2 },
+        { def: MONSTER_CATALOG.tetsuo, count: 1 },
+        { def: MONSTER_CATALOG.denchuwoUeruOtoko, count: 1 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
+        { def: ITEM_CATALOG.lifeJacket, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.sanctuary, count: 3 },
+        { def: SPELL_CATALOG.phoenixCurse, count: 3 },
+        { def: SPELL_CATALOG.antlion, count: 2 },
+        { def: SPELL_CATALOG.curseCleanse, count: 2 },
+        { def: SPELL_CATALOG.specialAudit, count: 3 },
+        { def: SPELL_CATALOG.taxHike, count: 1 },
+        { def: SPELL_CATALOG.taxEvasion, count: 1 },
+        { def: SPELL_CATALOG.realEstateAppraiser, count: 1 },
+        { def: SPELL_CATALOG.sideIncome, count: 4 },
+        { def: SPELL_CATALOG.divination, count: 1 },
+        { def: SPELL_CATALOG.homingInstinct, count: 1 },
+        { def: SPELL_CATALOG.toughness, count: 1 },
+      ],
+    },
+  },
   danball: {
     composition: {
       monsters: [

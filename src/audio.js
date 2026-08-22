@@ -40,6 +40,8 @@ const MAP_TRACK = {
   hitodemaso: 'hitodemaso',
   'mahjong-duo': 'mahjongDuo',
   'ofuda-field': 'ofudaField',
+  // ⑬はクエの逆襲＋Qの再登場なので⑫のテーマを流用する。
+  kessan: 'ofudaField',
 };
 
 const VOLUME = 0.5;
