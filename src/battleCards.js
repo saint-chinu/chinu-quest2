@@ -100,7 +100,7 @@ export const ITEM_CATALOG = {
   }),
   harinezumiNoFuku: item('harinezumiNoFuku', 'ハリネズミの服', Rarity.S, ItemType.ARMOR, 50, 0, 0, {
     effect: { type: 'reflectHalfDamage' },
-    effectDescription: '受けるダメージの1/2を相手に反射する',
+    effectDescription: '受けるダメージを半減し、半減した分を相手に反射する',
   }),
   morohaNoTsurugi: item('morohaNoTsurugi', '諸刃の剣', Rarity.S, ItemType.WEAPON, 60, 40, -20),
   stegoro: item('stegoro', 'ステゴロ', Rarity.S, ItemType.WEAPON, 50, 0, 0, {

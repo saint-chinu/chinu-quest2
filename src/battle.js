@@ -277,40 +277,45 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
     return { damage: 0, message, reflectedDamage: damage, reflectedTargetHp: attackerUnit.currentHp };
   }
 
-  defenderUnit.currentHp -= damage;
-  let message = `${attackerUnit.def.name} → ${defenderUnit.def.name} に${damage}ダメージ（倍率${multiplier}${damageCut ? `・軽減${damageCut}` : ''}）`;
+  // ハリネズミの服(reflectHalfDamage): 受けるダメージを半減し、半減した分を
+  // 攻撃側へ返す（痛みの折半 - 合計は元のダメージと同じ）。以前は「全部
+  // 受けたうえで半分を追加で返す」実装だったが、カードの説明文どおり
+  // 装備側の被ダメージそのものを軽減する仕様に改めた。端数は防御側が
+  // 多めに受ける（1ダメージなら反射0）ので、命中時効果の判定が消えない。
+  const hasHalfReflect = !pierces && (
+    defenderUnit.items.some((i) => i.effect?.type === 'reflectHalfDamage')
+    || hasTrait(defenderUnit, 'reflectHalfDamage')
+  );
+  const halfReflected = hasHalfReflect && damage > 0 ? Math.floor(damage / 2) : 0;
+  const damageTaken = damage - halfReflected;
+
+  defenderUnit.currentHp -= damageTaken;
+  let message = `${attackerUnit.def.name} → ${defenderUnit.def.name} に${damageTaken}ダメージ（倍率${multiplier}${damageCut ? `・軽減${damageCut}` : ''}${halfReflected > 0 ? '・反射半減' : ''}）`;
 
   // ライフジャケット(surviveLethalDamage): 致死ダメージでもHP1で踏みとどまる
   // （1戦闘1回のみ - アイテム本体にconsumedを立てて再発動を防ぐ）。
   const lifeJacketItem = consumeLethalSurvival(defenderUnit);
   if (lifeJacketItem) message += `／${defenderUnit.def.name}は「${lifeJacketItem.name}」でHP1で踏みとどまった`;
 
-  // ハリネズミの服(reflectHalfDamage): くねくねと違い自分も普通にダメージを
-  // 受けたうえで、その半分を追加で攻撃側にも返す。
   let resultReflectedDamage = 0;
-  const hasHalfReflect = !pierces && (
-    defenderUnit.items.some((i) => i.effect?.type === 'reflectHalfDamage')
-    || hasTrait(defenderUnit, 'reflectHalfDamage')
-  );
-  if (hasHalfReflect && damage > 0) {
-    const reflected = Math.round(damage / 2);
+  if (halfReflected > 0) {
     // 反射分を受ける攻撃側がナンカのお守りを持っていれば無効化する。
     if (consumeDamageNegation(attackerUnit, log)) {
       message += `／${defenderUnit.def.name}の反射は${attackerUnit.def.name}のお守りで無効化された`;
     } else {
-      attackerUnit.currentHp -= reflected;
-      message += `／${defenderUnit.def.name}が${reflected}ダメージを反射した`;
+      attackerUnit.currentHp -= halfReflected;
+      message += `／${defenderUnit.def.name}が${halfReflected}ダメージを反射した`;
       const reflectedLifeJacket = consumeLethalSurvival(attackerUnit);
       if (reflectedLifeJacket) {
         message += `／${attackerUnit.def.name}は「${reflectedLifeJacket.name}」でHP1で踏みとどまった`;
       }
-      resultReflectedDamage = reflected;
+      resultReflectedDamage = halfReflected;
     }
   }
 
   log.push(message);
   return {
-    damage,
+    damage: damageTaken,
     message,
     reflectedDamage: typeof resultReflectedDamage === 'number' ? resultReflectedDamage : 0,
     reflectedTargetHp: attackerUnit.currentHp,
