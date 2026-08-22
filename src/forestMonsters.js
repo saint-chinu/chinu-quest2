@@ -23,6 +23,14 @@ const forestMonster = (id, name, rarity, hp, atk, options = {}) => ({
 
 /** 森属性モンスター20種。画像未指定時はcardArt.jsの森属性共通画像を使う。 */
 export const FOREST_MONSTER_CATALOG = {
+  // 周回成長型の壁。森は3周目で「再生」を覚え、戦闘を生き延びるたび回復する。
+  uetateNoWakagi: forestMonster('uetateNoWakagi', '植えたての若木', Rarity.S, 50, 10, {
+    cost: 40,
+    traits: ['immovableByMoveCommand', 'emptyTileOnly'],
+    effect: { type: 'lapGrowth', hpPerLap: 10, growthLaps: 2, awakenLap: 3, awakenTrait: 'regenerate', awakenLabel: '再生' },
+    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主が1周するごとにHP+10（2周まで）。3周目で「再生」を覚える（戦闘を生き延びるとHPとATKが伸びる）',
+    imageDataUrl: assetUrl('/images/card-art/forest.png'),
+  }),
   takenokoha: forestMonster('takenokoha', 'タケノコ派', Rarity.N, 30, 30, {
     effect: { type: 'synergyWithNamedAlly', allyCatalogId: 'kinokoha', hpBonus: 10 },
     effectDescription: 'きのこ派が配置されていると、戦闘中HP+10（シナジー）',

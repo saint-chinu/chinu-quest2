@@ -2008,6 +2008,41 @@ async function promptLandLevelUp({ position, playerName, element, previousLevel,
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, pvpWaitCut(320));
 }
 
+/**
+ * 周回成長型モンスターが1段階育った時の演出。カメラをそのマスへ寄せて
+ * 「GROW UP!」／覚醒時は「AWAKEN!」のパネルを出す。この型のカードは
+ * 「置いたまま何周かすると強くなる」というのが要点なので、初見の
+ * プレイヤーが見落とさないよう、成長のたびに必ず盤上で見せる。
+ */
+async function promptUnitGrowth({ position, playerName, unitName, lap, awakened, label, detail }) {
+  if (!scene || !position) return;
+  const savedFocus = { x: scene.focus.x, z: scene.focus.z };
+  await scene.focusAndZoom(position.x, position.z, 1.48, pvpWaitCut(340));
+  const screen = scene.worldToScreen(position.x, PIECE_REST_Y + 1.5, position.z);
+  const panel = document.createElement('div');
+  panel.className = `fx-unit-growth${awakened ? ' awaken' : ''}`;
+  panel.style.left = `${screen.x}px`;
+  panel.style.top = `${screen.y}px`;
+  const heading = document.createElement('strong');
+  heading.textContent = awakened ? 'AWAKEN!' : 'GROW UP!';
+  const who = document.createElement('span');
+  who.textContent = `${playerName}の${unitName}　${detail || `${lap}周目`}`;
+  const gain = document.createElement('b');
+  gain.textContent = label;
+  panel.append(heading, who, gain);
+  fxLayer.appendChild(panel);
+  requestAnimationFrame(() => panel.classList.add('show'));
+  await Promise.all([
+    scene.playSpellAura(position),
+    awakened ? scene.playSummonBurst(position) : Promise.resolve(),
+  ]);
+  await new Promise((resolve) => setTimeout(resolve, pvpWaitCut(awakened ? 900 : 650) / getSpeedMultiplier()));
+  panel.classList.add('fade-out');
+  await new Promise((resolve) => setTimeout(resolve, 250));
+  panel.remove();
+  await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, pvpWaitCut(300));
+}
+
 async function promptLandLoss({ position, landLabel, chainBefore, chainAfter, assetsBefore, assetsAfter }) {
   if (!scene || !position) return;
   const savedFocus = { x: scene.focus.x, z: scene.focus.z };
@@ -3273,6 +3308,7 @@ function startBattle(character, storyOptions = {}) {
     onLandSale: relayable('landSale', promptLandSale, { broadcast: true }),
     onLandChain: relayable('landChain', promptLandChain, { broadcast: true }),
     onLandLevelUp: relayable('landLevelUp', promptLandLevelUp, { broadcast: true }),
+    onUnitGrowth: relayable('unitGrowth', promptUnitGrowth, { broadcast: true }),
     onCheckpoint: relayable('checkpoint', promptCheckpointSound, { broadcast: true }),
     onGoalBonus: relayable('goalBonus', promptGoalBonus, { broadcast: true }),
     onGoalAchieved: relayable('goalAchieved', promptGoalAchieved, { broadcast: true }),

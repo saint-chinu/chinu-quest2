@@ -183,6 +183,9 @@ function healUnit(unit, amount, battleMaxHp) {
 /** Traits may come from the monster itself, its one-use item, or a persistent spell curse. */
 export function hasTrait(unit, trait) {
   return !!unit.def.traits?.includes(trait)
+    // 周回成長型(lapGrowth)が覚醒して手に入れた特性。カード定義はデッキ間で
+    // 共有されうるので、覚醒は必ず盤上の個体側(awakenedTraits)に持たせる。
+    || !!unit.awakenedTraits?.includes(trait)
     || unit.items.some((item) => item.traits?.includes(trait))
     || unit.curses.some((curse) => curse.traits?.includes(trait));
 }

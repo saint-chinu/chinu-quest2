@@ -1292,10 +1292,11 @@ export const CHARACTER_DECKS = {
   qKessan: {
     composition: {
       monsters: [
-        // 無属性: ばら撒き用の壁と、Qらしい鉄道ギミック（合体）。
-        // ⑬は全マスが無属性で始まるので、まず「積み上がった伝票」で
-        // 土地の数を押さえ、放電/放火で色を付けてから育てる。
-        { def: MONSTER_CATALOG.tsumiageDenpyou, count: 3 },
+        // ばら撒き用の壁と、Qらしい鉄道ギミック（合体）。
+        // ⑬は全マスが無属性で始まるので、まず安い壁で土地の数を押さえ、
+        // 放電/放火で色を付けてから育てる。避雷針は据え置くだけで育ち、
+        // 3周目に足止めを覚えて通行料装置になる＝Qの籠城戦術そのもの。
+        { def: MONSTER_CATALOG.sodachikakeNoHiraishin, count: 3 },
         { def: MONSTER_CATALOG.battleTrain, count: 1 },
         { def: MONSTER_CATALOG.sacrificeCar, count: 1 },
         // 雷: 身代わり・生存収入・壁。盤面を落とさないための骨格。
@@ -1343,8 +1344,10 @@ export const CHARACTER_DECKS = {
     composition: {
       monsters: [
         // 壁と置物。全部「取られても痛くない」値段に揃えてある。
-        { def: MONSTER_CATALOG.tsumiageDenpyou, count: 4 },  // 40G HP65 再生・空き地専用
-        { def: MONSTER_CATALOG.sekizou, count: 4 },          // 0G  HP30/ATK10
+        // 周回成長型は周回屋のクエと相性が良い（1周ごとに勝手に育つ）。
+        { def: MONSTER_CATALOG.sodachikakeNoHiraishin, count: 3 }, // 40G 周回成長→3周目で足止め
+        { def: MONSTER_CATALOG.tsumiageDenpyou, count: 2 },  // 40G 周回成長→3周目でダメージ半減
+        { def: MONSTER_CATALOG.sekizou, count: 3 },          // 0G  HP30/ATK10
         { def: MONSTER_CATALOG.freelancer, count: 2 },       // 50G 周回の基本ボーナス1.3倍
         { def: MONSTER_CATALOG.netBenkei, count: 2 },        // 50G 50/50 素の壁
         { def: MONSTER_CATALOG.ninja, count: 2 },            // 50G 40/40 先制

@@ -23,6 +23,15 @@ const fireMonster = (id, name, rarity, hp, atk, options = {}) => ({
 
 /** 火属性モンスター20種。画像未指定時はcardArt.jsの火属性共通画像を使う（renderCardElがcard.imageDataUrlを優先するので、指定した分だけ自然に上書きされる）。 */
 export const FIRE_MONSTER_CATALOG = {
+  // 周回成長型の壁（5属性共通の型・詳細はneutralMonsters.jsのtsumiageDenpyou参照）。
+  // 火は3周目で「不死鳥」を覚え、致死ダメージを一度だけHP1で耐える。
+  hidaneNoTane: fireMonster('hidaneNoTane', '火種のタネ', Rarity.S, 50, 10, {
+    cost: 40,
+    traits: ['immovableByMoveCommand', 'emptyTileOnly'],
+    effect: { type: 'lapGrowth', hpPerLap: 10, growthLaps: 2, awakenLap: 3, awakenTrait: 'phoenix', awakenLabel: '不死鳥' },
+    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主が1周するごとにHP+10（2周まで）。3周目で「不死鳥」を覚える（致死ダメージを一度だけHP1で耐える）',
+    imageDataUrl: assetUrl('/images/card-art/fire.png'),
+  }),
   salarymander: fireMonster('salarymander', 'サラリーマンダー', Rarity.N, 30, 30, {
     effect: { type: 'survivalGold', multiplier: 2 },
     effectDescription: '戦闘で生き残った場合、残りHP×2Gを得る',

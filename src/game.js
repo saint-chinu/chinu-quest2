@@ -159,6 +159,7 @@ export class Game {
     onLandSale,
     onLandChain,
     onLandLevelUp,
+    onUnitGrowth,
     onCheckpoint,
     onGoalBonus,
     onGoalAchieved,
@@ -248,6 +249,8 @@ export class Game {
     this.onLandSale = onLandSale || (() => Promise.resolve());
     this.onLandChain = onLandChain || (() => Promise.resolve());
     this.onLandLevelUp = onLandLevelUp || (() => Promise.resolve());
+    // 周回成長型モンスターが1段階育った時の演出（main.jsのpromptUnitGrowth）。
+    this.onUnitGrowth = onUnitGrowth || (() => Promise.resolve());
     this.onCheckpoint = onCheckpoint || (() => Promise.resolve());
     this.onGoalBonus = onGoalBonus || (() => Promise.resolve());
     this.onGoalAchieved = onGoalAchieved || (() => Promise.resolve());
@@ -2402,6 +2405,9 @@ export class Game {
       position: goalPos ? { x: goalPos.x, z: goalPos.z } : null,
     });
     if (this.requireAllCheckpoints) player.passedCheckpoints.clear();
+    // 周回成長型モンスターはここで1段階育つ。ゴールを踏んだだけの通過では
+    // なく「周回として数えられた時」に揃えてある（＝lapsCompletedと同じ基準）。
+    await this._growLapUnitsOnLap(player);
 
     // 宝くじ: 次のゴール通過で0〜500Gをランダム獲得する権利（100G刻み、500Gだけ確率10%）。
     if (player.lotteryOnNextGoal) {
@@ -2607,6 +2613,56 @@ export class Game {
   }
 
   /**
+   * 周回成長型モンスター（def.effect.type === 'lapGrowth'）の育成。
+   * 持ち主が1周するたびに、盤上に残っているその個体の成長段階を1つ進める。
+   *   ・growthLaps周目まで : 基礎HPが hpPerLap ずつ恒久的に伸びる（現在HPも同じだけ増える）
+   *   ・awakenLap周目      : awakenTraitを覚える（覚醒）
+   * 覚醒した特性はカード定義ではなく個体（unit.awakenedTraits）に持たせる。
+   * カード定義はデッキ・図鑑と共有されうるので、def側を書き換えると同じカードの
+   * 他の1枚まで最初から覚醒済みになってしまう。
+   * 段階が進むたびに必ず演出(onUnitGrowth)を出す。初見のプレイヤーに
+   * 「置いたモンスターが周回で育つ」と気づいてもらうための、この型の要。
+   */
+  async _growLapUnitsOnLap(player) {
+    for (const tile of this._ownedTiles(player)) {
+      const unit = tile.unit;
+      const growth = unit?.def?.effect;
+      if (growth?.type !== 'lapGrowth') continue;
+      const lap = (unit.lapGrowthLaps || 0) + 1;
+      if (lap > (growth.awakenLap ?? 0)) continue; // 成長し切った個体は何もしない
+      unit.lapGrowthLaps = lap;
+
+      let label = '';
+      let detail = '';
+      if (lap <= (growth.growthLaps ?? 0)) {
+        const gain = growth.hpPerLap || 0;
+        unit.lapGrowthHpBonus = (unit.lapGrowthHpBonus || 0) + gain;
+        unit.currentHp += gain;
+        label = `HP +${gain}`;
+        detail = `${lap}周目の成長　HP${this._baseStats(unit).hp}`;
+      } else {
+        unit.awakenedTraits = [...(unit.awakenedTraits || []), growth.awakenTrait];
+        label = `${growth.awakenLabel}を覚えた！`;
+        detail = `${lap}周目で覚醒`;
+      }
+      this.onLog(`${player.name}の${unit.def.name}が成長した（${lap}周目：${label}）`);
+      this._notifyState();
+      await this.onUnitGrowth?.({
+        playerId: player.id,
+        playerName: player.name,
+        tileId: tile.id,
+        position: tile.position ? { x: tile.position.x, z: tile.position.z } : null,
+        unitName: unit.def.name,
+        lap,
+        awakened: lap > (growth.growthLaps ?? 0),
+        label,
+        detail,
+      });
+      if (this._isCancelled) return;
+    }
+  }
+
+  /**
    * まだ通過が必要なCPタイル一覧。
    * 通常マップは単純に「未通過のCP全部」。⑬のようにCPへ種別
    * (checkpointKind)が振られたマップでは「種別ごとに1つ通過すれば良い」
@@ -2642,7 +2698,7 @@ export class Game {
    * 呪いあり判定される）。免除対象の同盟仲間も素通りできる。
    */
   _isForcedStopFor(player, tile) {
-    const permanentForcedStop = tile.unit?.def?.traits?.includes('permanentForcedStop');
+    const permanentForcedStop = this._unitHasTrait(tile.unit, 'permanentForcedStop');
     if (permanentForcedStop && tile.type === TileType.LAND && tile.owner != null) {
       if (tile.owner === player.id) return false;
       const owner = this.players.find((p) => p.id === tile.owner);
@@ -5462,8 +5518,11 @@ export class Game {
    * 同属性が無ければ全体の最安を置く。同値なら地力の高い方を採る。
    */
   _cpuChooseScatterSummonCard(options, tile) {
+    // 周回成長型は据え置くほど強くなるので、ばら撒きとは相性が良い。
+    // 額面より40G安いものとして扱い、0Gの置物と competing させる。
+    const effectiveCost = (card) => (card.cost || 0) - (card.effect?.type === 'lapGrowth' ? 40 : 0);
     const cheapest = (list) => list.reduce((best, card) => {
-      const diff = (card.cost || 0) - (best.cost || 0);
+      const diff = effectiveCost(card) - effectiveCost(best);
       if (diff !== 0) return diff < 0 ? card : best;
       return (card.atk || 0) + (card.hp || 0) > (best.atk || 0) + (best.hp || 0) ? card : best;
     });
@@ -5698,7 +5757,7 @@ export class Game {
 
   /** 貫通を持つか（モンスター自身のtraits、または装備アイテム由来）。 */
   _hasPierce(unit) {
-    return !!unit?.def?.traits?.includes('pierce')
+    return this._unitHasTrait(unit, 'pierce')
       || !!unit?.items?.some((item) => item.traits?.includes('pierce'));
   }
 
@@ -5774,7 +5833,7 @@ export class Game {
   }
 
   _hasFieldTraitOnBoard(trait) {
-    return this.tiles.some((t) => t.unit?.def?.traits?.includes(trait));
+    return this.tiles.some((t) => this._unitHasTrait(t.unit, trait));
   }
 
   /**
@@ -5869,6 +5928,20 @@ export class Game {
     return 'neutral';
   }
 
+  /**
+   * 盤上の個体が持つ特性か。カード定義の特性に加えて、周回成長型が覚醒して
+   * 手に入れた特性（unit.awakenedTraits）も見る。battle.jsのhasTraitと同じ
+   * 考え方だが、こちらは盤面側（強制停止・不死鳥・貫通判定など）用。
+   */
+  _unitHasTrait(unit, trait) {
+    return !!unit?.def?.traits?.includes(trait) || !!unit?.awakenedTraits?.includes(trait);
+  }
+
+  /** 土地情報パネル等へ渡す特性一覧（覚醒済みの特性も含めて表示する）。 */
+  _visibleTraitsOf(unit) {
+    return [...(unit?.def?.traits ?? []), ...(unit?.awakenedTraits ?? [])];
+  }
+
   /** Base ATK/HP as shown on the battle-scene stat panel: def stats plus any永続 curses, but NOT items or the situational cheer/element bonuses (those are surfaced separately - see _runBattleScene). */
   _baseStats(unit) {
     const curseAtk = unit.curses.reduce((sum, c) => sum + (c.addedAtk || 0), 0);
@@ -5878,7 +5951,8 @@ export class Game {
     // 戦闘画面の基礎ステ表示だけが実際の数値とズレる）。
     return {
       atk: unit.def.atk + (unit.regenAtkBonus || 0) + curseAtk,
-      hp: unit.def.hp + (unit.summonBaseHpBonus || 0) + curseHp,
+      // lapGrowthHpBonus: 周回成長型が周回ごとに積み上げた恒久HP。
+      hp: unit.def.hp + (unit.summonBaseHpBonus || 0) + (unit.lapGrowthHpBonus || 0) + curseHp,
     };
   }
 
@@ -6825,7 +6899,7 @@ export class Game {
       }
     }
 
-    if (!unit.def.traits?.includes('phoenix')) return;
+    if (!this._unitHasTrait(unit, 'phoenix')) return;
 
     const catalogId = catalogIdOf(unit.def);
     // 召喚時に捨札へ送られた同一モンスターを1枚回収してから手札へ戻す
@@ -6996,7 +7070,7 @@ export class Game {
         cost: tile.unit.def.cost ?? 0,
         atk: tile.unit.def.atk,
         hp: tile.unit.def.hp,
-        traits: tile.unit.def.traits ?? [],
+        traits: this._visibleTraitsOf(tile.unit),
         effectDescription: tile.unit.def.effectDescription ?? '',
         imageDataUrl: tile.unit.def.imageDataUrl ?? null,
         imageFit: tile.unit.def.imageFit ?? null,
@@ -7656,7 +7730,7 @@ export class Game {
     const candidates = this.tiles
       .filter((t) => t.type === TileType.LAND && t.owner === player.id && t.unit
         && !t.transparentCursed && !t.forcedStopCursed
-        && !t.unit.def?.traits?.includes('permanentForcedStop'))
+        && !this._unitHasTrait(t.unit, 'permanentForcedStop'))
       .map((t) => ({ tile: t, toll: this._tollOfTile(t) }))
       .filter(({ toll }) => toll >= (card.cost || 0))
       .sort((a, b) => b.toll - a.toll);
@@ -8582,7 +8656,7 @@ export class Game {
                 imageDataUrl: t.unit.def.imageDataUrl ?? null,
                 rarity: t.unit.def.rarity ?? null,
                 cost: t.unit.def.cost ?? 0,
-                traits: t.unit.def.traits ?? [],
+                traits: this._visibleTraitsOf(t.unit),
                 effectDescription: t.unit.def.effectDescription ?? '',
                 imageFit: t.unit.def.imageFit ?? null,
                 toll: this._tollOfTile(t),
