@@ -73,6 +73,18 @@ export const GASHAAN_FIELD_MONSTER = {
 
 /** 無属性モンスター一覧。画像未指定時はcardArt.jsの無属性共通画像を使う。 */
 export const NEUTRAL_MONSTER_CATALOG = {
+  // 壁形モンスター（⑬最終決算で追加）。移動コマンドで動かせず
+  // (immovableByMoveCommand)、侵略にも自分の土地の入れ替えにも使えない
+  // (emptyTileOnly＝空き地への召喚専用)。代わりにコストが安くHPだけが高い。
+  // 「安いカードを空き地にばら撒いて土地の数を稼ぐ」ためのカードで、
+  // 盤面の押し合いには一切参加しない。
+  // 専用の絵柄はまだ無いので、無属性モンスター共通の絵柄を使う。
+  tsumiageDenpyou: neutralMonster('tsumiageDenpyou', '積み上がった伝票', Rarity.S, 65, 10, {
+    cost: 40,
+    traits: ['immovableByMoveCommand', 'emptyTileOnly', 'regenerate'],
+    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。戦闘を生き延びるとHPが回復する（再生）',
+    imageDataUrl: assetUrl('/images/card-art/neutral.png'),
+  }),
   battleTrain: neutralMonster(BATTLE_TRAIN_ID, '戦闘列車', Rarity.S, 20, 30, {
     cost: 70,
     dualUseItem: true,

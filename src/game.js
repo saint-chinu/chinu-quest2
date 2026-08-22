@@ -223,9 +223,11 @@ export class Game {
     // このマップに実在するチェックポイント番号一覧（board.jsが生成順に
     // 1から振ったもの）- プレイヤーパネルの通過状況表示用に_notifyState
     // で毎回そのまま送る（renderPlayerPanels参照）。
-    this.checkpointNumbers = this.tiles
+    // 番号は重複を潰す（⑬は「同じ番号のCPが3つあり、どれか1つ通れば良い」
+    // という作りなので、パネルには1番と2番の2つだけ出したい）。
+    this.checkpointNumbers = [...new Set(this.tiles
       .filter((t) => t.type === TileType.EVENT)
-      .map((t) => t.checkpointNumber)
+      .map((t) => t.checkpointNumber))]
       .sort((a, b) => a - b);
     this.scene = scene;
     this.onLog = onLog;
@@ -2362,9 +2364,7 @@ export class Game {
   async _grantGoalBonus(player, { viaHoming = false } = {}) {
     this._healOwnedUnitsOnLap(player);
     if (this.requireAllCheckpoints && !this._hasPassedAllCheckpoints(player)) {
-      const remaining = this.tiles
-        .filter((tile) => tile.type === TileType.EVENT && !player.passedCheckpoints.has(tile.id))
-        .map((tile) => tile.checkpointNumber);
+      const remaining = this._remainingCheckpointNumbers(player);
       this.onLog(`${player.name}はゴールを通過（ボーナスなし）　残りのCPは${remaining.map((number) => `${number}番`).join('、')}です`);
       // 帰巣本能によるゴール帰還は、CPが揃っていなくても周回として数える
       // （ボーナスは従来どおり出ない）。周回数は基本ボーナスの伸び・
@@ -2561,9 +2561,7 @@ export class Game {
     player.passedCheckpoints.add(tile.id);
     const bonus = this.checkpointBonus ?? 100;
     player.currency += bonus;
-    const remaining = this.tiles
-      .filter((candidate) => candidate.type === TileType.EVENT && !player.passedCheckpoints.has(candidate.id))
-      .map((candidate) => candidate.checkpointNumber);
+    const remaining = this._remainingCheckpointNumbers(player);
     const guidance = remaining.length
       ? `残りのCPは${remaining.map((number) => `${number}番`).join('、')}です`
       : 'すべてのCPを通過しました。ゴールしてください';
@@ -2608,10 +2606,32 @@ export class Game {
     }
   }
 
+  /**
+   * まだ通過が必要なCPタイル一覧。
+   * 通常マップは単純に「未通過のCP全部」。⑬のようにCPへ種別
+   * (checkpointKind)が振られたマップでは「種別ごとに1つ通過すれば良い」
+   * ので、まだ1つも通過していない種別のCPだけを返す（既に取った種別の
+   * 残りのCPは、通らなくてもゴールできるので残りに数えない）。
+   */
+  _remainingCheckpointTiles(player) {
+    const checkpoints = this.tiles.filter((t) => t.type === TileType.EVENT);
+    if (!checkpoints.some((t) => t.checkpointKind != null)) {
+      return checkpoints.filter((t) => !player.passedCheckpoints.has(t.id));
+    }
+    const clearedKinds = new Set(
+      checkpoints.filter((t) => player.passedCheckpoints.has(t.id)).map((t) => t.checkpointKind),
+    );
+    return checkpoints.filter((t) => !clearedKinds.has(t.checkpointKind));
+  }
+
+  /** ログ用: 「残りのCPは○番、○番です」の○番部分（重複を潰した番号列）。 */
+  _remainingCheckpointNumbers(player) {
+    return [...new Set(this._remainingCheckpointTiles(player).map((t) => t.checkpointNumber))]
+      .sort((a, b) => a - b);
+  }
+
   _hasPassedAllCheckpoints(player) {
-    return this.tiles
-      .filter((t) => t.type === TileType.EVENT)
-      .every((t) => player.passedCheckpoints.has(t.id));
+    return this._remainingCheckpointTiles(player).length === 0;
   }
 
   /**
@@ -2749,46 +2769,50 @@ export class Game {
     return bestIds[Math.floor(Math.random() * bestIds.length)];
   }
 
+  /**
+   * 候補タイルのうち、今の進行状態から一番近いもののid。
+   * ⑬のように島が陸続きでない盤面では、候補が全て歩いて行けない場合がある。
+   * その時は「そこへ飛べる選択式ワープ」のうち最短のものを目標に切り替える
+   * （そうしないと距離が全てInfinityで並び、分岐でどちらへ進んでも同点に
+   * なってCPUが島の中をさまよい続ける）。
+   */
+  _nearestNavigationTileId(player, candidates) {
+    if (candidates.length === 0) return null;
+    const distanceTo = (id) => this._forwardTileDistance(player.tileId, player.previousTileId, id);
+    let best = null;
+    let bestDistance = Infinity;
+    for (const tile of candidates) {
+      const distance = distanceTo(tile.id);
+      if (distance < bestDistance) { best = tile; bestDistance = distance; }
+    }
+    if (best) return best.id;
+    const warps = this.tiles.filter((tile) => tile.warpChoices?.length
+      && tile.warpChoices.some((id) => {
+        const reach = this._reachableTileIds(id);
+        return candidates.some((candidate) => reach.has(candidate.id));
+      }));
+    let bestWarp = null;
+    let bestWarpDistance = Infinity;
+    for (const warp of warps) {
+      const distance = distanceTo(warp.id);
+      if (distance < bestWarpDistance) { bestWarp = warp; bestWarpDistance = distance; }
+    }
+    return bestWarp?.id ?? candidates[0].id;
+  }
+
   /** 今向かうべき目標タイルid: 全チェックポイント制のマップでまだ未通過のものがあればその中で一番近いもの、そうでなければゴール（START）。目標が存在しないマップ構成ならnull。 */
   _nearestGoalTileId(player) {
     if (this.requireAllCheckpoints) {
-      const unpassed = this.tiles.filter((t) => t.type === TileType.EVENT && !player.passedCheckpoints.has(t.id));
-      if (unpassed.length > 0) {
-        let best = unpassed[0];
-        let bestDist = this._forwardTileDistance(player.tileId, player.previousTileId, best.id);
-        for (const t of unpassed.slice(1)) {
-          const d = this._forwardTileDistance(player.tileId, player.previousTileId, t.id);
-          if (d < bestDist) {
-            best = t;
-            bestDist = d;
-          }
-        }
-        return best.id;
-      }
+      const unpassed = this._remainingCheckpointTiles(player);
+      if (unpassed.length > 0) return this._nearestNavigationTileId(player, unpassed);
     }
-    const goals = this.tiles.filter((t) => t.type === TileType.START);
-    if (goals.length === 0) return null;
-    let best = goals[0];
-    let bestDist = this._forwardTileDistance(player.tileId, player.previousTileId, best.id);
-    for (const goal of goals.slice(1)) {
-      const distance = this._forwardTileDistance(player.tileId, player.previousTileId, goal.id);
-      if (distance < bestDist) { best = goal; bestDist = distance; }
-    }
-    return best.id;
+    return this._nearestNavigationTileId(player, this.tiles.filter((t) => t.type === TileType.START));
   }
 
   /** 未通過CPのうち、現在の進行状態から最短のもの。無ければnull。 */
   _nearestUnpassedCheckpointTileId(player) {
     if (!this.requireAllCheckpoints) return null;
-    const candidates = this.tiles.filter(
-      (tile) => tile.type === TileType.EVENT && !player.passedCheckpoints.has(tile.id),
-    );
-    if (candidates.length === 0) return null;
-    return candidates.reduce((best, tile) => {
-      const distance = this._forwardTileDistance(player.tileId, player.previousTileId, tile.id);
-      const bestDistance = this._forwardTileDistance(player.tileId, player.previousTileId, best.id);
-      return distance < bestDistance ? tile : best;
-    }).id;
+    return this._nearestNavigationTileId(player, this._remainingCheckpointTiles(player));
   }
 
   /**
@@ -3145,12 +3169,77 @@ export class Game {
    * 無くなるのでpreviousTileIdをリセットし、次の分岐では全方向が候補
    * になる。
    */
+  /**
+   * ワープマスから歩いて到達できるタイルidの集合（ワープは辿らない）。
+   * ⑬は島が陸続きでないので、「この飛び先はどの島か」「その島に必要なCPや
+   * ゴールがあるか」を判定するのにこれを使う。盤面は不変なのでキャッシュする。
+   */
+  _reachableTileIds(startId) {
+    this._reachCache ||= new Map();
+    const cached = this._reachCache.get(startId);
+    if (cached) return cached;
+    const seen = new Set([startId]);
+    const queue = [startId];
+    while (queue.length > 0) {
+      const current = this.tiles[queue.shift()];
+      for (const neighborId of current?.neighbors || []) {
+        if (seen.has(neighborId)) continue;
+        seen.add(neighborId);
+        queue.push(neighborId);
+      }
+    }
+    this._reachCache.set(startId, seen);
+    return seen;
+  }
+
+  /**
+   * 選択式ワープの飛び先決定。
+   * CPUは「まだ必要なCPがある島」＞「全CP済みならゴールのある島」を最優先し、
+   * 同条件なら敵の通行料の総額が小さい島を選ぶ（＝戦闘と出費を避ける）。
+   * 人間には行き先名のボタンを出す（キャンセル時はCPUと同じ推奨先へ飛ぶ）。
+   */
+  async _resolveWarpChoice(player, tile) {
+    const choices = tile.warpChoices.map((id) => this.tiles[id]).filter(Boolean);
+    if (choices.length === 0) return null;
+    const needed = this._remainingCheckpointTiles(player);
+    const scoreOf = (destination) => {
+      const reach = this._reachableTileIds(destination.id);
+      const hasNeededCheckpoint = needed.some((checkpoint) => reach.has(checkpoint.id));
+      const hasGoal = this.tiles.some((t) => t.type === TileType.START && reach.has(t.id));
+      const enemyToll = this.tiles.reduce((sum, t) => {
+        if (!reach.has(t.id) || t.owner == null || t.owner === player.id) return sum;
+        const owner = this.players.find((p) => p.id === t.owner);
+        if (!owner || this._isAllyOf(owner, player)) return sum;
+        return sum + this._tollOfTile(t);
+      }, 0);
+      return (hasNeededCheckpoint ? 1000 : 0)
+        + (needed.length === 0 && hasGoal ? 1000 : 0)
+        - enemyToll * 0.05;
+    };
+    const recommended = choices.reduce((best, destination) => (
+      scoreOf(destination) > scoreOf(best) ? destination : best
+    ));
+    if (player.isCPU) return recommended;
+    const picked = await this.onPickAbilityTarget(
+      choices.map((destination) => ({
+        id: destination.id,
+        label: destination.warpLabel || `${destination.id}番のワープへ`,
+      })),
+      player.id,
+    );
+    return this.tiles.find((t) => t.id === picked) || recommended;
+  }
+
   async _resolveWarpTile(player, sourceTile = null, { doubleNextDice = false } = {}) {
     const tile = sourceTile ?? this.tiles[player.tileId];
     let targetTile = null;
     if (tile.randomWarp) {
       const candidates = this.tiles.filter((t) => t.id !== tile.id && t.type !== TileType.WARP);
       targetTile = candidates[Math.floor(Math.random() * candidates.length)] || null;
+    } else if (tile.warpChoices?.length > 1) {
+      // ⑬の選択式ワープ: 飛び先を自分で選ぶ。CPUはCPの残りと敵の通行料を
+      // 見て決め、人間には行き先の名前を並べたボタンで選ばせる。
+      targetTile = await this._resolveWarpChoice(player, tile);
     } else {
       targetTile = this.tiles.find((t) => t.id === tile.warpTargetId);
     }
@@ -3227,7 +3316,7 @@ export class Game {
             tile.type === TileType.LAND &&
             !isAlliedLand &&
             !(tile.owner != null && tile.owner !== player.id && tile.transparentCursed) &&
-            this._affordableMonsterCards(player).length > 0,
+            this._affordableMonsterCards(player, tile).length > 0,
         },
         player.id,
       );
@@ -3412,9 +3501,16 @@ export class Game {
     }
   }
 
-  _affordableMonsterCards(player) {
+  /**
+   * 今召喚できるモンスターカード。tileを渡すと、その土地に置けないカードも
+   * 除く: 壁形モンスター(emptyTileOnly)は空き地への召喚専用で、敵地への
+   * 侵略にも自分の土地の入れ替えにも使えない。
+   */
+  _affordableMonsterCards(player, tile = null) {
+    const occupied = tile != null && tile.owner != null;
     return player.hand.filter(
       (c) => c.type === CardType.MONSTER && c.cost <= player.currency
+        && !(occupied && c.traits?.includes('emptyTileOnly'))
         && this._meetsChainRequirement(player, c) && this._meetsSacrificeRequirement(player, c),
     );
   }
@@ -3832,7 +3928,7 @@ export class Game {
       this.onLog('透過の呪いがかかっており侵略できません');
       return false;
     }
-    const options = this._affordableMonsterCards(player);
+    const options = this._affordableMonsterCards(player, tile);
     if (options.length === 0) {
       this.onLog('召喚できるモンスターカードがありません');
       return false;
@@ -3923,6 +4019,56 @@ export class Game {
     });
     await this._presentOfudaPriceChange(tile.element, ofudaPriceBefore);
     this.onTutorialEvent('levelUp', { playerId: player.id, tileId: tile.id, previousLevel, newLevel: tile.level });
+    return true;
+  }
+
+  /** デッキ（山札＋捨て札＋手札）のモンスターに一番多い非無属性の属性。同数なら全部返す。 */
+  _dominantDeckElementsOf(player) {
+    const counts = new Map();
+    const cards = [...(player.hand || []), ...(player.deck?.drawPile || []), ...(player.deck?.discardPile || [])];
+    for (const card of cards) {
+      if (card.type !== CardType.MONSTER) continue;
+      if (!CHANGEABLE_ELEMENTS.includes(card.element) || card.element === Element.NEUTRAL) continue;
+      counts.set(card.element, (counts.get(card.element) || 0) + 1);
+    }
+    if (counts.size === 0) return [];
+    const top = Math.max(...counts.values());
+    return [...counts.entries()].filter(([, count]) => count === top).map(([element]) => element);
+  }
+
+  /**
+   * CPUの土地コマンド「属性変更」。無属性の自分の土地にだけ使う。
+   * 無属性地はレベルアップできず、連鎖にも同属性HPボーナスにも数えられない
+   * ので、色を付けるまでその土地は資産として伸びない。逆に、既に色の付いた
+   * 土地を塗り直すのは連鎖を自分で折るだけなので絶対にやらせない。
+   * 塗る色はデッキテーマ（preferredElements）のうち自分の連鎖が一番伸びる
+   * ものを選ぶ。手持ちは通行料の備えを割らない範囲でだけ使う。
+   */
+  async _cpuMaybeChangeLandElement(player, tile) {
+    if (tile.type !== TileType.LAND || tile.owner !== player.id) return false;
+    if (tile.element !== Element.NEUTRAL) return false;
+    // テーマを持たない汎用CPU（対戦モードの相手など）は、自分のデッキに
+    // 一番多く入っている属性を「自分の色」とみなす。
+    const themed = (player.aiProfile?.preferredElements || [])
+      .filter((element) => CHANGEABLE_ELEMENTS.includes(element) && element !== Element.NEUTRAL);
+    const preferred = themed.length > 0 ? themed : this._dominantDeckElementsOf(player);
+    if (preferred.length === 0) return false;
+    const rate = NEUTRAL_ELEMENT_CHANGE_DISCOUNT;
+    const cost = Math.round(ELEMENT_CHANGE_COST_PER_LEVEL * tile.level * rate);
+    if (player.currency - cost < this._cpuSummonReserve(player)) return false;
+    const newElement = preferred.reduce((best, element) => (
+      this._chainCount(player.id, element) > this._chainCount(player.id, best) ? element : best
+    ));
+
+    const oldOfudaPrice = this._ofudaPrice(tile.element);
+    const newOfudaPrice = this._ofudaPrice(newElement);
+    player.currency -= cost;
+    tile.element = newElement;
+    this._repaintTileToElement(tile);
+    this.onLog(`${player.name}は土地属性を${ELEMENT_LABEL[newElement]}に変更した (-${cost}G)`);
+    this._notifyState();
+    await this._presentOfudaPriceChange(Element.NEUTRAL, oldOfudaPrice);
+    await this._presentOfudaPriceChange(newElement, newOfudaPrice);
     return true;
   }
 
@@ -4768,7 +4914,13 @@ export class Game {
       const usedAcquisitionAbility = await this._cpuMaybeAcquireHighValueLandByAbility(player, tile);
       if (usedAcquisitionAbility) return;
       const usedDamageAbility = await this._cpuMaybeUseDamageAbility(player, tile);
-      if (!usedDamageAbility) await this._cpuMaybeLevelUp(player, tile, profile);
+      if (usedDamageAbility) return;
+      // 無属性のままの自分の土地は、レベルアップも連鎖も同属性HPボーナスも
+      // 効かない「死んだ土地」。⑬のように全マスが無属性で始まる盤面では、
+      // まずここで色を付けないと何も積み上がらないので、レベルアップより先に
+      // 属性変更を試す。
+      if (await this._cpuMaybeChangeLandElement(player, tile)) return;
+      await this._cpuMaybeLevelUp(player, tile, profile);
       return;
     }
 
@@ -4783,7 +4935,7 @@ export class Game {
       return;
     }
 
-    const options = this._affordableMonsterCards(player);
+    const options = this._affordableMonsterCards(player, tile);
     if (options.length === 0) return;
 
     if (tile.owner == null) {
@@ -4795,7 +4947,11 @@ export class Game {
       const pool = withinReserve.length > 0
         ? withinReserve
         : [options.reduce((cheap, c) => ((c.cost || 0) < (cheap.cost || 0) ? c : cheap))];
-      const card = profile?.scatterSummons
+      // ばら撒き(scatterSummons)は無属性地でだけ働く。無属性地は連鎖にも
+      // 同属性HPボーナスにも土地レベルにも関与しない「ただの目印」なので、
+      // そこへ強いカードを置くのは丸損。色が付いた土地では通常の選択に戻り、
+      // ちゃんと強いカードを据える。
+      const card = profile?.scatterSummons && tile.element === Element.NEUTRAL
         ? this._cpuChooseScatterSummonCard(pool, tile)
         : this._isDanballBoss(player)
         ? this._cpuChooseSummonCardForDanball(pool, tile, player)
@@ -4904,6 +5060,20 @@ export class Game {
     }
     for (const tile of accessible) {
       if (await this._cpuMaybeMoveToHighValueLand(player, tile)) return true;
+    }
+
+    // 無属性のままの自分の土地は、レベルアップも連鎖も同属性HPボーナスも
+    // 効かない「死んだ土地」。⑬のように全マスが無属性で始まる盤面では、
+    // 色を付けるのが土地レベルアップより先になる。置いてあるモンスターが
+    // その色の恩恵を受けられる土地から順に塗る。
+    const neutralOwn = accessible.filter((tile) => tile.element === Element.NEUTRAL);
+    if (neutralOwn.length > 0) {
+      const preferred = player.aiProfile?.preferredElements || [];
+      const gainOf = (tile) => (preferred.includes(tile.unit?.def?.element) ? 1 : 0);
+      const target = neutralOwn.reduce((best, tile) => (
+        gainOf(tile) > gainOf(best) || (gainOf(tile) === gainOf(best) && tile.level > best.level) ? tile : best
+      ));
+      if (await this._cpuMaybeChangeLandElement(player, target)) return true;
     }
 
     const levelTarget = this._cpuChooseLevelUpTile(player, candidates);
@@ -5286,9 +5456,9 @@ export class Game {
   }
 
   /**
-   * ばら撒き型（aiProfile.scatterSummons）の召喚選択。
-   * 目的は土地を「数」で押さえてお札の購入資金を手元に残すことなので、
-   * 強さではなく安さで選ぶ。土地ボーナスを受けられる属性の中の最安を優先し、
+   * ばら撒き型（aiProfile.scatterSummons）の召喚選択。無属性地専用。
+   * 目的は土地を「数」で押さえて資金を手元に残すことなので、強さではなく
+   * 安さで選ぶ。土地ボーナスを受けられる属性の中の最安を優先し、
    * 同属性が無ければ全体の最安を置く。同値なら地力の高い方を採る。
    */
   _cpuChooseScatterSummonCard(options, tile) {
@@ -7197,13 +7367,16 @@ export class Game {
     const card = player.hand.find((candidate) => candidate.effect?.type === 'returnPlayerToStart');
     if (!card || player.currency < (card.cost || 0)) return false;
 
-    const checkpointTiles = this.tiles.filter((tile) => tile.type === TileType.EVENT);
-    const remainingFor = (target) => checkpointTiles.filter((tile) => !target.passedCheckpoints.has(tile.id));
+    const remainingFor = (target) => this._remainingCheckpointTiles(target);
+    // 「残り1つ」はタイル数ではなく種別の数で数える。⑬のように同じ番号の
+    // CPが複数あるマップでは、残りタイルが3枚でも「あと1種類」＝実質最後の
+    // CPなので、そこで戻せば一番効く。
+    const remainingKindCount = (remaining) => new Set(remaining.map((t) => t.checkpointKind ?? t.id)).size;
     const enemyAtLastCheckpoint = this.players
       .filter((target) => !target.defeated && target.id !== player.id && !this._isAllyOf(target, player))
       .map((target) => ({ target, remaining: remainingFor(target) }))
-      .filter(({ target, remaining }) => remaining.length === 1
-        && this._forwardTileDistance(target.tileId, target.previousTileId, remaining[0].id) <= 1)
+      .filter(({ target, remaining }) => remainingKindCount(remaining) === 1
+        && remaining.some((tile) => this._forwardTileDistance(target.tileId, target.previousTileId, tile.id) <= 1))
       .sort((a, b) => this._totalAssetsOf(b.target) - this._totalAssetsOf(a.target))[0]?.target;
 
     if (enemyAtLastCheckpoint) {
@@ -7212,7 +7385,7 @@ export class Game {
     }
 
     const ownRemaining = remainingFor(player);
-    if (player.currency <= 300 && ownRemaining.length !== 1) {
+    if (player.currency <= 300 && remainingKindCount(ownRemaining) !== 1) {
       await this._cpuCastSpell(player, card, { targetPlayerId: player.id });
       return true;
     }
@@ -7314,11 +7487,27 @@ export class Game {
    *    （逆に元属性のお札は下がる - 自分が持っていればその分は損）。
    *  ②敵の連鎖（地価・通行料の倍率）を折り、同属性の土地HPボーナスも剥がす。
    * 見込み益（お札の含み益の変化＋連鎖破壊）がコストに見合う時だけ使う。
+   *
+   * aiProfile.neutralRepaintAfter を持つCPUは、同盟の盤上モンスターがその
+   * 数に達したら「自分/仲間の無属性地を自分の色に塗り替える」動きも解禁する
+   * （⑬最終決算の作戦。全ての土地が無属性で始まる盤面なので、塗り替える
+   * までは土地レベルアップもお札の値上がりも一切起きない。まず安いカードを
+   * ばら撒いて土地を数だけ押さえ、揃ってから一斉に色をつける）。
    */
   async _cpuMaybeUseForceElementSpell(player) {
     if (player.spellUsedThisTurn) return;
-    const card = player.hand.find((c) => c.type === CardType.SPELL
-      && c.effect?.type === 'forceTileElement' && c.effect.element && c.effect.element !== Element.NEUTRAL);
+    // 複数の属性変更スペルを握っている時は、同盟がお札を溜めている属性を選ぶ
+    // （塗った土地はそのままその属性のお札の値上がりになるので、仲間の
+    // 仕込みと色を揃えた方が資産の伸びが大きい）。
+    const alliedOfudaOf = (targetElement) => (this.hasOfuda
+      ? this.players
+        .filter((p) => p.id === player.id || this._isAllyOf(p, player))
+        .reduce((sum, p) => sum + (p.ofuda?.[targetElement] || 0), 0)
+      : 0);
+    const card = player.hand
+      .filter((c) => c.type === CardType.SPELL && c.effect?.type === 'forceTileElement'
+        && c.effect.element && c.effect.element !== Element.NEUTRAL)
+      .sort((a, b) => alliedOfudaOf(b.effect.element) - alliedOfudaOf(a.effect.element))[0];
     if (!card || player.currency < (card.cost || 0)) return;
     const element = card.effect.element;
     const priceNow = this._ofudaPrice(element);
@@ -7329,21 +7518,42 @@ export class Game {
       const raw = (OFUDA_MAX_PRICE * scoreGain) / (initialCount * OFUDA_LEVEL_SCORE[LEVEL_CAP]);
       return Math.min(raw, Math.max(0, OFUDA_MAX_PRICE - priceNow));
     };
+    const isOursOf = (tile) => {
+      if (tile.owner === player.id) return true;
+      const owner = this.players.find((p) => p.id === tile.owner);
+      return !!owner && this._isAllyOf(owner, player);
+    };
+    // お札は同盟合算で資産になるので、含み益も同盟全体の保有で数える
+    // （⑬は札を買うのがクエ、土地を育てるのがQ、と役割が割れている）。
+    const alliedOfuda = alliedOfudaOf;
+    const repaintSignal = player.aiProfile?.neutralRepaintAfter;
+    const alliedUnitCount = this.tiles.filter((tile) => tile.unit && isOursOf(tile)).length;
+    const repaintOwnNeutral = repaintSignal != null && alliedUnitCount >= repaintSignal;
     const candidates = this.tiles
       .filter((tile) => {
-        if (tile.type !== TileType.LAND || tile.owner == null || tile.owner === player.id) return false;
+        if (tile.type !== TileType.LAND || tile.owner == null) return false;
         if (tile.element === element) return false;
         const owner = this.players.find((p) => p.id === tile.owner);
-        return owner && !owner.defeated && !this._isAllyOf(owner, player);
+        if (!owner || owner.defeated) return false;
+        // 自分/仲間の土地は、合図が出ている時の無属性地だけが対象。
+        if (isOursOf(tile)) return repaintOwnNeutral && tile.element === Element.NEUTRAL;
+        return true;
       })
       .map((tile) => {
-        const gainHoldings = this.hasOfuda ? (player.ofuda?.[element] || 0) : 0;
-        const lossHoldings = this.hasOfuda ? (player.ofuda?.[tile.element] || 0) : 0;
-        // 自分の含み益の増減（新属性の値上がり×保有 - 旧属性の値下がり×保有）
+        const ours = isOursOf(tile);
+        const gainHoldings = alliedOfuda(element);
+        const lossHoldings = alliedOfuda(tile.element);
+        // 同盟の含み益の増減（新属性の値上がり×保有 - 旧属性の値下がり×保有）
         const holdingsDelta = priceGainOf(tile) * gainHoldings - priceGainOf(tile) * lossHoldings;
         // 連鎖破壊: 2連鎖以上の一角なら、その土地の通行料の4割を毀損したとみなす
-        const chainBreak = this._chainCount(tile.owner, tile.element) >= 2 ? this._tollOfTile(tile) * 0.4 : 0;
-        return { tile, value: holdingsDelta + chainBreak + tile.level * 10 };
+        const chainBreak = !ours && this._chainCount(tile.owner, tile.element) >= 2
+          ? this._tollOfTile(tile) * 0.4
+          : 0;
+        // 自陣の無属性地を塗る価値: 土地レベルアップが解禁され（無属性地は
+        // レベルを上げられない）、置いてあるモンスターに同属性HPボーナスが
+        // 乗り、連鎖にも数え始める。
+        const unlockOwnLand = ours ? 130 + this._chainCount(player.id, element) * 25 : 0;
+        return { tile, value: holdingsDelta + chainBreak + unlockOwnLand + tile.level * 10 };
       })
       .sort((a, b) => b.value - a.value);
     const best = candidates[0];

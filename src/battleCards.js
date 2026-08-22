@@ -1292,11 +1292,14 @@ export const CHARACTER_DECKS = {
   qKessan: {
     composition: {
       monsters: [
-        // 無属性: Qらしい鉄道ギミック（合体）。
-        { def: MONSTER_CATALOG.battleTrain, count: 2 },
-        { def: MONSTER_CATALOG.sacrificeCar, count: 2 },
+        // 無属性: ばら撒き用の壁と、Qらしい鉄道ギミック（合体）。
+        // ⑬は全マスが無属性で始まるので、まず「積み上がった伝票」で
+        // 土地の数を押さえ、放電/放火で色を付けてから育てる。
+        { def: MONSTER_CATALOG.tsumiageDenpyou, count: 3 },
+        { def: MONSTER_CATALOG.battleTrain, count: 1 },
+        { def: MONSTER_CATALOG.sacrificeCar, count: 1 },
         // 雷: 身代わり・生存収入・壁。盤面を落とさないための骨格。
-        { def: MONSTER_CATALOG.raiheishinZamurai, count: 3 },
+        { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 },
         { def: MONSTER_CATALOG.hatsudenNezumi, count: 2 },
         { def: MONSTER_CATALOG.gandamu, count: 2 },
         { def: MONSTER_CATALOG.denchuwoUeruOtoko, count: 1 },
@@ -1312,16 +1315,57 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.lifeJacket, count: 1 },
       ],
       spells: [
-        { def: SPELL_CATALOG.sanctuary, count: 3 },
-        { def: SPELL_CATALOG.phoenixCurse, count: 3 },
+        // 放電/放火6枚が作戦の中核。ばら撒いた無属性地を一気に自分の色へ
+        // 塗り替えると、土地レベルアップが解禁され、連鎖と同属性HPボーナスが
+        // 立ち上がり、クエが仕込んだ雷・火のお札が同時に値上がりする。
+        { def: SPELL_CATALOG.electrify, count: 3 },
+        { def: SPELL_CATALOG.arson, count: 3 },
+        { def: SPELL_CATALOG.sanctuary, count: 2 },
+        { def: SPELL_CATALOG.phoenixCurse, count: 2 },
         { def: SPELL_CATALOG.antlion, count: 2 },
-        { def: SPELL_CATALOG.curseCleanse, count: 2 },
-        { def: SPELL_CATALOG.specialAudit, count: 3 },
+        { def: SPELL_CATALOG.curseCleanse, count: 1 },
+        { def: SPELL_CATALOG.specialAudit, count: 2 },
         { def: SPELL_CATALOG.taxHike, count: 1 },
-        { def: SPELL_CATALOG.taxEvasion, count: 1 },
-        { def: SPELL_CATALOG.realEstateAppraiser, count: 1 },
         { def: SPELL_CATALOG.sideIncome, count: 3 },
         { def: SPELL_CATALOG.divination, count: 1 },
+      ],
+    },
+  },
+  /**
+   * ⑬最終決算のクエ。役割は「戦闘を避けてひたすら周回し、安いカードを
+   * 空き地にばら撒きながらお札を買い占める」こと（aiProfile.scatterSummons
+   * ＋lapRacer＋ofudaStyle:'fixer'）。
+   * したがって高コストの殴り合い要員は一切入れず、0G〜50Gの土地マーカーと、
+   * 周回・現金化・相場操作のスペルだけで構成する。放電/放火はQと同じ色を
+   * 塗るための札で、塗った土地はそのまま自分の保有お札の値上がりになる。
+   */
+  queKessan: {
+    composition: {
+      monsters: [
+        // 壁と置物。全部「取られても痛くない」値段に揃えてある。
+        { def: MONSTER_CATALOG.tsumiageDenpyou, count: 4 },  // 40G HP65 再生・空き地専用
+        { def: MONSTER_CATALOG.sekizou, count: 4 },          // 0G  HP30/ATK10
+        { def: MONSTER_CATALOG.freelancer, count: 2 },       // 50G 周回の基本ボーナス1.3倍
+        { def: MONSTER_CATALOG.netBenkei, count: 2 },        // 50G 50/50 素の壁
+        { def: MONSTER_CATALOG.ninja, count: 2 },            // 50G 40/40 先制
+        { def: MONSTER_CATALOG.hatsudenNezumi, count: 2 },   // 雷 生存収入
+        { def: MONSTER_CATALOG.katanakaji, count: 2 },       // 50G 土地コマンドでオサフネ入手
+      ],
+      items: [
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 2 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.electrify, count: 3 },
+        { def: SPELL_CATALOG.arson, count: 3 },
+        // 資本主義の権化: 空き地へ自動展開する＝ばら撒きそのもの。
+        { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },
+        { def: SPELL_CATALOG.homingInstinct, count: 3 },
+        { def: SPELL_CATALOG.sideIncome, count: 3 },
+        { def: SPELL_CATALOG.taxHike, count: 1 },
+        { def: SPELL_CATALOG.sanctuary, count: 1 },
+        { def: SPELL_CATALOG.phoenixCurse, count: 1 },
+        { def: SPELL_CATALOG.dieWithMe, count: 1 },
+        { def: SPELL_CATALOG.divination, count: 2 },
       ],
     },
   },

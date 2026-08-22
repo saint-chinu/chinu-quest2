@@ -936,6 +936,10 @@ export const STORY_STAGES = [
       { speaker: '主人公', text: 'お肉！ ちょうどいい、手を貸してくれ！' },
       { speaker: 'お肉', text: 'ええで。腹減っとったところや、ちょうどええ運動になるわ。' },
       { speaker: 'Q', text: '結構。では二対二、正式な対戦ダイヤを組みましょう。' },
+      { speaker: 'Q', text: '路線図を説明します。この街は4つの島に分かれていて、島から島へはワープでしか渡れません。ワープに止まれば行き先は自分で選べます。' },
+      { speaker: 'Q', text: 'ゴールのある島のCPは全て1番、外の3島のCPは全て2番。1番と2番をひとつずつ通過すればゴールできます。つまり外の島をどれかひとつ回ってくれば良い。' },
+      { speaker: '主人公', text: '土地が……全部灰色だ。属性が無い？' },
+      { speaker: 'Q', text: 'ええ。無属性の土地はレベルを上げられず、連鎖もお札の値動きも起こしません。まず色を付けるところからです。' },
       { speaker: 'クエ', text: '言うとくけど、Qは殴らへんで。あいつは土地を積むだけ積んで、絶対に崩れへん壁になる。' },
       { speaker: 'クエ', text: 'ワイは逆にひたすら周回してお札を買い占める。相場も盤面もワイの色に染めたる。' },
       { speaker: '主人公', text: 'モンスターの強さで殴り勝てる相手じゃないってことか……。' },
@@ -961,8 +965,8 @@ export const STORY_STAGES = [
       {
         name: 'クエ',
         color: 0xc0c0c0,
-        deckKey: 'que',
-        theme: { elements: [Element.FOREST, Element.THUNDER, Element.NEUTRAL] },
+        deckKey: 'queKessan',
+        theme: { elements: [Element.THUNDER, Element.FIRE, Element.NEUTRAL] },
         // 高速周回・お札の買い占め特化（aiProfile.ofudaStyle:'fixer' +
         // lapRacer）。⑫と同じ経済エンジンを、コンビ戦用に少し積極化する。
         // Qとの役割分担: Qの属性（雷・火）のお札を最優先で買い集め、
@@ -978,6 +982,10 @@ export const STORY_STAGES = [
           itemGambleChance: 0,
           highValueAvoidance: 0.9,
           ofudaAllyPumpElements: [Element.THUNDER, Element.FIRE],
+          // 同盟の盤上モンスターが8体に達したら、無属性のままの自陣を
+          // 放電/放火で一気に雷・火へ塗り替える（＝仕込んだお札が値上がりし、
+          // Qの土地レベルアップも解禁される）。
+          neutralRepaintAfter: 8,
         },
         startingCurrency: 900,
       },
@@ -998,6 +1006,8 @@ export const STORY_STAGES = [
           itemGambleChance: 0.1,
           highValueAvoidance: 0.85,
           offElementSummonChance: 0.05,
+          scatterSummons: true,
+          neutralRepaintAfter: 8,
           levelPumpSignal: {
             allyName: 'クエ',
             elements: [Element.THUNDER, Element.FIRE],

@@ -251,23 +251,60 @@ const OFUDA_FIELD_ROWS = [
   'CMMMMMMMC',
 ];
 
-// ⑬最終決算。海上金融街の中央区画。⑪と同じ「外周＋中央の小さな四角＋
-// 左右2本の橋」の実証済みトポロジーを流用しつつ、Gを外周の左上角に置き、
-// CPは両方の橋の中ほどに置く（＝毎周、中央の取引区画を横断させる）。
-// お札ステージなので属性はやや厚めに配り、火12・水11・雷14・森10・無4。
+// ⑬最終決算。4つの島を選択式ワープ(X)だけで往き来する、このゲームで
+// 唯一の「陸続きでない」盤面。
+//
+//  ・上段の3島は全て同じ形（縦2本の通りを4本の横棒でつないだ梯子形）。
+//    上端の中央がCP、下端の中央がワープ。1島を1周すればそのCPを取れる。
+//  ・下の島がゴール島。中央下にG、3方向の枝の先にそれぞれCPとワープ。
+//    Gから左・右・中央の3ルートへ分かれるので、敵の高額地を避けて回れる。
+//  ・CPは全部で6つ。上段3島のCPは全て「2」、ゴール島の3つは全て「1」で、
+//    種別ごとに1つずつ通過すればゴールできる（createBoardのcheckpointKind
+//    とGame._remainingCheckpointTiles参照）。つまり「どれか1島を1周して
+//    ゴール島に戻る」のが最短経路になる。
+//  ・土地は全て無属性。無属性地はレベルアップできず、お札の基礎価格も
+//    全属性が最低値のまま始まる。属性変更スペル（放火/放水/放電/放牧）で
+//    自分の色に塗り替えて初めて、土地投資も相場の押し上げも動き出す。
 const KESSAN_ROWS = [
-  'GFFFFWWWWWN',
-  'F.........W',
-  'F.........W',
-  'F.........W',
-  'F...TNW...W',
-  'FFCFM.WTCTT',
-  'F...MNT...T',
-  'M.........T',
-  'M.........T',
-  'M.........T',
-  'NMMMMMTTTTT',
+  'NCN..NCN..NCN',
+  'N.N..N.N..N.N',
+  'NNN..NNN..NNN',
+  'N.N..N.N..N.N',
+  'NNN..NNN..NNN',
+  'N.N..N.N..N.N',
+  'NXN..NXN..NXN',
+  '.............',
+  '......X......',
+  '......C......',
+  '....XNNNX....',
+  '....C.N.C....',
+  '....NNGNN....',
 ];
+
+/**
+ * ⑬の島判定。上段は3列に分かれた周回島（gridXの帯で見分ける）、
+ * gridZ 8以降がゴール島。ワープの飛び先候補（同じ島へは飛べない）と
+ * CPの種別（周回島=2 / ゴール島=1）の両方をこの区分から決める。
+ */
+function kessanAreaOf(tile) {
+  if (tile.gridZ >= 8) return 'goal';
+  if (tile.gridX <= 2) return 'island1';
+  if (tile.gridX <= 7) return 'island2';
+  return 'island3';
+}
+
+const KESSAN_WARP_LABEL = {
+  island1: '第一の島',
+  island2: '第二の島',
+  island3: '第三の島',
+};
+
+/** ゴール島には入口が3つあるので、どの枝に降りるかまで選べるようにする。 */
+const KESSAN_GOAL_WARP_LABEL = {
+  6: 'ゴール島・中央の枝',
+  4: 'ゴール島・左の枝',
+  8: 'ゴール島・右の枝',
+};
 
 // 対人戦のマップ選択・ストーリーモードの各ステージ盤面として使う一覧。
 // idはstory.jsの各ステージ`key`と揃えてある - ストーリーモードは自ステージ
@@ -372,7 +409,8 @@ function typeForCode(code) {
   // V/Pおよびステージ7専用I/J/K/Lは共に、ちょうど止まったらワープする。
   // V=ワープ1（1マスだけ）、P=ワープ2（複数マスありうる）- 区別は型では
   // なく、createBoard末尾のリンク付けでtile.warpTargetIdに焼き込む。
-  if (code === 'V' || code === 'P' || ['I', 'J', 'K', 'L'].includes(code)) return TileType.WARP;
+  // Xは⑬の選択式ワープ（飛び先を候補から選ぶ）。リンク付けはcreateBoard末尾。
+  if (code === 'V' || code === 'P' || code === 'X' || ['I', 'J', 'K', 'L'].includes(code)) return TileType.WARP;
   if (LAND_ELEMENT_BY_CODE[code]) return TileType.LAND;
   return null;
 }
@@ -491,6 +529,34 @@ export function createBoard(mapId) {
     }
   }
 
+
+  // ⑬の選択式ワープ(X): 「自分の島以外のワープ全部」を飛び先候補として持たせ、
+  // 実際にどこへ飛ぶかは停止したプレイヤー（CPUはAI）に選ばせる。
+  // あわせてCPへ種別（周回島=2 / ゴール島=1）を焼き込む。
+  if (map.id === 'kessan') {
+    const warps = tiles.filter((t) => rows[t.gridZ][t.gridX] === 'X');
+    for (const tile of warps) {
+      const area = kessanAreaOf(tile);
+      tile.warpKind = area === 'goal' ? 'return' : 'entrance';
+      tile.warpLabel = area === 'goal'
+        ? (KESSAN_GOAL_WARP_LABEL[tile.gridX] || 'ゴール島')
+        : KESSAN_WARP_LABEL[area];
+      tile.warpChoices = warps
+        .filter((other) => kessanAreaOf(other) !== area)
+        .map((other) => other.id);
+      // 単独の飛び先しか無い場合に備えて従来のwarpTargetIdも埋めておく。
+      tile.warpTargetId = tile.warpChoices[0] ?? null;
+    }
+    // ⑬のCPは「番号＝種別」。周回島のCPは3つとも2番、ゴール島の3つは
+    // 全て1番で、1番と2番をそれぞれ1つずつ通過すればゴールできる。
+    // 表示上の番号もそのまま2番/1番になる（プレイヤーパネルは番号の
+    // 重複を潰して①②の2つだけ出す - Game.checkpointNumbers参照）。
+    for (const tile of tiles) {
+      if (tile.type !== TileType.EVENT) continue;
+      tile.checkpointKind = kessanAreaOf(tile) === 'goal' ? 1 : 2;
+      tile.checkpointNumber = tile.checkpointKind;
+    }
+  }
 
   // Qステージの暴走マスは必ず2枚一組。停止時の飛び先を相互に設定する。
   const runawayTiles = tiles.filter((t) => t.type === TileType.RUNAWAY);
