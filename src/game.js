@@ -108,6 +108,12 @@ const OFUDA_MIN_PRICE = 3;
 // 相場を動かせる幅に上限を設ける。
 const OFUDA_TRADE_LOT = 5;
 const OFUDA_MAX_BUY_PER_TRADE = 30;
+// お札は値上がりしても売らない仕様（ユーザー指定、2026-08-22）。売るのは
+// 手持ちGがマイナスになった時の強制清算だけで、その時も「不足分＋この額」
+// までしか売らない。ちょうど0Gで止めると次の小さな支払いで即また売る
+// ことになり、そのたびに自分で相場を押し下げてしまうため、わずかな
+// 余裕を持たせる。
+const OFUDA_DEBT_SELL_BUFFER = 80;
 const OFUDA_LEVEL_SCORE = { 1: 0.5, 2: 1.625, 3: 2.75, 4: 3.875, 5: 5 };
 // 周回ボーナスに乗るお札利回り（評価額×この率）。土地の領地ボーナスと
 // 並ぶ収入源になるよう5%→8%へ。保有2,000G分で周160G＝土地3枚弱に相当。
@@ -2469,36 +2475,14 @@ export class Game {
       count: player.ofuda[entry.element] || 0,
       avg: player.ofudaAvgCost[entry.element] || 0,
     }));
-    // フィクサーは値上がり益を「実現」しない。総資産は保有お札の時価で
-    // 数えられるため、勝つためには売る必要がなく、逐次約定の下で大量に
-    // 売れば自分の評価額を自分で暴落させるだけ（上限で全量売る旧ロジックは
-    // 勝利目前の自傷になっていた）。売るのは、土地を失って自力で相場を
-    // 支えられなくなった属性から撤退する時だけ。
-    // 売りは5枚単位なので、1ロットに満たない保有は売却候補にしない
-    // （切り捨てで0枚になり、判断だけ消費して何も起きなくなるため）。
-    const sellCandidate = isFixer
-      ? holdings
-        .filter((entry) => entry.count >= OFUDA_TRADE_LOT && entry.avg > 0
-          && !heldElements.has(entry.element) && entry.price >= entry.avg + 10
-          // コンビ戦で相方の一気上げ用に仕込んでいる属性は、値が乗っても
-          // 手放さず溜め続ける（早く売ると溜め直しになり閾値到達が遠のく）。
-          && entry.element !== player.aiProfile?.ofudaAllyPumpElement)
-        .sort((a, b) => (b.price - b.avg) * b.count - (a.price - a.avg) * a.count)[0]
-      : holdings
-        .filter((entry) => entry.count >= OFUDA_TRADE_LOT && entry.avg > 0 && entry.price >= entry.avg + 5)
-        .sort((a, b) => (b.price - b.avg) - (a.price - a.avg))[0];
-    if (sellCandidate) {
-      const sellCount = isFixer
-        ? sellCandidate.count
-        : Math.max(OFUDA_TRADE_LOT, Math.floor(sellCandidate.count / 2));
-      const result = this._sellOfuda(player, sellCandidate.element, sellCount);
-      if (result.sold > 0) {
-        this.onLog(`${player.name}は値上がりした${ELEMENT_LABEL[sellCandidate.element]}のお札を${result.sold}枚売却した (+${result.revenue}G)`);
-        this._notifyState();
-        await this._presentOfudaPriceChange(sellCandidate.element, result.before);
-        return;
-      }
-    }
+    // CPUは値上がりしてもお札を売らない（ユーザー指定の仕様、2026-08-22）。
+    // 総資産は保有お札の時価で数えるので勝つために売る必要がなく、逐次約定の
+    // 下で売れば自分の評価額を自分で崩すだけ。手放すのは手持ちGがマイナスに
+    // なった時の強制清算（_recoverFromDebt）だけで、そこでも「不足分＋80G」
+    // までしか売らない。
+    // heldElements/holdingsは買い判断のログと将来の拡張のために残してある。
+    void heldElements;
+    void holdings;
 
     // フィクサーは手元に盤面用の軍資金（大型召喚1体＋土地レベルアップ1回で
     // 600G前後）を残し、残りの6割を相場へ突っ込む。従来の「1周につき最大
@@ -4238,7 +4222,10 @@ export class Game {
       if (candidates.length === 0) {
         if (ofudaCandidates.length > 0) {
           const best = ofudaCandidates.sort((a, b) => b.price - a.price)[0];
-          const need = Math.ceil((-player.currency) / best.price);
+          // マイナス解消ちょうどで止めると、次の小さな支払いで即また売る
+          // 羽目になり、そのたびに相場を自分で押し下げてしまう。少しだけ
+          // 余裕（OFUDA_DEBT_SELL_BUFFER=80G）を持たせて売る。
+          const need = Math.ceil((-player.currency + OFUDA_DEBT_SELL_BUFFER) / best.price);
           // 借金精算は5枚単位に丸めない（端数しか持っていない時に売れず、
           // 返済もできず破産処理にも進めない無限ループになるため）。
           const result = this._sellOfuda(player, best.element, need, { allowRemainder: true });
@@ -4253,7 +4240,10 @@ export class Game {
       if (player.isCPU) {
         if (ofudaCandidates.length > 0) {
           const best = ofudaCandidates.sort((a, b) => b.price - a.price)[0];
-          const need = Math.ceil((-player.currency) / best.price);
+          // マイナス解消ちょうどで止めると、次の小さな支払いで即また売る
+          // 羽目になり、そのたびに相場を自分で押し下げてしまう。少しだけ
+          // 余裕（OFUDA_DEBT_SELL_BUFFER=80G）を持たせて売る。
+          const need = Math.ceil((-player.currency + OFUDA_DEBT_SELL_BUFFER) / best.price);
           // 借金精算は5枚単位に丸めない（端数しか持っていない時に売れず、
           // 返済もできず破産処理にも進めない無限ループになるため）。
           const result = this._sellOfuda(player, best.element, need, { allowRemainder: true });

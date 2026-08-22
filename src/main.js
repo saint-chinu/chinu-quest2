@@ -4095,7 +4095,7 @@ async function finishTutorial(completed = true) {
   tutorialStepBubble.classList.add('hidden');
   game?.cancel?.();
   game = undefined;
-  stopMusic();
+  blockMusicPlayback();
   appEl.classList.add('hidden');
   preGame.classList.remove('hidden');
 
@@ -5236,7 +5236,7 @@ async function handleStoryReplayEnd(index, result = {}, replayVariant) {
   if (queBankruptcy) saveCharacter(currentUserId, currentCharacter);
   clearStoryResume();
   game = undefined;
-  stopMusic();
+  blockMusicPlayback();
   appEl.classList.add('hidden');
   preGame.classList.remove('hidden');
   activeStoryStageIndex = null;
@@ -5271,7 +5271,7 @@ async function handleStoryBattleEnd(index, result = {}) {
 
   if (!useBoardOverlay) {
     game = undefined;
-    stopMusic();
+    blockMusicPlayback();
     appEl.classList.add('hidden');
     preGame.classList.remove('hidden');
   }
@@ -5343,7 +5343,7 @@ async function handleStoryBattleEnd(index, result = {}) {
       stageKey: stage.key,
     });
     game = undefined;
-    stopMusic();
+    blockMusicPlayback();
     appEl.classList.add('hidden');
     preGame.classList.remove('hidden');
     showStoryScreen();
@@ -7140,7 +7140,7 @@ async function handleCasualBattleEnd({ won }) {
   const endingAssets = humanPlayer && game ? game._totalAssetsOf(humanPlayer) : 0;
   const mReward = grantExitReward(endingAssets);
   game = undefined;
-  stopMusic();
+  blockMusicPlayback();
   appEl.classList.add('hidden');
   preGame.classList.remove('hidden');
   showScreen(battleMenuScreen);
@@ -8427,7 +8427,7 @@ async function startPvpGuestBattle() {
       setWaitCutRate(0);
       pvpMatch = null;
       pvpSession = null;
-      stopMusic();
+      blockMusicPlayback();
       appEl.classList.add('hidden');
       preGame.classList.remove('hidden');
       window.alert(`対戦が終了しました。獲得報酬：${earnedM}M`);
@@ -8635,7 +8635,7 @@ async function handlePvpBattleEnd(result = {}) {
   pvpMatch = null;
   pvpSession = null;
   game = undefined;
-  stopMusic();
+  blockMusicPlayback();
   appEl.classList.add('hidden');
   preGame.classList.remove('hidden');
   showHubScreen();
@@ -8760,7 +8760,7 @@ gameMenuExit.addEventListener('click', async () => {
   pvpMatch = null;
   game = undefined;
   setWaitCutRate(0);
-  stopMusic();
+  blockMusicPlayback();
   appEl.classList.add('hidden');
   preGame.classList.remove('hidden');
   activeStoryStageIndex = null;
@@ -8813,7 +8813,7 @@ function forceTerminateBoardSession() {
   activeStoryStageIndex = null;
   activeStorySessionMeta = null;
   latestStoryCheckpoint = null;
-  stopMusic();
+  blockMusicPlayback();
   appEl?.classList.add('hidden');
   preGame?.classList.remove('hidden');
 }

@@ -139,9 +139,25 @@ export function toggleMuted() {
   return muted;
 }
 
+/**
+ * 盤面(#app)が実際に表示されているか。BGMを鳴らしてよい唯一の状況がこれ。
+ *
+ * 以前はmusicPlaybackAllowedフラグだけで守っていたが、盤面を閉じる処理は
+ * 「stopMusic() → #appを隠す → （報酬保存やストーリー会話をawait） →
+ * showScreen()」という順序で、最後のshowScreen()までフラグがtrueのまま
+ * 残る。その隙に戦闘演出の遅延コールバック（BATTLE_MESSAGE_HOLD_MS +
+ * BATTLE_FADE_OUT_MS後にplayMapThemeを呼ぶ）が発火すると、タイトル画面に
+ * 戻っているのに直前のステージのBGMが鳴り出す。呼び出し順に依存しない
+ * よう、DOMの実状態そのものを最終的な判定に使う。
+ */
+function boardIsVisible() {
+  const app = typeof document !== 'undefined' ? document.getElementById('app') : null;
+  return !!app && !app.classList.contains('hidden');
+}
+
 function playTrack(track) {
   // pagehide後に古い戦闘演出Promiseが完了してplayMapThemeを呼んでも再生しない。
-  if (pageExited || !musicPlaybackAllowed) return;
+  if (pageExited || !musicPlaybackAllowed || !boardIsVisible()) return;
   if (muted) {
     if (currentTrack && currentTrack !== track) getAudioEl(currentTrack).pause();
     currentTrack = track;
@@ -194,6 +210,29 @@ window.addEventListener('pagehide', () => {
   pageExited = true;
   stopMusic();
 });
+
+// 盤面(#app)が隠された瞬間に必ずBGMを止める安全網。盤面を閉じる経路は
+// ストーリー/フリー対戦/対人戦/チュートリアルと複数あり、どれか一つでも
+// blockMusicPlaybackを呼び忘れると、遅れて届いた演出コールバックが
+// タイトル画面でBGMを鳴らしてしまう。呼び出し側の作法に頼らず、
+// DOMの変化そのものを監視して止める。
+if (typeof document !== 'undefined') {
+  const watchBoardVisibility = () => {
+    const app = document.getElementById('app');
+    if (!app) return;
+    let wasVisible = !app.classList.contains('hidden');
+    new MutationObserver(() => {
+      const visible = !app.classList.contains('hidden');
+      if (wasVisible && !visible) blockMusicPlayback();
+      wasVisible = visible;
+    }).observe(app, { attributes: true, attributeFilter: ['class'] });
+  };
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', watchBoardVisibility, { once: true });
+  } else {
+    watchBoardVisibility();
+  }
+}
 
 // アプリ切替やbfcacheから同じページへ戻った場合は、新しい盤面で再生可能に戻す。
 // 実際に盤面を破棄するかどうかはmain.js側が判断する。
