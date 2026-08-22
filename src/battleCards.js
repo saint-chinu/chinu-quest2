@@ -151,10 +151,10 @@ export const ITEM_CATALOG = {
     effect: { type: 'stealItemBeforeAttack' },
     effectDescription: '相手のアイテムを奪って自分が装備する',
   }),
-  zangokuKen: item('zangokuKen', '斬〇剣', Rarity.R, ItemType.WEAPON, 130, 30, 0, {
-    traits: ['lastStrike', 'pierce'],
+  zangokuKen: item('zangokuKen', '斬〇剣', Rarity.R, ItemType.WEAPON, 130, 30, -20, {
+    traits: ['pierce'],
     effect: { type: 'instantKillOnHit', chance: 0.5 },
-    effectDescription: '後攻・貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。攻撃成功時50%で相手を即死させる',
+    effectDescription: '装備中HP-20。貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。攻撃成功時50%で相手を即死させる',
   }),
 
   // ストーリー③クリア報酬（紫の魔女ホフクからのお礼）。story.jsのSTORY_STAGES[2].rewardから参照。

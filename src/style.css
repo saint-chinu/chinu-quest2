@@ -1833,8 +1833,11 @@ html, body {
 .story-overlay-portrait {
   position: absolute;
   bottom: 0;
-  width: 34vw;
-  max-width: 300px;
+  /* 立ち絵の実サイズは下の img の max-height で決めたい。ここの幅は、
+     どのキャラでも高さ側が先に頭打ちになるだけの余裕を持たせた受け皿
+     （幅が先に効くと、正方形に近い絵のキャラだけ小さくなってしまう）。 */
+  width: 62vw;
+  max-width: 640px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1850,6 +1853,27 @@ html, body {
   transform: translateY(-8px);
 }
 
+/* 主人公の枠だけは控えめにする。NPCは背景透過の縦長イラストだが、主人公は
+   正方形で背景も不透明なキャラクターアイコンなので、同じ高さまで伸ばすと
+   画面を占める大きな四角になってしまう。 */
+.story-overlay-portrait[data-hero] {
+  width: 34vw;
+  max-width: 320px;
+}
+
+.story-overlay-portrait[data-hero] img {
+  max-height: 46vh;
+}
+
+.story-dialogue-portrait[data-hero] {
+  width: 34vw;
+  max-width: 320px;
+}
+
+.story-dialogue-portrait[data-hero] img {
+  max-height: 46vh;
+}
+
 #story-overlay-portrait-left {
   left: 2vw;
   bottom: 57px;
@@ -1861,19 +1885,23 @@ html, body {
 
 .story-overlay-portrait img {
   width: 100%;
-  max-height: 42vh;
+  /* 全ストーリー共通の立ち絵サイズ。42vhでは画面に対して小さすぎたため
+     引き上げた（⑪の闇・ホフク等が小さいという指摘。実測で画面高の42%
+     しかなかった）。ステージ別・キャラ別に上書きしないこと - ここ一箇所で
+     全ステージの見た目を揃える。 */
+  max-height: 76vh;
   object-fit: contain;
   filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.5));
 }
 
-/* ステージ3は4人の立ち絵を左右2枠へ話者ごとに差し替えるため、汎用の
-   サイズ・位置ではなくキャラクター別に配置する。mm指定は依頼値どおり。 */
+/* ステージ3は4人の立ち絵を左右2枠へ話者ごとに差し替えるため、キャラクター
+   別に「位置」を調整する。サイズ(width/max-width/max-height)はここで
+   上書きしない - 全ストーリーで立ち絵の大きさを揃えるため、共通の
+   .story-overlay-portrait / .story-overlay-portrait img に一本化している。 */
 #story-overlay-dialogue[data-stage="budou"] .story-overlay-portrait[data-character="主人公"] {
   left: 50%;
   right: auto;
   bottom: 5mm;
-  width: 44.2vw;
-  max-width: 390px;
   transform: translateX(-50%);
 }
 
@@ -1884,8 +1912,6 @@ html, body {
 #story-overlay-dialogue[data-stage="budou"] .story-overlay-portrait[data-character="紫の魔女ホフク"] {
   right: calc(2vw + 5mm);
   bottom: 17mm;
-  width: 53.04vw;
-  max-width: 468px;
 }
 
 #deck-current-tabs { padding-bottom: 7px; }
@@ -1993,15 +2019,11 @@ html, body {
 #story-overlay-dialogue[data-stage="budou"] .story-overlay-portrait[data-character="ウサギン"] {
   left: 2vw;
   bottom: calc(57px + 3mm);
-  width: 48.96vw;
-  max-width: 432px;
 }
 
 #story-overlay-dialogue[data-stage="budou"] .story-overlay-portrait[data-character="少女A"] {
   left: calc(2vw + min(27vw, 238px));
   bottom: 57px;
-  width: 53.04vw;
-  max-width: 468px;
 }
 
 .story-overlay-name {
@@ -2129,8 +2151,8 @@ html, body {
 .story-dialogue-portrait {
   position: absolute;
   bottom: 150px;
-  width: 34vw;
-  max-width: 320px;
+  width: 62vw;
+  max-width: 640px;
   opacity: 0.5;
   filter: grayscale(40%) brightness(0.7);
   transition: opacity 0.25s ease, filter 0.25s ease, transform 0.25s ease;
@@ -2149,7 +2171,9 @@ html, body {
 
 .story-dialogue-portrait img {
   width: 100%;
-  max-height: 50vh;
+  /* 盤面オーバーレイ側(.story-overlay-portrait img)と揃える。こちらは
+     bottom:150px ぶん下に余白があるので、その分だけ低い上限にする。 */
+  max-height: 64vh;
   object-fit: contain;
   filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.55));
 }

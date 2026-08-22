@@ -482,14 +482,15 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
   return result;
 }
 
-// 先制(firstStrike)は+1、後攻(lastStrike)は-1、どちらも無ければ0。スコアが
-// 高い方が先に攻撃する（同スコア同士は下のresolveBattleが従来通り攻撃側を
-// 先にする）。先制と後攻が同じ戦闘に両方出てきても、単純に「先制側が先・
-// 後攻側が後」で矛盾なく解決できる設計。
+// 先制(firstStrike)は+1、後攻(lastStrike)は-1で、両方持っていれば打ち消し
+// 合って0。スコアが高い方が先に攻撃する（同スコア同士は下のresolveBattleが
+// 従来通り攻撃側を先にする）。
+//
+// 以前は先制を先に判定して即+1を返していたため、素で先制を持つモンスターが
+// 後攻のアイテムを装備しても後攻が黙って無視され、デメリットが無いまま
+// 先制し続けていた。加算方式にして、両方付いた時は素直に打ち消すようにした。
 export function strikeOrderScore(unit) {
-  if (hasTrait(unit, 'firstStrike')) return 1;
-  if (hasTrait(unit, 'lastStrike')) return -1;
-  return 0;
+  return (hasTrait(unit, 'firstStrike') ? 1 : 0) + (hasTrait(unit, 'lastStrike') ? -1 : 0);
 }
 
 /**

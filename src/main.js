@@ -4866,6 +4866,8 @@ function playDialogueLines(lines, { background, stageBadgeText } = {}) {
           storyDialogueImgLeft.src = heroIcon.dataUrl;
           storyDialoguePortraitLeft.classList.remove('hidden');
         }
+        // 左枠は常に主人公のキャラクターアイコン（NPCの縦長立ち絵とは別物）。
+        storyDialoguePortraitLeft.dataset.hero = 'true';
         storyDialoguePortraitLeft.classList.add('active');
         storyDialoguePortraitRight.classList.remove('active');
       } else {
@@ -4917,13 +4919,24 @@ function playOverlayDialogueLines(lines, {
   rightNpcPortraitUrl = null,
   speakerSides = null,
   speakerPortraitUrls = null,
+  heroPortraitUrl = null,
   stageKey = null,
 }) {
+  // 主人公の「立ち絵」はNPCのような縦長イラストではなく、正方形で背景も
+  // 不透明なキャラクターアイコン。NPCと同じ大きさまで引き伸ばすと画面を
+  // 占める巨大な四角になるため、どちらを表示しているかを枠へ印として残し、
+  // CSS側でサイズを分ける（.story-overlay-portrait[data-hero]）。
+  const markHero = (box, url) => {
+    if (heroPortraitUrl && url && url === heroPortraitUrl) box.dataset.hero = 'true';
+    else delete box.dataset.hero;
+  };
   storyOverlayDialogue.dataset.stage = stageKey || '';
   storyOverlayImgLeft.src = leftPortraitUrl || '';
   storyOverlayNameLeft.textContent = leftName;
   storyOverlayImgRight.src = rightPortraitUrl || '';
   storyOverlayNameRight.textContent = rightName;
+  markHero(storyOverlayPortraitLeft, leftPortraitUrl);
+  markHero(storyOverlayPortraitRight, rightPortraitUrl);
 
   return new Promise((resolve) => {
     let i = 0;
@@ -4938,6 +4951,8 @@ function playOverlayDialogueLines(lines, {
       delete storyOverlayDialogue.dataset.stage;
       delete storyOverlayPortraitLeft.dataset.character;
       delete storyOverlayPortraitRight.dataset.character;
+      delete storyOverlayPortraitLeft.dataset.hero;
+      delete storyOverlayPortraitRight.dataset.hero;
       resolve();
     }
     function showLine() {
@@ -4949,10 +4964,12 @@ function playOverlayDialogueLines(lines, {
           storyOverlayImgLeft.src = portraitUrl;
           storyOverlayNameLeft.textContent = line.speaker;
           storyOverlayPortraitLeft.dataset.character = line.speaker;
+          markHero(storyOverlayPortraitLeft, portraitUrl);
         } else {
           storyOverlayImgRight.src = portraitUrl;
           storyOverlayNameRight.textContent = line.speaker;
           storyOverlayPortraitRight.dataset.character = line.speaker;
+          markHero(storyOverlayPortraitRight, portraitUrl);
         }
       }
       // ステージ2は右側の立ち絵枠を主人公とお肉で共有する。話者が変わる
@@ -4961,8 +4978,10 @@ function playOverlayDialogueLines(lines, {
       if (rightNpcOnSpeaker && (line.speaker === rightNpcOnSpeaker || line.speaker === rightName)) {
         const showNpc = line.speaker === rightNpcOnSpeaker;
         displayedRightName = showNpc ? rightNpcOnSpeaker : rightName;
-        storyOverlayImgRight.src = (showNpc ? rightNpcPortraitUrl : rightPortraitUrl) || '';
+        const rightUrl = (showNpc ? rightNpcPortraitUrl : rightPortraitUrl) || '';
+        storyOverlayImgRight.src = rightUrl;
         storyOverlayNameRight.textContent = displayedRightName;
+        markHero(storyOverlayPortraitRight, rightUrl);
       }
       storyOverlaySpeaker.textContent = line.speaker;
       storyOverlayText.textContent = line.text;
@@ -5160,6 +5179,7 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
         rightPortraitUrl: NPC_PORTRAIT_URL['サーティー'],
         speakerSides: stage.overlaySpeakerSides,
         speakerPortraitUrls,
+        heroPortraitUrl: iconDataUrl,
         stageKey: stage.key,
       });
     },
@@ -5187,6 +5207,7 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
       rightNpcPortraitUrl: NPC_PORTRAIT_URL[stage.overlayRightNpcOnSpeaker],
       speakerSides: stage.overlaySpeakerSides,
       speakerPortraitUrls,
+      heroPortraitUrl: iconDataUrl,
       stageKey: stage.key,
     });
     // Only now deal the opening hand and start the first turn. This prevents
@@ -5340,6 +5361,7 @@ async function handleStoryBattleEnd(index, result = {}) {
       rightNpcPortraitUrl: NPC_PORTRAIT_URL[stage.overlayRightNpcOnSpeaker],
       speakerSides: stage.overlaySpeakerSides,
       speakerPortraitUrls,
+      heroPortraitUrl: iconDataUrl,
       stageKey: stage.key,
     });
     game = undefined;
