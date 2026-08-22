@@ -965,8 +965,12 @@ export const STORY_STAGES = [
         theme: { elements: [Element.FOREST, Element.THUNDER, Element.NEUTRAL] },
         // 高速周回・お札の買い占め特化（aiProfile.ofudaStyle:'fixer' +
         // lapRacer）。⑫と同じ経済エンジンを、コンビ戦用に少し積極化する。
+        // Qとの役割分担: Qの雷のお札を最優先で買い集め、値上がっても
+        // 手放さず溜め続ける（ofudaAllyPumpElement）。Qが仕込みを見て
+        // 土地を一気にレベル上げすると、この保有分がまとめて跳ね上がる。
         aiProfile: {
           lapRacer: true,
+          ofudaAllyPumpElement: Element.THUNDER,
         },
         startingCurrency: 900,
       },
@@ -977,11 +981,16 @@ export const STORY_STAGES = [
         theme: { elements: [Element.THUNDER, Element.NEUTRAL] },
         // 「土地をあげていく」純粋な籠城型。侵略はほぼ放棄し、聖域・不死鳥・
         // アリジゴクで固めた土地のレベルアップだけで資産を積む。
+        // クエとの役割分担(levelPumpSignal): クエの雷のお札保有が閾値に
+        // 届くまでは土地をLv2で足止めして資金だけ貯め、届いた瞬間に
+        // 堰を切って最大段階まで一気に注ぎ込む。地価が跳ねると同時に
+        // クエの雷お札も値上がりする、狙って作るタイミングの一致。
         aiProfile: {
           minWinProbabilityToInvade: 0.85,
           itemGambleChance: 0.1,
           highValueAvoidance: 0.85,
           offElementSummonChance: 0.05,
+          levelPumpSignal: { allyName: 'クエ', element: Element.THUNDER, threshold: 80 },
         },
         startingCurrency: 900,
       },

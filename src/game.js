@@ -2479,7 +2479,10 @@ export class Game {
     const sellCandidate = isFixer
       ? holdings
         .filter((entry) => entry.count >= OFUDA_TRADE_LOT && entry.avg > 0
-          && !heldElements.has(entry.element) && entry.price >= entry.avg + 10)
+          && !heldElements.has(entry.element) && entry.price >= entry.avg + 10
+          // コンビ戦で相方の一気上げ用に仕込んでいる属性は、値が乗っても
+          // 手放さず溜め続ける（早く売ると溜め直しになり閾値到達が遠のく）。
+          && entry.element !== player.aiProfile?.ofudaAllyPumpElement)
         .sort((a, b) => (b.price - b.avg) * b.count - (a.price - a.avg) * a.count)[0]
       : holdings
         .filter((entry) => entry.count >= OFUDA_TRADE_LOT && entry.avg > 0 && entry.price >= entry.avg + 5)
@@ -3694,6 +3697,10 @@ export class Game {
           // fixer型は自分の得意属性へ資金を集中させる。分散して安値を漁ると
           // 「自分の土地・塗り替えで吊り上げる」相乗りが効かなくなるため。
           + (isFixer && player.aiProfile?.preferredElements?.includes(entry.element) ? 30 : 0)
+          // コンビ戦の役割分担用: 相方が「これを溜めたらレベルアップで
+          // 一気に吊り上げる」役の時、その属性を最優先で仕込む
+          // （aiProfile.ofudaAllyPumpElement）。自分の得意属性より強く優先する。
+          + (isFixer && player.aiProfile?.ofudaAllyPumpElement === entry.element ? 60 : 0)
           - entry.price * 0.08;
         return { ...entry, score };
       })
@@ -5145,7 +5152,15 @@ export class Game {
     // 「+3段階まで一気に上げる」を許すと序盤から地価1000G超の土地ができ、
     // 初心者が通行料で消耗するうえ、CPUの総資産が目標へ一直線に伸びる。
     const cpuLevelCap = this.tutorialMode ? 2 : LEVEL_CAP;
-    if (player.currency < 300 || tile.type !== TileType.LAND || tile.level >= cpuLevelCap || tile.element === Element.NEUTRAL) return false;
+    // aiProfile.levelPumpSignal（コンビ戦の役割分担用）: 指定した相方が
+    // 指定属性のお札を閾値まで買い集めるまではLv2で足止めして資金を貯め、
+    // 閾値に届いた瞬間に堰を切って最大段階まで一気に注ぎ込む。相方の
+    // お札が値上がりするタイミングを自分の土地投資で作り出す役割分担。
+    const pumpSignal = player.aiProfile?.levelPumpSignal;
+    const pumpReady = pumpSignal
+      && (this.players.find((p) => p.name === pumpSignal.allyName)?.ofuda?.[pumpSignal.element] || 0) >= pumpSignal.threshold;
+    const effectiveCap = pumpSignal && !pumpReady ? Math.min(2, cpuLevelCap) : cpuLevelCap;
+    if (player.currency < 300 || tile.type !== TileType.LAND || tile.level >= effectiveCap || tile.element === Element.NEUTRAL) return false;
     // 投資後も「最悪1回の敵地通行料（上限800G）」を現金＋お札で払える範囲に
     // 抑える。ここを見ずに1250Gまで一気に注ぎ込むと、直後に高額地を踏んだ
     // 瞬間マイナス→土地とお札の投げ売り→破産の一直線になる（⑫はサドン
@@ -5154,7 +5169,7 @@ export class Game {
     const dangerReserve = Math.min(this._cpuMaxEnemyToll(player), 800);
     const liquidity = this._cpuLiquidity(player);
     const affordableTargets = [];
-    const maxTargetLevel = Math.min(cpuLevelCap, tile.level + (this.tutorialMode ? 1 : 3));
+    const maxTargetLevel = Math.min(effectiveCap, tile.level + (this.tutorialMode ? 1 : 3));
     for (let targetLevel = tile.level + 1; targetLevel <= maxTargetLevel; targetLevel += 1) {
       const cost = LEVEL_INVESTMENT[targetLevel] - LEVEL_INVESTMENT[tile.level];
       // 現金フロア250G: お札を担保に現金を使い切ると、次の通行料のたびに
@@ -5170,7 +5185,7 @@ export class Game {
     const pumpsOwnOfuda = this.hasOfuda
       && player.name === 'クエ'
       && (player.ofuda?.[tile.element] || 0) > 0;
-    const { targetLevel, cost } = pumpsOwnOfuda
+    const { targetLevel, cost } = (pumpsOwnOfuda || (pumpSignal && pumpReady))
       ? affordableTargets[affordableTargets.length - 1]
       : affordableTargets[Math.floor(Math.random() * affordableTargets.length)];
 
