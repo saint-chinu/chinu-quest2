@@ -23,12 +23,21 @@ const forestMonster = (id, name, rarity, hp, atk, options = {}) => ({
 
 /** 森属性モンスター20種。画像未指定時はcardArt.jsの森属性共通画像を使う。 */
 export const FOREST_MONSTER_CATALOG = {
-  // 周回成長型の壁。森は3周目で「再生」を覚え、戦闘を生き延びるたび回復する。
-  uetateNoWakagi: forestMonster('uetateNoWakagi', '植えたての若木', Rarity.S, 50, 10, {
+  // 周回成長型の壁。森はHPの伸びが一番大きい。
+  // 3周目で「再生」を覚え、戦闘を生き延びるたびに自力で育ち続ける。
+  //   素 35/10 → 1周 50/10 → 2周 70/15 → 3周 再生
+  taijuNoToride: forestMonster('taijuNoToride', '大樹の砦', Rarity.S, 35, 10, {
     cost: 40,
     traits: ['immovableByMoveCommand', 'emptyTileOnly'],
-    effect: { type: 'lapGrowth', hpPerLap: 10, growthLaps: 2, awakenLap: 3, awakenTrait: 'regenerate', awakenLabel: '再生' },
-    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主が1周するごとにHP+10（2周まで）。3周目で「再生」を覚える（戦闘を生き延びるとHPとATKが伸びる）',
+    effect: {
+      type: 'lapGrowth',
+      steps: [
+        { hp: 15 },
+        { hp: 20, atk: 5 },
+        { trait: 'regenerate', label: '再生' },
+      ],
+    },
+    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主の周回で成長する（1周目 HP50 → 2周目 HP70/ATK15 → 3周目「再生」を覚え、戦闘を生き延びるとHPとATKが伸びる）',
     imageDataUrl: assetUrl('/images/card-art/forest.png'),
   }),
   takenokoha: forestMonster('takenokoha', 'タケノコ派', Rarity.N, 30, 30, {

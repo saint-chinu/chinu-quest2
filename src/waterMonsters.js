@@ -33,12 +33,21 @@ const waterMonster = (id, name, rarity, hp, atk, options = {}) => ({
  * テーマから参照されているので維持）。
  */
 export const WATER_MONSTER_CATALOG = {
-  // 周回成長型の壁。水は3周目で「半分反射」を覚え、攻撃を受け流して相手へ返す壁になる。
-  mizutamariNoNushi: waterMonster('mizutamariNoNushi', '水たまりの主', Rarity.S, 50, 10, {
-    cost: 40,
+  // 周回成長型の壁。水は最も硬く、ATKはほとんど伸びない完全な壁。
+  // 3周目で「半分反射」を覚え、殴ってきた相手を削り返すようになる。
+  //   素 45/0 → 1周 60/0 → 2周 75/10 → 3周 半分反射
+  hyouketsuDock: waterMonster('hyouketsuDock', '氷結ドック', Rarity.S, 45, 0, {
+    cost: 45,
     traits: ['immovableByMoveCommand', 'emptyTileOnly'],
-    effect: { type: 'lapGrowth', hpPerLap: 10, growthLaps: 2, awakenLap: 3, awakenTrait: 'reflectHalfDamage', awakenLabel: '半分反射' },
-    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主が1周するごとにHP+10（2周まで）。3周目で「半分反射」を覚える（受けるダメージが半分になり、減らした分を相手に返す）',
+    effect: {
+      type: 'lapGrowth',
+      steps: [
+        { hp: 15 },
+        { hp: 15, atk: 10 },
+        { trait: 'reflectHalfDamage', label: '半分反射' },
+      ],
+    },
+    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主の周回で成長する（1周目 HP60 → 2周目 HP75/ATK10 → 3周目「半分反射」を覚え、受けるダメージが半分になり減らした分を相手に返す）',
     imageDataUrl: assetUrl('/images/card-art/water.png'),
   }),
   su: waterMonster('su', '酢', Rarity.EX, 60, 60, {

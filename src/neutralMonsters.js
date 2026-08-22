@@ -77,26 +77,36 @@ export const NEUTRAL_MONSTER_CATALOG = {
   //
   //  ・置き方の制限: 移動コマンドで動かせず(immovableByMoveCommand)、侵略にも
   //    自分の土地の入れ替えにも使えない(emptyTileOnly＝空き地への召喚専用)。
-  //    代わりにコストが安く(40G)、ATKは低く(10)、HPだけが高い。
+  //    代わりに安く、ATKは低く、HPだけが高い。
   //  ・成長(effect.type: 'lapGrowth'): 置いたあと持ち主が1周するごとに
-  //    HP+10（2周まで）、3周目でその属性ごとの特性を「覚醒」して覚える。
+  //    effect.steps を1段ずつ適用する。1周目・2周目でステータスが伸び、
+  //    3周目に属性ごとの特性を「覚醒」して覚える。伸び方も覚える特性も
+  //    属性で違うので、一律の計算ではなくカード側の表で持たせている。
   //    成長のたびに盤上で演出が出る（game.js _growLapUnitsOnLap /
   //    main.js promptUnitGrowth）ので、初見でも育つカードだと分かる。
   //  ・覚醒した特性はカード定義ではなく盤上の個体(unit.awakenedTraits)に
   //    持たせる。定義はデッキ・図鑑と共有されうるため。
   //
-  //  火 火種のタネ       → 不死鳥（致死ダメージを一度だけHP1で耐える）
-  //  水 水たまりの主     → 半分反射（受けるダメージが半分になり、減らした分を相手へ返す）
-  //  雷 育ちかけの避雷針 → 足止め（通る相手を必ず停止させる）
-  //  森 植えたての若木   → 再生
-  //  無 積み上がった伝票 → ダメージ半減
+  //  属性 名前           コスト  素     1周     2周      3周の覚醒
+  //  火   溶鉱炉          40G  30/15  40/20  50/35   不死鳥（致死を一度だけHP1で耐える）
+  //  水   氷結ドック       45G  45/0   60/0   75/10   半分反射（半減＋減らした分を返す）
+  //  雷   甲鉄要塞         40G  40/10  50/10  65/20   強制停止（通る相手を必ず止める）
+  //  森   大樹の砦         40G  35/10  50/10  70/15   再生
+  //  無   積み上がった伝票   35G  40/10  50/10  60/20   ダメージ半減
   //
   // 専用の絵柄はまだ無いので、属性共通の絵柄を使う。
-  tsumiageDenpyou: neutralMonster('tsumiageDenpyou', '積み上がった伝票', Rarity.S, 50, 10, {
-    cost: 40,
+  tsumiageDenpyou: neutralMonster('tsumiageDenpyou', '積み上がった伝票', Rarity.S, 40, 10, {
+    cost: 35,
     traits: ['immovableByMoveCommand', 'emptyTileOnly'],
-    effect: { type: 'lapGrowth', hpPerLap: 10, growthLaps: 2, awakenLap: 3, awakenTrait: 'halfDamage', awakenLabel: 'ダメージ半減' },
-    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主が1周するごとにHP+10（2周まで）。3周目で「ダメージ半減」を覚える（受けるダメージが半分になる）',
+    effect: {
+      type: 'lapGrowth',
+      steps: [
+        { hp: 10 },
+        { hp: 10, atk: 10 },
+        { trait: 'halfDamage', label: 'ダメージ半減' },
+      ],
+    },
+    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主の周回で成長する（1周目 HP50 → 2周目 HP60/ATK20 → 3周目「ダメージ半減」を覚え、受けるダメージが半分になる）',
     imageDataUrl: assetUrl('/images/card-art/neutral.png'),
   }),
   battleTrain: neutralMonster(BATTLE_TRAIN_ID, '戦闘列車', Rarity.S, 20, 30, {

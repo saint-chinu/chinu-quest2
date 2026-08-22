@@ -2620,9 +2620,15 @@ export class Game {
   /**
    * 周回成長型モンスター（def.effect.type === 'lapGrowth'）の育成。
    * 持ち主が1周するたびに、盤上に残っているその個体の成長段階を1つ進める。
-   *   ・growthLaps周目まで : 基礎HPが hpPerLap ずつ恒久的に伸びる（現在HPも同じだけ増える）
-   *   ・awakenLap周目      : awakenTraitを覚える（覚醒）
-   * 覚醒した特性はカード定義ではなく個体（unit.awakenedTraits）に持たせる。
+   * 段階はカード側の effect.steps 配列がそのまま「1周目・2周目・3周目…」で、
+   * 各段階は次を任意に持てる:
+   *   hp    : 基礎HPの恒久増加（現在HPも同じだけ増える）
+   *   atk   : 基礎ATKの恒久増加
+   *   trait : 覚える特性（label は演出とログの表示名）
+   * ステップを使い切った個体はそれ以上変化しない。属性ごとに伸び方も
+   * 覚える特性も違うので、一律の計算ではなくカード側の表で持たせている。
+   *
+   * 覚えた特性はカード定義ではなく個体（unit.awakenedTraits）に持たせる。
    * カード定義はデッキ・図鑑と共有されうるので、def側を書き換えると同じカードの
    * 他の1枚まで最初から覚醒済みになってしまう。
    * 段階が進むたびに必ず演出(onUnitGrowth)を出す。初見のプレイヤーに
@@ -2633,23 +2639,31 @@ export class Game {
       const unit = tile.unit;
       const growth = unit?.def?.effect;
       if (growth?.type !== 'lapGrowth') continue;
+      const steps = growth.steps || [];
       const lap = (unit.lapGrowthLaps || 0) + 1;
-      if (lap > (growth.awakenLap ?? 0)) continue; // 成長し切った個体は何もしない
+      const step = steps[lap - 1];
+      if (!step) continue; // 成長し切った個体は何もしない
       unit.lapGrowthLaps = lap;
 
-      let label = '';
-      let detail = '';
-      if (lap <= (growth.growthLaps ?? 0)) {
-        const gain = growth.hpPerLap || 0;
-        unit.lapGrowthHpBonus = (unit.lapGrowthHpBonus || 0) + gain;
-        unit.currentHp += gain;
-        label = `HP +${gain}`;
-        detail = `${lap}周目の成長　HP${this._baseStats(unit).hp}`;
-      } else {
-        unit.awakenedTraits = [...(unit.awakenedTraits || []), growth.awakenTrait];
-        label = `${growth.awakenLabel}を覚えた！`;
-        detail = `${lap}周目で覚醒`;
+      const parts = [];
+      if (step.hp) {
+        unit.lapGrowthHpBonus = (unit.lapGrowthHpBonus || 0) + step.hp;
+        unit.currentHp += step.hp;
+        parts.push(`HP +${step.hp}`);
       }
+      if (step.atk) {
+        unit.lapGrowthAtkBonus = (unit.lapGrowthAtkBonus || 0) + step.atk;
+        parts.push(`ATK +${step.atk}`);
+      }
+      if (step.trait) {
+        unit.awakenedTraits = [...(unit.awakenedTraits || []), step.trait];
+        parts.push(`${step.label}を覚えた！`);
+      }
+      const stats = this._baseStats(unit);
+      const label = parts.join('　');
+      const detail = step.trait
+        ? `${lap}周目で覚醒　ATK${stats.atk}/HP${stats.hp}`
+        : `${lap}周目の成長　ATK${stats.atk}/HP${stats.hp}`;
       this.onLog(`${player.name}の${unit.def.name}が成長した（${lap}周目：${label}）`);
       this._notifyState();
       await this.onUnitGrowth?.({
@@ -2659,7 +2673,7 @@ export class Game {
         position: tile.position ? { x: tile.position.x, z: tile.position.z } : null,
         unitName: unit.def.name,
         lap,
-        awakened: lap > (growth.growthLaps ?? 0),
+        awakened: !!step.trait,
         label,
         detail,
       });
@@ -5963,8 +5977,8 @@ export class Game {
     // その個体の"素のステータス"として扱う（statTotalsと同じ基準にしないと、
     // 戦闘画面の基礎ステ表示だけが実際の数値とズレる）。
     return {
-      atk: unit.def.atk + (unit.regenAtkBonus || 0) + curseAtk,
-      // lapGrowthHpBonus: 周回成長型が周回ごとに積み上げた恒久HP。
+      // lapGrowthAtkBonus / lapGrowthHpBonus: 周回成長型が周回ごとに積み上げた恒久値。
+      atk: unit.def.atk + (unit.regenAtkBonus || 0) + (unit.lapGrowthAtkBonus || 0) + curseAtk,
       hp: unit.def.hp + (unit.summonBaseHpBonus || 0) + (unit.lapGrowthHpBonus || 0) + curseHp,
     };
   }

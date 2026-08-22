@@ -42,13 +42,21 @@ export const DENCHU_FIELD_MONSTER = {
 
 /** 雷属性モンスター20種。画像未指定時はcardArt.jsの雷属性共通画像を使う。 */
 export const THUNDER_MONSTER_CATALOG = {
-  // 周回成長型の壁。雷は3周目で「足止め」を覚え、このマスへ来た相手を
-  // 必ず停止させる通行料装置になる（permanentForcedStop）。
-  sodachikakeNoHiraishin: thunderMonster('sodachikakeNoHiraishin', '育ちかけの避雷針', Rarity.S, 50, 10, {
+  // 周回成長型の壁（5属性共通の型・詳細はneutralMonsters.jsのtsumiageDenpyou参照）。
+  // 雷はバランス型。3周目で「強制停止」を覚え、通行料装置に化ける。
+  //   素 40/10 → 1周 50/10 → 2周 65/20 → 3周 強制停止
+  koutetsuYousai: thunderMonster('koutetsuYousai', '甲鉄要塞', Rarity.S, 40, 10, {
     cost: 40,
     traits: ['immovableByMoveCommand', 'emptyTileOnly'],
-    effect: { type: 'lapGrowth', hpPerLap: 10, growthLaps: 2, awakenLap: 3, awakenTrait: 'permanentForcedStop', awakenLabel: '足止め' },
-    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主が1周するごとにHP+10（2周まで）。3周目で「足止め」を覚える（このマスを通る相手を必ず停止させる）',
+    effect: {
+      type: 'lapGrowth',
+      steps: [
+        { hp: 10 },
+        { hp: 15, atk: 10 },
+        { trait: 'permanentForcedStop', label: '強制停止' },
+      ],
+    },
+    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主の周回で成長する（1周目 HP50 → 2周目 HP65/ATK20 → 3周目「強制停止」を覚え、このマスを通る相手を必ず停止させる）',
     imageDataUrl: assetUrl('/images/card-art/thunder.png'),
   }),
   hatsudenNezumi: thunderMonster('hatsudenNezumi', '発電ネズミ', Rarity.N, 30, 30, {

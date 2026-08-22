@@ -1293,7 +1293,7 @@ export const CHARACTER_DECKS = {
     composition: {
       monsters: [
         // ばら撒き兼、3周目で足止めを覚える成長型の壁。
-        { def: MONSTER_CATALOG.sodachikakeNoHiraishin, count: 3 },
+        { def: MONSTER_CATALOG.koutetsuYousai, count: 3 },
         // ■雷コンボの中核■
         // 電柱を植える男 → 電柱（盤上の雷モンスター全員がHP+10）
         // メカニックマソ → 周回ごとに自分の雷モンスター全員が最大HPの20%回復
@@ -1344,7 +1344,7 @@ export const CHARACTER_DECKS = {
       monsters: [
         // 壁と置物。全部「取られても痛くない」値段に揃えてある。
         // 周回成長型は周回屋のクエと相性が良い（1周ごとに勝手に育つ）。
-        { def: MONSTER_CATALOG.sodachikakeNoHiraishin, count: 4 }, // 40G 周回成長→3周目で足止め
+        { def: MONSTER_CATALOG.koutetsuYousai, count: 4 }, // 40G 周回成長→3周目で強制停止
         { def: MONSTER_CATALOG.sekizou, count: 3 },          // 0G  HP30/ATK10
         { def: MONSTER_CATALOG.freelancer, count: 2 },       // 50G 周回の基本ボーナス1.3倍
         { def: MONSTER_CATALOG.netBenkei, count: 2 },        // 50G 50/50 素の壁
