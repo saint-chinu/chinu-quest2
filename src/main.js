@@ -216,6 +216,7 @@ const battleSide = {
 const battleItemPickerBox = document.getElementById('battle-item-picker-box');
 const battleItemPickerTitle = document.getElementById('battle-item-picker-title');
 const battleItemPickerChoices = document.getElementById('battle-item-picker-choices');
+const battleItemNoneNotice = document.getElementById('battle-item-none-notice');
 const battleOpponentItems = document.getElementById('battle-opponent-items');
 const battleOpponentItemsTitle = document.getElementById('battle-opponent-items-title');
 const battleOpponentItemsChoices = document.getElementById('battle-opponent-items-choices');
@@ -2070,6 +2071,9 @@ const BATTLE_STAGE_REVEAL_MS = 300;
 // 戦闘中の数値・能力メッセージを読める時間を確保し、連続行動の間にも
 // 一呼吸置く。オンライン対戦でも各クライアントが同じPromiseを待つ。
 const BATTLE_MESSAGE_HOLD_MS = 3400;
+// 装備できるアイテムが1枚も無い時に「装備なし」を見せる時間。選択画面は
+// 出さず、この時間だけ表示してボタン操作を待たずに戦闘を進める。
+const BATTLE_NO_ITEM_NOTICE_MS = 1500;
 const BATTLE_ACTION_GAP_MS = 550;
 const BATTLE_RETREAT_MS = 600;
 const BATTLE_FADE_OUT_MS = 450;
@@ -2157,11 +2161,25 @@ function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, oppone
     // カードを灰色にして必要Gを赤字で重ねる。
     const canAfford = (card) => (card.cost || 0) <= currency;
     const affordableCount = hand.filter(canAfford).length;
-    battleItemPickerTitle.textContent = hand.length === 0
-      ? `${ownerName}の${unitName}: アイテムがありません`
-      : affordableCount === 0
-        ? `${ownerName}の${unitName}: 所持${currency}Gでは装備できるアイテムがありません`
-        : `${ownerName}の${unitName}: 使うアイテムを選んでください（所持${currency}G）`;
+    // 装備できるカードが1枚も無い（手札に無い／所持Gが足りない）場合は、
+    // 選ぶものが存在しないので選択画面そのものを出さない。「装備なし」を
+    // 短く見せるだけで、ボタン操作を待たずに戦闘を進める。
+    if (affordableCount === 0) {
+      const finishNotice = () => {
+        if (settled) return;
+        settled = true;
+        if (autoSkipTimer !== null) clearTimeout(autoSkipTimer);
+        battleItemNoneNotice.classList.add('hidden');
+        if (cancelActiveBattleItemPicker === finishNotice) cancelActiveBattleItemPicker = null;
+        resolve(null);
+      };
+      battleItemNoneNotice.classList.remove('hidden');
+      cancelActiveBattleItemPicker = finishNotice;
+      autoSkipTimer = setTimeout(finishNotice, BATTLE_NO_ITEM_NOTICE_MS);
+      return;
+    }
+    battleItemPickerTitle.textContent =
+      `${ownerName}の${unitName}: 使うアイテムを選んでください（所持${currency}G）`;
     battleItemPickerChoices.replaceChildren();
     for (const card of hand) {
       const choice = document.createElement('div');
@@ -2265,11 +2283,6 @@ function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, oppone
     battleItemPickerSkip.addEventListener('click', onSkip);
     cancelActiveBattleItemPicker = cancelPicker;
 
-    // 装備可能カードが無ければ選択操作そのものが存在しない。従来はこの場合も
-    // 「使わない」のタップを無期限に待っていたため、CPUから侵略された場面で
-    // 戦闘が止まったように見えていた。相手の公開アイテムを確認できる時間だけ
-    // 残し、自動的に未装備として戦闘を続ける。
-    if (hand.length === 0) autoSkipTimer = setTimeout(() => cleanup(null), 900);
   });
 }
 
@@ -8667,6 +8680,7 @@ async function handlePvpBattleEnd(result = {}) {
   cancelActiveBattleItemPicker = null;
   battleSceneModal.classList.add('hidden');
   battleItemPickerBox.classList.add('hidden');
+  battleItemNoneNotice.classList.add('hidden');
   battleMessageText.classList.add('hidden');
   pvpMatch.relay?.destroy?.();
   pvpMatch.participantActionListener?.destroy?.();
@@ -8790,6 +8804,7 @@ gameMenuExit.addEventListener('click', async () => {
   cancelActiveBattleItemPicker = null;
   battleSceneModal.classList.add('hidden');
   battleItemPickerBox.classList.add('hidden');
+  battleItemNoneNotice.classList.add('hidden');
   battleMessageText.classList.add('hidden');
 
   if (pvpMatch?.isHost) {

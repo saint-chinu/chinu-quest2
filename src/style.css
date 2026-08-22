@@ -4564,6 +4564,28 @@ html, body {
   color: #fff;
 }
 
+/* 装備できるアイテムが無い時の通知。戦闘メッセージと同じ見た目にして、
+   選択画面を出さずに一瞬だけ知らせる。 */
+#battle-item-none-notice {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-family: var(--font-display);
+  font-size: 21px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #d7dcea;
+  text-align: center;
+  text-shadow: 0 2px 8px #000;
+  background: linear-gradient(135deg, rgba(13, 18, 34, 0.94), rgba(30, 34, 50, 0.9));
+  padding: 16px 28px;
+  border: 1px solid rgba(215, 220, 234, 0.35);
+  border-radius: 14px;
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5);
+}
+
 #battle-message-text {
   position: absolute;
   z-index: 5;
