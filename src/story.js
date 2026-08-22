@@ -941,7 +941,9 @@ export const STORY_STAGES = [
       { speaker: '主人公', text: '土地が……全部灰色だ。属性が無い？' },
       { speaker: 'Q', text: 'ええ。無属性の土地はレベルを上げられず、連鎖もお札の値動きも起こしません。まず色を付けるところからです。' },
       { speaker: 'クエ', text: '言うとくけど、Qは殴らへんで。あいつは土地を積むだけ積んで、絶対に崩れへん壁になる。' },
-      { speaker: 'クエ', text: 'ワイは逆にひたすら周回してお札を買い占める。相場も盤面もワイの色に染めたる。' },
+      { speaker: 'Q', text: '雷で統一します。電柱が立てば雷は一律にHPが上がり、メカニックマソがいれば周回ごとに回復する。避雷針侍がいる限り、倒しても土地は取れません。' },
+      { speaker: 'Q', text: 'そして雷神は、雷の土地が連なるほど強くなる。盤が私の色に染まりきった頃には、手が付けられなくなっているはずです。' },
+      { speaker: 'クエ', text: 'ワイは逆にひたすら周回して、その雷のお札を買い占める。相場も盤面もワイらの色に染めたる。' },
       { speaker: '主人公', text: 'モンスターの強さで殴り勝てる相手じゃないってことか……。' },
       { speaker: 'お肉', text: 'ええやん、腕っぷしだけやないところ見せたろうや。' },
       { speaker: '???', text: '金色同盟と監査同盟、金融街の頂上決算が始まった。目標は同盟合わせて総資産20,000G！' },
@@ -966,10 +968,10 @@ export const STORY_STAGES = [
         name: 'クエ',
         color: 0xc0c0c0,
         deckKey: 'queKessan',
-        theme: { elements: [Element.THUNDER, Element.FIRE, Element.NEUTRAL] },
+        theme: { elements: [Element.THUNDER, Element.NEUTRAL] },
         // 高速周回・お札の買い占め特化（aiProfile.ofudaStyle:'fixer' +
         // lapRacer）。⑫と同じ経済エンジンを、コンビ戦用に少し積極化する。
-        // Qとの役割分担: Qの属性（雷・火）のお札を最優先で買い集め、
+        // Qとの役割分担: Qの属性（雷）のお札を最優先で買い集め、
         // 値上がっても手放さず溜め続ける（ofudaAllyPumpElements）。
         // Qが仕込み具合を見て土地を上げると、この保有分がまとめて跳ね上がる。
         // 戦闘は徹底して避ける(minWinProbabilityToInvade/itemGambleChance)。
@@ -981,10 +983,10 @@ export const STORY_STAGES = [
           minWinProbabilityToInvade: 0.95,
           itemGambleChance: 0,
           highValueAvoidance: 0.9,
-          ofudaAllyPumpElements: [Element.THUNDER, Element.FIRE],
+          ofudaAllyPumpElements: [Element.THUNDER],
           // 同盟の盤上モンスターが8体に達したら、無属性のままの自陣を
-          // 放電/放火で一気に雷・火へ塗り替える（＝仕込んだお札が値上がりし、
-          // Qの土地レベルアップも解禁される）。
+          // 放電で一気に雷へ塗り替える（＝仕込んだお札が値上がりし、
+          // Qの土地レベルアップと雷神の連鎖ボーナスが同時に立ち上がる）。
           neutralRepaintAfter: 8,
         },
         startingCurrency: 900,
@@ -993,10 +995,10 @@ export const STORY_STAGES = [
         name: 'Q',
         color: 0xc62828,
         deckKey: 'qKessan',
-        theme: { elements: [Element.THUNDER, Element.FIRE] },
+        theme: { elements: [Element.THUNDER] },
         // 「土地をあげていく」純粋な籠城型。侵略はほぼ放棄し、聖域・不死鳥・
         // アリジゴク・火口の不動明王で固めた土地の通行料とレベルで資産を積む。
-        // クエとの役割分担(levelPumpSignal): クエが雷・火のお札を
+        // クエとの役割分担(levelPumpSignal): クエが雷のお札を
         // 25枚集めたらLv2まで、50枚集めたら上限を外して一気に注ぎ込む。
         // 地価が跳ねると同時にクエの保有お札も値上がりする、狙って作る
         // タイミングの一致。単一の高い閾値だと合図が来ないまま試合が
@@ -1010,7 +1012,7 @@ export const STORY_STAGES = [
           neutralRepaintAfter: 8,
           levelPumpSignal: {
             allyName: 'クエ',
-            elements: [Element.THUNDER, Element.FIRE],
+            elements: [Element.THUNDER],
             toLevel2: 25,
             unleash: 50,
           },

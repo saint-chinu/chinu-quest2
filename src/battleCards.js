@@ -1292,43 +1292,42 @@ export const CHARACTER_DECKS = {
   qKessan: {
     composition: {
       monsters: [
-        // ばら撒き用の壁と、Qらしい鉄道ギミック（合体）。
-        // ⑬は全マスが無属性で始まるので、まず安い壁で土地の数を押さえ、
-        // 放電/放火で色を付けてから育てる。避雷針は据え置くだけで育ち、
-        // 3周目に足止めを覚えて通行料装置になる＝Qの籠城戦術そのもの。
+        // ばら撒き兼、3周目で足止めを覚える成長型の壁。
         { def: MONSTER_CATALOG.sodachikakeNoHiraishin, count: 3 },
-        { def: MONSTER_CATALOG.battleTrain, count: 1 },
-        { def: MONSTER_CATALOG.sacrificeCar, count: 1 },
-        // 雷: 身代わり・生存収入・壁。盤面を落とさないための骨格。
-        { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 },
+        // ■雷コンボの中核■
+        // 電柱を植える男 → 電柱（盤上の雷モンスター全員がHP+10）
+        // メカニックマソ → 周回ごとに自分の雷モンスター全員が最大HPの20%回復
+        // 避雷針侍       → 味方が倒される時、代わりに身代わりになって土地を守る
+        // この3枚が噛み合うと「削っても毎周戻る・倒しても身代わりが立つ」壁になる。
+        { def: MONSTER_CATALOG.denchuwoUeruOtoko, count: 2 },
+        { def: MONSTER_CATALOG.mechanicMaso, count: 2 },
+        { def: MONSTER_CATALOG.raiheishinZamurai, count: 3 },
+        // 連鎖スケール枠。雷神は「雷の連鎖数×7」でHP・ATKが伸びる。連鎖は
+        // 同盟合算なので、クエも雷に塗るほどここが跳ね上がる（コンボの出口）。
+        { def: MONSTER_CATALOG.raijin, count: 2 },
+        // 落雷予報士: 戦闘開始時50%で相手の装備を無効化する。プレイヤーの
+        // 「強い武器を積んで一点突破」という定番の対策を正面から潰す。
+        { def: MONSTER_CATALOG.rakuraiYohoushi, count: 2 },
         { def: MONSTER_CATALOG.hatsudenNezumi, count: 2 },
-        { def: MONSTER_CATALOG.gandamu, count: 2 },
-        { def: MONSTER_CATALOG.denchuwoUeruOtoko, count: 1 },
-        // 火: 通行料を取りに行く側。火口の不動明王は敵を必ず停止させる
-        // （＝アリジゴクを撃たなくても通行料装置になる）。門番兵は先制壁、
-        // 炎上系はHP50の的として相手の攻めを吸う。
-        { def: MONSTER_CATALOG.kakouFudoumyouou, count: 2 },
-        { def: MONSTER_CATALOG.rengokuMonbanhei, count: 2 },
-        { def: MONSTER_CATALOG.flamingYoutuber, count: 2 },
+        { def: MONSTER_CATALOG.raiun, count: 1 },
+        { def: MONSTER_CATALOG.ironWool, count: 1 },
       ],
       items: [
         { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
         { def: ITEM_CATALOG.lifeJacket, count: 1 },
       ],
       spells: [
-        // 放電/放火6枚が作戦の中核。ばら撒いた無属性地を一気に自分の色へ
-        // 塗り替えると、土地レベルアップが解禁され、連鎖と同属性HPボーナスが
-        // 立ち上がり、クエが仕込んだ雷・火のお札が同時に値上がりする。
-        { def: SPELL_CATALOG.electrify, count: 3 },
-        { def: SPELL_CATALOG.arson, count: 3 },
+        // 雷単色なので塗り替えは放電に集中させる。
+        { def: SPELL_CATALOG.electrify, count: 4 },
         { def: SPELL_CATALOG.sanctuary, count: 2 },
         { def: SPELL_CATALOG.phoenixCurse, count: 2 },
         { def: SPELL_CATALOG.antlion, count: 2 },
-        { def: SPELL_CATALOG.curseCleanse, count: 1 },
         { def: SPELL_CATALOG.specialAudit, count: 2 },
         { def: SPELL_CATALOG.taxHike, count: 1 },
+        { def: SPELL_CATALOG.curseCleanse, count: 1 },
         { def: SPELL_CATALOG.sideIncome, count: 3 },
-        { def: SPELL_CATALOG.divination, count: 1 },
+        { def: SPELL_CATALOG.divination, count: 2 },
+        { def: SPELL_CATALOG.homingInstinct, count: 1 },
       ],
     },
   },
@@ -1345,21 +1344,22 @@ export const CHARACTER_DECKS = {
       monsters: [
         // 壁と置物。全部「取られても痛くない」値段に揃えてある。
         // 周回成長型は周回屋のクエと相性が良い（1周ごとに勝手に育つ）。
-        { def: MONSTER_CATALOG.sodachikakeNoHiraishin, count: 3 }, // 40G 周回成長→3周目で足止め
-        { def: MONSTER_CATALOG.tsumiageDenpyou, count: 2 },  // 40G 周回成長→3周目でダメージ半減
+        { def: MONSTER_CATALOG.sodachikakeNoHiraishin, count: 4 }, // 40G 周回成長→3周目で足止め
         { def: MONSTER_CATALOG.sekizou, count: 3 },          // 0G  HP30/ATK10
         { def: MONSTER_CATALOG.freelancer, count: 2 },       // 50G 周回の基本ボーナス1.3倍
         { def: MONSTER_CATALOG.netBenkei, count: 2 },        // 50G 50/50 素の壁
         { def: MONSTER_CATALOG.ninja, count: 2 },            // 50G 40/40 先制
-        { def: MONSTER_CATALOG.hatsudenNezumi, count: 2 },   // 雷 生存収入
+        { def: MONSTER_CATALOG.hatsudenNezumi, count: 3 },   // 雷 生存収入
         { def: MONSTER_CATALOG.katanakaji, count: 2 },       // 50G 土地コマンドでオサフネ入手
       ],
       items: [
         { def: ITEM_CATALOG.nankaNoOmamori, count: 2 },
       ],
       spells: [
-        { def: SPELL_CATALOG.electrify, count: 3 },
-        { def: SPELL_CATALOG.arson, count: 3 },
+        // Qと同じ雷に塗る。連鎖もお札の基礎価格も同盟で合算されるので、
+        // 色を1つに寄せるほどQの雷神と自分の保有お札の両方が伸びる。
+        { def: SPELL_CATALOG.electrify, count: 4 },
+        { def: SPELL_CATALOG.specialAudit, count: 2 },
         // 資本主義の権化: 空き地へ自動展開する＝ばら撒きそのもの。
         { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },
         { def: SPELL_CATALOG.homingInstinct, count: 3 },

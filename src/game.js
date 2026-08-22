@@ -2503,12 +2503,17 @@ export class Game {
     // 軍資金がほぼ要らないので、軍資金を250Gまで削って相場へ厚く回す。
     // 「戦闘を避けて札を買い占める」役割を担うキャラは、ここを600Gのままに
     // すると軍資金の積み直しに周回を使い切って札がほとんど溜まらない。
+    // ばら撒き型(scatterSummons)は大型召喚も土地レベルアップもしない＝盤面用の
+    // 軍資金が要らないので、軍資金を450Gまで削って相場へ回す。
+    // ここを250G・投入8割まで緩めた版も試したが、同盟が単色に寄った盤面では
+    // 相場が上限120Gに張り付き、お札の含み益だけで目標に届いてしまった
+    // （積極的な主人公相手に敵側9/10）。単色コンボと共存させるための調整。
     const scatters = !!player.aiProfile?.scatterSummons;
-    const boardReserve = scatters ? 250 : 600;
-    const fixerReserve = Math.max(boardReserve, Math.min(this._cpuMaxEnemyToll(player), scatters ? 800 : 1200))
+    const boardReserve = scatters ? 450 : 600;
+    const fixerReserve = Math.max(boardReserve, Math.min(this._cpuMaxEnemyToll(player), scatters ? 900 : 1200))
       + (holdsFinisher ? 800 : 0);
     const budget = isFixer
-      ? Math.floor(Math.max(0, player.currency - fixerReserve) * (scatters ? 0.8 : 0.65))
+      ? Math.floor(Math.max(0, player.currency - fixerReserve) * 0.65)
       : Math.min(350, Math.max(0, player.currency - 200));
     if (budget <= 0) return;
     const preferred = this._rankOfudaBuyCandidates(player, market)[0];
@@ -5349,7 +5354,15 @@ export class Game {
     }
 
     if (ability.type === 'summonFieldMonster' || ability.type === 'summonMonsterOnEmptyLand') {
-      const target = this._cpuHighValueEmptyLands()[0];
+      // 高額な空き地（Lv2以上）が第一希望だが、無ければ普通の空き地でよい。
+      // 電柱は「盤上のどこかに1体でもいれば雷モンスター全員がHP+10」という
+      // 全体効果なので、置き場所の地価より「置けているかどうか」が全て。
+      // ⑬のように全マスがLv1から始まる盤面では、Lv2以上の空き地を待つと
+      // 一生撃てないまま試合が終わる（実際に電柱が1試合0.3本しか立たなかった）。
+      const target = this._cpuHighValueEmptyLands()[0]
+        ?? this.tiles
+          .filter((tile) => tile.type === TileType.LAND && tile.owner == null)
+          .sort((a, b) => this._landValueOfTile(b) - this._landValueOfTile(a))[0];
       if (!target) return false;
       player.currency -= cost;
       const summonedDef = ability.type === 'summonFieldMonster'
