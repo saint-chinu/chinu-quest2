@@ -114,6 +114,18 @@ const OFUDA_MAX_BUY_PER_TRADE = 30;
 // ことになり、そのたびに自分で相場を押し下げてしまうため、わずかな
 // 余裕を持たせる。
 const OFUDA_DEBT_SELL_BUFFER = 80;
+
+/**
+ * コンビ戦で「相方の一気上げのために仕込んでおく」属性の一覧。
+ * aiProfile.ofudaAllyPumpElements（複数）に対応し、単数指定の旧形にも
+ * 後方互換で応じる。該当が無ければ空配列。
+ */
+function allyPumpElementsOf(player) {
+  const profile = player?.aiProfile;
+  if (!profile) return [];
+  if (Array.isArray(profile.ofudaAllyPumpElements)) return profile.ofudaAllyPumpElements;
+  return profile.ofudaAllyPumpElement ? [profile.ofudaAllyPumpElement] : [];
+}
 const OFUDA_LEVEL_SCORE = { 1: 0.5, 2: 1.625, 3: 2.75, 4: 3.875, 5: 5 };
 // 周回ボーナスに乗るお札利回り（評価額×この率）。土地の領地ボーナスと
 // 並ぶ収入源になるよう5%→8%へ。保有2,000G分で周160G＝土地3枚弱に相当。
@@ -2460,29 +2472,15 @@ export class Game {
     player.ofuda ||= Object.fromEntries(OFUDA_ELEMENTS.map((element) => [element, 0]));
     player.ofudaAvgCost ||= Object.fromEntries(OFUDA_ELEMENTS.map((element) => [element, 0]));
 
-    // クエは金融街のフィクサー: 自分の土地でその属性の相場を吊り上げ、
-    // 吊り上げ切るまで玉を手放さない。他のCPUは従来どおりの小口売買。
-    // fixer型のお札運用はクエ固有だったが、aiProfile.ofudaStyle:'fixer' でも
-    // 有効化できるようにした（同名キャラをステージ別に切り替える仕組みと
-    // 組み合わせて、⑬でも別キャラに同じ運用をさせられるようにするため）。
-    const isFixer = player.name === 'クエ' || player.aiProfile?.ofudaStyle === 'fixer';
-    // 自分がその属性の土地を持っている ＝ まだ自分で吊り上げられる余地が
-    // あるので売らない。フィクサーが利確するのは上限に張り付いた時か、
-    // 土地を失って基礎価格そのものが落ちてきた時だけ。
-    const heldElements = new Set(this._ownedTiles(player).map((tile) => tile.element));
-    const holdings = market.map((entry) => ({
-      ...entry,
-      count: player.ofuda[entry.element] || 0,
-      avg: player.ofudaAvgCost[entry.element] || 0,
-    }));
+    // フィクサー型のお札運用（買い集めて自分の土地で相場を押し上げる）。
+    // クエ固有だったが、aiProfile.ofudaStyle:'fixer' でも有効化できる。
+    //
     // CPUは値上がりしてもお札を売らない（ユーザー指定の仕様、2026-08-22）。
     // 総資産は保有お札の時価で数えるので勝つために売る必要がなく、逐次約定の
     // 下で売れば自分の評価額を自分で崩すだけ。手放すのは手持ちGがマイナスに
     // なった時の強制清算（_recoverFromDebt）だけで、そこでも「不足分＋80G」
-    // までしか売らない。
-    // heldElements/holdingsは買い判断のログと将来の拡張のために残してある。
-    void heldElements;
-    void holdings;
+    // までしか売らない。したがってここは買い判断だけを行う。
+    const isFixer = player.name === 'クエ' || player.aiProfile?.ofudaStyle === 'fixer';
 
     // フィクサーは手元に盤面用の軍資金（大型召喚1体＋土地レベルアップ1回で
     // 600G前後）を残し、残りの6割を相場へ突っ込む。従来の「1周につき最大
@@ -2495,10 +2493,16 @@ export class Game {
     // これを積まないと、相場に突っ込んだ直後は常にG不足で撃てず、
     // アリジゴク対策の切り札が手札で腐り続ける。
     const holdsFinisher = (player.hand || []).some((c) => c.effect?.type === 'guaranteedNextInvasionWin');
-    const fixerReserve = Math.max(600, Math.min(this._cpuMaxEnemyToll(player), 1200))
+    // ばら撒き型(scatterSummons)は大型召喚も土地レベルアップもしない＝盤面用の
+    // 軍資金がほぼ要らないので、軍資金を250Gまで削って相場へ厚く回す。
+    // 「戦闘を避けて札を買い占める」役割を担うキャラは、ここを600Gのままに
+    // すると軍資金の積み直しに周回を使い切って札がほとんど溜まらない。
+    const scatters = !!player.aiProfile?.scatterSummons;
+    const boardReserve = scatters ? 250 : 600;
+    const fixerReserve = Math.max(boardReserve, Math.min(this._cpuMaxEnemyToll(player), scatters ? 800 : 1200))
       + (holdsFinisher ? 800 : 0);
     const budget = isFixer
-      ? Math.floor(Math.max(0, player.currency - fixerReserve) * 0.65)
+      ? Math.floor(Math.max(0, player.currency - fixerReserve) * (scatters ? 0.8 : 0.65))
       : Math.min(350, Math.max(0, player.currency - 200));
     if (budget <= 0) return;
     const preferred = this._rankOfudaBuyCandidates(player, market)[0];
@@ -3683,8 +3687,8 @@ export class Game {
           + (isFixer && player.aiProfile?.preferredElements?.includes(entry.element) ? 30 : 0)
           // コンビ戦の役割分担用: 相方が「これを溜めたらレベルアップで
           // 一気に吊り上げる」役の時、その属性を最優先で仕込む
-          // （aiProfile.ofudaAllyPumpElement）。自分の得意属性より強く優先する。
-          + (isFixer && player.aiProfile?.ofudaAllyPumpElement === entry.element ? 60 : 0)
+          // （aiProfile.ofudaAllyPumpElements）。自分の得意属性より強く優先する。
+          + (isFixer && allyPumpElementsOf(player).includes(entry.element) ? 60 : 0)
           - entry.price * 0.08;
         return { ...entry, score };
       })
@@ -4791,7 +4795,9 @@ export class Game {
       const pool = withinReserve.length > 0
         ? withinReserve
         : [options.reduce((cheap, c) => ((c.cost || 0) < (cheap.cost || 0) ? c : cheap))];
-      const card = this._isDanballBoss(player)
+      const card = profile?.scatterSummons
+        ? this._cpuChooseScatterSummonCard(pool, tile)
+        : this._isDanballBoss(player)
         ? this._cpuChooseSummonCardForDanball(pool, tile, player)
         : player.name === 'Q'
           ? this._cpuChooseSummonCardForQ(pool, tile, profile, player)
@@ -5142,14 +5148,24 @@ export class Game {
     // 「+3段階まで一気に上げる」を許すと序盤から地価1000G超の土地ができ、
     // 初心者が通行料で消耗するうえ、CPUの総資産が目標へ一直線に伸びる。
     const cpuLevelCap = this.tutorialMode ? 2 : LEVEL_CAP;
-    // aiProfile.levelPumpSignal（コンビ戦の役割分担用）: 指定した相方が
-    // 指定属性のお札を閾値まで買い集めるまではLv2で足止めして資金を貯め、
-    // 閾値に届いた瞬間に堰を切って最大段階まで一気に注ぎ込む。相方の
-    // お札が値上がりするタイミングを自分の土地投資で作り出す役割分担。
+    // aiProfile.levelPumpSignal（コンビ戦の役割分担用）: 相方が自分の属性の
+    // お札をどれだけ買い集めたかを合図にして、土地への投資を2段階で解禁する。
+    //   ①合図が来るまで      : レベルアップせず資金を貯める
+    //   ②toLevel2枚に到達    : Lv2まで上げる（相場を軽く押し上げる）
+    //   ③unleash枚に到達     : 上限を外して一気に注ぎ込む
+    // 自分が土地を育てると相方の保有お札が値上がりする、というタイミングを
+    // 狙って作るための仕組み。elementsは複数属性を合計して数える。
     const pumpSignal = player.aiProfile?.levelPumpSignal;
-    const pumpReady = pumpSignal
-      && (this.players.find((p) => p.name === pumpSignal.allyName)?.ofuda?.[pumpSignal.element] || 0) >= pumpSignal.threshold;
-    const effectiveCap = pumpSignal && !pumpReady ? Math.min(2, cpuLevelCap) : cpuLevelCap;
+    let effectiveCap = cpuLevelCap;
+    if (pumpSignal) {
+      const ally = this.players.find((p) => p.name === pumpSignal.allyName);
+      const elements = pumpSignal.elements || (pumpSignal.element ? [pumpSignal.element] : []);
+      const stocked = elements.reduce((sum, element) => sum + (ally?.ofuda?.[element] || 0), 0);
+      if (stocked >= (pumpSignal.unleash ?? Infinity)) effectiveCap = cpuLevelCap;
+      else if (stocked >= (pumpSignal.toLevel2 ?? Infinity)) effectiveCap = Math.min(2, cpuLevelCap);
+      else effectiveCap = 1;
+    }
+    const pumpReady = !pumpSignal || effectiveCap === cpuLevelCap;
     if (player.currency < 300 || tile.type !== TileType.LAND || tile.level >= effectiveCap || tile.element === Element.NEUTRAL) return false;
     // 投資後も「最悪1回の敵地通行料（上限800G）」を現金＋お札で払える範囲に
     // 抑える。ここを見ずに1250Gまで一気に注ぎ込むと、直後に高額地を踏んだ
@@ -5267,6 +5283,22 @@ export class Game {
     const preferOff = onElement.length === 0 || (offElement.length > 0 && Math.random() < profile.offElementSummonChance);
     const pool = preferOff && offElement.length > 0 ? offElement : onElement.length > 0 ? onElement : offElement;
     return this._strongestCard(pool);
+  }
+
+  /**
+   * ばら撒き型（aiProfile.scatterSummons）の召喚選択。
+   * 目的は土地を「数」で押さえてお札の購入資金を手元に残すことなので、
+   * 強さではなく安さで選ぶ。土地ボーナスを受けられる属性の中の最安を優先し、
+   * 同属性が無ければ全体の最安を置く。同値なら地力の高い方を採る。
+   */
+  _cpuChooseScatterSummonCard(options, tile) {
+    const cheapest = (list) => list.reduce((best, card) => {
+      const diff = (card.cost || 0) - (best.cost || 0);
+      if (diff !== 0) return diff < 0 ? card : best;
+      return (card.atk || 0) + (card.hp || 0) > (best.atk || 0) + (best.hp || 0) ? card : best;
+    });
+    const matched = options.filter((card) => this._cardBenefitsFromLandElement(card, tile));
+    return cheapest(matched.length > 0 ? matched : options);
   }
 
   /**

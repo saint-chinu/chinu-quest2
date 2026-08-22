@@ -1282,24 +1282,30 @@ export const CHARACTER_DECKS = {
     },
   },
   /**
-   * ⑬最終決算のQ（暴走列車Q号の再登場）。「土地をあげていく」＝殴りでは
-   * なくレベルアップで資産を積む純粋な籠城型。武器はほぼゼロで、代わりに
-   * 身代わり（避雷針侍）・生存収入（発電ネズミ）・聖域/不死鳥/アリジゴクで
-   * 固めた土地を守り抜く。電柱を植える男の土地能力（雷モンスター全体
-   * HP+10）と不動産鑑〇士を組み合わせ、殴らずに盤面全体を底上げする。
-   * 戦闘列車・供物車両（合体ギミック）も、Qらしい鉄道要素として残す。
+   * ⑬最終決算のQ。「土地をあげていく」純粋な籠城型で、雷＋火の2属性。
+   * 武器はほぼ持たず、避雷針侍の身代わり・電柱の全体HP+10・火口の不動明王の
+   * 強制停止で盤面を固め、聖域／不死鳥／アリジゴク／追徴課税で通行料を取る。
+   * 2属性にしてあるのは、相方クエが仕込むお札を雷・火の2種類に広げるため
+   * （levelPumpSignalの合図もこの2属性の合計で数える）。
+   * 戦闘列車・供物車両の合体はQらしい鉄道要素として残す。
    */
   qKessan: {
     composition: {
       monsters: [
+        // 無属性: Qらしい鉄道ギミック（合体）。
         { def: MONSTER_CATALOG.battleTrain, count: 2 },
         { def: MONSTER_CATALOG.sacrificeCar, count: 2 },
+        // 雷: 身代わり・生存収入・壁。盤面を落とさないための骨格。
         { def: MONSTER_CATALOG.raiheishinZamurai, count: 3 },
         { def: MONSTER_CATALOG.hatsudenNezumi, count: 2 },
         { def: MONSTER_CATALOG.gandamu, count: 2 },
-        { def: MONSTER_CATALOG.ironWool, count: 2 },
-        { def: MONSTER_CATALOG.tetsuo, count: 1 },
         { def: MONSTER_CATALOG.denchuwoUeruOtoko, count: 1 },
+        // 火: 通行料を取りに行く側。火口の不動明王は敵を必ず停止させる
+        // （＝アリジゴクを撃たなくても通行料装置になる）。門番兵は先制壁、
+        // 炎上系はHP50の的として相手の攻めを吸う。
+        { def: MONSTER_CATALOG.kakouFudoumyouou, count: 2 },
+        { def: MONSTER_CATALOG.rengokuMonbanhei, count: 2 },
+        { def: MONSTER_CATALOG.flamingYoutuber, count: 2 },
       ],
       items: [
         { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
@@ -1314,10 +1320,8 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.taxHike, count: 1 },
         { def: SPELL_CATALOG.taxEvasion, count: 1 },
         { def: SPELL_CATALOG.realEstateAppraiser, count: 1 },
-        { def: SPELL_CATALOG.sideIncome, count: 4 },
+        { def: SPELL_CATALOG.sideIncome, count: 3 },
         { def: SPELL_CATALOG.divination, count: 1 },
-        { def: SPELL_CATALOG.homingInstinct, count: 1 },
-        { def: SPELL_CATALOG.toughness, count: 1 },
       ],
     },
   },

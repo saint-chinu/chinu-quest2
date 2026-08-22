@@ -965,12 +965,19 @@ export const STORY_STAGES = [
         theme: { elements: [Element.FOREST, Element.THUNDER, Element.NEUTRAL] },
         // 高速周回・お札の買い占め特化（aiProfile.ofudaStyle:'fixer' +
         // lapRacer）。⑫と同じ経済エンジンを、コンビ戦用に少し積極化する。
-        // Qとの役割分担: Qの雷のお札を最優先で買い集め、値上がっても
-        // 手放さず溜め続ける（ofudaAllyPumpElement）。Qが仕込みを見て
-        // 土地を一気にレベル上げすると、この保有分がまとめて跳ね上がる。
+        // Qとの役割分担: Qの属性（雷・火）のお札を最優先で買い集め、
+        // 値上がっても手放さず溜め続ける（ofudaAllyPumpElements）。
+        // Qが仕込み具合を見て土地を上げると、この保有分がまとめて跳ね上がる。
+        // 戦闘は徹底して避ける(minWinProbabilityToInvade/itemGambleChance)。
+        // Gは侵略ではなくお札に回すのが仕事なので、空き地には最強ではなく
+        // 「最安の同属性」を置いて数だけ稼ぐ(scatterSummons)。
         aiProfile: {
           lapRacer: true,
-          ofudaAllyPumpElement: Element.THUNDER,
+          scatterSummons: true,
+          minWinProbabilityToInvade: 0.95,
+          itemGambleChance: 0,
+          highValueAvoidance: 0.9,
+          ofudaAllyPumpElements: [Element.THUNDER, Element.FIRE],
         },
         startingCurrency: 900,
       },
@@ -978,19 +985,25 @@ export const STORY_STAGES = [
         name: 'Q',
         color: 0xc62828,
         deckKey: 'qKessan',
-        theme: { elements: [Element.THUNDER, Element.NEUTRAL] },
+        theme: { elements: [Element.THUNDER, Element.FIRE] },
         // 「土地をあげていく」純粋な籠城型。侵略はほぼ放棄し、聖域・不死鳥・
-        // アリジゴクで固めた土地のレベルアップだけで資産を積む。
-        // クエとの役割分担(levelPumpSignal): クエの雷のお札保有が閾値に
-        // 届くまでは土地をLv2で足止めして資金だけ貯め、届いた瞬間に
-        // 堰を切って最大段階まで一気に注ぎ込む。地価が跳ねると同時に
-        // クエの雷お札も値上がりする、狙って作るタイミングの一致。
+        // アリジゴク・火口の不動明王で固めた土地の通行料とレベルで資産を積む。
+        // クエとの役割分担(levelPumpSignal): クエが雷・火のお札を
+        // 25枚集めたらLv2まで、50枚集めたら上限を外して一気に注ぎ込む。
+        // 地価が跳ねると同時にクエの保有お札も値上がりする、狙って作る
+        // タイミングの一致。単一の高い閾値だと合図が来ないまま試合が
+        // 終わることが多かったため、2段階へ分けて確実に効かせる。
         aiProfile: {
           minWinProbabilityToInvade: 0.85,
           itemGambleChance: 0.1,
           highValueAvoidance: 0.85,
           offElementSummonChance: 0.05,
-          levelPumpSignal: { allyName: 'クエ', element: Element.THUNDER, threshold: 80 },
+          levelPumpSignal: {
+            allyName: 'クエ',
+            elements: [Element.THUNDER, Element.FIRE],
+            toLevel2: 25,
+            unleash: 50,
+          },
         },
         startingCurrency: 900,
       },
