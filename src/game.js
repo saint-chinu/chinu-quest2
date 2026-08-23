@@ -2525,8 +2525,16 @@ export class Game {
     // （積極的な主人公相手に敵側9/10）。単色コンボと共存させるための調整。
     const scatters = !!player.aiProfile?.scatterSummons;
     const boardReserve = scatters ? 450 : 600;
+    // 自陣に残っている無属性地の塗り替え代（1マス50G）は相場へ回さず取っておく。
+    // 仕込んだお札の値段はそのまま自陣の色付き土地のレベル合計で決まるので、
+    // 塗り替えを後回しにして買い増すのは「値上がりの燃料を売って燃料を買う」
+    // のと同じ。上限は400Gまでとして、貯め込みすぎて相場に乗り遅れないようにする。
+    const unpaintedOwn = this.tiles.filter((tile) => (
+      tile.type === TileType.LAND && tile.owner === player.id && tile.element === Element.NEUTRAL
+    )).length;
+    const paintFund = Math.min(400, unpaintedOwn * Math.round(ELEMENT_CHANGE_COST_PER_LEVEL * NEUTRAL_ELEMENT_CHANGE_DISCOUNT));
     const fixerReserve = Math.max(boardReserve, Math.min(this._cpuMaxEnemyToll(player), scatters ? 900 : 1200))
-      + (holdsFinisher ? 800 : 0) + (holdsOptimize ? 300 : 0);
+      + (holdsFinisher ? 800 : 0) + (holdsOptimize ? 300 : 0) + paintFund;
     const budget = isFixer
       ? Math.floor(Math.max(0, player.currency - fixerReserve) * 0.65)
       : Math.min(350, Math.max(0, player.currency - 200));
@@ -4253,7 +4261,16 @@ export class Game {
     if (preferred.length === 0) return false;
     const rate = NEUTRAL_ELEMENT_CHANGE_DISCOUNT;
     const cost = Math.round(ELEMENT_CHANGE_COST_PER_LEVEL * tile.level * rate);
-    if (player.currency - cost < this._cpuSummonReserve(player)) return false;
+    // 色付けは召喚やレベルアップと同列の「使い道の一つ」ではなく、それらの
+    // 前提条件。無属性のままではレベルアップも連鎖も同属性HPボーナスもお札の
+    // 相場も一切動かないので、通行料の備え（最大500G）を理由に見送ると
+    // 盤面が無属性で固まったまま試合が終わる。
+    // 実測: 敵側が伸びた試合は自陣21マス中17マスに色が付いて雷相場49G、
+    // 止まった試合は同じ枚数のお札を抱えたまま色付き4〜6マス・相場14〜23G。
+    // 差はお札の枚数でも土地の数でもなく、色が付いたかどうかだけだった。
+    // したがってLv1の塗り替え(50G)には最小限の備えしか要求しない。
+    const paintReserve = Math.min(this._cpuSummonReserve(player), 150);
+    if (player.currency - cost < paintReserve) return false;
     const newElement = preferred.reduce((best, element) => (
       this._chainCount(player.id, element) > this._chainCount(player.id, best) ? element : best
     ));
