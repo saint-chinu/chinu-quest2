@@ -452,6 +452,10 @@ export class Game {
       tollWaiverCharges: 0,
       // 宝くじ: 次にゴールした時0〜500Gをランダム獲得する権利があるか。
       lotteryOnNextGoal: false,
+      // 対抗買い(aiProfile.counterOfudaBuy)の進行状態。armed=自分の色を
+      // 一度買った／done=対抗買いを済ませた。1試合に一度だけ発動する。
+      counterOfudaArmed: false,
+      counterOfudaDone: false,
       // 絶対攻撃: 次の侵略で召喚したモンスターが貫通を得るか。
       pierceNextInvasion: false,
       // お前も〇ぬんだ: 次の侵略が戦闘無しで確定勝利になるか（発動時に700G消費）。
@@ -563,6 +567,10 @@ export class Game {
       lapsCompleted: 0,
       tollWaiverCharges: 0,
       lotteryOnNextGoal: false,
+      // 対抗買い(aiProfile.counterOfudaBuy)の進行状態。armed=自分の色を
+      // 一度買った／done=対抗買いを済ませた。1試合に一度だけ発動する。
+      counterOfudaArmed: false,
+      counterOfudaDone: false,
       pierceNextInvasion: false,
       guaranteedNextInvasionWin: false,
       allTilesAccessTurnsRemaining: 0,
@@ -2521,6 +2529,35 @@ export class Game {
       ? Math.floor(Math.max(0, player.currency - fixerReserve) * 0.65)
       : Math.min(350, Math.max(0, player.currency - 200));
     if (budget <= 0) return;
+
+    // 対抗買い(aiProfile.counterOfudaBuy): 自分の色のお札を初めて買った次の
+    // 取引機会に一度だけ、相手側のデッキで一番多い属性のお札をまとめて買う。
+    // 相手が土地を育てるほどその属性の基礎価格が上がるので、敵の成長を
+    // そのまま自分の含み益に変える保険になる。相手のデッキでも自分の色が
+    // 一番多いなら寄り道の意味が無いので、そのまま自分の色を買い続ける。
+    const counterBuy = player.aiProfile?.counterOfudaBuy;
+    if (counterBuy && player.counterOfudaArmed && !player.counterOfudaDone) {
+      const ownElements = this._ofudaOwnElementsOf(player);
+      const dominant = this._opposingDeckDominantElement(player);
+      if (!dominant || ownElements.includes(dominant)) {
+        player.counterOfudaDone = true; // 相手も同じ色。対抗買いは不要
+      } else {
+        // 対抗買いは「一度だけまとめて買う」のが目的なので、通常の投入比率
+        // （手持ちの一部）ではなく手元を200Gまで使い切る枠で買う。
+        // ここを通常予算のままにすると枚数が足りず、狙った保険にならない。
+        const counterBudget = Math.max(0, player.currency - 200);
+        const counterResult = this._buyOfuda(player, dominant, counterBudget, { maxSheets: counterBuy.sheets || 20 });
+        if (counterResult.bought > 0) {
+          player.counterOfudaDone = true;
+          this.onLog(`${player.name}は相手の主力属性を見て${ELEMENT_LABEL[dominant]}のお札を${counterResult.bought}枚買い付けた (-${counterResult.spent}G)`);
+          this._notifyState();
+          await this._presentOfudaPriceChange(dominant, counterResult.before);
+          return;
+        }
+        return; // 今回は資金が足りない。次の取引機会にもう一度試す
+      }
+    }
+
     const preferred = this._rankOfudaBuyCandidates(player, market)[0];
     if (!preferred) return;
     // 逐次約定では買うほど自分の取得単価が上がる。基礎価格から10G以上
@@ -2532,8 +2569,51 @@ export class Game {
     const result = this._buyOfuda(player, preferred.element, spendBudget);
     if (result.bought <= 0) return;
     this.onLog(`${player.name}は${ELEMENT_LABEL[preferred.element]}のお札を${result.bought}枚購入した (-${result.spent}G)`);
+    // 自分の色を買った時点で対抗買いの合図を立てる（次の取引機会に発動する）。
+    if (counterBuy && this._ofudaOwnElementsOf(player).includes(preferred.element)) {
+      player.counterOfudaArmed = true;
+    }
     this._notifyState();
     await this._presentOfudaPriceChange(preferred.element, result.before);
+  }
+
+  /**
+   * そのCPUが本命として集めているお札の属性。
+   * 相方のために仕込む属性(ofudaAllyPumpElements)を最優先し、無ければ
+   * デッキテーマ(preferredElements)のうちお札のある属性を使う。
+   */
+  _ofudaOwnElementsOf(player) {
+    const pump = allyPumpElementsOf(player);
+    if (pump.length > 0) return pump.filter((element) => OFUDA_ELEMENTS.includes(element));
+    return (player.aiProfile?.preferredElements || []).filter((element) => OFUDA_ELEMENTS.includes(element));
+  }
+
+  /**
+   * 敵側（同盟以外の全員）のデッキで一番多いモンスターの属性。
+   * 山札・捨て札・手札に加えて、既に盤上へ出したモンスターも数える
+   * （序盤に召喚した分が抜け落ちて偏るのを防ぐ）。同数なら盤面の
+   * 走査順で先に出た方。該当が無ければnull。
+   */
+  _opposingDeckDominantElement(player) {
+    const counts = new Map();
+    const add = (card) => {
+      if (card?.type !== CardType.MONSTER || !OFUDA_ELEMENTS.includes(card.element)) return;
+      counts.set(card.element, (counts.get(card.element) || 0) + 1);
+    };
+    for (const other of this.players) {
+      if (other.id === player.id || this._isAllyOf(other, player)) continue;
+      for (const card of other.hand || []) add(card);
+      for (const card of other.deck?.drawPile || []) add(card);
+      for (const card of other.deck?.discardPile || []) add(card);
+      for (const tile of this.tiles) {
+        if (tile.unit?.ownerId === other.id) add(tile.unit.def);
+      }
+    }
+    let best = null;
+    for (const [element, count] of counts) {
+      if (!best || count > best.count) best = { element, count };
+    }
+    return best?.element ?? null;
   }
 
   async _checkGoalAchievement(player) {

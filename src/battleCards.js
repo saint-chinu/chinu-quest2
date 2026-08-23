@@ -1364,8 +1364,8 @@ export const CHARACTER_DECKS = {
         // 最適化(300G): 自分の土地を「置いてあるモンスターの属性」へ一斉に
         // 揃える。全マス無属性で始まるこのステージでは、ばら撒いた甲鉄要塞の
         // 数だけまとめて雷地に変わる＝放電を何枚も撃つより遥かに速い。
-        { def: SPELL_CATALOG.optimize, count: 2 },
-        { def: SPELL_CATALOG.electrify, count: 2 },
+        { def: SPELL_CATALOG.optimize, count: 1 },
+        { def: SPELL_CATALOG.electrify, count: 3 },
         // 金策。副業収入は周回するほど増えるので周回屋のクエと噛み合う。
         { def: SPELL_CATALOG.sideIncome, count: 4 },
         { def: SPELL_CATALOG.specialAudit, count: 2 },

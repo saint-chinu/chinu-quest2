@@ -988,6 +988,11 @@ export const STORY_STAGES = [
           itemGambleChance: 0,
           highValueAvoidance: 0.9,
           ofudaAllyPumpElements: [Element.THUNDER],
+          // 対抗買い: 雷を初めて買った次の取引機会に一度だけ、主人公側の
+          // デッキで一番多い属性のお札を20枚買う。相手が土地を育てるほど
+          // その属性の相場が上がるので、敵の成長を含み益に変える保険。
+          // 相手のデッキでも雷が一番多いなら寄り道せず雷を買い続ける。
+          counterOfudaBuy: { sheets: 20 },
           // 同盟の盤上モンスターが8体に達したら、無属性のままの自陣を
           // 放電で一気に雷へ塗り替える（＝仕込んだお札が値上がりし、
           // Qの土地レベルアップと雷神の連鎖ボーナスが同時に立ち上がる）。
@@ -1014,6 +1019,7 @@ export const STORY_STAGES = [
           offElementSummonChance: 0.05,
           scatterSummons: true,
           neutralRepaintAfter: 8,
+          counterOfudaBuy: { sheets: 20 },
           levelPumpSignal: {
             allyName: 'クエ',
             elements: [Element.THUNDER],
