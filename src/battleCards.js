@@ -1357,8 +1357,9 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.kadenryuuCheetah, count: 1 }, // 60G S 先制
         { def: MONSTER_CATALOG.rakuraiYohoushi, count: 1 },  // 90G R 連鎖2 装備50%無効化
       ],
-      items: [
-        { def: ITEM_CATALOG.nankaNoOmamori, count: 2 },
+        items: [
+          { def: ITEM_CATALOG.nankaNoOmamori, count: 2 },
+          { def: ITEM_CATALOG.lifeJacket, count: 1 },
       ],
       spells: [
         // 最適化(300G): 自分の土地を「置いてあるモンスターの属性」へ一斉に
@@ -1368,18 +1369,16 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.electrify, count: 2 },
         // 金策。副業収入は周回するほど増えるので周回屋のクエと噛み合う。
         { def: SPELL_CATALOG.sideIncome, count: 4 },
-        { def: SPELL_CATALOG.specialAudit, count: 2 },
         // 周回加速。帰巣本能で強制的に1周を締め、出目操作で距離を稼ぐ。
-        { def: SPELL_CATALOG.homingInstinct, count: 3 },
-        { def: SPELL_CATALOG.iCanFly, count: 2 },
+          { def: SPELL_CATALOG.homingInstinct, count: 4 },
+          { def: SPELL_CATALOG.iCanFly, count: 3 },
         { def: SPELL_CATALOG.diceSix, count: 2 },
         // 引き当て。最適化と放電はどちらも撃てるかどうかで盤面が変わる。
         { def: SPELL_CATALOG.divination, count: 3 },
         { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },
-        { def: SPELL_CATALOG.taxHike, count: 1 },
-        { def: SPELL_CATALOG.sanctuary, count: 1 },
-        { def: SPELL_CATALOG.phoenixCurse, count: 1 },
-        { def: SPELL_CATALOG.dieWithMe, count: 1 },
+          { def: SPELL_CATALOG.taxHike, count: 1 },
+          { def: SPELL_CATALOG.sanctuary, count: 1 },
+          { def: SPELL_CATALOG.phoenixCurse, count: 1 },
       ],
     },
   },
