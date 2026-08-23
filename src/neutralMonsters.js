@@ -18,6 +18,8 @@ const neutralMonster = (id, name, rarity, hp, atk, options = {}) => ({
   ...(options.traits ? { traits: options.traits } : {}),
   ...(options.effect ? { effect: options.effect } : {}),
   ...(options.effectDescription ? { effectDescription: options.effectDescription } : {}),
+  // wip: 制作中で未公開のカード。パック・デッキ編集・図鑑から外す（cardCatalog.js）。
+  ...(options.wip ? { wip: true } : {}),
   ...(options.npcExclusive ? { npcExclusive: true } : {}),
   ...(options.exclusiveOwnerName ? { exclusiveOwnerName: options.exclusiveOwnerName } : {}),
   ...(options.dualUseItem ? {
@@ -97,6 +99,8 @@ export const NEUTRAL_MONSTER_CATALOG = {
   // 専用の絵柄はまだ無いので、属性共通の絵柄を使う。
   tsumiageDenpyou: neutralMonster('tsumiageDenpyou', '積み上がった伝票', Rarity.S, 40, 10, {
     cost: 35,
+    // 制作中。パック・デッキ編集・図鑑には出さず、CPUのキャラ専用デッキでのみ使う。
+    wip: true,
     traits: ['immovableByMoveCommand', 'emptyTileOnly'],
     effect: {
       type: 'lapGrowth',

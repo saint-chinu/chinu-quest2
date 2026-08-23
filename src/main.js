@@ -6,7 +6,7 @@ import { Game } from './game.js';
 import { CardType, CARD_COLOR, ELEMENT_LABEL, Element, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
 import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, buildCharacterDeckList, MONSTER_CATALOG, ITEM_CATALOG, SPELL_CATALOG, catalogIdOf } from './battleCards.js';
 import { loginOrRegister, saveCharacter } from './auth.js';
-import { getCardCatalog, isLegacyPlaceholderCardName } from './cardCatalog.js';
+import { getCardCatalog, isLegacyPlaceholderCardName, WIP_CARD_NAMES } from './cardCatalog.js';
 import { PACKS, drawPack } from './shopPacks.js';
 import { CARD_EFFECTS, saveCustomCard, saveCustomCardsBulk, setCloudCustomCardUser, validateCustomCard } from './customCards.js';
 import { loadCharacterIconPresets, fileToCharacterIcon, resolveCharacterIcon, iconFromDataUrl, compactCharacterIconDataUrl } from './playerIcons.js';
@@ -4676,6 +4676,50 @@ function ensureBreedFields(character) {
   return character;
 }
 
+/**
+ * 制作中に戻したステージ・カードの巻き戻し。ログイン時のキャラクター
+ * 正規化（ensureBreedFields）から必ず通る。
+ *
+ * ①未公開ステージ(story.jsのwip)より先へ進んだ扱いになっている進行度を
+ *   そこまで戻す。⑬をクリア済みの人からクリアフラグだけが消え、
+ *   ⑫までのクリア記録はそのまま残る。
+ * ②未公開に戻したカード(cardCatalog.jsのWIP_CARD_NAMES)を手元とデッキから
+ *   外す。ただし引いてしまった枚数はcharacter.wipCardHoldingsへ残す
+ *   （公開時にこの記録を見て配り直すため、上書きではなく最大値を保持する）。
+ *
+ * 変更があったかどうかを返す。呼び出し元はtrueならクラウドへ保存し直す。
+ */
+function applyWipRollback(character) {
+  let changed = false;
+
+  const firstWipStage = STORY_STAGES.findIndex((stage) => stage.wip);
+  if (firstWipStage >= 0 && (character.storyProgress || 0) > firstWipStage) {
+    character.storyProgress = firstWipStage;
+    changed = true;
+  }
+
+  const wipNames = new Set(WIP_CARD_NAMES);
+  if (wipNames.size > 0) {
+    const holdings = { ...(character.wipCardHoldings || {}) };
+    for (const [name, count] of Object.entries(character.ownedCards || {})) {
+      if (!wipNames.has(name)) continue;
+      holdings[name] = Math.max(holdings[name] || 0, count);
+      delete character.ownedCards[name];
+      changed = true;
+    }
+    for (const deck of character.decks || []) {
+      const kept = (deck.deckList || []).filter((card) => !wipNames.has(card.name));
+      if (kept.length !== (deck.deckList || []).length) {
+        deck.deckList = kept;
+        changed = true;
+      }
+    }
+    if (Object.keys(holdings).length > 0) character.wipCardHoldings = holdings;
+  }
+
+  return changed;
+}
+
 loginSubmit.addEventListener('click', async () => {
   if (loginSubmit.disabled) return;
   if (!loginConsent?.checked) {
@@ -4703,6 +4747,11 @@ loginSubmit.addEventListener('click', async () => {
     showCharmakeScreen();
   } else {
     currentCharacter = ensureBreedFields(result.character);
+    // 未公開へ戻した分の巻き戻し。ローカルだけで終わらせず必ず保存し直す
+    // （別端末でログインし直しても復活しないように、クラウドのセーブも直す）。
+    // ensureBreedFieldsの中では呼ばない - あちらは何度も通るので、
+    // 「変わったから保存する」の判定がここで取れなくなる。
+    if (applyWipRollback(currentCharacter)) saveCharacter(currentUserId, currentCharacter);
     showHubScreen();
   }
 });

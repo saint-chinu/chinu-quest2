@@ -17,7 +17,7 @@ let cached = null;
 export function getCardCatalog(userId) {
   if (cached) return [...cached, ...loadCustomCards(userId)];
   cached = [
-    ...Object.values(MONSTER_CATALOG).filter((card) => !card.npcExclusive),
+    ...Object.values(MONSTER_CATALOG).filter((card) => !card.npcExclusive && !card.wip),
     ...Object.values(ITEM_CATALOG),
     ...Object.values(SPELL_CATALOG),
   ];
@@ -28,3 +28,15 @@ export function getCardCatalog(userId) {
 export function isLegacyPlaceholderCardName(name) {
   return /^(?:(?:火|水|雷|森|無色)のモンスター\d+|武器防具\d+|スペル\d+)$/.test(name || '');
 }
+
+/**
+ * 制作中で未公開のカード名一覧（カード定義のwipフラグ）。
+ * パック・デッキ編集・図鑑からは外れているが、CPUのキャラ専用デッキは
+ * MONSTER_CATALOGを直接見るのでそのまま使える。
+ * 既に配布してしまった分は、main.jsのensureBreedFieldsが
+ * character.wipCardHoldingsへ枚数を記録したうえで手元から外す
+ * （完成して公開する時に、この記録を見て配り直す）。
+ */
+export const WIP_CARD_NAMES = Object.values(MONSTER_CATALOG)
+  .filter((card) => card.wip)
+  .map((card) => card.name);

@@ -18,6 +18,8 @@ const forestMonster = (id, name, rarity, hp, atk, options = {}) => ({
   ...(options.traits ? { traits: options.traits } : {}),
   ...(options.effect ? { effect: options.effect } : {}),
   ...(options.effectDescription ? { effectDescription: options.effectDescription } : {}),
+  // wip: 制作中で未公開のカード。パック・デッキ編集・図鑑から外す（cardCatalog.js）。
+  ...(options.wip ? { wip: true } : {}),
   imageDataUrl: options.imageDataUrl ?? assetUrl(`/images/card-art/${id}.jpg`),
 });
 
@@ -28,6 +30,8 @@ export const FOREST_MONSTER_CATALOG = {
   //   素 35/10 → 1周 50/10 → 2周 70/15 → 3周 再生
   taijuNoToride: forestMonster('taijuNoToride', '大樹の砦', Rarity.S, 35, 10, {
     cost: 40,
+    // 制作中。パック・デッキ編集・図鑑には出さず、CPUのキャラ専用デッキでのみ使う。
+    wip: true,
     traits: ['immovableByMoveCommand', 'emptyTileOnly'],
     effect: {
       type: 'lapGrowth',
