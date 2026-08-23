@@ -1898,6 +1898,16 @@ html, body {
   max-width: 320px;
 }
 
+/* 主人公の発言時に正方形アイコンの下端が吹き出しへ潜り込むため、全ステージ
+   共通でスマホ換算およそ1cm（38px）だけ上へ逃がす。NPCの立ち絵位置は変えない。 */
+#story-overlay-portrait-left[data-hero] {
+  bottom: calc(57px + 38px);
+}
+
+#story-overlay-portrait-right[data-hero] {
+  bottom: 38px;
+}
+
 .story-overlay-portrait[data-hero] img {
   max-height: 46vh;
 }
@@ -1905,6 +1915,7 @@ html, body {
 .story-dialogue-portrait[data-hero] {
   width: 34vw;
   max-width: 320px;
+  bottom: calc(150px + 38px);
 }
 
 .story-dialogue-portrait[data-hero] img {
