@@ -3519,7 +3519,7 @@ const HELP_TEXT = `【勝敗の目標】
 ・属性相性: 火→水→雷→森→火 の順に強く、弱点属性を攻撃すると与ダメージが1.2倍になります（無属性は相性なし）
 ・同属性ボーナス: 自分の土地の上で戦うモンスターは、その土地と属性が一致していれば土地レベル×10（最大50）だけHPが上がります。守備側だけの特典で、攻め込む側は土地を離れて戦うため受けられません
 ・応援ボーナス: 戦闘するマスの隣に自分か同盟仲間のモンスターがいるとATK+10
-・アイテム: 戦闘のたびに双方が手札のアイテムを1枚だけ装備できます。相手の手札にあるアイテムは見えますが、実際にどれを選んだかは両者の選択が終わるまで分かりません。装備したアイテムは1回で使い切りです
+・アイテム: 戦闘のたびに双方が手札のアイテムを1枚だけ装備できます。装備にはカード記載のGが必要です。相手の手札にあるアイテムは見えますが、実際にどれを選んだかは両者の選択が終わるまで分かりません。装備したアイテムは1回で使い切りです
 ・先制/後攻: 「先制」持ちは必ず先に攻撃し、「後攻」持ちは後回しになります
 ・貫通: 相手のダメージ半減や無効化を無視します
 戦闘で受けたダメージは盤面に残り、次の戦闘へ持ち越されます（周回時や一部の効果で回復します）。
@@ -3560,7 +3560,7 @@ STARTマスを通過・着地すると「基本ボーナス＋領地ボーナス
 【土地コマンド】
 自分が通ったことのある土地を選ぶと、以下の操作ができます。
 ・入れ替え: 配置済みモンスターを手札のモンスターと交換します
-・土地Lvアップ: Gを払って土地レベルを1段階上げます
+・土地Lvアップ: Gを払って、予算内なら目標の土地レベルまでまとめて上げられます
 ・属性変更: Gを払って土地の属性を変更します
 ・移動: 配置モンスターを隣接する土地へ移動させます（空き地ならそのまま移動、敵地なら戦闘になります）
 ・特殊能力: モンスター固有の効果をGを払って発動します（使えるモンスターのみ）
@@ -4502,9 +4502,10 @@ function fmtDate(ts) {
 // という2つのズレが生じていた。
 function buildStoryStageLabels() {
   const labels = ['未着手'];
-  STORY_STAGES.forEach((stage, i) => {
+  const releasedStages = STORY_STAGES.filter((stage) => !stage.wip);
+  releasedStages.forEach((stage, i) => {
     const numeral = (stage.title || '').trim().split(/\s+/)[0] || `${i + 1}`;
-    const isLast = i === STORY_STAGES.length - 1;
+    const isLast = i === releasedStages.length - 1;
     labels.push(`${numeral}クリア${isLast ? '(全)' : ''}`);
   });
   return labels;
@@ -4517,7 +4518,8 @@ function buildAdminDashboardHtml(players) {
   const withCharacter = players.filter((p) => p.character && p.character.name).length;
 
   // ストーリー進捗分布（全ステージ数に追従）。
-  const progressCounts = Array.from({ length: STORY_STAGES.length + 1 }, () => 0);
+  const releasedStageCount = STORY_STAGES.filter((stage) => !stage.wip).length;
+  const progressCounts = Array.from({ length: releasedStageCount + 1 }, () => 0);
   let mSum = 0;
   let mMax = 0;
   let mMaxName = '—';
@@ -4526,7 +4528,7 @@ function buildAdminDashboardHtml(players) {
 
   for (const p of players) {
     const c = p.character || {};
-    const prog = Math.max(0, Math.min(STORY_STAGES.length, Number(c.storyProgress || 0)));
+    const prog = Math.max(0, Math.min(releasedStageCount, Number(c.storyProgress || 0)));
     progressCounts[prog] += 1;
     const m = Number(c.m || 0);
     mSum += m;
@@ -4545,7 +4547,7 @@ function buildAdminDashboardHtml(players) {
   // 「全ステージ制覇」= storyProgressが最終ステージ数と一致する人数。
   // 旧コードは4固定だったため、⑤〜⑫追加後は「④クリア人数」を
   // 「全ステージ制覇」として表示していた。
-  const clearedAll = progressCounts[STORY_STAGES.length];
+  const clearedAll = progressCounts[releasedStageCount];
   const startedStory = total - progressCounts[0];
   const avgM = withCharacter ? Math.round(mSum / withCharacter) : 0;
 

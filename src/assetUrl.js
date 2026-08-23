@@ -4,5 +4,8 @@
 // リテラルは対象外 - 前置し忘れるとGitHub Pages環境でだけ404になる
 // （ローカル開発はbaseが'/'なので気づきにくい）。
 export function assetUrl(path) {
-  return `${import.meta.env.BASE_URL}${path.replace(/^\//, '')}`;
+  // Nodeのヘッドレス検証ではViteのimport.meta.envが存在しない。
+  // 本番・開発では従来どおりViteが渡すBASE_URLを使う。
+  const baseUrl = import.meta.env?.BASE_URL || '/';
+  return `${baseUrl}${path.replace(/^\//, '')}`;
 }

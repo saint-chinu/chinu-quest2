@@ -1448,7 +1448,7 @@ export class Game {
 
       case 'surviveLethalDamageCurse':
         if (!targetTile?.unit) return false;
-        targetTile.unit.items.push({ name: card.name, atkBonus: 0, hpBonus: 0, effect: { type: 'surviveLethalDamage' } });
+        applyCurse(targetTile.unit, { name: card.name, traits: ['surviveLethalDamage'] });
         this.onLog(`${targetTile.unit.def.name}に不死鳥の呪いをかけた`);
         return false;
 
@@ -6746,10 +6746,9 @@ export class Game {
       { side: 'defender', labels: multiplierLabels(defenderUnit, defenderBonus) },
     ];
 
-    // 破壊・強奪はpreAttackEffectsで既に適用・演出済みなので、resolveBattle内の
-    // 同判定はitems配列が既に空/移動済み（length>0ガード）で不発になる。
-    // result.itemDestructions/itemStealsは常に空配列で返るため、ここでの
-    // 二重演出は発生しない。
+    // 攻撃前効果はpreAttackEffectsで既に判定・演出済み。resolveBattleは
+    // battle.jsのキャッシュから同じ判定結果を受け取るため、ここで確率を
+    // 引き直したり、破壊・強奪を二重に適用したりしない。
     const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, battleDefenderBonus);
     result.log.forEach((line) => this.onLog(line));
 
@@ -7930,7 +7929,7 @@ export class Game {
     if (!card || player.currency < (card.cost || 0)) return;
     const candidates = this.tiles
       .filter((t) => t.owner === player.id && t.unit?.ownerId === player.id)
-      .filter((t) => !t.unit.items?.some((item) => item.effect?.type === 'surviveLethalDamage'))
+      .filter((t) => !hasTrait(t.unit, 'surviveLethalDamage'))
       .map((tile) => {
         const def = tile.unit.def;
         const rarityScore = def.rarity === Rarity.EX ? 80 : def.rarity === Rarity.R ? 50 : def.rarity === Rarity.S ? 25 : 0;

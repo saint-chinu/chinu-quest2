@@ -1,5 +1,8 @@
 import { WEAK_AGAINST } from './battleCards.js';
 
+// 演出側と解決側で同じ戦闘前効果を共有する。特に確率効果を引き直さない。
+const preAttackEffectCache = new WeakMap();
+
 /** A monster once it's on the board: base stats plus equipped items/curses. */
 export function createFieldUnit(monsterDef, ownerId) {
   return {
@@ -242,10 +245,14 @@ function consumeDamageNegation(unit, log) {
 function consumeLethalSurvival(unit) {
   if (unit.currentHp > 0) return null;
   const item = unit.items.find((i) => i.effect?.type === 'surviveLethalDamage' && !i.consumed);
-  if (!item) return null;
-  item.consumed = true;
+  const curseIndex = unit.curses.findIndex((curse) => curse.traits?.includes('surviveLethalDamage'));
+  if (!item && curseIndex < 0) return null;
+  if (item) item.consumed = true;
+  // 不死鳥の呪いは戦闘後も残る装備品ではなく、発動した時だけ消える呪い。
+  const source = item || unit.curses[curseIndex];
+  if (!item) unit.curses.splice(curseIndex, 1);
   unit.currentHp = 1;
-  return item;
+  return source;
 }
 
 function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
@@ -529,13 +536,16 @@ export function strikeOrderScore(unit) {
  * maxHpに残ってしまうため）。
  *
  * resolveBattleが内部でも呼ぶが、その前に呼び出し側（game.jsの戦闘演出）が
- * 明示的に一度呼んでおくと、items配列が既に書き換わっているのでresolveBattle
- * 内の呼び出しはlength>0ガードにより何もしない（二重適用にはならない）。
+ * 明示的に一度呼んでおくと、その判定結果をWeakMap経由でresolveBattleが再利用する。
+ * これにより確率効果を含めて二重適用・二重抽選にはならない。
  * こうすることで、演出側は「装備公開（ATK+20等の補正演出）」より前に
  * 破壊・強奪の演出を挟める——攻撃前に奪われた/壊されたアイテムの補正演出が
  * 元の持ち主側に出てしまい、見た目上何も奪えていないように見える問題を防ぐ。
  */
 export function applyPreAttackItemEffects(attacker, defender) {
+  const cached = preAttackEffectCache.get(attacker);
+  if (cached?.defender === defender) return cached.result;
+
   const log = [];
   const itemSteals = [];
   const itemDestructions = [];
@@ -584,11 +594,19 @@ export function applyPreAttackItemEffects(attacker, defender) {
     log.push(`${defender.def.name}が${attacker.def.name}のアイテムを奪い装備した`);
   }
 
-  return { log, itemSteals, itemDestructions };
+  const result = { log, itemSteals, itemDestructions };
+  preAttackEffectCache.set(attacker, { defender, result });
+  return result;
 }
 
-export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defenderBonus = {}) {
-  const { log, itemSteals, itemDestructions } = applyPreAttackItemEffects(attacker, defender);
+export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defenderBonus = {}, preAttackEffects = null) {
+  // 盤面演出側が先に攻撃前効果を再生した場合は、その判定結果をそのまま使う。
+  // とくに落雷予報士の50%判定をresolveBattle内で引き直さないための受け渡し。
+  const cached = preAttackEffectCache.get(attacker);
+  const resolvedPreAttackEffects = preAttackEffects
+    || (cached?.defender === defender ? cached.result : applyPreAttackItemEffects(attacker, defender));
+  preAttackEffectCache.delete(attacker);
+  const { log, itemSteals, itemDestructions } = resolvedPreAttackEffects;
 
   prepareForBattle(attacker, attackerBonus);
   prepareForBattle(defender, defenderBonus);

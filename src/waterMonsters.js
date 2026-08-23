@@ -64,7 +64,7 @@ export const WATER_MONSTER_CATALOG = {
   }),
   minatoJoshi: waterMonster('minatoJoshi', '港〇女子', Rarity.N, 30, 30, {
     effect: { type: 'stealGoldOnHit', amount: 30 },
-    effectDescription: '攻撃成功時、相手の手持ちGから30G消費させる',
+    effectDescription: '攻撃成功時、相手の手持ちGから30G奪う',
     imageDataUrl: assetUrl('/images/card-art/minatojoshi.png'),
   }),
   amoeba: waterMonster('amoeba', 'アメーバ', Rarity.N, 20, 30),
