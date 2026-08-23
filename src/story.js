@@ -917,6 +917,11 @@ export const STORY_STAGES = [
     // 同盟合算の目標。長丁場ほど敵側の複利（通行料網・お札の含み益・
     // 周回収入）が効く、という設計なのでやや高めにしてある。
     goalCurrency: 20000,
+    // 全員300Gスタート（主人公・お肉・クエ・Q共通）。お札の初期値が
+    // 全属性3Gなので、無一文でも1周目から相場に参加できる。土地も全マス
+    // 無属性なので、開幕は「安い札を仕込む」か「空き地に色を付ける」かの
+    // 選択がそのまま資産の伸びを決める、という設計。
+    startingCurrency: 300,
     heroAllianceId: 'gold',
     enemyAllianceId: 'audit',
     boardDialogue: true,
@@ -998,7 +1003,6 @@ export const STORY_STAGES = [
           // Qの土地レベルアップと雷神の連鎖ボーナスが同時に立ち上がる）。
           neutralRepaintAfter: 8,
         },
-        startingCurrency: 900,
       },
       {
         name: 'Q',
@@ -1027,7 +1031,6 @@ export const STORY_STAGES = [
             unleash: 50,
           },
         },
-        startingCurrency: 900,
       },
     ],
     replay: {

@@ -335,11 +335,11 @@ export const MAPS = [
   // wip: 制作中。対戦モードのマップ選択には出さない（PVP_MAPSで除外）。
   // ofuda: 全マスが無属性で始まる盤面なので、そのままだと「その属性の土地が
   // 0枚＝相場が立たない」で開幕から誰もお札を買えない。startPriceで最初から
-  // 5G/枚の市場を開き、initialCountには「1属性あたり何マスまで伸びうるか」の
+  // 3G/枚（相場の下限そのもの）の市場を開き、initialCountには「1属性あたり何マスまで伸びうるか」の
   // 目安（土地56マス÷4属性＝14）を入れて価格の伸び方を⑫と同じ形に揃える
   // （実際の枚数0のままだと分母1になり、1マス塗っただけで12G、10マスで
   // 上限120Gに張り付いてしまう）。
-  { id: 'kessan', name: '⑬ 船上のロンド', wip: true, rows: KESSAN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, ofuda: { startPrice: 5, initialCount: 14 }, background: assetUrl('/images/stage/stage12-financial-city.png'), spacing: 2.8 },
+  { id: 'kessan', name: '⑬ 船上のロンド', wip: true, rows: KESSAN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, ofuda: { startPrice: 3, initialCount: 14 }, background: assetUrl('/images/stage/stage12-financial-city.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {

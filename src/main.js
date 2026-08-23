@@ -5228,6 +5228,10 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
       allianceId: heroAllianceId,
       deckList: heroDeckList,
       iconImage,
+      // ステージ全体の開始G（stage.startingCurrency）。指定が無ければ
+      // エンジン既定の500G。⑬のように「全員が無一文から始める」盤面を
+      // 作るために、味方・敵だけでなく主人公にも同じ額を適用する。
+      startingCurrency: stage.startingCurrency,
       startGoalIndex: stage.heroStartGoalIndex,
     },
   ];
@@ -5241,7 +5245,7 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
       iconImage: await loadNpcTokenImage(allyDef.name),
       elements: allyDef.theme.elements,
       aiProfile: allyDef.aiProfile,
-      startingCurrency: allyDef.startingCurrency,
+      startingCurrency: allyDef.startingCurrency ?? stage.startingCurrency,
       startGoalIndex: allyDef.startGoalIndex,
     });
   }
@@ -5259,7 +5263,7 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
       // ステージ固有のAI性格の部分上書き（story.jsのopponent.aiProfile）。
       // 同名キャラをステージごとに別の戦い方で出すために使う。
       aiProfile: opponent.aiProfile,
-      startingCurrency: opponent.startingCurrency,
+      startingCurrency: opponent.startingCurrency ?? stage.startingCurrency,
       startGoalIndex: opponent.startGoalIndex,
     });
   }
