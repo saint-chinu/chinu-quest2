@@ -3773,6 +3773,12 @@ const adminScreen = document.getElementById('admin-screen');
 const adminContent = document.getElementById('admin-content');
 const adminBack = document.getElementById('admin-back');
 const adminRefresh = document.getElementById('admin-refresh');
+const adminTestplayStage = document.getElementById('admin-testplay-stage');
+const adminTestplayDeck = document.getElementById('admin-testplay-deck');
+const adminTestplayStart = document.getElementById('admin-testplay-start');
+const adminTestplayCopy = document.getElementById('admin-testplay-copy');
+const adminTestplayExport = document.getElementById('admin-testplay-export');
+const adminTestplayStatus = document.getElementById('admin-testplay-status');
 const adminComposeSubject = document.getElementById('admin-compose-subject');
 const adminComposeBody = document.getElementById('admin-compose-body');
 const adminComposeCard = document.getElementById('admin-compose-card');
@@ -4593,6 +4599,12 @@ function buildAdminDashboardHtml(players) {
 
 // 直近の集計結果をキャッシュ（再度開いた時は即表示。再読み込みボタンで更新）。
 let adminPlayersCache = null;
+/**
+ * 管理ダッシュボードからのテストプレイ中フラグ。
+ * 立っている間は決着処理で報酬・進行度・図鑑登録を一切書き込まない
+ * （バランス確認のために何度でも回せるようにするため）。
+ */
+let storyTestPlayMode = false;
 
 function adminErrorHtml(error) {
   if (error?.code === 'permission-denied') {
@@ -4609,6 +4621,9 @@ async function showAdminDashboard(forceReload = false) {
     return;
   }
   showScreen(adminScreen);
+  // ステージ一覧はプレイヤーの読み込みを待たずに埋める（Firebaseに繋がらない
+  // 環境でも、どのステージが選べるかは見えるようにしておく）。
+  renderAdminTestplay();
   if (!firebaseReady || !db) {
     adminContent.innerHTML = '<p class="admin-error">Firebaseに接続できないため集計できません。</p>';
     return;
@@ -4641,6 +4656,7 @@ async function showAdminDashboard(forceReload = false) {
     const snapshot = await fsGetDocs(collection(db, 'players'));
     adminPlayersCache = snapshot.docs.map((d) => d.data());
     adminContent.innerHTML = buildAdminDashboardHtml(adminPlayersCache);
+    renderAdminTestplay();
   } catch (error) {
     console.error('管理ダッシュボードの詳細集計に失敗', error);
     // 詳細が取れなくても登録者数だけは残す。
@@ -5446,6 +5462,22 @@ async function handleStoryBattleEnd(index, result = {}) {
   const { won } = result;
   const stage = STORY_STAGES[index];
   clearStoryResume();
+  // 管理ダッシュボードからのテストプレイは記録を一切残さない。報酬・進行度・
+  // 図鑑登録・終幕演出をまとめて飛ばし、盤面を閉じて管理画面へ戻る。
+  // 勝敗どちらでも通るよう、他の分岐より先に処理する。
+  if (storyTestPlayMode) {
+    storyTestPlayMode = false;
+    game = undefined;
+    blockMusicPlayback();
+    appEl.classList.add('hidden');
+    preGame.classList.remove('hidden');
+    activeStoryStageIndex = null;
+    activeStorySessionMeta = null;
+    latestStoryCheckpoint = null;
+    showToast(`テストプレイ終了（${won ? '勝利' : '敗北'}）　記録は残していません`, 2600);
+    showAdminDashboard();
+    return;
+  }
   // ストーリー本編・再戦共通の「4%＋相手人数×3%」報酬を勝敗にかかわらず付与。
   const mReward = grantStoryBattleReward();
   // overlayNpc持ちのステージ（①②）の勝利時だけ、盤面をまだ隠さずに決着
@@ -5583,6 +5615,107 @@ battleBackButton.addEventListener('click', showHubScreen);
 stubBackButton.addEventListener('click', showHubScreen);
 if (adminBack) adminBack.addEventListener('click', showHubScreen);
 if (adminRefresh) adminRefresh.addEventListener('click', () => showAdminDashboard(true));
+
+// ---- 管理ダッシュボードのテストプレイ ----
+// 「制作中(wip)を含む全ステージ」×「登録プレイヤーの実デッキ」で盤面を起動する。
+// バランス調整は一番強いプレイヤーのデッキ相手に見たいので、テスト用の
+// 仮デッキではなく実際に使われているデッキをそのまま使えるようにしてある。
+
+/** 登録プレイヤーのデッキ一覧を [{label, deckList}] に均す。40枚のデッキだけを対象にする。 */
+function adminTestplayDeckOptions() {
+  const options = [];
+  for (const player of adminPlayersCache || []) {
+    const character = player?.character;
+    for (const deck of character?.decks || []) {
+      const list = Array.isArray(deck?.deckList) ? deck.deckList : [];
+      if (list.length === 0) continue;
+      options.push({
+        label: `${character.name || '名無し'} / ${deck.name || 'デッキ'}（${list.length}枚）`,
+        playerName: character.name || '名無し',
+        deckName: deck.name || 'デッキ',
+        deckList: list,
+      });
+    }
+  }
+  // 強いプレイヤーから試したいので、進行度の高い順→名前順に並べる。
+  return options;
+}
+
+function renderAdminTestplay() {
+  if (!adminTestplayStage || !adminTestplayDeck) return;
+  const keepStage = adminTestplayStage.value;
+  const keepDeck = adminTestplayDeck.value;
+  adminTestplayStage.replaceChildren();
+  STORY_STAGES.forEach((stage, index) => {
+    const option = document.createElement('option');
+    option.value = String(index);
+    option.textContent = `${stage.title}${stage.wip ? '（制作中）' : ''}`;
+    adminTestplayStage.appendChild(option);
+  });
+  adminTestplayStage.value = keepStage || String(STORY_STAGES.length - 1);
+
+  const options = adminTestplayDeckOptions();
+  adminTestplayDeck.replaceChildren();
+  if (options.length === 0) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = '（プレイヤーの読み込み後に選べます）';
+    adminTestplayDeck.appendChild(option);
+    return;
+  }
+  options.forEach((entry, index) => {
+    const option = document.createElement('option');
+    option.value = String(index);
+    option.textContent = entry.label;
+    adminTestplayDeck.appendChild(option);
+  });
+  if (keepDeck && Number(keepDeck) < options.length) adminTestplayDeck.value = keepDeck;
+}
+
+if (adminTestplayStart) {
+  adminTestplayStart.addEventListener('click', async () => {
+    const options = adminTestplayDeckOptions();
+    const entry = options[Number(adminTestplayDeck.value)];
+    const index = Number(adminTestplayStage.value);
+    if (!entry || !STORY_STAGES[index]) {
+      adminTestplayStatus.textContent = 'ステージとデッキを選んでください。';
+      return;
+    }
+    adminTestplayStatus.textContent = `${STORY_STAGES[index].title} を ${entry.label} で開始します…`;
+    storyTestPlayMode = true;
+    // 途中データは踏まない（テストは必ず最初から）。再戦版ではなく本編を回す。
+    clearStoryResume(index, false);
+    await startStoryBattle(index, entry.deckList, false);
+  });
+}
+
+if (adminTestplayCopy) {
+  adminTestplayCopy.addEventListener('click', async () => {
+    const options = adminTestplayDeckOptions();
+    const entry = options[Number(adminTestplayDeck.value)];
+    if (!entry) {
+      adminTestplayStatus.textContent = 'コピーするデッキを選んでください。';
+      return;
+    }
+    // 中身は「カード名: 枚数」に丸めて出す（画像データを含む生のセーブを
+    // そのまま出すと巨大になり、貼り付けにも使えないため）。
+    const counts = {};
+    for (const card of entry.deckList) {
+      const name = card?.name || '(不明)';
+      counts[name] = (counts[name] || 0) + 1;
+    }
+    const text = JSON.stringify({
+      player: entry.playerName, deck: entry.deckName, total: entry.deckList.length, cards: counts,
+    }, null, 2);
+    adminTestplayExport.value = text;
+    try {
+      await navigator.clipboard.writeText(text);
+      adminTestplayStatus.textContent = 'クリップボードにコピーしました。';
+    } catch {
+      adminTestplayStatus.textContent = '下の枠の中身を選択してコピーしてください。';
+    }
+  });
+}
 
 // ---- Card catalog: unowned entries stay blank; owned entries reveal name/count/detail. ----
 

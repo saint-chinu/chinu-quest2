@@ -1,4 +1,4 @@
-import { TileType, mapRequiresAllCheckpoints, mapCheckpointBonus, mapUsesAlternateGoalStarts, mapHasOfuda } from './board.js';
+import { TileType, mapRequiresAllCheckpoints, mapCheckpointBonus, mapUsesAlternateGoalStarts, mapHasOfuda, mapOfudaSettings } from './board.js';
 import { PIECE_REST_Y, UNIT_ICON_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity } from './cards.js';
 import { buildStarterCardList, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf, isRewardOnlyCard } from './battleCards.js';
@@ -318,11 +318,13 @@ export class Game {
     this.storyMode = storyMode;
     this.goalCurrency = Number.isFinite(Number(goalCurrency)) ? Number(goalCurrency) : null;
     this.hasOfuda = mapHasOfuda(mapId);
+    // マップ固有の相場設定（⑬のように全マス無属性で始まる盤面用）。
+    this.ofudaSettings = mapOfudaSettings(mapId);
     this.ofudaPressure = Object.fromEntries(OFUDA_ELEMENTS.map((element) => [element, 0]));
-    this.ofudaInitialCounts = Object.fromEntries(OFUDA_ELEMENTS.map((element) => [
-      element,
-      this.tiles.filter((tile) => tile.type === TileType.LAND && tile.element === element).length,
-    ]));
+    this.ofudaInitialCounts = Object.fromEntries(OFUDA_ELEMENTS.map((element) => {
+      const onBoard = this.tiles.filter((tile) => tile.type === TileType.LAND && tile.element === element).length;
+      return [element, onBoard > 0 ? onBoard : (this.ofudaSettings?.initialCount || 0)];
+    }));
     this.tutorialMode = !!tutorialMode;
     this.tutorialOpeningCardIds = tutorialOpeningCardIds;
     this.tutorialCpuOpeningCardIds = tutorialCpuOpeningCardIds;
@@ -3847,8 +3849,14 @@ export class Game {
     const score = this.tiles
       .filter((tile) => tile.type === TileType.LAND && tile.element === element)
       .reduce((sum, tile) => sum + (OFUDA_LEVEL_SCORE[tile.level] ?? OFUDA_LEVEL_SCORE[1]), 0);
-    if (score <= 0) return 0;
-    return Math.round(OFUDA_MAX_PRICE * score / (initialCount * OFUDA_LEVEL_SCORE[LEVEL_CAP]));
+    // その属性の土地が1枚も無い状態。通常マップは市場ごと閉じる（0=売買不可）が、
+    // 全マス無属性で始まるマップは開幕から誰も買えなくなってしまうので、
+    // マップ設定のstartPriceで最低限の市場を開いておく。
+    if (score <= 0) return this.ofudaSettings?.startPrice || 0;
+    return Math.max(
+      this.ofudaSettings?.startPrice || 0,
+      Math.round(OFUDA_MAX_PRICE * score / (initialCount * OFUDA_LEVEL_SCORE[LEVEL_CAP])),
+    );
   }
 
   _ofudaPrice(element) {

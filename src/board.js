@@ -333,7 +333,13 @@ export const MAPS = [
   { id: 'mahjong-duo', name: '⑪ ふたりは○○', rows: MAHJONG_DUO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage11-mahjong.png'), spacing: 2.8 },
   { id: 'ofuda-field', name: '⑫ 海上金融街', rows: OFUDA_FIELD_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage12-financial-city.png'), spacing: 2.8 },
   // wip: 制作中。対戦モードのマップ選択には出さない（PVP_MAPSで除外）。
-  { id: 'kessan', name: '⑬ 船上のロンド', wip: true, rows: KESSAN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage12-financial-city.png'), spacing: 2.8 },
+  // ofuda: 全マスが無属性で始まる盤面なので、そのままだと「その属性の土地が
+  // 0枚＝相場が立たない」で開幕から誰もお札を買えない。startPriceで最初から
+  // 5G/枚の市場を開き、initialCountには「1属性あたり何マスまで伸びうるか」の
+  // 目安（土地56マス÷4属性＝14）を入れて価格の伸び方を⑫と同じ形に揃える
+  // （実際の枚数0のままだと分母1になり、1マス塗っただけで12G、10マスで
+  // 上限120Gに張り付いてしまう）。
+  { id: 'kessan', name: '⑬ 船上のロンド', wip: true, rows: KESSAN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, ofuda: { startPrice: 5, initialCount: 14 }, background: assetUrl('/images/stage/stage12-financial-city.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {
@@ -390,6 +396,11 @@ export function mapUsesAlternateGoalStarts(mapId) {
 
 export function mapHasOfuda(mapId) {
   return !!getMap(mapId).hasOfuda;
+}
+
+/** お札マップの相場設定（startPrice=土地が0枚の時の価格、initialCount=価格計算の分母）。 */
+export function mapOfudaSettings(mapId) {
+  return getMap(mapId).ofuda || null;
 }
 
 const LAND_ELEMENT_BY_CODE = {

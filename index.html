@@ -236,6 +236,20 @@
             <button id="admin-compose-send" class="pg-button" type="button">この内容で配信する</button>
             <p id="admin-compose-status" class="admin-compose-status"></p>
           </section>
+          <section id="admin-testplay" class="admin-compose">
+            <h3 class="admin-compose-title">🧪 テストプレイ</h3>
+            <p class="admin-compose-hint">制作中を含む全ステージを、登録プレイヤーのデッキで試せます。進行度・報酬・図鑑には一切記録されません。</p>
+            <div class="admin-compose-cardrow">
+              <select id="admin-testplay-stage" class="admin-compose-input"></select>
+              <select id="admin-testplay-deck" class="admin-compose-input"></select>
+            </div>
+            <div class="admin-compose-cardrow">
+              <button id="admin-testplay-start" class="pg-button" type="button">このデッキで開始</button>
+              <button id="admin-testplay-copy" class="pg-button pg-button-secondary" type="button">デッキをコピー</button>
+            </div>
+            <textarea id="admin-testplay-export" class="admin-compose-textarea" readonly placeholder="「デッキをコピー」を押すと、ここに中身が出ます"></textarea>
+            <p id="admin-testplay-status" class="admin-compose-status"></p>
+          </section>
           <div id="admin-content" class="admin-content"></div>
           <button id="admin-refresh" class="pg-button pg-button-secondary">再読み込み</button>
           <button id="admin-back" class="pg-button pg-button-secondary">戻る</button>
