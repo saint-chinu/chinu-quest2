@@ -1292,7 +1292,7 @@ export const CHARACTER_DECKS = {
   qKessan: {
     composition: {
       monsters: [
-        // ばら撒き兼、3周目で足止めを覚える成長型の壁。
+        // ばら撒き兼、3周目で強制停止を覚える成長型の壁。
         { def: MONSTER_CATALOG.koutetsuYousai, count: 3 },
         // ■雷コンボの中核■
         // 電柱を植える男 → 電柱（盤上の雷モンスター全員がHP+10）
@@ -1302,15 +1302,17 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.denchuwoUeruOtoko, count: 2 },
         { def: MONSTER_CATALOG.mechanicMaso, count: 2 },
         { def: MONSTER_CATALOG.raiheishinZamurai, count: 3 },
+        // サンダーバード: 先制持ちで、土地コマンド(90G)から雷雲を空き地へ
+        // 送り込める。籠城しながら盤面を増やせる数少ない手。
+        { def: MONSTER_CATALOG.thunderbird, count: 2 },
         // 連鎖スケール枠。雷神は「雷の連鎖数×7」でHP・ATKが伸びる。連鎖は
         // 同盟合算なので、クエも雷に塗るほどここが跳ね上がる（コンボの出口）。
         { def: MONSTER_CATALOG.raijin, count: 2 },
         // 落雷予報士: 戦闘開始時50%で相手の装備を無効化する。プレイヤーの
         // 「強い武器を積んで一点突破」という定番の対策を正面から潰す。
         { def: MONSTER_CATALOG.rakuraiYohoushi, count: 2 },
-        { def: MONSTER_CATALOG.hatsudenNezumi, count: 2 },
+        { def: MONSTER_CATALOG.hatsudenNezumi, count: 1 },
         { def: MONSTER_CATALOG.raiun, count: 1 },
-        { def: MONSTER_CATALOG.ironWool, count: 1 },
       ],
       items: [
         { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
@@ -1318,16 +1320,18 @@ export const CHARACTER_DECKS = {
       ],
       spells: [
         // 雷単色なので塗り替えは放電に集中させる。
-        { def: SPELL_CATALOG.electrify, count: 4 },
+        { def: SPELL_CATALOG.electrify, count: 3 },
+        // 周回加速。籠城型でも周回そのものは収入と成長の源なので、
+        // 出目操作と帰巣本能で1周を早く畳む。
+        { def: SPELL_CATALOG.homingInstinct, count: 2 },
+        { def: SPELL_CATALOG.iCanFly, count: 2 },
+        { def: SPELL_CATALOG.diceSix, count: 1 },
         { def: SPELL_CATALOG.sanctuary, count: 2 },
         { def: SPELL_CATALOG.phoenixCurse, count: 2 },
-        { def: SPELL_CATALOG.antlion, count: 2 },
+        { def: SPELL_CATALOG.antlion, count: 1 },
         { def: SPELL_CATALOG.specialAudit, count: 2 },
-        { def: SPELL_CATALOG.taxHike, count: 1 },
-        { def: SPELL_CATALOG.curseCleanse, count: 1 },
         { def: SPELL_CATALOG.sideIncome, count: 3 },
         { def: SPELL_CATALOG.divination, count: 2 },
-        { def: SPELL_CATALOG.homingInstinct, count: 1 },
       ],
     },
   },
@@ -1342,33 +1346,40 @@ export const CHARACTER_DECKS = {
   queKessan: {
     composition: {
       monsters: [
-        // 壁と置物。全部「取られても痛くない」値段に揃えてある。
-        // 周回成長型は周回屋のクエと相性が良い（1周ごとに勝手に育つ）。
-        { def: MONSTER_CATALOG.koutetsuYousai, count: 4 }, // 40G 周回成長→3周目で強制停止
-        { def: MONSTER_CATALOG.sekizou, count: 3 },          // 0G  HP30/ATK10
-        { def: MONSTER_CATALOG.freelancer, count: 2 },       // 50G 周回の基本ボーナス1.3倍
-        { def: MONSTER_CATALOG.netBenkei, count: 2 },        // 50G 50/50 素の壁
-        { def: MONSTER_CATALOG.ninja, count: 2 },            // 50G 40/40 先制
-        { def: MONSTER_CATALOG.hatsudenNezumi, count: 3 },   // 雷 生存収入
-        { def: MONSTER_CATALOG.katanakaji, count: 2 },       // 50G 土地コマンドでオサフネ入手
+        // 雷単色12枚。クエは戦闘を避けて周回する役なので数は絞り、
+        // 「置いたら育つ」「守れる」「立っているだけで金になる」の3種に寄せた。
+        // 甲鉄要塞がSレアなのが効いていて、無属性地に据えた瞬間から
+        // 「Sレアの属性が土地と食い違っている」＝最適化の発動条件になる。
+        { def: MONSTER_CATALOG.koutetsuYousai, count: 4 },   // 40G 周回成長→3周目で強制停止
+        { def: MONSTER_CATALOG.tenhou, count: 2 },           // 50G R 先制・与ダメ×5G強奪
+        { def: MONSTER_CATALOG.hatsudenNezumi, count: 2 },   // 50G 生き残ると残HP×2G
+        { def: MONSTER_CATALOG.erekiKagayaki, count: 2 },    // 30G S 先制
+        { def: MONSTER_CATALOG.kadenryuuCheetah, count: 1 }, // 60G S 先制
+        { def: MONSTER_CATALOG.rakuraiYohoushi, count: 1 },  // 90G R 連鎖2 装備50%無効化
       ],
       items: [
         { def: ITEM_CATALOG.nankaNoOmamori, count: 2 },
       ],
       spells: [
-        // Qと同じ雷に塗る。連鎖もお札の基礎価格も同盟で合算されるので、
-        // 色を1つに寄せるほどQの雷神と自分の保有お札の両方が伸びる。
-        { def: SPELL_CATALOG.electrify, count: 4 },
+        // 最適化(300G): 自分の土地を「置いてあるモンスターの属性」へ一斉に
+        // 揃える。全マス無属性で始まるこのステージでは、ばら撒いた甲鉄要塞の
+        // 数だけまとめて雷地に変わる＝放電を何枚も撃つより遥かに速い。
+        { def: SPELL_CATALOG.optimize, count: 2 },
+        { def: SPELL_CATALOG.electrify, count: 2 },
+        // 金策。副業収入は周回するほど増えるので周回屋のクエと噛み合う。
+        { def: SPELL_CATALOG.sideIncome, count: 4 },
         { def: SPELL_CATALOG.specialAudit, count: 2 },
-        // 資本主義の権化: 空き地へ自動展開する＝ばら撒きそのもの。
-        { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },
+        // 周回加速。帰巣本能で強制的に1周を締め、出目操作で距離を稼ぐ。
         { def: SPELL_CATALOG.homingInstinct, count: 3 },
-        { def: SPELL_CATALOG.sideIncome, count: 3 },
+        { def: SPELL_CATALOG.iCanFly, count: 2 },
+        { def: SPELL_CATALOG.diceSix, count: 2 },
+        // 引き当て。最適化と放電はどちらも撃てるかどうかで盤面が変わる。
+        { def: SPELL_CATALOG.divination, count: 3 },
+        { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },
         { def: SPELL_CATALOG.taxHike, count: 1 },
         { def: SPELL_CATALOG.sanctuary, count: 1 },
         { def: SPELL_CATALOG.phoenixCurse, count: 1 },
         { def: SPELL_CATALOG.dieWithMe, count: 1 },
-        { def: SPELL_CATALOG.divination, count: 2 },
       ],
     },
   },

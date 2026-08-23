@@ -909,6 +909,10 @@ export const STORY_STAGES = [
   {
     key: 'kessan',
     title: '⑬ 船上のロンド',
+    // 制作中。背景・BGM・デッキ調整が済むまでプレイヤーからは選べないようにする
+    // （isStageUnlockedがこのフラグを見て常にロック扱いにする）。公開する時は
+    // この1行を消すだけでよい。
+    wip: true,
     format: '2vs2',
     // 同盟合算の目標。長丁場ほど敵側の複利（通行料網・お札の含み益・
     // 周回収入）が効く、という設計なのでやや高めにしてある。
@@ -1037,7 +1041,14 @@ export const STORY_STAGES = [
 ];
 
 export function isStageUnlocked(character, index) {
+  // 制作中のステージ(wip)は進行度に関係なく常にロック。
+  if (STORY_STAGES[index]?.wip) return false;
   return index <= (character.storyProgress || 0);
+}
+
+/** 制作中で未公開のステージか（一覧の表示文言を分けるために使う）。 */
+export function isStageWip(index) {
+  return !!STORY_STAGES[index]?.wip;
 }
 
 export function isStageCleared(character, index) {

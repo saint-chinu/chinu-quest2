@@ -92,6 +92,8 @@ const LEVEL_INVESTMENT = { 1: 0, 2: 50, 3: 250, 4: 650, 5: 1250 };
 // 属性変更コスト = 現レベル×100（無色マスからの変更は半額）
 const ELEMENT_CHANGE_COST_PER_LEVEL = 100;
 const NEUTRAL_ELEMENT_CHANGE_DISCOUNT = 0.5;
+// 「最適化」(300G)をCPUが撃つのに必要な、自陣でまとめて塗れるマス数の下限。
+const OPTIMIZE_MIN_TILES = 4;
 const CHANGEABLE_ELEMENTS = [Element.FIRE, Element.WATER, Element.THUNDER, Element.FOREST, Element.NEUTRAL];
 const OFUDA_ELEMENTS = [Element.FIRE, Element.WATER, Element.FOREST, Element.THUNDER];
 // 150Gぶんの売買で相場が1G動く。小さくするほど「買い」が自己成就的に
@@ -2499,6 +2501,9 @@ export class Game {
     // これを積まないと、相場に突っ込んだ直後は常にG不足で撃てず、
     // アリジゴク対策の切り札が手札で腐り続ける。
     const holdsFinisher = (player.hand || []).some((c) => c.effect?.type === 'guaranteedNextInvasionWin');
+    // 「最適化」(300G)を握っている間はその分を軍資金に残す。相場へ突っ込んで
+    // 撃てないまま手札で腐らせると、無属性のまま盤面が止まる。
+    const holdsOptimize = (player.hand || []).some((c) => c.effect?.type === 'autoMatchAllTileElements');
     // ばら撒き型(scatterSummons)は大型召喚も土地レベルアップもしない＝盤面用の
     // 軍資金がほぼ要らないので、軍資金を250Gまで削って相場へ厚く回す。
     // 「戦闘を避けて札を買い占める」役割を担うキャラは、ここを600Gのままに
@@ -2511,7 +2516,7 @@ export class Game {
     const scatters = !!player.aiProfile?.scatterSummons;
     const boardReserve = scatters ? 450 : 600;
     const fixerReserve = Math.max(boardReserve, Math.min(this._cpuMaxEnemyToll(player), scatters ? 900 : 1200))
-      + (holdsFinisher ? 800 : 0);
+      + (holdsFinisher ? 800 : 0) + (holdsOptimize ? 300 : 0);
     const budget = isFixer
       ? Math.floor(Math.max(0, player.currency - fixerReserve) * 0.65)
       : Math.min(350, Math.max(0, player.currency - 200));
@@ -4145,6 +4150,13 @@ export class Game {
   async _cpuMaybeChangeLandElement(player, tile) {
     if (tile.type !== TileType.LAND || tile.owner !== player.id) return false;
     if (tile.element !== Element.NEUTRAL) return false;
+    // 「最適化」を握っていて、かつ今それを撃てるだけのGがあるなら1マスずつは
+    // 塗らない。最適化は自分の土地をまとめて配置モンスターの属性へ揃えるので、
+    // 無属性地を残しておくほど1枚あたりの取り分が増える。
+    // 撃てるGが無い時まで我慢すると盤面が無属性のまま止まるので、その時は
+    // 従来どおり土地コマンドで1マスずつ塗る。
+    const optimizeInHand = (player.hand || []).find((c) => c.effect?.type === 'autoMatchAllTileElements');
+    if (optimizeInHand && player.currency >= (optimizeInHand.cost || 0)) return false;
     // テーマを持たない汎用CPU（対戦モードの相手など）は、自分のデッキに
     // 一番多く入っている属性を「自分の色」とみなす。
     const themed = (player.aiProfile?.preferredElements || [])
@@ -8339,8 +8351,27 @@ export class Game {
 
     const optimizeCard = affordable.find((c) => c.effect.type === 'autoMatchAllTileElements');
     if (optimizeCard) {
-      await this._cpuCastSpell(player, optimizeCard, {});
-      return;
+      // 最適化(300G)は盤面全体が対象。撃つ条件は2つ:
+      //  ①自陣でまとめて塗れるマスが十分にあること。「溜めてから一斉に塗る」
+      //    作戦のCPU(aiProfile.neutralRepaintAfter持ち)はOPTIMIZE_MIN_TILES枚
+      //    まで待つ（1〜2マスのために300Gを払うなら放電の方が安い）。
+      //    それ以外のCPUは従来どおり1マスの食い違いでも撃つ。
+      //  ②敵の土地まで敵の色に揃えてしまうので、自分たちの取り分の方が
+      //    多いこと。少ないなら撃つほど相手を利する。
+      const alignableFor = (mine) => this.tiles.filter((t) => {
+        if (t.type !== TileType.LAND || !t.unit || t.owner == null) return false;
+        if (t.element === t.unit.def.element) return false;
+        const owner = this.players.find((p) => p.id === t.owner);
+        if (!owner) return false;
+        const ours = owner.id === player.id || this._isAllyOf(owner, player);
+        return mine ? ours : !ours;
+      }).length;
+      const minTiles = player.aiProfile?.neutralRepaintAfter != null ? OPTIMIZE_MIN_TILES : 1;
+      const alignedByUs = alignableFor(true);
+      if (alignedByUs >= minTiles && alignedByUs > alignableFor(false)) {
+        await this._cpuCastSpell(player, optimizeCard, {});
+        return;
+      }
     }
 
     for (const tile of mismatchedTiles) {

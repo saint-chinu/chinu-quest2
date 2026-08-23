@@ -332,7 +332,8 @@ export const MAPS = [
   { id: 'hitodemaso', name: '⑩ 成れの果て', rows: HITODEMASO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage10-trench-temple.png'), spacing: 2.8 },
   { id: 'mahjong-duo', name: '⑪ ふたりは○○', rows: MAHJONG_DUO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage11-mahjong.png'), spacing: 2.8 },
   { id: 'ofuda-field', name: '⑫ 海上金融街', rows: OFUDA_FIELD_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage12-financial-city.png'), spacing: 2.8 },
-  { id: 'kessan', name: '⑬ 船上のロンド', rows: KESSAN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage12-financial-city.png'), spacing: 2.8 },
+  // wip: 制作中。対戦モードのマップ選択には出さない（PVP_MAPSで除外）。
+  { id: 'kessan', name: '⑬ 船上のロンド', wip: true, rows: KESSAN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage12-financial-city.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {
@@ -359,7 +360,7 @@ export const PVP_MAPS = [
   { ...HITODE_FIRST_MAP, name: '① はじまりの海（初戦マップ）' },
   { ...MAPS[0], name: '① ヒトデの縄張り（再戦マップ）' },
   ...MAPS.slice(1),
-];
+].filter((map) => !map.wip);
 
 function getMap(mapId) {
   if (mapId === TUTORIAL_MAP.id) return TUTORIAL_MAP;

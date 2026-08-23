@@ -24,7 +24,7 @@ import {
   drawBreedPartPack,
   describeBreedPart,
 } from './breedParts.js';
-import { STORY_STAGES, isStageUnlocked, isStageCleared } from './story.js';
+import { STORY_STAGES, isStageUnlocked, isStageCleared, isStageWip } from './story.js';
 import { NPC_PORTRAIT_URL, loadNpcTokenImage } from './npcArt.js';
 import { defaultCardArtUrl } from './cardArt.js';
 import { firebaseReady, db, auth } from './firebase.js';
@@ -4875,6 +4875,8 @@ function showStoryScreen() {
     const hasResume = unlocked && !!loadStoryResume(index, !!(cleared && stage.replay));
     meta.textContent = hasResume
       ? `途中データあり　${battleInfo}`
+      : isStageWip(index)
+      ? `準備中　${battleInfo}`
       : !unlocked
       ? `ロック中　${battleInfo}`
       : cleared
