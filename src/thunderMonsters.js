@@ -61,7 +61,7 @@ export const THUNDER_MONSTER_CATALOG = {
       ],
     },
     effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主の周回で成長する（1周目 HP50 → 2周目 HP65/ATK20 → 3周目「強制停止」を覚え、このマスを通る相手を必ず停止させる）',
-    imageDataUrl: assetUrl('/images/card-art/thunder.png'),
+    imageDataUrl: assetUrl('/images/card-art/koutetsuYousai.png'),
   }),
   hatsudenNezumi: thunderMonster('hatsudenNezumi', '発電ネズミ', Rarity.N, 30, 30, {
     effect: { type: 'survivalGold', multiplier: 2 },
