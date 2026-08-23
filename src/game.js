@@ -3383,37 +3383,68 @@ export class Game {
 
   /**
    * 選択式ワープの飛び先決定。
-   * CPUは「まだ必要なCPがある島」＞「全CP済みならゴールのある島」を最優先し、
-   * 同条件なら敵の通行料の総額が小さい島を選ぶ（＝戦闘と出費を避ける）。
+   *
+   * 優先順位（上から順に、下の項では覆せない重み付け）:
+   *  ①周回。まだ必要なCPがある島＞全CP済みならゴールのある島。
+   *  ②その島で「今すぐ召喚できる空き地」がどれだけあるか。手札と所持Gで
+   *    実際に置けるかまで見る（置けない空き地は将来の取り分として軽く数える）。
+   *  ③敵地の"枚数"を嫌う。通行料の総額だけで見ると、Lv1の敵地が並ぶ島を
+   *    「安いから」と選んでしまい、戦闘と支払いの回数が増える。
+   *  ④空き地が枯れている島（1マス以下）に限り、自陣・同盟地の育成余地を
+   *    重く見る。召喚できないなら、通り道の自分の土地で属性変更や
+   *    レベルアップを回すのが次善手になるため。
+   *  ⑤同じ島の入口どうしのタイブレーク。⑬のゴール島は入口が3つあり、
+   *    到達範囲が完全に一致するので①〜④では差が付かない。降りた地点から
+   *    次の目的地（未通過CP／ゴール）までの歩数が短い入口を選ぶ。
+   *
    * 人間には行き先名のボタンを出す（キャンセル時はCPUと同じ推奨先へ飛ぶ）。
    */
   async _resolveWarpChoice(player, tile) {
     const choices = tile.warpChoices.map((id) => this.tiles[id]).filter(Boolean);
     if (choices.length === 0) return null;
     const needed = this._remainingCheckpointTiles(player);
+    const firstLap = (player.lapsCompleted || 0) === 0;
     const scoreOf = (destination) => {
       const reach = this._reachableTileIds(destination.id);
-      // ①周回最優先。まだ必要なCPがある島、全CP済みならゴールのある島。
       const hasNeededCheckpoint = needed.some((checkpoint) => reach.has(checkpoint.id));
       const hasGoal = this.tiles.some((t) => t.type === TileType.START && reach.has(t.id));
 
-      // ②空き地の多さ。「まだ誰も取っていないマス」だけを数える＝仲間が
-      // 既に押さえた分は空きに数えない。そうしないとクエとQが同じ島に
-      // 固まってしまい、盤面を広く取るという狙いが崩れる。
-      let emptyLands = 0;
+      // 「まだ誰も取っていないマス」だけを空き地に数える＝仲間が既に押さえた
+      // 分は空きに数えない。そうしないとクエとQが同じ島に固まってしまい、
+      // 盤面を広く取るという狙いが崩れる。
+      let summonableEmpty = 0;
+      let otherEmpty = 0;
+      let ownUpgradable = 0;
+      let enemyLands = 0;
       let enemyToll = 0;
       for (const t of this.tiles) {
         if (!reach.has(t.id) || t.type !== TileType.LAND) continue;
-        if (t.owner == null) { emptyLands += 1; continue; }
-        if (t.owner === player.id) continue;
+        if (t.owner == null) {
+          if (this._affordableMonsterCards(player, t).length > 0) summonableEmpty += 1;
+          else otherEmpty += 1;
+          continue;
+        }
+        // 育成余地は「自分の土地」だけ数える。土地コマンドは自分の所有地に
+        // しか使えないうえ、味方の土地まで加点すると仲間の島へ寄っていって
+        // しまい、「同盟で盤面を広く取る」という狙いが崩れる（空き地を
+        // 数える時に仲間の取り分を除いているのと同じ理由）。
         const owner = this.players.find((p) => p.id === t.owner);
-        if (!owner || this._isAllyOf(owner, player)) continue;
+        if (t.owner === player.id) {
+          if (t.level < LEVEL_CAP) ownUpgradable += 1;
+          continue;
+        }
+        if (owner && this._isAllyOf(owner, player)) continue;
+        enemyLands += 1;
         enemyToll += this._tollOfTile(t);
       }
+      // 空き地が枯れている島でだけ、自陣の育成余地を代わりの狙いとして見る。
+      // 空き地が残っている限りは土地を取る方が優先なので0にする（ここを
+      // 常時加点にすると「自分の土地が多い島」へ寄り続け、盤面を広げなくなる）。
+      const emptyTotal = summonableEmpty + otherEmpty;
+      const ownWeight = emptyTotal <= 1 ? 12 : 0;
 
-      // ③先に行かれた島は避ける。1周目は特に強く効かせる（開幕でわざわざ
+      // 先に行かれた島は避ける。1周目は特に強く効かせる（開幕でわざわざ
       // 相手と同じ島へ飛び込んでも、取れる土地を取り合うだけで得がない）。
-      const firstLap = (player.lapsCompleted || 0) === 0;
       let occupied = 0;
       for (const other of this.players) {
         if (other.id === player.id || other.defeated) continue;
@@ -3422,15 +3453,33 @@ export class Game {
         occupied += isAlly ? (firstLap ? 120 : 60) : (firstLap ? 400 : 150);
       }
 
+      // 降りた地点から次の目的地までの歩数（同じ島の入口どうしの並べ替え用）。
+      const aims = needed.length > 0
+        ? needed.filter((checkpoint) => reach.has(checkpoint.id))
+        : this.tiles.filter((t) => t.type === TileType.START && reach.has(t.id));
+      const approach = aims.length > 0
+        ? Math.min(...aims.map((a) => this._tileDistance(destination.id, a.id)))
+        : 0;
+
+      // 空き地の総数を主軸に置く（実績のある重み25）。そのうえで「今すぐ
+      // 置ける空き地」に上乗せし、敵地は枚数でも軽く嫌う。ここを主軸と
+      // 同じ大きさにすると、土地を広げるという一番効く判断を押しのけて
+      // しまい、実測で敵側の勝率が69%→61%まで落ちた。
       return (hasNeededCheckpoint ? 100000 : 0)
         + (needed.length === 0 && hasGoal ? 100000 : 0)
-        + emptyLands * 25
+        + emptyTotal * 25
+        + summonableEmpty * 6
+        + ownUpgradable * ownWeight
+        - enemyLands * 6
+        - enemyToll * 0.05
         - occupied
-        - enemyToll * 0.05;
+        - (Number.isFinite(approach) ? approach * 3 : 0);
     };
-    const recommended = choices.reduce((best, destination) => (
-      scoreOf(destination) > scoreOf(best) ? destination : best
-    ));
+    // scoreOfは盤面を全走査するので、reduceの比較のたびに再計算しない。
+    const ranked = choices
+      .map((destination) => ({ destination, score: scoreOf(destination) }))
+      .sort((a, b) => b.score - a.score);
+    const recommended = ranked[0].destination;
     if (player.isCPU) return recommended;
     const picked = await this.onPickAbilityTarget(
       choices.map((destination) => ({
