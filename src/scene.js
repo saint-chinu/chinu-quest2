@@ -32,7 +32,7 @@ const WARP_MARKERS = {
   return: { url: assetUrl('/images/board-markers/wa-pu2.png'), aspect: 1024 / 1536 },
   wormhole: { url: assetUrl('/images/board-markers/wormhole.png'), aspect: 1 },
   parallel: { url: assetUrl('/images/board-markers/parallel-world.png'), aspect: 1 },
-  choice: { url: assetUrl('/images/board-markers/choice-warp.png'), aspect: 2 / 3 },
+  choice: { url: assetUrl('/images/board-markers/choice-warp.png'), aspect: 1122 / 1402 },
 };
 const boardMarkerTextureLoader = new THREE.TextureLoader();
 const boardMarkerTextureCache = new Map();

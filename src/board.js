@@ -283,8 +283,9 @@ const KESSAN_ROWS = [
 
 /**
  * ⑬の島判定。上段は3列に分かれた周回島（gridXの帯で見分ける）、
- * gridZ 8以降がゴール島。ワープの飛び先候補（同じ島へは飛べない）と
- * CPの種別（周回島=2 / ゴール島=1）の両方をこの区分から決める。
+ * gridZ 8以降がゴール島。ワープの飛び先候補（ゴール島⇔CP島の往復だけ。
+ * CP島どうしの横移動は不可 - createBoard参照）とCPの種別
+ * （周回島=2 / ゴール島=1）の両方をこの区分から決める。
  */
 function kessanAreaOf(tile) {
   if (tile.gridZ >= 8) return 'goal';
@@ -332,14 +333,15 @@ export const MAPS = [
   { id: 'hitodemaso', name: '⑩ 成れの果て', rows: HITODEMASO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage10-trench-temple.png'), spacing: 2.8 },
   { id: 'mahjong-duo', name: '⑪ ふたりは○○', rows: MAHJONG_DUO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage11-mahjong.png'), spacing: 2.8 },
   { id: 'ofuda-field', name: '⑫ 海上金融街', rows: OFUDA_FIELD_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage12-financial-city.png'), spacing: 2.8 },
-  // wip: 制作中。対戦モードのマップ選択には出さない（PVP_MAPSで除外）。
+  // wip: ストーリーは仮公開したが、対戦モードのマップ選択にはまだ出さない
+  // （PVP_MAPSで除外）。story.js側のwipとは別物で、こちらはPvPの可否だけを決める。
   // ofuda: 全マスが無属性で始まる盤面なので、そのままだと「その属性の土地が
   // 0枚＝相場が立たない」で開幕から誰もお札を買えない。startPriceで最初から
   // 3G/枚（相場の下限そのもの）の市場を開き、initialCountには「1属性あたり何マスまで伸びうるか」の
   // 目安（土地56マス÷4属性＝14）を入れて価格の伸び方を⑫と同じ形に揃える
   // （実際の枚数0のままだと分母1になり、1マス塗っただけで12G、10マスで
   // 上限120Gに張り付いてしまう）。
-  { id: 'kessan', name: '⑬ 船上のロンド', wip: true, rows: KESSAN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, ofuda: { startPrice: 3, initialCount: 14 }, background: assetUrl('/images/stage/stage13-luxury-liner.png'), spacing: 2.8 },
+  { id: 'kessan', name: '⑬ 豪華客船（仮公開）', wip: true, rows: KESSAN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, ofuda: { startPrice: 3, initialCount: 14 }, background: assetUrl('/images/stage/stage13-luxury-liner.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {
