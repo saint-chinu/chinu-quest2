@@ -110,6 +110,14 @@ const OFUDA_MIN_PRICE = 3;
 // 相場を動かせる幅に上限を設ける。
 const OFUDA_TRADE_LOT = 5;
 const OFUDA_MAX_BUY_PER_TRADE = 30;
+// フィクサーが「まだ安い」と見なす相場の上限（startPriceの何倍まで）。
+// この範囲では札を現金の代わりとみなして全力で仕込む（_cpuMaybeTradeOfuda）。
+// 下限3G・上限120Gの⑬なら24Gまで＝相場全体の下から2割。実測（シード固定
+// 180戦・主人公側は最強デッキを手動操作）では、この窓を広げるほど敵側が
+// 強くなる: x2で67.2% / x4で69.4% / x8で70.0% / x16以上で71.1%。
+// x16以上は事実上「常に全力」で、相場が高い時の下振れを無視する形になる。
+// 伸びしろの大半を取りつつ「安いうちだけ」という判断の形は保つx8を採る。
+const OFUDA_FLOOR_BUY_MULTIPLIER = 8;
 // お札は値上がりしても売らない仕様（ユーザー指定、2026-08-22）。売るのは
 // 手持ちGがマイナスになった時の強制清算だけで、その時も「不足分＋この額」
 // までしか売らない。ちょうど0Gで止めると次の小さな支払いで即また売る
@@ -2535,8 +2543,19 @@ export class Game {
     const paintFund = Math.min(400, unpaintedOwn * Math.round(ELEMENT_CHANGE_COST_PER_LEVEL * NEUTRAL_ELEMENT_CHANGE_DISCOUNT));
     const fixerReserve = Math.max(boardReserve, Math.min(this._cpuMaxEnemyToll(player), scatters ? 900 : 1200))
       + (holdsFinisher ? 800 : 0) + (holdsOptimize ? 300 : 0) + paintFund;
+    // 相場が下限付近にある間、札は「値下がりしない資産」になる。下限3Gの
+    // 盤面では、そこで買った札は上限120Gまで伸びる余地がある一方で下がる
+    // 余地が無く、しかも手持ちGがマイナスになれば自動で売って支払いに充てられる
+    // （＝現金と同じ流動性がある）。この局面だけは現金で持つ理由がほぼ無いので、
+    // 軍資金は塗り替え代と最悪1回の通行料ぶんだけ残して突っ込む。
+    // 通常価格帯での買い方（0.65投入・厚めの軍資金）は従来どおり。
+    const ownFocus = this._ofudaOwnElementsOf(player)[0];
+    const focusPrice = ownFocus ? this._ofudaPrice(ownFocus) : 0;
+    const floorPrice = this.ofudaSettings?.startPrice || 0;
+    const atFloor = isFixer && floorPrice > 0 && focusPrice > 0 && focusPrice <= floorPrice * OFUDA_FLOOR_BUY_MULTIPLIER;
+    const floorReserve = paintFund + Math.min(this._cpuMaxEnemyToll(player), 300);
     const budget = isFixer
-      ? Math.floor(Math.max(0, player.currency - fixerReserve) * 0.65)
+      ? Math.floor(Math.max(0, player.currency - (atFloor ? floorReserve : fixerReserve)) * (atFloor ? 0.9 : 0.65))
       : Math.min(350, Math.max(0, player.currency - 200));
     if (budget <= 0) return;
 
