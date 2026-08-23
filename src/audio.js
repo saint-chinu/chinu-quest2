@@ -24,6 +24,7 @@ const TRACK_SRC = {
   hitodemaso: assetUrl('/audio/stage10bgm.mp3'), // ⑩成れの果て
   mahjongDuo: assetUrl('/audio/stage11bgm.mp3'), // ⑪ふたりは○○
   ofudaField: assetUrl('/audio/stage12bgm.mp3'), // ⑫海上金融街のフィクサー
+  kessan: assetUrl('/audio/stage13bgm.mp3'), // ⑬船上のロンド
 };
 
 // mapId(board.jsのMAPS)→専用トラック。無いキーはplayMapTheme側でboardに
@@ -41,8 +42,7 @@ const MAP_TRACK = {
   hitodemaso: 'hitodemaso',
   'mahjong-duo': 'mahjongDuo',
   'ofuda-field': 'ofudaField',
-  // ⑬はクエの逆襲＋Qの再登場なので⑫のテーマを流用する。
-  kessan: 'ofudaField',
+  kessan: 'kessan',
 };
 
 const VOLUME = 0.5;
