@@ -294,16 +294,16 @@ function kessanAreaOf(tile) {
 }
 
 const KESSAN_WARP_LABEL = {
-  island1: '第一の島',
-  island2: '第二の島',
-  island3: '第三の島',
+  island1: 'CP島①',
+  island2: 'CP島②',
+  island3: 'CP島③',
 };
 
 /** ゴール島には入口が3つあるので、どの枝に降りるかまで選べるようにする。 */
 const KESSAN_GOAL_WARP_LABEL = {
-  6: 'ゴール島・中央の枝',
-  4: 'ゴール島・左の枝',
-  8: 'ゴール島・右の枝',
+  6: 'ゴール島①',
+  4: 'ゴール島②',
+  8: 'ゴール島③',
 };
 
 // 対人戦のマップ選択・ストーリーモードの各ステージ盤面として使う一覧。
@@ -542,19 +542,22 @@ export function createBoard(mapId) {
   }
 
 
-  // ⑬の選択式ワープ(X): 「自分の島以外のワープ全部」を飛び先候補として持たせ、
+  // ⑬の選択式ワープ(X): ゴール島からはCP島①〜③だけ、CP島からは
+  // ゴール島①〜③だけを選択できる。CP島どうしの横移動は許可しない。
   // 実際にどこへ飛ぶかは停止したプレイヤー（CPUはAI）に選ばせる。
   // あわせてCPへ種別（周回島=2 / ゴール島=1）を焼き込む。
   if (map.id === 'kessan') {
     const warps = tiles.filter((t) => rows[t.gridZ][t.gridX] === 'X');
     for (const tile of warps) {
       const area = kessanAreaOf(tile);
-      tile.warpKind = area === 'goal' ? 'return' : 'entrance';
+      tile.warpKind = 'choice';
       tile.warpLabel = area === 'goal'
         ? (KESSAN_GOAL_WARP_LABEL[tile.gridX] || 'ゴール島')
         : KESSAN_WARP_LABEL[area];
       tile.warpChoices = warps
-        .filter((other) => kessanAreaOf(other) !== area)
+        .filter((other) => (area === 'goal'
+          ? kessanAreaOf(other) !== 'goal'
+          : kessanAreaOf(other) === 'goal'))
         .map((other) => other.id);
       // 単独の飛び先しか無い場合に備えて従来のwarpTargetIdも埋めておく。
       tile.warpTargetId = tile.warpChoices[0] ?? null;
