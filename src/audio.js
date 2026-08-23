@@ -24,6 +24,7 @@ const TRACK_SRC = {
   hitodemaso: assetUrl('/audio/stage10bgm.mp3'), // ⑩成れの果て
   mahjongDuo: assetUrl('/audio/stage11bgm.mp3'), // ⑪ふたりは○○
   ofudaField: assetUrl('/audio/stage12bgm.mp3'), // ⑫海上金融街のフィクサー
+  kessan: assetUrl('/audio/stage13bgm.mp3'), // ⑬船上のロンド
 };
 
 // mapId(board.jsのMAPS)→専用トラック。無いキーはplayMapTheme側でboardに
@@ -41,11 +42,21 @@ const MAP_TRACK = {
   hitodemaso: 'hitodemaso',
   'mahjong-duo': 'mahjongDuo',
   'ofuda-field': 'ofudaField',
-  // ⑬はクエの逆襲＋Qの再登場なので⑫のテーマを流用する。
-  kessan: 'ofudaField',
+  kessan: 'kessan',
 };
 
 const VOLUME = 0.5;
+
+// 曲ごとの音量補正。音源のマスタリング音圧はまちまちで、しかも各曲とも
+// ピークが0dBFSまで来ているため、ファイル側でゲインを足すとクリップする。
+// 再生側で補正すれば劣化なしに揃えられる（VOLUMEが0.5なので上げる余地がある）。
+// 値はライブラリ全体のRMS平均(約-18.5dBFS)に対する比。指定の無い曲は1.0。
+const TRACK_GAIN = {
+  kessan: 1.4, // ⑬船上のロンド: 素の音圧が-21.9dBFSと他より約3dB低い
+};
+function volumeFor(track) {
+  return Math.min(1, VOLUME * (TRACK_GAIN[track] || 1));
+}
 
 let muted = false;
 let currentTrack = null; // TRACK_SRCのキー | null
@@ -80,7 +91,7 @@ function getAudioEl(track) {
     const el = new Audio(TRACK_SRC[track]);
     el.loop = true;
     el.muted = muted;
-    el.volume = muted ? 0 : VOLUME;
+    el.volume = muted ? 0 : volumeFor(track);
     audioEls[track] = el;
   }
   return audioEls[track];
@@ -115,7 +126,7 @@ function unlockAudioElements() {
     el.pause();
     el.currentTime = 0;
     el.muted = muted;
-    el.volume = muted ? 0 : VOLUME;
+    el.volume = muted ? 0 : volumeFor(track);
   }
 }
 
@@ -125,9 +136,9 @@ window.addEventListener('keydown', unlockAudioElements, { once: true, capture: t
 
 export function setMuted(value) {
   muted = value;
-  for (const el of Object.values(audioEls)) {
+  for (const [track, el] of Object.entries(audioEls)) {
     el.muted = muted;
-    el.volume = muted ? 0 : VOLUME;
+    el.volume = muted ? 0 : volumeFor(track);
     if (muted) el.pause();
   }
   // 解除時だけ、盤面／戦闘で選択中だった曲をその位置から再開する。
@@ -167,7 +178,7 @@ function playTrack(track) {
   }
   const el = getAudioEl(track);
   el.muted = false;
-  el.volume = VOLUME;
+  el.volume = volumeFor(track);
   // 以前のplay()が自動再生制限などで失敗して停止中なら、同じテーマでも
   // 「切替済み」とみなして黙ってreturnせず再試行する。
   if (currentTrack === track) {
