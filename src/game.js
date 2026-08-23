@@ -105,11 +105,11 @@ const OFUDA_TRADE_UNIT_G = 150;
 // 死に市場」を防ぐ床（お札は紙くずにはならない）。
 const OFUDA_MAX_PRICE = 120;
 const OFUDA_MIN_PRICE = 3;
-// 売買は5枚単位。1回の購入は30枚（=6ロット）まで。さらに売買は1ターンに
+// 売買は5枚単位。1回の購入は50枚（=10ロット）まで。さらに売買は1ターンに
 // 1回だけ（_maybeTradeOfudaAtGoal）。逐次約定と組み合わせて、1回の取引で
 // 相場を動かせる幅に上限を設ける。
 const OFUDA_TRADE_LOT = 5;
-const OFUDA_MAX_BUY_PER_TRADE = 30;
+const OFUDA_MAX_BUY_PER_TRADE = 50;
 // フィクサーが「まだ安い」と見なす相場の上限（startPriceの何倍まで）。
 // この範囲では札を現金の代わりとみなして全力で仕込む（_cpuMaybeTradeOfuda）。
 // 下限3G・上限120Gの⑬なら24Gまで＝相場全体の下から2割。実測（シード固定

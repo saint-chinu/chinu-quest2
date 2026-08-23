@@ -779,10 +779,10 @@ function promptPickSellLandForDebt({ tiles, deficit }) {
   });
 }
 
-// お札は5枚単位で売買し、1回の購入は30枚まで（game.jsのOFUDA_TRADE_LOT /
+// お札は5枚単位で売買し、1回の購入は50枚まで（game.jsのOFUDA_TRADE_LOT /
 // OFUDA_MAX_BUY_PER_TRADEと対応。表示用にこちらでも持つ）。
 const OFUDA_TRADE_LOT = 5;
-const OFUDA_BUY_CHOICES = [5, 10, 30];
+const OFUDA_BUY_CHOICES = [5, 20, 50];
 
 function buildOfudaRows({ market = [], holdings = {}, currency = 0, interactive = false, resolve = null } = {}) {
   ofudaMarketChoices.replaceChildren();
@@ -795,7 +795,7 @@ function buildOfudaRows({ market = [], holdings = {}, currency = 0, interactive 
     info.innerHTML = `<strong>${entry.label}のお札</strong><span>${entry.price}G / 枚　所持${owned}枚</span>`;
     row.appendChild(info);
     if (interactive) {
-      // 売買は5枚単位、1回の購入は30枚まで。枚数を指定して買う形にして、
+      // 売買は5枚単位、1回の購入は50枚まで。枚数を指定して買う形にして、
       // 「何枚買えるのか・いくら掛かるのか」を押す前に分かるようにする
       // （相場が動くので表示額は概算＝押し上げ前の単価×枚数）。
       for (const sheets of OFUDA_BUY_CHOICES) {
@@ -837,7 +837,7 @@ function promptOfudaMarket(payload, forcedPlayerId = null) {
     function cancelSelf() { cleanup({ action: 'close' }); }
     ofudaMarketTitle.textContent = 'お札相場';
     ofudaMarketNote.textContent = interactive
-      ? `${payload.playerName}：所持${payload.currency}G。5枚単位で売買（1回の購入は30枚まで）、売買は1ターンに1回だけです。`
+      ? `${payload.playerName}：所持${payload.currency}G。5枚単位で売買（1回の購入は50枚まで）、売買は1ターンに1回だけです。`
       : '現在のお札相場です。売買はゴールとCPでできます。';
     buildOfudaRows({ ...payload, interactive, resolve: cleanup });
     ofudaMarketModal.classList.remove('hidden');
@@ -3549,7 +3549,7 @@ STARTマスを通過・着地すると「基本ボーナス＋領地ボーナス
 ・価格: その属性の土地の数と土地レベルで決まります。土地が育つほど値上がりします。開始時は全属性1枚12G、上限は120G（最大10倍）です
 ・売買による変動: 150Gぶん買うと1G上がり、同じ額を売ると1G下がります。価格は取引の最中にも動くため、大量に買うと後半の分は高くつき、大量に売ると後半の分は安くなります（買い占めで高値を作れますが、自分で売って往復しても儲かりません）
 ・価格は3G〜120Gの範囲で動きます。売られすぎても3Gを下回らないので、暴落した相場を安く仕込み直すこともできます
-・売買の単位: 売買は5枚単位です。1回の購入は30枚までで、5枚ぶんのGに足りない場合はその5枚は成立しません（Gは減りません）
+・売買の単位: 売買は5枚単位です。1回の購入は50枚までで、5枚ぶんのGに足りない場合はその5枚は成立しません（Gは減りません）
 ・売買の回数: 売買できるのは1ターンにつき1回だけです。同じターンにCPとゴールの両方を通っても、取引できるのは最初の1回です
 ・取引のタイミング: ゴール通過時と、チェックポイントをその周で初めて通過した時に相場画面が開き、購入・売却ができます（ゴールはCPが揃っていなくても開きます）。相場の確認だけなら盤面右の「相場」ボタンでいつでも行えます
 ・資産への反映: 保有しているお札は時価で総資産に加算され、周回ボーナスにも評価額の8%が上乗せされます
