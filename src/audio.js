@@ -2,7 +2,8 @@
 // だったが、ユーザー提供の実音源（MP3、public/audio/）に差し替えた。
 // 盤面BGMはマップごとに専用曲がある（playMapTheme(mapId)、無いマップは
 // 共通のboard-theme.mp3にフォールバック）。バトルシーン自体は全マップ
-// 共通のbattle-theme.mp3のまま（専用のマップ別戦闘曲は無いため）。
+// 共通の1曲（専用のマップ別戦闘曲は無いため）。戦闘は数秒〜十数秒で
+// 終わるので、頭から全開の短いループを使う。
 // ブラウザの自動再生ポリシー上、最初のユーザー操作（クリック等）が起きる
 // までplay()が失敗しうる - 失敗は無視する（次にテーマ切り替えが呼ばれた
 // 時に再度play()される想定なので、実害はゲーム開始後の最初の一瞬だけ）。
@@ -11,7 +12,7 @@ import { assetUrl } from './assetUrl.js';
 
 const TRACK_SRC = {
   board: assetUrl('/audio/board-theme.mp3'), // ①ヒトデの縄張り・専用曲の無いマップの既定
-  battle: assetUrl('/audio/battle-theme.mp3'),
+  battle: assetUrl('/audio/newbattle.mp3'), // 全マップ共通の戦闘シーン曲
   madai: assetUrl('/audio/stage2-theme.mp3'), // ②マダイの岩礁
   budou: assetUrl('/audio/stage3-theme.mp3'), // ③決闘の浜辺
   qTrain: assetUrl('/audio/stage4-theme.mp3'), // ④暴走列車Q号
