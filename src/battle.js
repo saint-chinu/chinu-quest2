@@ -231,7 +231,14 @@ function consumeDamageNegation(unit, log) {
   return message;
 }
 
-/** ライフジャケット: 通常攻撃だけでなく反射など、戦闘中の致死ダメージに共通適用する。 */
+/**
+ * ライフジャケット: 通常攻撃だけでなく反射など、戦闘中の致死ダメージに
+ * 共通適用する。ただし守るのは「一撃」だけで、1戦闘に1回きり(consumed)。
+ *  ・ツインハンマー(doubleStrike)の2発目は、1発目で使い切った後なので
+ *    そのまま通る（HP1で耐えた＝生存扱いなので2発目自体は必ず飛んでくる）。
+ *  ・毒tickはこの関数を通らないので、HP1で耐えた直後に毒で倒れる。
+ * どちらも仕様どおり（ユーザー指定、2026-08-23）。
+ */
 function consumeLethalSurvival(unit) {
   if (unit.currentHp > 0) return null;
   const item = unit.items.find((i) => i.effect?.type === 'surviveLethalDamage' && !i.consumed);

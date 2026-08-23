@@ -109,8 +109,8 @@ export const ITEM_CATALOG = {
   }),
   ikasamaNoSaikoro: item('ikasamaNoSaikoro', 'イカサマのサイコロ', Rarity.S, ItemType.WEAPON, 40, 0, 0, {
     traits: ['pierce'],
-    effect: { type: 'atkFromLastDiceRoll', multiplier: 11 },
-    effectDescription: 'ATK+前回移動したサイコロの目×11。貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）',
+    effect: { type: 'atkFromLastDiceRoll', multiplier: 5 },
+    effectDescription: 'ATK+前回移動したサイコロの目×5。貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）',
   }),
   twinHammer: item('twinHammer', 'ツインハンマー', Rarity.S, ItemType.WEAPON, 65, 10, 0, {
     effect: { type: 'doubleStrike' },
@@ -118,7 +118,7 @@ export const ITEM_CATALOG = {
   }),
   lifeJacket: item('lifeJacket', 'ライフジャケット', Rarity.S, ItemType.ARMOR, 35, 0, 0, {
     effect: { type: 'surviveLethalDamage' },
-    effectDescription: '致死ダメージを受けてもHPが1残る（1戦闘1回のみ）',
+    effectDescription: '一撃で受ける致死ダメージをHP1で耐える（1戦闘1回のみ）。ツインハンマーの2発目や毒のダメージは普通に受けるので、そのまま倒されることがある',
   }),
 
   kaenHoushakiki: item('kaenHoushakiki', '火炎放射器', Rarity.R, ItemType.WEAPON, 80, 20, 0, {
@@ -1247,7 +1247,7 @@ export const CHARACTER_DECKS = {
       items: [
         { def: ITEM_CATALOG.gomuGoNoPistol, count: 2 },  // 人食い草: 森が持つとATK+50
         { def: ITEM_CATALOG.nankaNoOmamori, count: 3 },
-        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 1 }, // ATK+直前の出目×11、貫通
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 1 }, // ATK+直前の出目×5、貫通
       ],
       spells: [
         // 財布チューチューは抜いた: ⑫の対人ではプレイヤーが現金をお札と
