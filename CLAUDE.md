@@ -11,6 +11,16 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
   （現在 `chinuquest2-v192`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
+## 未実装: Firebase App Check
+- Web版のFirebase App Check（reCAPTCHA Enterprise）は未設定。現在はSecurity Rulesと
+  Firebase Authenticationでアクセスを制御しているが、不正クライアントからの
+  Firestore/対戦ルームへの大量リクエストをApp Checkでは弾けない。
+- 導入時はreCAPTCHA EnterpriseのWebキーを発行し、Firebase Consoleの
+  Security > App CheckでWebアプリを登録する。GitHub ActionsのSecretへ
+  `VITE_FIREBASE_APPCHECK_SITE_KEY`として登録してからデプロイする。
+- 先にApp Checkのリクエスト指標を監視し、正規プレイヤーのトークン送信を確認してから
+  Firestore等のenforcementを有効化する。キー未設定のまま強制化してはいけない。
+
 ## ⚠️ 並行開発 (Codex) — 必ず守る
 別のエージェント Codex（git author「セイントチヌ」/「saint-chinu」, 同一ユーザー
 riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。壊さないこと:
