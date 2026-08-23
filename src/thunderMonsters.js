@@ -79,7 +79,7 @@ export const THUNDER_MONSTER_CATALOG = {
     effectDescription: '攻撃成功時、相手のATKを10下げる（永続）',
   }),
   ironWool: thunderMonster('ironWool', 'アイアンウール', Rarity.N, 30, 30),
-  tetsuo: thunderMonster('tetsuo', '鉄男', Rarity.N, 40, 20),
+  tetsuo: thunderMonster('tetsuo', '鉄男', Rarity.N, 40, 20, { cost: 30 }),
   nazoNoKagakusha: thunderMonster('nazoNoKagakusha', '謎の科学者', Rarity.N, 30, 30, {
     effect: { type: 'itemOnSummon' },
     effectDescription: '召喚時、アイテムカードを1枚入手する（全アイテムからランダム。N70%・S20%・R10%）',

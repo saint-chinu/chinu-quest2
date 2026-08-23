@@ -1352,14 +1352,15 @@ export const CHARACTER_DECKS = {
         // 「Sレアの属性が土地と食い違っている」＝最適化の発動条件になる。
         { def: MONSTER_CATALOG.koutetsuYousai, count: 4 },   // 40G 周回成長→3周目で強制停止
         { def: MONSTER_CATALOG.tenhou, count: 2 },           // 50G R 先制・与ダメ×5G強奪
-        { def: MONSTER_CATALOG.hatsudenNezumi, count: 2 },   // 50G 生き残ると残HP×2G
-        { def: MONSTER_CATALOG.erekiKagayaki, count: 2 },    // 30G S 先制
-        { def: MONSTER_CATALOG.kadenryuuCheetah, count: 1 }, // 60G S 先制
+        { def: MONSTER_CATALOG.tetsuo, count: 3 },            // 30G HP40の無条件壁
+        { def: MONSTER_CATALOG.erekiKagayaki, count: 1 },     // 30G S・先制は1枚だけ残す
+        { def: MONSTER_CATALOG.thunderbird, count: 1 },       // 空き地に雷雲を増やせる先制役
         { def: MONSTER_CATALOG.rakuraiYohoushi, count: 1 },  // 90G R 連鎖2 装備50%無効化
       ],
         items: [
           { def: ITEM_CATALOG.nankaNoOmamori, count: 2 },
           { def: ITEM_CATALOG.lifeJacket, count: 1 },
+          { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
       ],
       spells: [
         // 最適化(300G): 自分の土地を「置いてあるモンスターの属性」へ一斉に
@@ -1375,7 +1376,7 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.diceSix, count: 2 },
         // 引き当て。最適化と放電はどちらも撃てるかどうかで盤面が変わる。
         { def: SPELL_CATALOG.divination, count: 3 },
-        { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },
+        { def: SPELL_CATALOG.capitalismIncarnate, count: 1 },
           { def: SPELL_CATALOG.taxHike, count: 1 },
           { def: SPELL_CATALOG.sanctuary, count: 1 },
           { def: SPELL_CATALOG.phoenixCurse, count: 1 },
