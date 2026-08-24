@@ -1021,6 +1021,10 @@ export const STORY_STAGES = [
           // 1のダイスで主人公の足を止める。ほかのCPUを狙って同盟戦の駆け引きを
           // 崩さないよう、人間プレイヤーを優先する。
           diceHarassHuman: true,
+          // 聖域はアリジゴク対策として温存する。相手が関所（強制停止＋通行料）
+          // を張ってきたら聖域を上書きして通行料をゼロにし、関所を無力化する。
+          // 相手の山札・手札にアリジゴクが残っている間は自陣には使わない。
+          sanctuaryCounterForcedStop: true,
           neutralRepaintAfter: 8,
           counterOfudaBuy: { sheets: 20 },
           levelPumpSignal: {

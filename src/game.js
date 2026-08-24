@@ -7517,6 +7517,11 @@ export class Game {
       }
       return;
     }
+    // 関所つぶしの聖域は「相手が張ってきた時に打ち返す」対抗手段なので、
+    // ルーチンのスペル群より先に判定する。後ろに置くと、その手番に別の
+    // スペルを使ってしまって(spellUsedThisTurn)打ち返せないまま
+    // 通行料を払い続けることになる。
+    await this._cpuMaybeCounterForcedStopWithSanctuary(this.currentPlayer);
     await this._cpuMaybeUseCapitalismIncarnateSpell(this.currentPlayer);
     await this._cpuMaybeUseForcedAscensionSpell(this.currentPlayer);
     // ダンボール男は③手札の「未知との遭遇」を最優先で使う（無属性モンスター＝ギアを
@@ -7972,6 +7977,17 @@ export class Game {
     if (player.spellUsedThisTurn) return;
     const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'curseSanctuary');
     if (!card || player.currency < (card.cost || 0)) return;
+
+    // aiProfile.sanctuaryCounterForcedStop: 聖域をアリジゴク対策として使う。
+    // 聖域は対象を侵略不能にする代わりに通行料をゼロにする呪いで、対象は
+    // 自分の土地に限られない(target:'anyMonster')。相手が自分の土地へ
+    // アリジゴクを張って関所にしてきた場合、そこへ聖域を上書きすれば
+    // 「止まらされるが1Gも払わない」に変えられる＝関所そのものを無効化できる。
+    // 相手がまだアリジゴクを持っているなら、自分の土地には使わず温存する。
+    // 先に自陣へ使ってしまうと、関所を張られた時に打ち返す手段が無くなる。
+    if (player.aiProfile?.sanctuaryCounterForcedStop
+      && this._opponentHoldsSpellEffect(player, 'curseForcedStop')) return;
+
     const candidates = this.tiles
       .filter((t) => t.type === TileType.LAND && t.owner === player.id && t.unit && !t.transparentCursed)
       // アリジゴク済みの土地は除外（聖域は通行料ゼロ化なので、強制停止で
@@ -7981,6 +7997,42 @@ export class Game {
       .sort((a, b) => b.level - a.level || this._landValueOfTile(b) - this._landValueOfTile(a));
     if (candidates.length === 0) return;
     await this._cpuCastSpell(player, card, { targetTileId: candidates[0].id });
+  }
+
+  /**
+   * aiProfile.sanctuaryCounterForcedStop 用: 相手が張った関所（強制停止＋
+   * 通行料）へ聖域を上書きして無力化する。聖域は対象を侵略不能にする代わりに
+   * 通行料をゼロにする呪いで、対象は自分の土地に限られない(target:'anyMonster')
+   * ので、敵地に撃てば「止まらされるが1Gも払わない」に変えられる。
+   *
+   * ルーチンのスペル群より先に判定する。後ろに置くと、その手番に別のスペルを
+   * 使ってしまって(spellUsedThisTurn)打ち返せないまま通行料を払い続ける。
+   * こちらは対抗専用で、自陣を守る通常運用は_cpuMaybeUseSanctuarySpellのまま。
+   */
+  async _cpuMaybeCounterForcedStopWithSanctuary(player) {
+    if (player.spellUsedThisTurn || !player.aiProfile?.sanctuaryCounterForcedStop) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'curseSanctuary');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const gates = this.tiles
+      .filter((t) => t.type === TileType.LAND && t.unit && !t.transparentCursed
+        && this._isForcedStopFor(player, t) && this._tollOfTile(t) > 0)
+      .sort((a, b) => this._tollOfTile(b) - this._tollOfTile(a));
+    if (gates.length === 0) return;
+    this.onLog(`${player.name}は関所を無力化するため聖域を張った`);
+    await this._cpuCastSpell(player, card, { targetTileId: gates[0].id });
+  }
+
+  /**
+   * 相手（同盟外）の手札・山札に、この効果のスペルがまだ残っているか。
+   * 捨札は「もう使われた」ぶんなので数えない——温存の判断に必要なのは
+   * 「これから飛んでくるか」であって、過去に使われたかではない。
+   */
+  _opponentHoldsSpellEffect(player, effectType) {
+    return this.players.some((other) => {
+      if (other.id === player.id || other.defeated || this._isAllyOf(other, player)) return false;
+      const pool = [...(other.hand || []), ...(other.deck?.drawPile || [])];
+      return pool.some((c) => c.type === CardType.SPELL && c.effect?.type === effectType);
+    });
   }
 
   /**
