@@ -25,24 +25,21 @@ const forestMonster = (id, name, rarity, hp, atk, options = {}) => ({
 
 /** 森属性モンスター20種。画像未指定時はcardArt.jsの森属性共通画像を使う。 */
 export const FOREST_MONSTER_CATALOG = {
-  // 周回成長型の壁。森はHPの伸びが一番大きい。
-  // 3周目で「再生」を覚え、戦闘を生き延びるたびに自力で育ち続ける。
-  //   素 35/10 → 1周 50/10 → 2周 70/15 → 3周 再生
-  taijuNoToride: forestMonster('taijuNoToride', '大樹の砦', Rarity.S, 35, 10, {
+  // 周回成長型の壁。2周目に再生、3周目には味方の森属性全体を強化する繁栄を覚える。
+  //   素 HP55/ATK10 → 1周 65/15 → 2周 75/20＋再生 → 3周 繁栄
+  kyochinhei: forestMonster('kyochinhei', '巨珍兵', Rarity.S, 55, 10, {
     cost: 40,
-    // 制作中。パック・デッキ編集・図鑑には出さず、CPUのキャラ専用デッキでのみ使う。
-    wip: true,
     traits: ['immovableByMoveCommand', 'emptyTileOnly'],
     effect: {
       type: 'lapGrowth',
       steps: [
-        { hp: 15 },
-        { hp: 20, atk: 5 },
-        { trait: 'regenerate', label: '再生' },
+        { hp: 10, atk: 5 },
+        { hp: 10, atk: 5, trait: 'regenerate', label: '再生' },
+        { trait: 'forestProsperity', label: '繁栄' },
       ],
     },
-    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主の周回で成長する（1周目 HP50 → 2周目 HP70/ATK15 → 3周目「再生」を覚え、戦闘を生き延びるとHPとATKが伸びる）',
-    imageDataUrl: assetUrl('/images/card-art/forest.png'),
+    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主の周回で成長する（1周目 HP+10/ATK+5 → 2周目 HP+10/ATK+5・再生 → 3周目「繁栄」を覚え、味方の森属性モンスターは自身を含め戦闘中HP/ATK+20）',
+    imageDataUrl: assetUrl('/images/card-art/kyochinhei.png'),
   }),
   takenokoha: forestMonster('takenokoha', 'タケノコ派', Rarity.N, 30, 30, {
     effect: { type: 'synergyWithNamedAlly', allyCatalogId: 'kinokoha', hpBonus: 10 },

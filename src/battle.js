@@ -103,11 +103,15 @@ export function statTotals(unit, bonus = {}) {
   const curseAtk = unit.curses.reduce((sum, c) => sum + (c.addedAtk || 0), 0);
   const curseHp = unit.curses.reduce((sum, c) => sum + (c.addedHp || 0), 0);
   const override = unit.def.effect?.type === 'statOverrideInBattle' ? unit.def.effect : null;
-  const baseAtk = (override ? override.atk : unit.def.atk) + Number(unit.regenAtkBonus || 0);
+  const baseAtk = (override ? override.atk : unit.def.atk)
+    + Number(unit.regenAtkBonus || 0)
+    + Number(unit.lapGrowthAtkBonus || 0);
   // タフネスで空地へ召喚された個体のHP加算は、その盤面上の個体だけが持つ
   // 基礎HPとして扱う。カード定義やデッキへは書き戻さない。
   const summonBaseHpBonus = Number(unit.summonBaseHpBonus || 0);
-  const baseHp = (override ? override.hp : unit.def.hp) + summonBaseHpBonus;
+  const baseHp = (override ? override.hp : unit.def.hp)
+    + summonBaseHpBonus
+    + Number(unit.lapGrowthHpBonus || 0);
   // ダンボールの鎧(forceZeroAtk): 装備中はATKが常に0になる（他の加算要素も
   // 含め完全に上書き）。装備アイテムは常に最大1個なのでsome()で十分。
   const forcesZeroAtk = unit.items.some((i) => i.forceZeroAtk);
@@ -132,7 +136,9 @@ function getEffect(unit, type) {
  *  statOverrideInBattleだけは素のHP自体を固定値に差し替えるので考慮する。 */
 function baseMaxHp(unit) {
   const baseHp = unit.def.effect?.type === 'statOverrideInBattle' ? unit.def.effect.hp : unit.def.hp;
-  return baseHp + Number(unit.summonBaseHpBonus || 0);
+  return baseHp
+    + Number(unit.summonBaseHpBonus || 0)
+    + Number(unit.lapGrowthHpBonus || 0);
 }
 
 /**
@@ -292,6 +298,15 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus, gold) {
       endsBattle: true,
       moneyGuard: { unitName: defenderUnit.def.name, itemName: moneyGuard.name, amount: paid },
     };
+  }
+
+  // アイランドホエールの3周目覚醒「1/2無効化」。通常の無効化と違い、
+  // 貫通でも突破できない固有防御なのでpiercesの判定より先に処理する。
+  // 連続攻撃は1打ごとに抽選し、無効化した打撃の命中時効果も発動しない。
+  if (hasTrait(defenderUnit, 'unpierceableChanceNegate') && damage > 0 && Math.random() < 0.5) {
+    const message = `${defenderUnit.def.name}の1/2無効化が発動！ ダメージを完全に防いだ`;
+    log.push(message);
+    return { damage: 0, message };
   }
 
   // ナンカのお守り(negateNextDamage): このアイテムで1回だけダメージを完全無効化。
@@ -532,6 +547,9 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
 // 後攻のアイテムを装備しても後攻が黙って無視され、デメリットが無いまま
 // 先制し続けていた。加算方式にして、両方付いた時は素直に打ち消すようにした。
 export function strikeOrderScore(unit) {
+  // 溶岩竜の3周目覚醒。相手の先制や装備による後攻補正を比較せず、常に
+  // 通常の先制より上へ置く。両者が絶対先制なら従来どおり攻撃側を先にする。
+  if (hasTrait(unit, 'absoluteFirstStrike')) return 100;
   return (hasTrait(unit, 'firstStrike') ? 1 : 0) + (hasTrait(unit, 'lastStrike') ? -1 : 0);
 }
 

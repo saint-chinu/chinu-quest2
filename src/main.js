@@ -272,6 +272,7 @@ function renderTileInfo(tile) {
   const bonusParts = [];
   if (tile.unitElementHpBonus > 0) bonusParts.push(`土地HP+${tile.unitElementHpBonus}`);
   if (tile.unitCheerAtkBonus > 0) bonusParts.push(`応援ATK+${tile.unitCheerAtkBonus}`);
+  if (tile.unitProsperityBonus > 0) bonusParts.push(`繁栄ATK/HP+${tile.unitProsperityBonus}`);
   for (const curse of tile.unitCurses || []) {
     const statParts = [];
     if (curse.addedAtk) statParts.push(`ATK${curse.addedAtk > 0 ? '+' : ''}${curse.addedAtk}`);
@@ -3707,6 +3708,7 @@ function showLandInfoCamera() {
     const curseAtk = curses.reduce((sum, c) => sum + (c.addedAtk || 0), 0);
     let elementHpBonus = null;
     let cheerAtkBonus = null;
+    let prosperityBonus = null;
     if (unit) {
       const ignoresElement = unit.def?.effect?.type === 'elementHpBonusIgnoreElement'
         || unit.def?.traits?.includes('elementHpBonusIgnoreElement');
@@ -3724,6 +3726,16 @@ function showLandInfoCamera() {
         return other?.allianceId != null && other.allianceId === me.allianceId;
       });
       cheerAtkBonus = hasAlly ? 10 : 0;
+      const sameSide = (sourceOwnerId) => {
+        if (sourceOwnerId === tile.owner) return true;
+        const sourceOwner = playersById.get(sourceOwnerId);
+        return !!me && sourceOwner?.allianceId != null && sourceOwner.allianceId === me.allianceId;
+      };
+      prosperityBonus = unit.def?.element === Element.FOREST && tiles.some((sourceTile) => (
+        sourceTile.unit
+        && sameSide(sourceTile.owner)
+        && sourceTile.unit.def?.traits?.includes('forestProsperity')
+      )) ? 20 : 0;
     }
     return {
       id: tile.id,
@@ -3742,6 +3754,7 @@ function showLandInfoCamera() {
       unitHp: tile.unit?.currentHp ?? null,
       unitElementHpBonus: elementHpBonus,
       unitCheerAtkBonus: cheerAtkBonus,
+      unitProsperityBonus: prosperityBonus,
       unitCurses: curses,
       unitCard: tile.unit ? {
         catalogId: tile.unit.catalogId ?? tile.unit.def?.catalogId ?? null,

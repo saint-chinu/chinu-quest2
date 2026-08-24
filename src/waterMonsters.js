@@ -35,24 +35,21 @@ const waterMonster = (id, name, rarity, hp, atk, options = {}) => ({
  * テーマから参照されているので維持）。
  */
 export const WATER_MONSTER_CATALOG = {
-  // 周回成長型の壁。水は最も硬く、ATKはほとんど伸びない完全な壁。
-  // 3周目で「半分反射」を覚え、殴ってきた相手を削り返すようになる。
-  //   素 45/0 → 1周 60/0 → 2周 75/10 → 3周 半分反射
-  hyouketsuDock: waterMonster('hyouketsuDock', '氷結ドック', Rarity.S, 45, 0, {
-    cost: 45,
-    // 制作中。パック・デッキ編集・図鑑には出さず、CPUのキャラ専用デッキでのみ使う。
-    wip: true,
+  // 周回成長型の壁。2周目に先制、3周目に貫通でも抜けない確率無効化を覚える。
+  //   素 HP40/ATK25 → 1周 45/35 → 2周 55/40＋先制 → 3周 65/40＋1/2無効化
+  islandWhale: waterMonster('islandWhale', 'アイランドホエール', Rarity.S, 40, 25, {
+    cost: 40,
     traits: ['immovableByMoveCommand', 'emptyTileOnly'],
     effect: {
       type: 'lapGrowth',
       steps: [
-        { hp: 15 },
-        { hp: 15, atk: 10 },
-        { trait: 'reflectHalfDamage', label: '半分反射' },
+        { hp: 5, atk: 10 },
+        { hp: 10, atk: 5, trait: 'firstStrike', label: '先制' },
+        { hp: 10, trait: 'unpierceableChanceNegate', label: '1/2無効化' },
       ],
     },
-    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主の周回で成長する（1周目 HP60 → 2周目 HP75/ATK10 → 3周目「半分反射」を覚え、受けるダメージが半分になり減らした分を相手に返す）',
-    imageDataUrl: assetUrl('/images/card-art/water.png'),
+    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主の周回で成長する（1周目 HP+5/ATK+10 → 2周目 HP+10/ATK+5・先制 → 3周目 HP+10・攻撃を1/2の確率で完全無効化。この無効化は貫通でも突破できない）',
+    imageDataUrl: assetUrl('/images/card-art/islandWhale.png'),
   }),
   su: waterMonster('su', '酢', Rarity.EX, 60, 60, {
     cost: 300,

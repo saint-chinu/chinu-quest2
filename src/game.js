@@ -6185,7 +6185,7 @@ export class Game {
   /** Bundles both situational bonuses into the {atk,hp} shape resolveBattle expects, logging whichever actually apply. */
   _battleBonus(unit, positionTile, battleTile) {
     let hp = this._elementHpBonus(unit, positionTile);
-    const atk = this._cheerAtkBonus(unit, battleTile);
+    let atk = this._cheerAtkBonus(unit, battleTile);
     if (hp > 0) this.onLog(`${unit.def.name}は${ELEMENT_LABEL[positionTile.element]}の土地でHP+${hp}`);
     if (atk > 0) this.onLog(`${unit.def.name}は応援を受けてATK+10`);
     // 電柱（電柱を植える男の土地コマンド産）: 所有者を問わず、盤上のどこかに
@@ -6199,6 +6199,14 @@ export class Game {
       hp += 10;
       this.onLog(`${unit.def.name}は古代のギアCの応援でHP+10`);
     }
+    // 巨珍兵の3周目覚醒「繁栄」。巨珍兵自身を含む、設置者本人または
+    // 同盟仲間の森属性モンスターへ戦闘中ATK/HP+20。敵の巨珍兵からは受けない。
+    const prosperity = this._forestProsperityBonus(unit);
+    if (prosperity > 0) {
+      atk += prosperity;
+      hp += prosperity;
+      this.onLog(`${unit.def.name}は繁栄の恩恵でATK/HP+20`);
+    }
     return { atk, hp };
   }
 
@@ -6209,6 +6217,23 @@ export class Game {
 
   _hasFieldTraitOnBoard(trait) {
     return this.tiles.some((t) => this._unitHasTrait(t.unit, trait));
+  }
+
+  _hasAlliedFieldTrait(ownerId, trait) {
+    const owner = this.players.find((player) => player.id === ownerId);
+    if (!owner) return false;
+    return this.tiles.some((tile) => {
+      if (!this._unitHasTrait(tile.unit, trait)) return false;
+      const sourceOwner = this.players.find((player) => player.id === tile.unit.ownerId);
+      return !!sourceOwner && this._isAllyOf(sourceOwner, owner);
+    });
+  }
+
+  _forestProsperityBonus(unit) {
+    return unit?.def?.element === Element.FOREST
+      && this._hasAlliedFieldTrait(unit.ownerId, 'forestProsperity')
+      ? 20
+      : 0;
   }
 
   /**
@@ -6906,9 +6931,13 @@ export class Game {
     const defenderScore = strikeOrderScore(defenderUnit);
     const traitLabelsFor = (unit, myScore, theirScore) => {
       const labels = [];
-      if (hasTrait(unit, 'firstStrike') && myScore > theirScore) labels.push('先制：先に攻撃');
+      const absoluteFirst = hasTrait(unit, 'absoluteFirstStrike');
+      if (absoluteFirst && myScore >= theirScore) labels.push('絶対先制：相手の先制や装備にかかわらず先に攻撃');
+      if (!absoluteFirst && hasTrait(unit, 'firstStrike') && myScore > theirScore) labels.push('先制：先に攻撃');
       if (hasTrait(unit, 'lastStrike') && myScore < theirScore) labels.push('後攻：あとに攻撃');
       if (hasTrait(unit, 'pierce')) labels.push('貫通：HPの土地レベルボーナス、ダメージ無効化、反射を無視してダメージ。アイテムやカード能力によるHP増加は無視できない。');
+      if (hasTrait(unit, 'unpierceableChanceNegate')) labels.push('1/2無効化：50%で攻撃を完全無効化（貫通不可）');
+      if (hasTrait(unit, 'forestProsperity')) labels.push('繁栄：味方の森属性モンスターは戦闘中ATK/HP+20');
       return labels;
     };
     // 攻撃側の貫通で守備側の土地レベルHPボーナスが実際に無効化される場合、
@@ -7442,6 +7471,7 @@ export class Game {
       // battleTileになる（防衛時はこのマスで戦うため）。
       unitElementHpBonus: tile.unit ? this._elementHpBonus(tile.unit, tile) : null,
       unitCheerAtkBonus: tile.unit ? this._cheerAtkBonus(tile.unit, tile) : null,
+      unitProsperityBonus: tile.unit ? this._forestProsperityBonus(tile.unit) : null,
       // 呪い一覧（マ〇ジャロ等のstatCurse、毒・感電のようにaddedAtk/addedHpを
       // 持たないものも名前だけは分かるよう含める）。
       unitCurses: tile.unit
@@ -9232,12 +9262,14 @@ export class Game {
           toll: this._tollOfTile(t),
           chainCount: this._chainCount(t.owner, t.element),
           unit: t.unit
-            ? {
+            ? (() => {
+                const baseStats = this._baseStats(t.unit);
+                return {
                 catalogId: t.unit.def.catalogId ?? null,
                 name: t.unit.def.name,
-                atk: t.unit.def.atk,
-                maxHp: t.unit.def.hp ?? 0,
-                hp: t.unit.currentHp ?? t.unit.def.hp,
+                atk: baseStats.atk,
+                maxHp: baseStats.hp,
+                hp: t.unit.currentHp ?? baseStats.hp,
                 element: t.unit.def.element ?? null,
                 imageDataUrl: t.unit.def.imageDataUrl ?? null,
                 rarity: t.unit.def.rarity ?? null,
@@ -9250,7 +9282,8 @@ export class Game {
                 // 「基礎値への上乗せ」表示（elementHpBonus/cheerAtkBonus/curses）を
                 // Gameを持たずローカルで組み立てるため、名前と加算値だけ渡す。
                 curses: t.unit.curses.map((c) => ({ name: c.name, addedAtk: c.addedAtk || 0, addedHp: c.addedHp || 0 })),
-              }
+                };
+              })()
             : null,
         })),
       hands: Object.fromEntries(this.players.filter((p) => !p.isCPU).map((p) => [p.id, p.hand])),

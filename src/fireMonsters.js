@@ -25,24 +25,21 @@ const fireMonster = (id, name, rarity, hp, atk, options = {}) => ({
 
 /** 火属性モンスター20種。画像未指定時はcardArt.jsの火属性共通画像を使う（renderCardElがcard.imageDataUrlを優先するので、指定した分だけ自然に上書きされる）。 */
 export const FIRE_MONSTER_CATALOG = {
-  // 周回成長型の壁。火は攻撃寄りで、ATKが一番よく伸びる。
-  // 3周目で「不死鳥」を覚え、致死ダメージを一度だけHP1で耐える。
-  //   素 30/15 → 1周 40/20 → 2周 50/35 → 3周 不死鳥
-  youkouro: fireMonster('youkouro', '溶鉱炉', Rarity.S, 30, 15, {
+  // 周回成長型の壁。火は攻撃寄りで、3周目には相手の先制や装備を無視して先に攻撃する。
+  //   素 HP35/ATK30 → 1周 35/40＋先制 → 2周 40/50 → 3周 40/60＋絶対先制
+  lavaDragon: fireMonster('lavaDragon', '溶岩竜', Rarity.S, 35, 30, {
     cost: 40,
-    // 制作中。パック・デッキ編集・図鑑には出さず、CPUのキャラ専用デッキでのみ使う。
-    wip: true,
     traits: ['immovableByMoveCommand', 'emptyTileOnly'],
     effect: {
       type: 'lapGrowth',
       steps: [
-        { hp: 10, atk: 5 },
-        { hp: 10, atk: 15 },
-        { trait: 'phoenix', label: '不死鳥' },
+        { atk: 10, trait: 'firstStrike', label: '先制' },
+        { hp: 5, atk: 10 },
+        { atk: 10, trait: 'absoluteFirstStrike', label: '絶対先制' },
       ],
     },
-    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主の周回で成長する（1周目 HP40/ATK20 → 2周目 HP50/ATK35 → 3周目「不死鳥」を覚え、致死ダメージを一度だけHP1で耐える）',
-    imageDataUrl: assetUrl('/images/card-art/fire.png'),
+    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主の周回で成長する（1周目 ATK+10・先制 → 2周目 HP+5/ATK+10 → 3周目 ATK+10・絶対先制。相手の先制や装備にかかわらず先に攻撃する）',
+    imageDataUrl: assetUrl('/images/card-art/lavaDragon.png'),
   }),
   salarymander: fireMonster('salarymander', 'サラリーマンダー', Rarity.N, 30, 30, {
     effect: { type: 'survivalGold', multiplier: 2 },
