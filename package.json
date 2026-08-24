@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:rules": "firebase emulators:exec --only firestore --project demo-chinuquest2 \"node --test tests/firestore.rules.test.mjs\"",
-    "lint": "eslint src public"
+    "lint": "eslint src public",
+    "test:cards": "node --test tests/newCards.test.mjs"
   },
   "dependencies": {
     "firebase": "^12.17.1",

@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v207`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v208`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## 未実装: Firebase App Check
@@ -212,6 +212,53 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 - **ステージ7の左右固定ワープ**: マップ記号`I/J`(卍側=entrance)と`K/L`(下段直線側=return)。
   I↔K・J↔Lで左右を保ったまま相互転移。`createBoard`末尾でリンク付け。
 - 新モンスター効果(Codex): `selfDamageRatioAfterAttack`(反動), `chanceDestroyItemBeforeAttack`(予報でアイテム無効化)等。
+
+## 新カード（2026-08、スペル4／アイテム3）
+専用イラストは未用意なので7枚とも`imageDataUrl: null`＝cardArt.jsの共通絵。
+**`item()`/`spell()`のoptions経由で`imageDataUrl: null`を渡しても効かない**
+（`options.imageDataUrl ?? assetUrl(...)`のnullish合体でURL側に落ちる）。
+`{ ...item(...), imageDataUrl: null }`のスプレッド上書きで書くこと。
+回帰テストは`npm run test:cards`（`tests/newCards.test.mjs`）。
+
+- **鋼体** Nスペル50G `boostBaseHp` target=anyMonster: 対象の配置モンスターの
+  基礎HP+15（現在HPも+15）。呪い枠（1体1つ・上書きで消える）ではなく
+  タフネスと同じ`unit.summonBaseHpBonus`へ加算するので、別の呪いを重ねても
+  消えず、戦闘時の最大HPにもそのまま乗る。
+- **パンデミック** Sスペル100G `replaceAllUnitsWithZombie` target=none: 盤面の
+  配置モンスターを全部ゾンビ(20/20)へ差し替える。土地の所有者・レベル・属性は
+  動かない＝地価も連鎖もお札の相場も変わらない。**死亡ではなく置換**なので
+  `_handleUnitDeath`は通さない（不死鳥の手札戻り／ゾンビ再出現／ネクロマンサーの
+  蘇生元には数えない）。既にゾンビの個体は作り直さない。
+- **ホライズン** Rスペル200G `setAllLandLevels` target=none: 所有されている土地を
+  一律Lv2へ。上がる側も下がる側もあるので、総資産の変動額を
+  `onTargetEffect({playerId, message})`で各プレイヤーの駒へズームして出す
+  （`playerId`指定はその駒のマスへ寄る＝「頭上」表示）。お札の相場も属性ごとに提示。
+- **遅延行為** Sスペル100G `lowerTileLevel` target=anyTile: 対象の土地レベルを1下げる。
+  下げた分の`LEVEL_INVESTMENT`は所有者に返らない。Lv1には無効。
+- **ロシアンルーレット** Sアイテム50G `russianRoulette`: どちらかが装備していると
+  `resolveBattle`が通常の殴り合いを丸ごとスキップし、攻撃側→守備側の順にd6を振って
+  出目の大きい方が勝つ。負けた側は即死。**ATK/HP・土地ボーナス・先制/後攻・
+  ライフジャケット等はすべて無視**（`prepareForBattle`より前で分岐する）。同じ出目は
+  両者死亡＝土地が無人になり、`_settleLandingToll`の「払う相手がもういない」経路で
+  通行料も発生しない。`_runBattleScene`は`result.russianRoulette`を見て特性・倍率の
+  表示ごと飛ばす（効かない特性を見せない）。
+- **ダイヤモンドの盾** Sアイテム55G ARMOR ATK-20/HP+60/`lastStrike`: 後攻は
+  「守備側が装備しても普段どおり相手が先に殴る」＝守備では実質デメリットなし、
+  侵略に持ち出すと本当に先攻を譲る、という使い分けのアイテム。コストは指定が
+  無かったため55G（S帯の45〜65Gの中央）で置いた。
+- **札束ガード** Rアイテム60G `payDamageToEndBattle` multiplier=3: 受けるはずだった
+  ダメージ×3Gを攻撃側へ払い、ノーダメージのまま**戦闘そのものを打ち切る**
+  （`dealDamage`が`endsBattle`を返し、resolveBattleの両ループが`break`）。土地は
+  取られないが侵略も止まるだけなので**通行料は通常どおり**発生する。
+  「無効化」ではなく「支払い」なので**貫通では抜けない**（ナンカのお守り・反射より
+  前に判定する）。真剣白刃取りで奪われるとアイテムごと相手へ移るので、判定も
+  自動的に奪った側にかかる＝元の持ち主が受け取る側に回る。
+- CPUの使用判断も同時に実装済み（`_cpuMaybeUseToughBodySpell` /
+  `_cpuMaybeUseDelayTacticsSpell` / `_cpuMaybeUsePandemicSpell` /
+  `_cpuMaybeUseHorizonSpell`）。遅延行為とホライズンは**実際に盤面を書き換えて
+  地価・総資産を測り、必ず元へ戻してから**判断する。アイテム3種はCPU側の追加実装
+  不要——`_chooseBattleItemByOutcome`が候補を実戦闘でシミュレートして選ぶため、
+  ルーレットも札束ガードも勝敗への寄与で自動的に評価される。
 
 ## ストーリー⑦「支配の終焉」(final-alliance)
 - **2vs2同盟戦**。紅組=主人公＋**朕**(味方CPU, deckKey `chin`)、白組=「彼」＋段ボール男。
@@ -432,4 +479,7 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   `.mjs`は**プロジェクト直下**に置いて`node`実行（`node_modules`のvite解決のため）。
   `Object.create(Game.prototype)`＋必要メソッドbind＋callbackモックで部分テスト可。
   フルGameは`requestAnimationFrame`/`performance`のNodeポリフィルが必要。
+- **`npm run test:cards`**（`tests/newCards.test.mjs`）: 新カード7枚の回帰テスト。
+  上のSSRローダ＋`Object.create(Game.prototype)`の実例でもある。カード効果を
+  触った時はこれを回す。
 - でかいツール結果(actions_list等)はファイル保存→`python3`でパース。

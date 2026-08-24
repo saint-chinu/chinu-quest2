@@ -255,7 +255,7 @@ function consumeLethalSurvival(unit) {
   return source;
 }
 
-function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
+function dealDamage(attackerUnit, defenderUnit, log, attackerBonus, gold) {
   const atkStats = statTotals(attackerUnit, attackerBonus);
   const reduction = damageReductionMultiplier(defenderUnit, attackerUnit);
   const multiplier = incomingDamageMultiplier(defenderUnit, attackerUnit) * reduction.multiplier;
@@ -272,6 +272,27 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus) {
   // 全て無視して素通りする。同属性ボーナス（土地レベルのHP加算）を無視する
   // 側の処理はgame.js側で別途行う（_runBattleScene参照）。
   const pierces = hasTrait(attackerUnit, 'pierce');
+
+  // 札束ガード(payDamageToEndBattle): 受けるはずだったダメージ×倍率のGを
+  // 攻撃側へ払い、自分はノーダメージのまま戦闘そのものを打ち切る（endsBattle）。
+  // 「無効化」ではなく「支払い」なので貫通では抜けられない — ナンカのお守りや
+  // 反射より前に判定するのはそのため。1戦闘1回だけ（consumedを立てる）。
+  // 真剣白刃取りで奪われた場合はアイテムごと相手へ移るので、この判定も
+  // 自動的に奪った側にかかる＝奪われた側が支払いを受け取る形になる。
+  const moneyGuard = defenderUnit.items.find((i) => i.effect?.type === 'payDamageToEndBattle' && !i.consumed);
+  if (moneyGuard && damage > 0) {
+    moneyGuard.consumed = true;
+    const paid = damage * (moneyGuard.effect.multiplier || 1);
+    gold?.transfer(defenderUnit.ownerId, attackerUnit.ownerId, paid);
+    const message = `${defenderUnit.def.name}は「${moneyGuard.name}」で${paid}Gを払い、戦闘を打ち切った`;
+    log.push(message);
+    return {
+      damage: 0,
+      message,
+      endsBattle: true,
+      moneyGuard: { unitName: defenderUnit.def.name, itemName: moneyGuard.name, amount: paid },
+    };
+  }
 
   // ナンカのお守り(negateNextDamage): このアイテムで1回だけダメージを完全無効化。
   if (!pierces && damage > 0) {
@@ -391,7 +412,11 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
     return { damage: 0, message };
   }
 
-  const result = dealDamage(attackerUnit, defenderUnit, log, bonus);
+  const result = dealDamage(attackerUnit, defenderUnit, log, bonus, gold);
+
+  // 札束ガードで戦闘そのものが打ち切られた場合は、この一撃に紐づく後処理
+  // （強奪・命中時効果・攻撃後の自傷）を一切走らせずに抜ける。
+  if (result.endsBattle) return result;
 
   // 与ダメージ比例の強奪（テンホウ／目出し帽）は、相手を倒した一撃でも成立
   // させる。毒や目くらましと違って相手の生存を前提にした状態異常ではなく、
@@ -608,6 +633,72 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   preAttackEffectCache.delete(attacker);
   const { log, itemSteals, itemDestructions } = resolvedPreAttackEffects;
 
+  // ロシアンルーレット: どちらかが装備していたら通常の殴り合いを一切行わず、
+  // 攻撃側→守備側の順にサイコロを振り、出目の大きい方が勝つ。ATK/HP・土地
+  // ボーナス・先制/後攻・ライフジャケット等の戦闘中効果はすべて無視され、
+  // 負けた側は即死する。同じ出目なら両者死亡＝呼び出し側で土地が無人になり、
+  // 「払う相手がもういない」ため通行料も発生しない（_settleLandingToll参照）。
+  // 真剣白刃取りより後に判定するので、奪われたルーレットもそのまま機能する。
+  const rouletteEquipped = attacker.items.some((i) => i.effect?.type === 'russianRoulette')
+    || defender.items.some((i) => i.effect?.type === 'russianRoulette');
+  if (rouletteEquipped) {
+    const rollDie = () => 1 + Math.floor(Math.random() * 6);
+    const attackerRoll = rollDie();
+    const defenderRoll = rollDie();
+    const rouletteLabel = `ロシアンルーレット！ ${attacker.def.name}の出目${attackerRoll} vs ${defender.def.name}の出目${defenderRoll}`;
+    log.push(rouletteLabel);
+    // 演出用のダメージ数値は「HPを全部持っていかれた」ことを示すための値で、
+    // 実際の勝敗は出目だけで決まっている。
+    const attackerHpBefore = Math.max(1, attacker.currentHp);
+    const defenderHpBefore = Math.max(1, defender.currentHp);
+    const attackerWins = attackerRoll >= defenderRoll;
+    const defenderWins = defenderRoll >= attackerRoll;
+    const rouletteExchanges = [];
+    if (attackerWins) {
+      defender.currentHp = 0;
+      rouletteExchanges.push({
+        side: 'attacker',
+        message: `${defender.def.name}はルーレットに負けて倒れた`,
+        damage: defenderHpBefore,
+        element: attacker.def.element,
+        targetHp: 0,
+        targetDied: true,
+        special: [rouletteLabel],
+      });
+    }
+    if (defenderWins) {
+      attacker.currentHp = 0;
+      rouletteExchanges.push({
+        side: 'defender',
+        message: `${attacker.def.name}はルーレットに負けて倒れた`,
+        damage: attackerHpBefore,
+        element: defender.def.element,
+        targetHp: 0,
+        targetDied: true,
+        special: rouletteExchanges.length === 0 ? [rouletteLabel] : ['同じ出目！ 両者とも倒れた'],
+      });
+    }
+    if (attackerWins && defenderWins) log.push('同じ出目のため両者とも倒れた');
+    attacker.items = [];
+    defender.items = [];
+    if (attacker.currentHp <= 0) attacker.curses = [];
+    if (defender.currentHp <= 0) defender.curses = [];
+    return {
+      log,
+      dmgToAttacker: defenderWins ? attackerHpBefore : 0,
+      dmgToDefender: attackerWins ? defenderHpBefore : 0,
+      attackerSurvived: attacker.currentHp > 0,
+      defenderSurvived: defender.currentHp > 0,
+      exchanges: rouletteExchanges,
+      itemSteals,
+      itemDestructions,
+      robberEffects: [],
+      stealEffects: [],
+      moneyGuardEffects: [],
+      russianRoulette: { attackerRoll, defenderRoll },
+    };
+  }
+
   prepareForBattle(attacker, attackerBonus);
   prepareForBattle(defender, defenderBonus);
   log.push(
@@ -649,6 +740,10 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   // 与ダメージ比例の強奪が発動した回数分を積む（強盗と同じく、攻撃再生の
   // 直後に1件ずつ大きく見せる）。2回攻撃なら2件並ぶ。
   const stealEffects = [];
+  // 札束ガードが発動した一撃を記録する。発動した時点で戦闘は打ち切りなので、
+  // 以降の攻撃（2発目・反撃）は行わない。
+  const moneyGuardEffects = [];
+  let battleEnded = false;
   let firstTargetSurvived = true;
   for (let i = 0; i < strikeCount(first.unit) && firstTargetSurvived && first.unit.currentHp > 0; i++) {
     const beforeLen = log.length;
@@ -660,6 +755,11 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     if (i === 0 && orderSpecial) special.unshift(orderSpecial);
     if (strike.stolenGold > 0) {
       stealEffects.push({ side: first.side, unitName: first.unit.def.name, amount: strike.stolenGold });
+    }
+    if (strike.endsBattle) {
+      battleEnded = true;
+      // 札束ガードを持っているのは「殴られた側」＝この一撃の標的。
+      moneyGuardEffects.push({ side: first.side === 'attacker' ? 'defender' : 'attacker', ...strike.moneyGuard });
     }
     exchanges.push({
       side: first.side,
@@ -702,9 +802,10 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
         reflected: true,
       });
     }
+    if (battleEnded) break;
   }
 
-  if (firstTargetSurvived && first.unit.currentHp > 0) {
+  if (!battleEnded && firstTargetSurvived && first.unit.currentHp > 0) {
     let secondTargetSurvived = true;
     for (let i = 0; i < strikeCount(second.unit) && secondTargetSurvived && second.unit.currentHp > 0; i++) {
       const beforeLen = log.length;
@@ -715,6 +816,10 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
       const special = log.slice(beforeLen).filter((line) => line !== strike.message && line !== strike.retaliationMessage);
       if (strike.stolenGold > 0) {
         stealEffects.push({ side: second.side, unitName: second.unit.def.name, amount: strike.stolenGold });
+      }
+      if (strike.endsBattle) {
+        battleEnded = true;
+        moneyGuardEffects.push({ side: second.side === 'attacker' ? 'defender' : 'attacker', ...strike.moneyGuard });
       }
       exchanges.push({
         side: second.side,
@@ -756,6 +861,7 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
           reflected: true,
         });
       }
+      if (battleEnded) break;
     }
   }
 
@@ -892,5 +998,5 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   if (finalAttackerSurvived) attacker.currentHp = restoreOnBoardHp(attacker);
   if (finalDefenderSurvived) defender.currentHp = restoreOnBoardHp(defender);
 
-  return { log, dmgToAttacker, dmgToDefender, attackerSurvived: finalAttackerSurvived, defenderSurvived: finalDefenderSurvived, exchanges, itemSteals, itemDestructions, robberEffects, stealEffects };
+  return { log, dmgToAttacker, dmgToDefender, attackerSurvived: finalAttackerSurvived, defenderSurvived: finalDefenderSurvived, exchanges, itemSteals, itemDestructions, robberEffects, stealEffects, moneyGuardEffects };
 }

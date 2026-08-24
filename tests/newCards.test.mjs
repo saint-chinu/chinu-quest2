@@ -1,0 +1,314 @@
+// 新規カード（スペル4種・アイテム3種）の回帰テスト。
+// game.js は scene.js 経由で three を読むので、直接importせずViteのSSR
+// ローダを通す（CLAUDE.md「テスト（ヘッドレス）」参照）。Gameは
+// Object.create(Game.prototype) の部分インスタンスにモックを載せて叩く。
+//   npm run test:cards
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { createServer } from 'vite';
+
+const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' });
+const { ITEM_CATALOG, SPELL_CATALOG, MONSTER_CATALOG } = await vite.ssrLoadModule('/src/battleCards.js');
+const { Game } = await vite.ssrLoadModule('/src/game.js');
+const battle = await vite.ssrLoadModule('/src/battle.js');
+const { TileType } = await vite.ssrLoadModule('/src/board.js');
+test.after(() => vite.close());
+
+const mon = (name, hp, atk, extra = {}) => ({ id: name, name, element: 'fire', rarity: 'N', hp, atk, ...extra });
+const unit = (def, ownerId) => battle.createFieldUnit(def, ownerId);
+const makeTile = (id, over = {}) => ({
+  id, type: TileType.LAND, element: 'fire', level: 1, price: 100, owner: null, unit: null,
+  neighbors: [], position: { x: id, z: 0 }, ...over,
+});
+
+/** 盤面と参加者だけを載せた部分Game。お札市場は閉じておく（相場演出を挟まない）。 */
+function makeStub(tiles, players) {
+  const g = Object.create(Game.prototype);
+  const logs = [];
+  const effects = [];
+  Object.assign(g, {
+    tiles,
+    players,
+    hasOfuda: false,
+    ofudaSettings: null,
+    ofudaPressure: {},
+    ofudaInitialCounts: {},
+    scene: {},
+    logs,
+    effects,
+    onLog: (m) => logs.push(m),
+    _notifyState: () => {},
+    onTargetEffect: async (p) => { effects.push(p); },
+  });
+  return g;
+}
+
+/** CPUの使用判断だけを見たいので、実際の詠唱は記録に差し替える。 */
+function makeCpuStub(tiles, players) {
+  const g = makeStub(tiles, players);
+  const casts = [];
+  Object.assign(g, {
+    casts,
+    _cpuCastSpell: async (player, card, cast) => {
+      casts.push({ name: card.name, cast });
+      player.spellUsedThisTurn = true;
+    },
+  });
+  return g;
+}
+const spellCopy = (def) => ({ ...def, catalogId: def.id, id: `${def.id}-hand` });
+
+test('新カードはカタログに載り、専用イラストが無いのでプレースホルダーへ落ちる', () => {
+  for (const id of ['russianRoulette', 'diamondShield', 'satsutabaGuard']) {
+    assert.ok(ITEM_CATALOG[id], `${id} が ITEM_CATALOG にない`);
+    // item()の既定は /images/card-art/<id>.jpg。実ファイルが無いと404で
+    // 盤面が固まるため、必ずnullにしてcardArt.jsの共通絵へ落とす。
+    assert.equal(ITEM_CATALOG[id].imageDataUrl, null, `${id} の画像がプレースホルダーでない`);
+  }
+  for (const id of ['kotai', 'pandemic', 'horizon', 'delayTactics']) {
+    assert.ok(SPELL_CATALOG[id], `${id} が SPELL_CATALOG にない`);
+    assert.equal(SPELL_CATALOG[id].imageDataUrl, null, `${id} の画像がプレースホルダーでない`);
+  }
+  assert.equal(ITEM_CATALOG.diamondShield.atkBonus, -20);
+  assert.equal(ITEM_CATALOG.diamondShield.hpBonus, 60);
+  assert.ok(ITEM_CATALOG.diamondShield.traits.includes('lastStrike'));
+});
+
+test('ロシアンルーレットはステータスを無視して出目だけで決まる', () => {
+  let attackerWins = 0;
+  let defenderWins = 0;
+  let mutual = 0;
+  for (let i = 0; i < 4000; i++) {
+    const a = unit(mon('弱者', 10, 10), 'A');
+    const d = unit(mon('強者', 100, 100), 'D');
+    battle.equipItem(a, ITEM_CATALOG.russianRoulette);
+    const r = battle.resolveBattle(a, d, new battle.GoldLedger());
+    assert.ok(!(r.attackerSurvived && r.defenderSurvived), '両者生存はありえない');
+    if (r.attackerSurvived) attackerWins += 1;
+    else if (r.defenderSurvived) defenderWins += 1;
+    else mutual += 1;
+  }
+  const total = attackerWins + defenderWins + mutual;
+  // 出目勝負なので 15/36 : 15/36 : 6/36。ステータス差は一切効かない。
+  assert.ok(attackerWins / total > 0.35 && attackerWins / total < 0.45, `攻撃側勝率 ${attackerWins / total}`);
+  assert.ok(defenderWins / total > 0.35 && defenderWins / total < 0.45, `守備側勝率 ${defenderWins / total}`);
+  assert.ok(mutual / total > 0.13 && mutual / total < 0.20, `相打ち率 ${mutual / total}`);
+});
+
+test('ロシアンルーレットの敗北はライフジャケットでも耐えられない', () => {
+  let survived = 0;
+  for (let i = 0; i < 2000; i++) {
+    const a = unit(mon('攻', 100, 100), 'A');
+    const d = unit(mon('守', 10, 10), 'D');
+    battle.equipItem(d, ITEM_CATALOG.russianRoulette);
+    battle.equipItem(d, ITEM_CATALOG.lifeJacket);
+    const r = battle.resolveBattle(a, d, new battle.GoldLedger());
+    if (r.attackerSurvived && r.defenderSurvived) survived += 1;
+  }
+  assert.equal(survived, 0);
+});
+
+test('札束ガードはダメージ×3Gを払って戦闘を打ち切る', () => {
+  const a = unit(mon('攻', 100, 40), 'A');
+  const d = unit(mon('守', 50, 30), 'D');
+  battle.equipItem(d, ITEM_CATALOG.satsutabaGuard);
+  const gold = new battle.GoldLedger({ A: 0, D: 1000 });
+  const r = battle.resolveBattle(a, d, gold);
+  assert.ok(r.attackerSurvived && r.defenderSurvived, '両者生存で終わるはず');
+  assert.equal(r.dmgToDefender, 0, '守備側はノーダメージ');
+  assert.equal(r.dmgToAttacker, 0, '打ち切りなので反撃も起きない');
+  assert.deepEqual(gold.balances, { A: 120, D: 880 });
+  assert.equal(r.moneyGuardEffects[0].side, 'defender');
+  assert.equal(r.moneyGuardEffects[0].amount, 120);
+});
+
+test('札束ガードは「無効化」ではなく「支払い」なので貫通で抜けない', () => {
+  const a = unit(mon('攻', 100, 40, { traits: ['pierce'] }), 'A');
+  const d = unit(mon('守', 50, 30), 'D');
+  battle.equipItem(d, ITEM_CATALOG.satsutabaGuard);
+  const gold = new battle.GoldLedger({ A: 0, D: 1000 });
+  const r = battle.resolveBattle(a, d, gold);
+  assert.ok(r.defenderSurvived);
+  assert.equal(gold.balances.A, 120);
+});
+
+test('札束ガードを真剣白刃取りで奪うと、奪った側が支払う', () => {
+  const a = unit(mon('泥棒', 100, 40), 'A');
+  const d = unit(mon('守', 100, 30), 'D');
+  battle.equipItem(a, ITEM_CATALOG.shinkenShirahadori);
+  battle.equipItem(d, ITEM_CATALOG.satsutabaGuard);
+  const gold = new battle.GoldLedger({ A: 1000, D: 0 });
+  const r = battle.resolveBattle(a, d, gold);
+  // 奪った側が殴られる番になって初めて発動する＝元の持ち主がATK30×3を受け取る。
+  assert.deepEqual(gold.balances, { A: 910, D: 90 });
+  assert.equal(r.moneyGuardEffects[0].side, 'attacker');
+});
+
+test('札束ガードはツインハンマーの2発目を止める', () => {
+  const a = unit(mon('攻', 100, 40), 'A');
+  const d = unit(mon('守', 200, 10), 'D');
+  battle.equipItem(a, ITEM_CATALOG.twinHammer);
+  battle.equipItem(d, ITEM_CATALOG.satsutabaGuard);
+  const gold = new battle.GoldLedger({ A: 0, D: 1000 });
+  battle.resolveBattle(a, d, gold);
+  assert.equal(1000 - gold.balances.D, (40 + 10) * 3, '1発ぶんしか支払わない');
+});
+
+test('鋼体は基礎HPを底上げし、呪いの上書きでも消えない', async () => {
+  const tile = makeTile(0, { owner: 'A' });
+  const target = unit(mon('壁', 30, 10), 'A');
+  target.currentHp = 12;
+  tile.unit = target;
+  const g = makeStub([tile], [{ id: 'A', name: 'ア', currency: 0 }]);
+  await g._applySpellEffect(g.players[0], SPELL_CATALOG.kotai, { targetTileId: 0 });
+  assert.equal(g._baseStats(target).hp, 45);
+  assert.equal(target.currentHp, 27);
+  battle.applyCurse(target, { name: '別の呪い', addedAtk: 5, addedHp: 0 });
+  assert.equal(g._baseStats(target).hp, 45, '呪いは1体1つなので上書きされるが、鋼体は呪いではない');
+  battle.prepareForBattle(target, {});
+  assert.equal(target._battleMaxHp, 45);
+});
+
+test('パンデミックは配置モンスターだけを置き換え、土地には触らない', async () => {
+  const tiles = [makeTile(0, { owner: 'A' }), makeTile(1, { owner: 'B' }), makeTile(2)];
+  tiles[0].unit = unit(mon('強い壁', 60, 60), 'A');
+  tiles[1].unit = unit(MONSTER_CATALOG.zombie, 'B');
+  const alreadyZombie = tiles[1].unit;
+  const g = makeStub(tiles, [{ id: 'A', name: 'ア', currency: 0 }, { id: 'B', name: 'イ', currency: 0 }]);
+  await g._applySpellEffect(g.players[0], SPELL_CATALOG.pandemic, {});
+  assert.equal(tiles[0].unit.def.name, 'ゾンビ');
+  assert.equal(tiles[0].unit.def.hp, 20);
+  assert.equal(tiles[0].unit.ownerId, 'A', 'モンスターの持ち主は変わらない');
+  assert.equal(tiles[0].owner, 'A');
+  assert.equal(tiles[1].owner, 'B');
+  assert.equal(tiles[1].unit, alreadyZombie, '既にゾンビなら作り直さない');
+  assert.equal(tiles[2].unit, null, '空き地には湧かない');
+});
+
+test('ホライズンは全所有地をLv2に均し、総資産の増減を各自の頭上に出す', async () => {
+  const tiles = [
+    makeTile(0, { owner: 'A', level: 5 }),
+    makeTile(1, { owner: 'B', level: 1 }),
+    makeTile(2, { owner: 'B', level: 1 }),
+    makeTile(3),
+  ];
+  const players = [{ id: 'A', name: 'ア', currency: 0 }, { id: 'B', name: 'イ', currency: 0 }];
+  const g = makeStub(tiles, players);
+  const beforeA = g._totalAssetsOf(players[0]);
+  const beforeB = g._totalAssetsOf(players[1]);
+  await g._applySpellEffect(players[0], SPELL_CATALOG.horizon, {});
+  assert.deepEqual(tiles.map((t) => t.level), [2, 2, 2, 1], '空き地は対象外');
+  assert.ok(g._totalAssetsOf(players[0]) < beforeA, 'Lv5だった側は減る');
+  assert.ok(g._totalAssetsOf(players[1]) > beforeB, 'Lv1だった側は増える');
+  assert.equal(g.effects.filter((e) => e.playerId != null).length, 2);
+});
+
+test('遅延行為は土地レベルを1下げ、Lv1には効かない', async () => {
+  const tiles = [makeTile(0, { owner: 'A', level: 4 }), makeTile(1, { owner: 'A', level: 1 })];
+  const players = [{ id: 'A', name: 'ア', currency: 0 }];
+  const g = makeStub(tiles, players);
+  const valueBefore = g._landValueOfTile(tiles[0]);
+  await g._applySpellEffect(players[0], SPELL_CATALOG.delayTactics, { targetTileId: 0 });
+  assert.equal(tiles[0].level, 3);
+  assert.ok(g._landValueOfTile(tiles[0]) < valueBefore);
+  await g._applySpellEffect(players[0], SPELL_CATALOG.delayTactics, { targetTileId: 1 });
+  assert.equal(tiles[1].level, 1);
+  assert.ok(g.logs.some((l) => l.includes('既にLv1')));
+});
+
+test('CPUの遅延行為は一番育った敵地を狙い、割に合わなければ撃たない', async () => {
+  const tiles = [
+    makeTile(0, { owner: 'B', level: 4, price: 200 }),
+    makeTile(1, { owner: 'B', level: 2, price: 60 }),
+    makeTile(2, { owner: 'A', level: 5, price: 200 }),
+  ];
+  const players = [
+    { id: 'A', name: 'CPU', currency: 500, hand: [spellCopy(SPELL_CATALOG.delayTactics)] },
+    { id: 'B', name: '敵', currency: 0, hand: [] },
+  ];
+  const g = makeCpuStub(tiles, players);
+  await g._cpuMaybeUseDelayTacticsSpell(players[0]);
+  assert.equal(g.casts.length, 1);
+  assert.equal(g.casts[0].cast.targetTileId, 0, '自分の土地ではなく最大の敵地へ');
+  assert.deepEqual(tiles.map((t) => t.level), [4, 2, 5], '見積もりの一時変更を戻していない');
+
+  const poor = [makeTile(0, { owner: 'B', level: 2, price: 20 })];
+  const poorPlayers = [
+    { id: 'A', name: 'CPU', currency: 500, hand: [spellCopy(SPELL_CATALOG.delayTactics)] },
+    { id: 'B', name: '敵', currency: 0, hand: [] },
+  ];
+  const poorGame = makeCpuStub(poor, poorPlayers);
+  await poorGame._cpuMaybeUseDelayTacticsSpell(poorPlayers[0]);
+  assert.equal(poorGame.casts.length, 0, '削れる額がコスト未満なら撃たない');
+});
+
+test('CPUのパンデミックは敵の壁が固い時だけ撃つ', async () => {
+  const strongEnemy = makeTile(0, { owner: 'B' });
+  strongEnemy.unit = unit(mon('鉄壁', 90, 80), 'B');
+  const myWeak = makeTile(1, { owner: 'A' });
+  myWeak.unit = unit(mon('雑魚', 20, 10), 'A');
+  const players = [
+    { id: 'A', name: 'CPU', currency: 500, hand: [spellCopy(SPELL_CATALOG.pandemic)] },
+    { id: 'B', name: '敵', currency: 0, hand: [] },
+  ];
+  const g = makeCpuStub([strongEnemy, myWeak], players);
+  await g._cpuMaybeUsePandemicSpell(players[0]);
+  assert.equal(g.casts.length, 1);
+
+  const weakEnemy = makeTile(0, { owner: 'B' });
+  weakEnemy.unit = unit(mon('雑魚', 20, 10), 'B');
+  const myStrong = makeTile(1, { owner: 'A' });
+  myStrong.unit = unit(mon('鉄壁', 90, 80), 'A');
+  const players2 = [
+    { id: 'A', name: 'CPU', currency: 500, hand: [spellCopy(SPELL_CATALOG.pandemic)] },
+    { id: 'B', name: '敵', currency: 0, hand: [] },
+  ];
+  const g2 = makeCpuStub([weakEnemy, myStrong], players2);
+  await g2._cpuMaybeUsePandemicSpell(players2[0]);
+  assert.equal(g2.casts.length, 0, '自分の盤面の方が強ければ自爆しない');
+});
+
+test('CPUのホライズンは自分の伸びが首位の伸びを上回る時だけ撃つ', async () => {
+  const good = [
+    makeTile(0, { owner: 'A', level: 1, price: 200 }),
+    makeTile(1, { owner: 'A', level: 1, price: 200 }),
+    makeTile(2, { owner: 'A', level: 1, price: 200 }),
+    makeTile(3, { owner: 'B', level: 5, price: 200 }),
+  ];
+  const goodPlayers = [
+    { id: 'A', name: 'CPU', currency: 500, hand: [spellCopy(SPELL_CATALOG.horizon)] },
+    { id: 'B', name: '敵', currency: 0, hand: [] },
+  ];
+  const g = makeCpuStub(good, goodPlayers);
+  await g._cpuMaybeUseHorizonSpell(goodPlayers[0]);
+  assert.equal(g.casts.length, 1);
+  assert.deepEqual(good.map((t) => t.level), [1, 1, 1, 5], '見積もりの一時変更を戻していない');
+
+  const bad = [makeTile(0, { owner: 'A', level: 5, price: 200 }), makeTile(1, { owner: 'B', level: 1, price: 200 })];
+  const badPlayers = [
+    { id: 'A', name: 'CPU', currency: 500, hand: [spellCopy(SPELL_CATALOG.horizon)] },
+    { id: 'B', name: '敵', currency: 0, hand: [] },
+  ];
+  const g2 = makeCpuStub(bad, badPlayers);
+  await g2._cpuMaybeUseHorizonSpell(badPlayers[0]);
+  assert.equal(g2.casts.length, 0);
+  assert.deepEqual(bad.map((t) => t.level), [5, 1]);
+});
+
+test('CPUの鋼体は高価な土地の薄い守備を選び、手元が寂しければ撃たない', async () => {
+  const cheap = makeTile(0, { owner: 'A', level: 1, price: 60 });
+  cheap.unit = unit(mon('厚い', 60, 10), 'A');
+  const rich = makeTile(1, { owner: 'A', level: 4, price: 200 });
+  rich.unit = unit(mon('薄い', 20, 10), 'A');
+  const players = [{ id: 'A', name: 'CPU', currency: 900, hand: [spellCopy(SPELL_CATALOG.kotai)] }];
+  const g = makeCpuStub([cheap, rich], players);
+  await g._cpuMaybeUseToughBodySpell(players[0]);
+  assert.equal(g.casts[0].cast.targetTileId, 1);
+
+  const lone = makeTile(0, { owner: 'A', level: 4, price: 200 });
+  lone.unit = unit(mon('薄い', 20, 10), 'A');
+  const poorPlayers = [{ id: 'A', name: 'CPU', currency: 55, hand: [spellCopy(SPELL_CATALOG.kotai)] }];
+  const g2 = makeCpuStub([lone], poorPlayers);
+  await g2._cpuMaybeUseToughBodySpell(poorPlayers[0]);
+  assert.equal(g2.casts.length, 0, '備え100Gを割ってまでは撃たない');
+});

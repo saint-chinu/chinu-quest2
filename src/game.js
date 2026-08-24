@@ -1476,6 +1476,108 @@ export class Game {
         return false;
       }
 
+      // 鋼体: 呪い枠（1体に1つしか乗らず上書きで消える）ではなく、タフネスと
+      // 同じsummonBaseHpBonusで個体の基礎HPそのものを底上げする。現在HPも
+      // 同じだけ上がるので、傷ついた守備を立て直す使い方もできる。
+      case 'boostBaseHp': {
+        if (!targetTile?.unit) {
+          this.onLog('対象が既にいません');
+          return false;
+        }
+        const boosted = targetTile.unit;
+        const boostAmount = effect.amount || 0;
+        boosted.summonBaseHpBonus = Number(boosted.summonBaseHpBonus || 0) + boostAmount;
+        boosted.currentHp += boostAmount;
+        this.onLog(`${boosted.def.name}の基礎HPが${boostAmount}上がった（HP${boosted.currentHp}/${this._baseStats(boosted).hp}）`);
+        this._notifyState();
+        return false;
+      }
+
+      // パンデミック: 盤面の配置モンスターを全てゾンビへ差し替える。土地の
+      // 所有者・レベル・属性は動かないので、地価・連鎖・お札の相場には影響
+      // しない。「置き換わる」であって死亡ではないため_handleUnitDeathは
+      // 通さない（不死鳥の手札戻り・ゾンビの再出現・ネクロマンサーの蘇生元
+      // には数えない）。既にゾンビの個体は差し替えても何も変わらないので、
+      // 盤面アイコンの作り直しを無駄に走らせないようそのまま残す。
+      case 'replaceAllUnitsWithZombie': {
+        const zombieDef = MONSTER_CATALOG.zombie;
+        let replaced = 0;
+        for (const tile of this.tiles) {
+          if (!tile.unit || catalogIdOf(tile.unit.def) === zombieDef.id) continue;
+          const ownerId = tile.unit.ownerId;
+          tile.unit = createFieldUnit(
+            {
+              ...zombieDef,
+              id: `pandemic-${ownerId}-${tile.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+              catalogId: zombieDef.id,
+            },
+            ownerId,
+          );
+          replaced += 1;
+        }
+        this.onLog(replaced > 0
+          ? `パンデミックが蔓延し、盤面の${replaced}体が${zombieDef.name}になった`
+          : 'パンデミックが蔓延したが、置き換わるモンスターがいなかった');
+        this._notifyState();
+        return false;
+      }
+
+      // ホライズン: 所有されている土地を一律で指定レベルへ均す。育てた側は
+      // 資産が減り、Lv1で数を並べていた側は増えるので、誰がどれだけ動いたかを
+      // 各プレイヤーの頭上（onTargetEffectのplayerId指定＝その駒のマスへズーム）
+      // に総資産の変動額として出す。土地レベルはお札の基礎価格そのものなので、
+      // 相場の変動も属性ごとに1回ずつ見せる。
+      case 'setAllLandLevels': {
+        const leveledTo = Math.min(LEVEL_CAP, Math.max(1, effect.level || 1));
+        const assetsBefore = new Map(this.players.map((p) => [p.id, this._totalAssetsOf(p)]));
+        const ofudaBefore = new Map(OFUDA_ELEMENTS.map((element) => [element, this._ofudaPrice(element)]));
+        let leveled = 0;
+        for (const tile of this.tiles) {
+          if (tile.type !== TileType.LAND || tile.owner == null || tile.level === leveledTo) continue;
+          tile.level = leveledTo;
+          this.scene.updateTileLevelBorder?.(tile);
+          leveled += 1;
+        }
+        this.onLog(`「${card.name}」で全プレイヤーの領地がLv${leveledTo}に均された（${leveled}マス）`);
+        this._notifyState();
+        for (const p of this.players) {
+          if (p.defeated) continue;
+          const diff = this._totalAssetsOf(p) - (assetsBefore.get(p.id) || 0);
+          if (diff === 0) continue;
+          await this.onTargetEffect?.({
+            playerId: p.id,
+            message: `${p.name}の総資産 ${diff > 0 ? '+' : ''}${diff}G`,
+          });
+        }
+        for (const [element, before] of ofudaBefore) {
+          await this._presentOfudaPriceChange(element, before);
+        }
+        return false;
+      }
+
+      // 遅延行為: 対象の土地レベルを下げる。下げた分の投資額（LEVEL_INVESTMENT）
+      // は所有者に返らない＝地価と通行料がそのまま目減りする妨害。
+      case 'lowerTileLevel': {
+        if (!targetTile) return false;
+        if (targetTile.level <= 1) {
+          this.onLog('対象の土地は既にLv1のため効果がなかった');
+          return false;
+        }
+        const previousLevel = targetTile.level;
+        const ofudaPriceBefore = this._ofudaPrice(targetTile.element);
+        targetTile.level = Math.max(1, targetTile.level - Math.max(1, effect.amount || 1));
+        this.scene.updateTileLevelBorder?.(targetTile);
+        this.onLog(`対象の土地のレベルがLv${previousLevel}→Lv${targetTile.level}に下がった`);
+        this._notifyState();
+        await this.onTargetEffect?.({
+          tileId: targetTile.id,
+          position: targetTile.position,
+          message: `土地レベル Lv${previousLevel}→Lv${targetTile.level}`,
+        });
+        await this._presentOfudaPriceChange(targetTile.element, ofudaPriceBefore);
+        return false;
+      }
+
       case 'swapTwoMonsters':
         this._spellSwapTwoMonsters(cast.targetTileIds);
         return false;
@@ -6843,12 +6945,11 @@ export class Game {
     const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, battleDefenderBonus);
     result.log.forEach((line) => this.onLog(line));
 
-    for (const reveal of traitRevealSides) {
-      if (reveal.labels.length === 0) continue;
-      await this.onBattleTraitReveal(reveal);
-      if (this._isCancelled) return null;
-    }
-    for (const reveal of effectRevealSides) {
+    // ロシアンルーレットの戦闘は出目だけで決まり、先制/後攻・貫通・ATK倍率は
+    // 一切効かない。効かない特性を先に大きく表示すると誤解を招くので、その
+    // 回だけ特性・倍率の表示ごと飛ばす（resolveBattleの分岐と対になっている）。
+    const revealSides = result.russianRoulette ? [] : [...traitRevealSides, ...effectRevealSides];
+    for (const reveal of revealSides) {
       if (reveal.labels.length === 0) continue;
       await this.onBattleTraitReveal(reveal);
       if (this._isCancelled) return null;
@@ -6894,6 +6995,15 @@ export class Game {
       await this.onBattleTraitReveal({
         side: effect.side,
         labels: [`強盗：${effect.amount}Gを奪った！`],
+      });
+      if (this._isCancelled) return null;
+    }
+    // 札束ガード: ダメージを金で握り潰して戦闘を打ち切った、という一番大事な
+    // 事実がログ1行では流れてしまうので、強盗と同じ大きさで明示する。
+    for (const effect of result.moneyGuardEffects || []) {
+      await this.onBattleTraitReveal({
+        side: effect.side,
+        labels: [`${effect.itemName}：${effect.amount}Gを払って戦闘終了！`],
       });
       if (this._isCancelled) return null;
     }
@@ -7558,6 +7668,10 @@ export class Game {
     await this._cpuMaybeUseManaExtractionSpell(this.currentPlayer);
     await this._cpuMaybeUseNecromancerSpell(this.currentPlayer);
     await this._cpuMaybeUseSplitEvenlySpell(this.currentPlayer);
+    await this._cpuMaybeUsePandemicSpell(this.currentPlayer);
+    await this._cpuMaybeUseHorizonSpell(this.currentPlayer);
+    await this._cpuMaybeUseDelayTacticsSpell(this.currentPlayer);
+    await this._cpuMaybeUseToughBodySpell(this.currentPlayer);
     await this._cpuMaybeUseForceElementSpell(this.currentPlayer);
     await this._cpuMaybeUseStealGoldSpell(this.currentPlayer);
     await this._cpuMaybeUseCurseCleanseSpell(this.currentPlayer);
@@ -8191,6 +8305,114 @@ export class Game {
 
   /** 増税通知(tollReductionCurse)のCPU使用判断: 同盟以外の敵の土地のうち
    * 通行料が最も高い所へかける。減額見込みがコストを上回る時だけ。 */
+  /**
+   * 鋼体: 自分の守備モンスターの基礎HPを恒久的に底上げする。効き目が一番
+   * 大きいのは「価値の高い土地に、素のHPが低いモンスターが座っている」形なので、
+   * 土地レベル・地価と守備の薄さを足したスコアで選ぶ。召喚・通行料の備えを
+   * 割ってまで撃つカードではないので、余裕がある時だけ使う。
+   */
+  async _cpuMaybeUseToughBodySpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'boostBaseHp');
+    // 盤上に敵地が無い序盤は_cpuSummonReserveが0になるので、最低100Gは
+    // 手元に残す（撃った直後に召喚も通行料も払えない状態を作らない）。
+    if (!card || player.currency < (card.cost || 0) + Math.max(100, this._cpuSummonReserve(player))) return;
+    const candidates = this.tiles
+      .filter((t) => t.owner === player.id && t.unit?.ownerId === player.id)
+      .map((tile) => ({
+        tile,
+        score: tile.level * 120 + this._landValueOfTile(tile) - this._baseStats(tile.unit).hp * 2,
+      }))
+      .sort((a, b) => b.score - a.score);
+    const best = candidates[0];
+    if (!best) return;
+    await this._cpuCastSpell(player, card, { targetTileId: best.tile.id });
+  }
+
+  /**
+   * 遅延行為: 敵地のレベルを1下げる。総資産勝負なので「相手の地価をいくら
+   * 削れるか」＋「通行料をいくら軽くできるか」の合計がコストを上回る土地だけを
+   * 狙う。実際に一段下げた盤面を作って測り、必ず元へ戻す。
+   */
+  async _cpuMaybeUseDelayTacticsSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'lowerTileLevel');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const damageOf = (tile) => {
+      const savedLevel = tile.level;
+      const valueBefore = this._landValueOfTile(tile);
+      const tollBefore = this._tollOfTile(tile);
+      tile.level = Math.max(1, savedLevel - Math.max(1, card.effect.amount || 1));
+      const damage = (valueBefore - this._landValueOfTile(tile)) + (tollBefore - this._tollOfTile(tile));
+      tile.level = savedLevel;
+      return damage;
+    };
+    const best = this.tiles
+      .filter((t) => {
+        if (t.type !== TileType.LAND || t.owner == null || t.level <= 1) return false;
+        const owner = this.players.find((p) => p.id === t.owner);
+        return owner && !owner.defeated && !this._isAllyOf(owner, player);
+      })
+      .map((tile) => ({ tile, damage: damageOf(tile) }))
+      .sort((a, b) => b.damage - a.damage)[0];
+    if (!best || best.damage < (card.cost || 0)) return;
+    await this._cpuCastSpell(player, card, { targetTileId: best.tile.id });
+  }
+
+  /**
+   * パンデミック: 盤面の配置モンスターを全部ゾンビ(20/20)へ均す。失うのは
+   * 「ゾンビより強い分」だけなので、敵側の損失が自分側の損失を明確に上回る
+   * 時だけ撃つ。相手の壁が固くて侵略できない盤面をひっくり返すためのカード。
+   */
+  async _cpuMaybeUsePandemicSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'replaceAllUnitsWithZombie');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const zombieDef = MONSTER_CATALOG.zombie;
+    const zombiePower = zombieDef.hp + zombieDef.atk;
+    let myLoss = 0;
+    let enemyLoss = 0;
+    let enemyUnits = 0;
+    for (const tile of this.tiles) {
+      const unit = tile.unit;
+      if (!unit || catalogIdOf(unit.def) === zombieDef.id) continue;
+      const stats = this._baseStats(unit);
+      const loss = Math.max(0, stats.hp + stats.atk - zombiePower);
+      const owner = this.players.find((p) => p.id === unit.ownerId);
+      if (owner && this._isAllyOf(owner, player)) myLoss += loss;
+      else { enemyLoss += loss; enemyUnits += 1; }
+    }
+    if (enemyUnits === 0 || enemyLoss < myLoss + 120) return;
+    await this._cpuCastSpell(player, card, {});
+  }
+
+  /**
+   * ホライズン: 全員の領地を一律のレベルへ均す。効果が完全に決定的なので、
+   * 実際に盤面を書き換えて総資産を測り、必ず元へ戻して判断する。自分の伸びが
+   * トップの敵の伸びを明確に上回る時だけ撃つ（自分だけ得でも、首位をもっと
+   * 太らせるなら撃たない）。
+   */
+  async _cpuMaybeUseHorizonSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'setAllLandLevels');
+    if (!card || player.currency < (card.cost || 0)) return;
+    const rivals = this.players.filter((p) => !p.defeated && !this._isAllyOf(p, player));
+    if (rivals.length === 0) return;
+    const leveledTo = Math.min(LEVEL_CAP, Math.max(1, card.effect.level || 1));
+    const savedLevels = this.tiles.map((t) => t.level);
+    const myAssetsBefore = this._totalAssetsOf(player);
+    const rivalAssetsBefore = Math.max(...rivals.map((r) => this._totalAssetsOf(r)));
+    for (const tile of this.tiles) {
+      if (tile.type !== TileType.LAND || tile.owner == null) continue;
+      tile.level = leveledTo;
+    }
+    const myGain = this._totalAssetsOf(player) - myAssetsBefore - (card.cost || 0);
+    const rivalGain = Math.max(...rivals.map((r) => this._totalAssetsOf(r))) - rivalAssetsBefore;
+    this.tiles.forEach((tile, index) => { tile.level = savedLevels[index]; });
+    if (myGain - rivalGain < 300) return;
+    await this._cpuCastSpell(player, card, {});
+  }
+
   async _cpuMaybeUseTollReductionSpell(player) {
     if (player.spellUsedThisTurn) return;
     const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'tollReductionCurse');
