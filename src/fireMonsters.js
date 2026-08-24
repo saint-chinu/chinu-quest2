@@ -49,7 +49,10 @@ export const FIRE_MONSTER_CATALOG = {
     effectDescription: '戦闘で生き残った場合、残りHP×2Gを得る',
     imageDataUrl: assetUrl('/images/card-art/salarymander.webp'),
   }),
-  moeMoeKyun: fireMonster('moeMoeKyun', '燃え燃えきゅん', Rarity.N, 20, 30, { imageDataUrl: assetUrl('/images/card-art/moeMoeKyun.jpg') }),
+  moeMoeKyun: fireMonster('moeMoeKyun', '燃え燃えきゅん', Rarity.N, 40, 30, {
+    cost: 45,
+    imageDataUrl: assetUrl('/images/card-art/moeMoeKyun.jpg'),
+  }),
   heavySmoker: fireMonster('heavySmoker', 'ヘビースモーカー', Rarity.N, 40, 30, {
     effect: { type: 'selfDamageAfterAttack', damage: 5 },
     effectDescription: '攻撃終了時、自身が5ダメージを受ける',

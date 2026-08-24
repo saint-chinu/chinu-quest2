@@ -73,6 +73,7 @@ export const FOREST_MONSTER_CATALOG = {
   }),
   moriNoKumasan: forestMonster('moriNoKumasan', '森のクマさん？', Rarity.N, 30, 30),
   yasugi: forestMonster('yasugi', '屋〇杉', Rarity.N, 50, 10, {
+    cost: 30,
     effect: { type: 'chanceSelfDestructAfterAttack', chance: 0.5 },
     effectDescription: '自身の攻撃終了時、50%の確率で自身が倒れる（巨木ゆえの反動）',
   }),
