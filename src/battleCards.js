@@ -1293,7 +1293,7 @@ export const CHARACTER_DECKS = {
     composition: {
       monsters: [
         // ばら撒き兼、3周目で強制停止を覚える成長型の壁。
-        { def: MONSTER_CATALOG.koutetsuYousai, count: 3 },
+        { def: MONSTER_CATALOG.koutetsuYousai, count: 4 },
         // ■雷コンボの中核■
         // 電柱を植える男 → 電柱（盤上の雷モンスター全員がHP+10）
         // メカニックマソ → 周回ごとに自分の雷モンスター全員が最大HPの20%回復
@@ -1321,7 +1321,7 @@ export const CHARACTER_DECKS = {
       ],
       spells: [
         // 雷単色なので塗り替えは放電に集中させる。
-        { def: SPELL_CATALOG.electrify, count: 3 },
+        { def: SPELL_CATALOG.electrify, count: 2 },
         // 周回加速。籠城型でも周回そのものは収入と成長の源なので、
         // 出目操作と帰巣本能で1周を早く畳む。
         { def: SPELL_CATALOG.homingInstinct, count: 2 },
@@ -1330,7 +1330,7 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.diceOne, count: 2 },
         { def: SPELL_CATALOG.sanctuary, count: 1 },
         { def: SPELL_CATALOG.phoenixCurse, count: 1 },
-        { def: SPELL_CATALOG.specialAudit, count: 2 },
+        { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },
         { def: SPELL_CATALOG.sideIncome, count: 3 },
         { def: SPELL_CATALOG.divination, count: 2 },
       ],
