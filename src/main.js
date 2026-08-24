@@ -1148,20 +1148,6 @@ function promptPickCardType() {
 }
 
 /** Simple info-only popup, no camera-work of its own - "閉じる" just resolves. */
-function promptShowTileInfo(tile) {
-  return new Promise((resolve) => {
-    function onClose() {
-      tileInfoModal.classList.add('hidden');
-      tileInfoClose.removeEventListener('click', onClose);
-      unregisterPromptCanceller(onClose);
-      resolve();
-    }
-    renderTileInfo(tile);
-    tileInfoModal.classList.remove('hidden');
-    tileInfoClose.addEventListener('click', onClose);
-    registerPromptCanceller(onClose);
-  });
-}
 
 const BROWSE_HIGHLIGHT_COLOR = 0xfff2a8;
 
@@ -3395,7 +3381,6 @@ function startBattle(character, storyOptions = {}) {
     onPickAbilityTarget: relayable('pickAbilityTarget', promptPickAbilityTarget),
     onPickTransformTarget: relayable('pickTransformTarget', promptPickTransformTarget),
     onPickCardType: relayable('pickCardType', promptPickCardType),
-    onShowTileInfo: relayable('showTileInfo', promptShowTileInfo),
     onChooseBranch: relayable('chooseBranch', promptChooseBranch),
     onBranchUndo: setBranchUndoControl,
     onPickMoveDirection: relayable('pickMoveDirection', promptMoveDirection),
@@ -8485,7 +8470,6 @@ const pvpGuestHandlers = {
   pickAbilityTarget: promptPickAbilityTarget,
   pickTransformTarget: promptPickTransformTarget,
   pickCardType: promptPickCardType,
-  showTileInfo: promptShowTileInfo,
   chooseBranch: promptChooseBranch,
   pickMoveDirection: promptMoveDirection,
   pickElement: promptPickElement,

@@ -194,7 +194,6 @@ export class Game {
     onPickAbilityTarget,
     onPickTransformTarget,
     onPickCardType,
-    onShowTileInfo,
     onChooseBranch,
     onBranchUndo,
     onPickMoveDirection,
@@ -288,7 +287,6 @@ export class Game {
     this.onPickAbilityTarget = onPickAbilityTarget;
     this.onPickTransformTarget = onPickTransformTarget || onPickMonsterCard;
     this.onPickCardType = onPickCardType;
-    this.onShowTileInfo = onShowTileInfo;
     this.onChooseBranch = onChooseBranch;
     this.onBranchUndo = onBranchUndo || (() => {});
     this.onPickMoveDirection = onPickMoveDirection;
