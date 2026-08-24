@@ -769,6 +769,11 @@ function appendDebtSaleLandChoice(tile, onPick) {
   debtSaleChoices.appendChild(row);
 }
 
+/**
+ * 土地だけを売って清算する画面。エンジンへ直接つなぐコールバックではなく、
+ * promptPickDebtRecoveryが「お札が無い場合」に内部で使うUIヘルパー。
+ * 戻り値は素のタイルidで、呼び出し元が{type:'land', id}へ包み直す。
+ */
 function promptPickSellLandForDebt({ tiles, deficit }) {
   return new Promise((resolve) => {
     function cleanup(result) {
@@ -3382,7 +3387,6 @@ function startBattle(character, storyOptions = {}) {
     onConfirmAction: relayable('confirmAction', promptConfirmAction),
     onPickLevelUp: relayable('pickLevelUp', promptPickLevelUp),
     onConfirmMove: relayable('confirmMove', promptConfirmMove),
-    onPickSellLandForDebt: relayable('pickSellLandForDebt', promptPickSellLandForDebt),
     onOfudaMarket: relayable('ofudaMarket', promptOfudaMarket),
     onPickDebtRecovery: relayable('pickDebtRecovery', promptPickDebtRecovery),
     onBankruptcy: relayable('bankruptcy', promptBankruptcy, { broadcast: true }),
@@ -8470,7 +8474,6 @@ const pvpGuestHandlers = {
   confirmAction: promptConfirmAction,
   pickLevelUp: promptPickLevelUp,
   confirmMove: promptConfirmMove,
-  pickSellLandForDebt: promptPickSellLandForDebt,
   // どちらもgame.js側は(payload, playerId)の2引数で呼ぶ ＝ relayable()は
   // 「payload以外はplayerIdだけ」と判断して素のpayloadを1つ送ってくるので、
   // landCommandのような{a0,a1}形にはならない。念のため両形を受ける。

@@ -186,7 +186,6 @@ export class Game {
     onConfirmAction,
     onPickLevelUp,
     onConfirmMove,
-    onPickSellLandForDebt,
     onOfudaMarket,
     onPickDebtRecovery,
     onBankruptcy,
@@ -281,7 +280,6 @@ export class Game {
     // （カメラクローズアップ+ゆれ+「破産」の2文字）用フック - どちらも
     // 未指定ならテスト等で素通りできるようデフォルトを与えておく
     // （_resolveNegativeCurrency/_triggerBankruptcy参照）。
-    this.onPickSellLandForDebt = onPickSellLandForDebt || (() => Promise.resolve(null));
     this.onOfudaMarket = onOfudaMarket || (() => Promise.resolve(null));
     this.onPickDebtRecovery = onPickDebtRecovery || (() => Promise.resolve(null));
     this.onBankruptcy = onBankruptcy || (() => Promise.resolve());
@@ -4745,9 +4743,14 @@ export class Game {
         await this._presentOfudaPriceChange(entry.element, result.before);
         continue;
       }
-      const pickedId = choice?.type === 'land' ? choice.id : choice;
-      const pickedTile = candidates.find((t) => t.id === pickedId);
-      if (!pickedTile) continue; // 念のため: 不正な選択は無視して再提示する
+      // 戻り値は {type:'ofuda'|'land', ...} の1形だけを受ける。以前は素のタイルidも
+      // 通していたが、生産者（main.jsのpromptPickDebtRecovery／対人戦の中継）は
+      // どちらも型付きで返すので通る道が無く、「どちらの形でもいい」という緩さが
+      // 実装違いを隠すだけになっていた。
+      const pickedTile = choice?.type === 'land'
+        ? candidates.find((t) => t.id === choice.id)
+        : null;
+      if (!pickedTile) continue; // 不正な選択は無視して再提示する
       await this._sellLandTile(player, pickedTile);
     }
   }
