@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v208`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v209`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## 未実装: Firebase App Check
@@ -214,11 +214,19 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 - 新モンスター効果(Codex): `selfDamageRatioAfterAttack`(反動), `chanceDestroyItemBeforeAttack`(予報でアイテム無効化)等。
 
 ## 新カード（2026-08、スペル4／アイテム3）
-専用イラストは未用意なので7枚とも`imageDataUrl: null`＝cardArt.jsの共通絵。
-**`item()`/`spell()`のoptions経由で`imageDataUrl: null`を渡しても効かない**
-（`options.imageDataUrl ?? assetUrl(...)`のnullish合体でURL側に落ちる）。
-`{ ...item(...), imageDataUrl: null }`のスプレッド上書きで書くこと。
-回帰テストは`npm run test:cards`（`tests/newCards.test.mjs`）。
+カードアートは`tools/gen_card_art.py`（Pillow + numpy）で生成した
+`public/images/card-art/<id>.jpg`。`item()`/`spell()`の既定パスにそのまま
+乗るので、カード定義側で`imageDataUrl`を指定していない。**描き下ろしが
+用意できたら同名で置き換えるだけ**でよく、作り直したい時は
+`python3 tools/gen_card_art.py`を回す（seed固定なので同じ絵が出る）。
+- 作り方の前提はスクリプト冒頭のdocstring参照（2:3・主題は上寄り・
+  renderCardElが上から暗いグラデを重ねるので主題は明るめに）。
+- 専用絵を持たせない運用にする場合、**`item()`/`spell()`のoptions経由で
+  `imageDataUrl: null`を渡しても効かない**（`options.imageDataUrl ??
+  assetUrl(...)`のnullish合体でURL側に落ち、存在しない.jpgを指してしまう）。
+  その時は`{ ...item(...), imageDataUrl: null }`のスプレッド上書きで書くこと。
+- 回帰テストは`npm run test:cards`（`tests/newCards.test.mjs`）。
+  **imageDataUrlが指すファイルがpublic/に実在するかまで検証している**。
 
 - **鋼体** Nスペル50G `boostBaseHp` target=anyMonster: 対象の配置モンスターの
   基礎HP+15（現在HPも+15）。呪い枠（1体1つ・上書きで消える）ではなく

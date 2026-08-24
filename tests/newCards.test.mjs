@@ -5,6 +5,7 @@
 //   npm run test:cards
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
 import { createServer } from 'vite';
 
 const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' });
@@ -58,16 +59,20 @@ function makeCpuStub(tiles, players) {
 }
 const spellCopy = (def) => ({ ...def, catalogId: def.id, id: `${def.id}-hand` });
 
-test('新カードはカタログに載り、専用イラストが無いのでプレースホルダーへ落ちる', () => {
-  for (const id of ['russianRoulette', 'diamondShield', 'satsutabaGuard']) {
-    assert.ok(ITEM_CATALOG[id], `${id} が ITEM_CATALOG にない`);
-    // item()の既定は /images/card-art/<id>.jpg。実ファイルが無いと404で
-    // 盤面が固まるため、必ずnullにしてcardArt.jsの共通絵へ落とす。
-    assert.equal(ITEM_CATALOG[id].imageDataUrl, null, `${id} の画像がプレースホルダーでない`);
-  }
-  for (const id of ['kotai', 'pandemic', 'horizon', 'delayTactics']) {
-    assert.ok(SPELL_CATALOG[id], `${id} が SPELL_CATALOG にない`);
-    assert.equal(SPELL_CATALOG[id].imageDataUrl, null, `${id} の画像がプレースホルダーでない`);
+test('新カードはカタログに載り、参照している画像が実在する', () => {
+  // 画像が404だと <img> がbroken化し、drawImageのInvalidStateErrorが
+  // 召喚処理のawait連鎖を壊して盤面が固まる（CLAUDE.md参照）。
+  // imageDataUrlが指す先が本当にpublic/にあるかまで見る。
+  const cards = [
+    ...['russianRoulette', 'diamondShield', 'satsutabaGuard'].map((id) => [id, ITEM_CATALOG[id]]),
+    ...['kotai', 'pandemic', 'horizon', 'delayTactics'].map((id) => [id, SPELL_CATALOG[id]]),
+  ];
+  for (const [id, card] of cards) {
+    assert.ok(card, `${id} がカタログにない`);
+    if (card.imageDataUrl == null) continue; // cardArt.jsの共通絵へ落とす運用もあり
+    const rel = card.imageDataUrl.replace(/^\/+/, '');
+    const file = new URL(`../public/${rel}`, import.meta.url);
+    assert.ok(existsSync(file), `${id} の画像 ${card.imageDataUrl} が public/ に無い`);
   }
   assert.equal(ITEM_CATALOG.diamondShield.atkBonus, -20);
   assert.equal(ITEM_CATALOG.diamondShield.hpBonus, 60);

@@ -122,23 +122,17 @@ export const ITEM_CATALOG = {
   }),
   // 通常の殴り合いを丸ごと置き換えるアイテム。ステータス・先制・防御効果が
   // 一切効かないので、格上の土地へ格安モンスターで挑む博打として使う。
-  russianRoulette: {
-    ...item('russianRoulette', 'ロシアンルーレット', Rarity.S, ItemType.WEAPON, 50, 0, 0, {
-      effect: { type: 'russianRoulette' },
-      effectDescription: '通常の戦闘を行わず、攻撃側から順にサイコロを振って出目の大きい方が勝つ。負けた側は即死し、同じ出目なら両者死亡（土地は無人になり通行料も発生しない）。ATK/HP・先制・ライフジャケット等の効果はすべて無効',
-    }),
-    imageDataUrl: null,
-  },
+  russianRoulette: item('russianRoulette', 'ロシアンルーレット', Rarity.S, ItemType.WEAPON, 50, 0, 0, {
+    effect: { type: 'russianRoulette' },
+    effectDescription: '通常の戦闘を行わず、攻撃側から順にサイコロを振って出目の大きい方が勝つ。負けた側は即死し、同じ出目なら両者死亡（土地は無人になり通行料も発生しない）。ATK/HP・先制・ライフジャケット等の効果はすべて無効',
+  }),
   // 後攻は「守備側が装備しても普段どおり相手が先に殴る」＝実質デメリット
   // なしなので、防衛用としては破格のHP+60になる。侵略に持ち出すと相手に
   // 先攻を譲るぶん本当に不利になる、という使い分けのアイテム。
-  diamondShield: {
-    ...item('diamondShield', 'ダイヤモンドの盾', Rarity.S, ItemType.ARMOR, 55, -20, 60, {
-      traits: ['lastStrike'],
-      effectDescription: '後攻。HP+60、ATK-20',
-    }),
-    imageDataUrl: null,
-  },
+  diamondShield: item('diamondShield', 'ダイヤモンドの盾', Rarity.S, ItemType.ARMOR, 55, -20, 60, {
+    traits: ['lastStrike'],
+    effectDescription: '後攻。HP+60、ATK-20',
+  }),
 
   kaenHoushakiki: item('kaenHoushakiki', '火炎放射器', Rarity.R, ItemType.WEAPON, 80, 20, 0, {
     effect: { type: 'wielderElementAtkBonus', wielderElement: Element.FIRE, atkBonus: 30 },
@@ -172,13 +166,10 @@ export const ITEM_CATALOG = {
   }),
   // 「負けない」ではなく「死なない」アイテム。侵略は止まるが土地は取られず、
   // 代金は受けるはずだったダメージに比例するので、大ダメージほど高くつく。
-  satsutabaGuard: {
-    ...item('satsutabaGuard', '札束ガード', Rarity.R, ItemType.ARMOR, 60, 0, 0, {
-      effect: { type: 'payDamageToEndBattle', multiplier: 3 },
-      effectDescription: '本来受けるダメージ×3Gを相手に払い、ノーダメージのまま戦闘を終了させる（通行料は通常どおり発生）。真剣白刃取りで奪われた場合は、逆に奪った相手が同じ計算で支払う',
-    }),
-    imageDataUrl: null,
-  },
+  satsutabaGuard: item('satsutabaGuard', '札束ガード', Rarity.R, ItemType.ARMOR, 60, 0, 0, {
+    effect: { type: 'payDamageToEndBattle', multiplier: 3 },
+    effectDescription: '本来受けるダメージ×3Gを相手に払い、ノーダメージのまま戦闘を終了させる（通行料は通常どおり発生）。真剣白刃取りで奪われた場合は、逆に奪った相手が同じ計算で支払う',
+  }),
   zangokuKen: item('zangokuKen', '斬〇剣', Rarity.R, ItemType.WEAPON, 130, 30, -20, {
     traits: ['pierce'],
     effect: { type: 'instantKillOnHit', chance: 0.5 },
@@ -440,18 +431,15 @@ export const SPELL_CATALOG = {
   heal: spell('heal', 'ヒール', Rarity.N, 30, 'ownMonster', { type: 'fullHeal' }, '自分のモンスター1体のHPを全回復する'),
   // 呪い（マ〇ジャロ等）ではなく基礎HPそのものを底上げする。呪いは1体に1つ
   // しか乗らず上書きで消えるが、こちらはその個体が土地を離れるまで残る。
-  kotai: {
-    ...spell(
-      'kotai',
-      '鋼体',
-      Rarity.N,
-      50,
-      'anyMonster',
-      { type: 'boostBaseHp', amount: 15 },
-      '対象の配置モンスターの基礎HPを15上げる（現在HPも15回復する）。呪いではないので上書きされず、その個体が土地を離れるまで永続',
-    ),
-    imageDataUrl: null,
-  },
+  kotai: spell(
+    'kotai',
+    '鋼体',
+    Rarity.N,
+    50,
+    'anyMonster',
+    { type: 'boostBaseHp', amount: 15 },
+    '対象の配置モンスターの基礎HPを15上げる（現在HPも15回復する）。呪いではないので上書きされず、その個体が土地を離れるまで永続',
+  ),
   philanthropy: spell('philanthropy', '博愛精神', Rarity.N, 50, 'none', { type: 'healAllUnitsRatio', ratio: 0.3 }, '場のすべてのモンスターのHPを30%回復する'),
   curseCleanse: spell(
     'curseCleanse',
@@ -498,44 +486,35 @@ export const SPELL_CATALOG = {
   // 盤面の配置モンスターを一掃して全部ゾンビ(20/20)にする。土地の所有権も
   // レベルも変わらないので、育てた壁を潰す妨害としても、格上の土地へ挑む
   // 下準備としても効く。
-  pandemic: {
-    ...spell(
-      'pandemic',
-      'パンデミック',
-      Rarity.S,
-      100,
-      'none',
-      { type: 'replaceAllUnitsWithZombie' },
-      '盤面に召喚されているモンスターがすべてゾンビ（HP20/ATK20）に置き換わる。土地の所有者・レベルは変わらず、呪いは消える',
-    ),
-    imageDataUrl: null,
-  },
+  pandemic: spell(
+    'pandemic',
+    'パンデミック',
+    Rarity.S,
+    100,
+    'none',
+    { type: 'replaceAllUnitsWithZombie' },
+    '盤面に召喚されているモンスターがすべてゾンビ（HP20/ATK20）に置き換わる。土地の所有者・レベルは変わらず、呪いは消える',
+  ),
   // 全員の土地をLv2へ揃える。育てた側は資産が減り、Lv1で並べていた側は
   // 資産が増える。誰がどれだけ動いたかは頭上の総資産変動で見せる。
-  horizon: {
-    ...spell(
-      'horizon',
-      'ホライズン',
-      Rarity.R,
-      200,
-      'none',
-      { type: 'setAllLandLevels', level: 2 },
-      'すべてのプレイヤーの領地がレベル2になる。上がる土地も下がる土地もあり、総資産の変動が各プレイヤーの頭上に表示される',
-    ),
-    imageDataUrl: null,
-  },
-  delayTactics: {
-    ...spell(
-      'delayTactics',
-      '遅延行為',
-      Rarity.S,
-      100,
-      'anyTile',
-      { type: 'lowerTileLevel', amount: 1 },
-      '対象の土地のレベルを1下げる（Lv1の土地には効果がない）。下げた分の投資額は戻らない',
-    ),
-    imageDataUrl: null,
-  },
+  horizon: spell(
+    'horizon',
+    'ホライズン',
+    Rarity.R,
+    200,
+    'none',
+    { type: 'setAllLandLevels', level: 2 },
+    'すべてのプレイヤーの領地がレベル2になる。上がる土地も下がる土地もあり、総資産の変動が各プレイヤーの頭上に表示される',
+  ),
+  delayTactics: spell(
+    'delayTactics',
+    '遅延行為',
+    Rarity.S,
+    100,
+    'anyTile',
+    { type: 'lowerTileLevel', amount: 1 },
+    '対象の土地のレベルを1下げる（Lv1の土地には効果がない）。下げた分の投資額は戻らない',
+  ),
   shuffleMonsters: spell(
     'shuffleMonsters',
     'シャッフル',
