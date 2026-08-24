@@ -2968,7 +2968,7 @@ const DICE_STOP_DELAY_MS = 300;
 // before the move actually starts.
 const DICE_RESULT_HOLD_MS = 1500;
 
-// idle -> (click) -> spinning -> (click) -> locking -> settles + holds, then rollDice() fires
+// idle -> (click) -> spinning -> locking -> settles + holds, then rollDice() fires
 let diceState = 'idle';
 let diceValue = 1;
 let diceSpinTimer = null;
@@ -3038,8 +3038,8 @@ function startDiceSpin() {
 
 /**
  * Stops the spin DICE_STOP_DELAY_MS from now, landing on `forcedValue` if
- * given (CPU's predetermined roll) or whatever's currently showing (the
- * player's case). Then holds that result - hand and dice both unchanged -
+ * given (CPU's or player's pre-determined random roll). Then holds that result
+ * - hand and dice both unchanged -
  * for DICE_RESULT_HOLD_MS before resolving, so there's a beat to actually
  * see the number before the piece starts moving.
  */
@@ -3102,12 +3102,11 @@ diceButton.addEventListener('click', () => {
   }
 
   if (diceState === 'idle') {
+    // 出目はタップした瞬間に抽選する。回転中にもう一度タップして止める形式だと
+    // 表示のタイミングを狙えてしまうため、プレイヤーの操作で出目は変わらない。
+    const finalValue = Math.floor(Math.random() * 6) + 1;
     startDiceSpin();
-    return;
-  }
-
-  if (diceState === 'spinning') {
-    settleDiceSpin().then(beginDiceMove);
+    settleDiceSpin(finalValue).then(beginDiceMove);
   }
 });
 
