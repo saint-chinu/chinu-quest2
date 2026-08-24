@@ -150,6 +150,17 @@ export const AI_PROFILES = {
     itemGambleChance: 0.8,
     highValueAvoidance: 0.7,
   },
+  '塞ぎ込んだ男': {
+    // ⑭は土地を育てず、とにかく安い召喚札を空き地へ広げる。盤面が
+    // 十分埋まった後の資金化はgame.jsの専用スペルコンボが担当する。
+    offElementSummonChance: 1,
+    levelUpReserve: 999999,
+    minWinProbabilityToInvade: 0.35,
+    itemGambleChance: 0.85,
+    highValueAvoidance: 0.35,
+    scatterSummons: true,
+    diceHarassHuman: true,
+  },
   '「彼」': {
     offElementSummonChance: 0.05,
     levelUpReserve: 300,

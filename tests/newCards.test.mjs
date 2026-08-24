@@ -9,10 +9,11 @@ import { existsSync } from 'node:fs';
 import { createServer } from 'vite';
 
 const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' });
-const { ITEM_CATALOG, SPELL_CATALOG, MONSTER_CATALOG } = await vite.ssrLoadModule('/src/battleCards.js');
+const { ITEM_CATALOG, SPELL_CATALOG, MONSTER_CATALOG, buildCharacterCardList } = await vite.ssrLoadModule('/src/battleCards.js');
 const { Game } = await vite.ssrLoadModule('/src/game.js');
 const battle = await vite.ssrLoadModule('/src/battle.js');
-const { TileType } = await vite.ssrLoadModule('/src/board.js');
+const { TileType, MAPS } = await vite.ssrLoadModule('/src/board.js');
+const { STORY_STAGES } = await vite.ssrLoadModule('/src/story.js');
 test.after(() => vite.close());
 
 const mon = (name, hp, atk, extra = {}) => ({ id: name, name, element: 'fire', rarity: 'N', hp, atk, ...extra });
@@ -65,7 +66,7 @@ test('新カードはカタログに載り、参照している画像が実在�
   // imageDataUrlが指す先が本当にpublic/にあるかまで見る。
   const cards = [
     ...['russianRoulette', 'diamondShield', 'satsutabaGuard'].map((id) => [id, ITEM_CATALOG[id]]),
-    ...['kotai', 'pandemic', 'horizon', 'delayTactics'].map((id) => [id, SPELL_CATALOG[id]]),
+    ...['kotai', 'pandemic', 'horizon', 'delayTactics', 'ashToDust', 'landlessOne'].map((id) => [id, SPELL_CATALOG[id]]),
   ];
   for (const [id, card] of cards) {
     assert.ok(card, `${id} がカタログにない`);
@@ -77,6 +78,94 @@ test('新カードはカタログに載り、参照している画像が実在�
   assert.equal(ITEM_CATALOG.diamondShield.atkBonus, -20);
   assert.equal(ITEM_CATALOG.diamondShield.hpBonus, 60);
   assert.ok(ITEM_CATALOG.diamondShield.traits.includes('lastStrike'));
+});
+
+test('塞ぎ込んだ男の固定デッキは指定札を含む40枚', () => {
+  const cards = buildCharacterCardList('fusagikonda');
+  const count = (id) => cards.filter((card) => (card.catalogId || card.id) === id).length;
+  assert.equal(cards.length, 40);
+  assert.equal(count('ashToDust'), 2);
+  assert.equal(count('pandemic'), 2);
+  assert.equal(count('horizon'), 2);
+  assert.equal(count('landlessOne'), 2);
+  assert.equal(count('shinkenShirahadori'), 4);
+  assert.equal(count('poisonMist'), 2);
+  assert.equal(count('delayTactics'), 2);
+  assert.equal(count('diceOne'), 2);
+});
+
+test('ステージ14は専用マップ・会話・塞ぎ込んだ男へ正しく接続されている', () => {
+  const stage = STORY_STAGES.find((entry) => entry.key === 'royal-guard');
+  const map = MAPS.find((entry) => entry.id === 'royal-guard');
+  assert.ok(stage && map);
+  assert.equal(stage.title, '⑭ 王都の番人？？');
+  assert.equal(stage.opponents[0].deckKey, 'fusagikonda');
+  assert.equal(stage.opponents[0].name, '塞ぎ込んだ男');
+  assert.equal(map.rows.join('').split('C').length - 1, 4, 'CPは4か所');
+  for (const symbol of ['F', 'W', 'M', 'T']) {
+    assert.equal(map.rows.join('').split(symbol).length - 1, 6, `${symbol}属性は6マス`);
+  }
+});
+
+test('灰塵は自分の無属性モンスター土地だけを全て200%換金する', async () => {
+  const ownNeutral = makeTile(0, { owner: 'A' });
+  ownNeutral.unit = unit({ ...mon('無色', 20, 20), element: 'neutral' }, 'A');
+  const ownFire = makeTile(1, { owner: 'A' });
+  ownFire.unit = unit(mon('火', 20, 20), 'A');
+  const enemyNeutral = makeTile(2, { owner: 'B' });
+  enemyNeutral.unit = unit({ ...mon('敵無色', 20, 20), element: 'neutral' }, 'B');
+  const players = [{ id: 'A', name: 'ア', currency: 0 }, { id: 'B', name: 'イ', currency: 0 }];
+  const g = makeStub([ownNeutral, ownFire, enemyNeutral], players);
+  const cashed = [];
+  g._cashOutOwnLand = async (player, tile, multiplier) => {
+    cashed.push({ tileId: tile.id, multiplier });
+    player.currency += 200;
+  };
+  await g._applySpellEffect(players[0], SPELL_CATALOG.ashToDust, {});
+  assert.deepEqual(cashed, [{ tileId: 0, multiplier: 2 }]);
+});
+
+test('持たざる者は土地0でゴールした時だけ500Gを渡して解除する', async () => {
+  const player = {
+    id: 'A', name: 'ア', currency: 100, landlessGoalBonus: 0, lapsCompleted: 0,
+    passedCheckpoints: new Set(), lotteryOnNextGoal: false,
+  };
+  const g = makeStub([makeTile(0)], [player]);
+  g.requireAllCheckpoints = false;
+  g._healOwnedUnitsOnLap = () => {};
+  g._computeLapBonus = () => ({ base: 0, land: 0, ofuda: 0, total: 0 });
+  g.onGoalBonus = async () => {};
+  g._growLapUnitsOnLap = async () => {};
+  g._maybeTradeOfudaAtGoal = async () => {};
+  g._checkGoalAchievement = async () => false;
+  await g._applySpellEffect(player, SPELL_CATALOG.landlessOne, { targetPlayerId: 'A' });
+  assert.equal(player.landlessGoalBonus, 500);
+  await g._grantGoalBonus(player);
+  assert.equal(player.currency, 600);
+  assert.equal(player.landlessGoalBonus, 0);
+});
+
+test('塞ぎ込んだ男AIは灰塵を最優先し、次にホライズン、6体でパンデミック', async () => {
+  const makeOwned = (count, level = 2, zombie = true) => Array.from({ length: count }, (_, id) => {
+    const tile = makeTile(id, { owner: 'A', level });
+    tile.unit = unit(zombie ? MONSTER_CATALOG.zombie : MONSTER_CATALOG.tetsuo, 'A');
+    return tile;
+  });
+  const comboHand = ['ashToDust', 'horizon', 'pandemic', 'landlessOne'].map((id) => spellCopy(SPELL_CATALOG[id]));
+  const ashPlayer = { id: 'A', name: '塞ぎ込んだ男', currency: 1000, spellUsedThisTurn: false, hand: comboHand, landlessGoalBonus: 0 };
+  const ashGame = makeCpuStub(makeOwned(7, 2, true), [ashPlayer]);
+  await ashGame._cpuMaybeUseFusagikondaCombo(ashPlayer);
+  assert.equal(ashGame.casts[0].name, '灰塵');
+
+  const horizonPlayer = { ...ashPlayer, spellUsedThisTurn: false, hand: comboHand };
+  const horizonGame = makeCpuStub(makeOwned(7, 1, true), [horizonPlayer]);
+  await horizonGame._cpuMaybeUseFusagikondaCombo(horizonPlayer);
+  assert.equal(horizonGame.casts[0].name, 'ホライズン');
+
+  const pandemicPlayer = { ...ashPlayer, spellUsedThisTurn: false, hand: comboHand };
+  const pandemicGame = makeCpuStub(makeOwned(6, 1, false), [pandemicPlayer]);
+  await pandemicGame._cpuMaybeUseFusagikondaCombo(pandemicPlayer);
+  assert.equal(pandemicGame.casts[0].name, 'パンデミック');
 });
 
 test('ロシアンルーレットはステータスを無視して出目だけで決まる', () => {

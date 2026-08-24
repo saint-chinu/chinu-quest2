@@ -281,6 +281,20 @@ const KESSAN_ROWS = [
   '....NNGNN....',
 ];
 
+// ⑭王都の番人？？。王都の路地を外周で巡り、中央の細道を横断できる
+// コンパクトな回廊型。4属性は各6マス、CPは外周上段2か所＋中央2か所。
+// 無属性地も4か所置き、パンデミック後の灰塵だけでなく通常の無属性召喚にも
+// 逃げ道を残す。ゴールは上段中央。
+const ROYAL_GUARD_ROWS = [
+  'CFFGWWC',
+  'M..F..T',
+  'M..F..T',
+  'MMCNCTT',
+  'M..W..T',
+  'M..W..T',
+  'NWWNFFN',
+];
+
 /**
  * ⑬の島判定。上段は3列に分かれた周回島（gridXの帯で見分ける）、
  * gridZ 8以降がゴール島。ワープの飛び先候補（ゴール島⇔CP島の往復だけ。
@@ -342,6 +356,8 @@ export const MAPS = [
   // （実際の枚数0のままだと分母1になり、1マス塗っただけで12G、10マスで
   // 上限120Gに張り付いてしまう）。
   { id: 'kessan', name: '⑬ 豪華客船（仮公開）', wip: true, rows: KESSAN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, ofuda: { startPrice: 3, initialCount: 14 }, background: assetUrl('/images/stage/stage13-luxury-liner.png'), spacing: 2.8 },
+  // ストーリー専用として実装。対戦モードへは調整完了後にwipを外して公開する。
+  { id: 'royal-guard', name: '⑭ 王都の番人？？', wip: true, rows: ROYAL_GUARD_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage14-royal-alley.jpg'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {

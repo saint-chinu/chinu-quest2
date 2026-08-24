@@ -474,6 +474,8 @@ export class Game {
       // タフネス: 空き地へ新規召喚した盤面個体だけに基礎HP+10を与える残りターン数。
       // 元カードやデッキ定義には触れず、_placeUnitでunit.summonBaseHpBonusへ焼き込む。
       toughnessTurnsRemaining: 0,
+      // 持たざる者: 土地を持たずにゴールした時だけ消費される待機中ボーナス。
+      landlessGoalBonus: 0,
       // バックファイア用: 直近に実際に着地したタイルidの履歴（新しい順が先頭）。
       tileHistory: [],
       };
@@ -584,6 +586,7 @@ export class Game {
       guaranteedNextInvasionWin: false,
       allTilesAccessTurnsRemaining: 0,
       toughnessTurnsRemaining: 0,
+      landlessGoalBonus: 0,
       tileHistory: [],
     };
   }
@@ -1348,6 +1351,37 @@ export class Game {
         await this._cashOutOwnLand(player, targetTile, effect.multiplier || 1);
         return false;
 
+      case 'cashOutAllNeutralMonsterLands': {
+        const targets = this.tiles.filter((tile) => (
+          tile.type === TileType.LAND
+          && tile.owner === player.id
+          && tile.unit?.ownerId === player.id
+          && tile.unit.def.element === Element.NEUTRAL
+        ));
+        if (targets.length === 0) {
+          this.onLog('無属性モンスターが配置された自分の土地がないため、灰塵は不発に終わった');
+          return false;
+        }
+        let total = 0;
+        for (const tile of targets) {
+          // 連鎖が崩れるたび残りの地価も変わるため、実際の売却順でその都度
+          // 現在地価を計算する。各土地の消滅演出・相場・連鎖表示は既存の
+          // 強制成仏と同じ安全な処理へ集約する。
+          const before = player.currency;
+          await this._cashOutOwnLand(player, tile, effect.multiplier || 2, { suppressDeathEffects: true });
+          total += player.currency - before;
+          if (this._isCancelled) break;
+        }
+        this.onLog(`${player.name}は「灰塵」で${targets.length}か所を換金し、合計${total}Gを得た`);
+        return false;
+      }
+
+      case 'landlessGoalBonusCurse':
+        if (!targetPlayer || !this._isAllyOf(targetPlayer, player)) return false;
+        targetPlayer.landlessGoalBonus = Math.max(targetPlayer.landlessGoalBonus || 0, effect.amount || 500);
+        this.onLog(`${targetPlayer.name}は「持たざる者」の呪いを受けた。土地を持たずにゴールすると+${targetPlayer.landlessGoalBonus}G`);
+        return false;
+
       case 'lotteryOnNextGoal':
         player.lotteryOnNextGoal = true;
         this.onLog(`${player.name}は宝くじを手に入れた`);
@@ -1441,6 +1475,7 @@ export class Game {
         player.guaranteedNextInvasionWin = false;
         player.allTilesAccessTurnsRemaining = 0;
         player.toughnessTurnsRemaining = 0;
+        player.landlessGoalBonus = 0;
         if (targetTile?.unit) targetTile.unit.curses = [];
         this.onLog(`${player.name}は呪いを解除した`);
         return false;
@@ -2487,6 +2522,19 @@ export class Game {
   /** ゴール(START)着地/通過どちらからも呼ぶ: このマップにrequireAllCheckpointsが立っていれば全チェックポイント通過済みの時だけボーナスを渡し、渡したらこのラップ分の通過記録をクリアする。立っていなければ無条件で渡す（従来通り）。 */
   async _grantGoalBonus(player, { viaHoming = false } = {}) {
     this._healOwnedUnitsOnLap(player);
+    // 持たざる者はCP達成の有無とは独立した「ゴール到達」ボーナス。土地を
+    // 1つでも持っている間は消費せず、次に条件を満たすまで呪いを保持する。
+    if ((player.landlessGoalBonus || 0) > 0 && this._ownedTiles(player).length === 0) {
+      const bonus = player.landlessGoalBonus;
+      player.landlessGoalBonus = 0;
+      player.currency += bonus;
+      this.onLog(`${player.name}は土地を持たずにゴールし、「持たざる者」で${bonus}Gを得た！`);
+      await this.onTargetEffect?.({
+        playerId: player.id,
+        message: `持たざる者\n土地0か所でゴール　+${bonus}G`,
+      });
+      this._notifyState();
+    }
     if (this.requireAllCheckpoints && !this._hasPassedAllCheckpoints(player)) {
       const remaining = this._remainingCheckpointNumbers(player);
       this.onLog(`${player.name}はゴールを通過（ボーナスなし）　残りのCPは${remaining.map((number) => `${number}番`).join('、')}です`);
@@ -4720,7 +4768,7 @@ export class Game {
   }
 
   /** 強制成仏: 自分の土地を地価倍率で換金し、配置モンスターは消滅、土地はLv1空き地へ戻る。 */
-  async _cashOutOwnLand(player, tile, multiplier = 1.2) {
+  async _cashOutOwnLand(player, tile, multiplier = 1.2, { suppressDeathEffects = false } = {}) {
     const landLoss = this._captureLandLoss(player, tile);
     const salePrice = Math.round(this._landValueOfTile(tile) * multiplier);
     const unit = tile.unit;
@@ -4754,7 +4802,10 @@ export class Game {
     // これが無いと換金後もLv5の枠が残り、空き地なのに高レベルに見える。
     this.scene.updateTileLevelBorder(tile);
     this.onLog(`${player.name}は「強制成仏」で土地を${salePrice}Gに換金した`);
-    if (unit) await this._handleUnitDeath(unit, player);
+    // 灰塵は「死亡」ではなく土地ごと灰にして売却する効果。パンデミックで
+    // 生まれたゾンビの再出現判定や不死鳥の手札復帰を起こすと、換金後も盤面へ
+    // 残ってコンボが破綻するため、灰塵経路だけ死亡時能力を発動させない。
+    if (unit && !suppressDeathEffects) await this._handleUnitDeath(unit, player);
     this._notifyState();
     await this._presentOfudaPriceChange(tile.element, ofudaPriceBefore);
     await this._presentLandLoss(landLoss);
@@ -5748,6 +5799,8 @@ export class Game {
     // チュートリアルではCPUの強化をLv2まで・1段階ずつに抑える。通常AIの
     // 「+3段階まで一気に上げる」を許すと序盤から地価1000G超の土地ができ、
     // 初心者が通行料で消耗するうえ、CPUの総資産が目標へ一直線に伸びる。
+    // 塞ぎ込んだ男はホライズンで一律Lv2にする以外、土地へ一切投資しない。
+    if (player.name === '塞ぎ込んだ男') return false;
     const cpuLevelCap = this.tutorialMode ? 2 : LEVEL_CAP;
     // aiProfile.levelPumpSignal（コンビ戦の役割分担用）: 相方が自分の属性の
     // お札をどれだけ買い集めたかを合図にして、土地への投資を2段階で解禁する。
@@ -7691,6 +7744,8 @@ export class Game {
     }
     await this._cpuMaybeFixLandElementSpell(this.currentPlayer);
     await this._cpuMaybeUsePsychokinesisSpell(this.currentPlayer);
+    // ⑭ボスの一本道コンボは、毒霧や遅延行為などの補助札より優先する。
+    await this._cpuMaybeUseFusagikondaCombo(this.currentPlayer);
     await this._cpuMaybeUseDisruptionSpell(this.currentPlayer);
     await this._cpuMaybeUseDamageSpell(this.currentPlayer);
     await this._cpuMaybeUsePoisonSpell(this.currentPlayer);
@@ -8379,7 +8434,8 @@ export class Game {
     };
     const best = this.tiles
       .filter((t) => {
-        if (t.type !== TileType.LAND || t.owner == null || t.level <= 1) return false;
+        const minimumLevel = player.name === '塞ぎ込んだ男' ? 4 : 2;
+        if (t.type !== TileType.LAND || t.owner == null || t.level < minimumLevel) return false;
         const owner = this.players.find((p) => p.id === t.owner);
         return owner && !owner.defeated && !this._isAllyOf(owner, player);
       })
@@ -8390,11 +8446,56 @@ export class Game {
   }
 
   /**
+   * ⑭「塞ぎ込んだ男」専用の一本道AI。
+   *  1. 盤面全体で6体以上になったらパンデミック
+   *  2. 自分が7体以上撒いたらホライズンで全領地をLv2へ
+   *  3. 自分の7体以上がゾンビ化済みかつLv2なら灰塵で200%換金
+   * 条件外のターンだけ持たざる者を自分へ準備する。各カードが手札に無い
+   * 場合は飛ばし、引けた時点で続きを再開するためドロー順には依存しない。
+   */
+  async _cpuMaybeUseFusagikondaCombo(player) {
+    if (player.name !== '塞ぎ込んだ男' || player.spellUsedThisTurn) return;
+    const affordable = (effectType) => player.hand.find((card) => (
+      card.type === CardType.SPELL
+      && card.effect?.type === effectType
+      && player.currency >= (card.cost || 0)
+    ));
+    const occupied = this.tiles.filter((tile) => tile.type === TileType.LAND && tile.unit);
+    const owned = occupied.filter((tile) => tile.owner === player.id && tile.unit.ownerId === player.id);
+    const neutralOwned = owned.filter((tile) => tile.unit.def.element === Element.NEUTRAL);
+
+    const ash = affordable('cashOutAllNeutralMonsterLands');
+    if (ash && neutralOwned.length >= 7 && neutralOwned.every((tile) => tile.level === 2)) {
+      await this._cpuCastSpell(player, ash, {});
+      return;
+    }
+
+    const horizon = affordable('setAllLandLevels');
+    if (horizon && owned.length >= 7 && owned.some((tile) => tile.level !== 2)) {
+      await this._cpuCastSpell(player, horizon, {});
+      return;
+    }
+
+    const pandemic = affordable('replaceAllUnitsWithZombie');
+    if (pandemic && occupied.length >= 6
+      && occupied.some((tile) => catalogIdOf(tile.unit.def) !== MONSTER_CATALOG.zombie.id)) {
+      await this._cpuCastSpell(player, pandemic, {});
+      return;
+    }
+
+    const landless = affordable('landlessGoalBonusCurse');
+    if (landless && !(player.landlessGoalBonus > 0)) {
+      await this._cpuCastSpell(player, landless, { targetPlayerId: player.id });
+    }
+  }
+
+  /**
    * パンデミック: 盤面の配置モンスターを全部ゾンビ(20/20)へ均す。失うのは
    * 「ゾンビより強い分」だけなので、敵側の損失が自分側の損失を明確に上回る
    * 時だけ撃つ。相手の壁が固くて侵略できない盤面をひっくり返すためのカード。
    */
   async _cpuMaybeUsePandemicSpell(player) {
+    if (player.name === '塞ぎ込んだ男') return;
     if (player.spellUsedThisTurn) return;
     const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'replaceAllUnitsWithZombie');
     if (!card || player.currency < (card.cost || 0)) return;
@@ -8423,6 +8524,7 @@ export class Game {
    * 太らせるなら撃たない）。
    */
   async _cpuMaybeUseHorizonSpell(player) {
+    if (player.name === '塞ぎ込んだ男') return;
     if (player.spellUsedThisTurn) return;
     const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'setAllLandLevels');
     if (!card || player.currency < (card.cost || 0)) return;

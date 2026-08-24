@@ -298,6 +298,30 @@ export const SPELL_CATALOG = {
     imageDataUrl: assetUrl('/images/card-art/capitalismIncarnate.png'),
     rewardOnly: true,
   },
+  ashToDust: {
+    ...spell(
+      'ashToDust',
+      '灰塵',
+      Rarity.EX,
+      100,
+      'self',
+      { type: 'cashOutAllNeutralMonsterLands', multiplier: 2 },
+      '自分の無属性モンスターが配置された土地をすべて手放し、地価の200%で換金する。配置モンスターは消滅し、土地は空き地Lv1に戻る',
+    ),
+    imageDataUrl: assetUrl('/images/card-art/ashToDust.jpg'),
+  },
+  landlessOne: {
+    ...spell(
+      'landlessOne',
+      '持たざる者',
+      Rarity.S,
+      0,
+      'selfOrAllyPlayer',
+      { type: 'landlessGoalBonusCurse', amount: 500 },
+      '対象プレイヤーが土地を1つも持たずにゴールした時、ボーナスとして500Gを得るプレイヤー呪い。条件を満たすまで残る',
+    ),
+    imageDataUrl: assetUrl('/images/card-art/landlessOne.jpg'),
+  },
   // ── 移動系 ──
   diceOne: spell('diceOne', '1のダイス', Rarity.N, 30, 'anyPlayer', { type: 'setNextDice', value: 1 }, '選んだプレイヤーの次のサイコロを1にする'),
   backfire: spell('backfire', 'バックファイア', Rarity.S, 50, 'anyPlayer', { type: 'reverseNextDice' }, '選んだプレイヤーを次のサイコロの数だけ後退させる'),
@@ -1443,6 +1467,35 @@ export const CHARACTER_DECKS = {
           { def: SPELL_CATALOG.taxHike, count: 1 },
           { def: SPELL_CATALOG.sanctuary, count: 1 },
           { def: SPELL_CATALOG.phoenixCurse, count: 1 },
+      ],
+    },
+  },
+  /** ⑭王都の番人？？。盤面へ数を撒き、パンデミック→ホライズン→灰塵の
+   * 一連だけで資金化する専用構成。固定40枚。 */
+  fusagikonda: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.thunderbird, count: 4 },
+        { def: MONSTER_CATALOG.dryad, count: 4 },
+        { def: MONSTER_CATALOG.mysteriousInvader, count: 4 },
+        { def: MONSTER_CATALOG.kyousenshi, count: 4 },
+        { def: MONSTER_CATALOG.kontonNoAtama, count: 2 },
+        { def: MONSTER_CATALOG.tetsuo, count: 1 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.shinkenShirahadori, count: 4 },
+        { def: ITEM_CATALOG.zangokuKen, count: 1 },
+        { def: ITEM_CATALOG.lifeJacket, count: 1 },
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.ashToDust, count: 2 },
+        { def: SPELL_CATALOG.pandemic, count: 2 },
+        { def: SPELL_CATALOG.horizon, count: 2 },
+        { def: SPELL_CATALOG.landlessOne, count: 2 },
+        { def: SPELL_CATALOG.poisonMist, count: 2 },
+        { def: SPELL_CATALOG.delayTactics, count: 2 },
+        { def: SPELL_CATALOG.diceOne, count: 2 },
       ],
     },
   },
