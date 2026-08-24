@@ -8616,6 +8616,17 @@ export class Game {
     const affordable = diceCards.filter((c) => player.currency >= (c.cost || 0));
     if (affordable.length === 0) return;
 
+    // ⑬のQは「1のダイス」で主人公を足止めすることがデッキ上の明示的な役割。
+    // 高額空き地へ自分を寄せる一般則より先に処理し、自己使用に化けないようにする。
+    if (player.aiProfile?.diceHarassHuman) {
+      const diceOne = affordable.find((c) => c.effect?.type === 'setNextDice' && c.effect.value === 1);
+      const humanTarget = this._cpuPickDiceSpellTarget(player);
+      if (diceOne && humanTarget && !humanTarget.isCPU) {
+        await this._cpuCastSpell(player, diceOne, { targetPlayerId: humanTarget.id });
+        return;
+      }
+    }
+
     // 自分から高額空き地までの距離と一致する固定ダイスがあれば、自分へ
     // 使用して確保を狙う。妨害目的で相手へ使う判断より優先する。
     for (const tile of this._cpuHighValueEmptyLands()) {
@@ -8661,6 +8672,12 @@ export class Game {
       (p) => !p.defeated && p.id !== player.id && !(p.allianceId != null && p.allianceId === player.allianceId),
     );
     if (candidates.length === 0) return null;
+    // ステージ固有の妨害役（⑬のQなど）は、同盟外のCPUへ無駄打ちせず
+    // 主人公＝人間プレイヤーを優先して固定ダイスを使う。
+    if (player.aiProfile?.diceHarassHuman) {
+      const human = candidates.find((p) => !p.isCPU);
+      if (human) return human;
+    }
     // ②総資産が最上位（＝1位）のプレイヤーを狙う（CPUも含む。自分・同盟は除外）。
     return candidates.reduce((best, p) => (this._totalAssetsOf(p) > this._totalAssetsOf(best) ? p : best));
   }

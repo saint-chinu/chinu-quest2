@@ -1311,12 +1311,13 @@ export const CHARACTER_DECKS = {
         // 落雷予報士: 戦闘開始時50%で相手の装備を無効化する。プレイヤーの
         // 「強い武器を積んで一点突破」という定番の対策を正面から潰す。
         { def: MONSTER_CATALOG.rakuraiYohoushi, count: 2 },
-        { def: MONSTER_CATALOG.hatsudenNezumi, count: 1 },
+        { def: MONSTER_CATALOG.tetsuo, count: 1 },
         { def: MONSTER_CATALOG.raiun, count: 1 },
       ],
       items: [
         { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
-        { def: ITEM_CATALOG.lifeJacket, count: 1 },
+        { def: ITEM_CATALOG.lifeJacket, count: 2 },
+        { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
       ],
       spells: [
         // 雷単色なので塗り替えは放電に集中させる。
@@ -1325,10 +1326,10 @@ export const CHARACTER_DECKS = {
         // 出目操作と帰巣本能で1周を早く畳む。
         { def: SPELL_CATALOG.homingInstinct, count: 2 },
         { def: SPELL_CATALOG.iCanFly, count: 2 },
-        { def: SPELL_CATALOG.diceSix, count: 1 },
-        { def: SPELL_CATALOG.sanctuary, count: 2 },
-        { def: SPELL_CATALOG.phoenixCurse, count: 2 },
-        { def: SPELL_CATALOG.antlion, count: 1 },
+        // 1のダイスは主人公を足止めする妨害札（stage 13のAI設定で人間を優先）。
+        { def: SPELL_CATALOG.diceOne, count: 2 },
+        { def: SPELL_CATALOG.sanctuary, count: 1 },
+        { def: SPELL_CATALOG.phoenixCurse, count: 1 },
         { def: SPELL_CATALOG.specialAudit, count: 2 },
         { def: SPELL_CATALOG.sideIncome, count: 3 },
         { def: SPELL_CATALOG.divination, count: 2 },

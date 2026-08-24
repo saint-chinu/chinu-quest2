@@ -1018,6 +1018,9 @@ export const STORY_STAGES = [
           highValueAvoidance: 0.85,
           offElementSummonChance: 0.05,
           scatterSummons: true,
+          // 1のダイスで主人公の足を止める。ほかのCPUを狙って同盟戦の駆け引きを
+          // 崩さないよう、人間プレイヤーを優先する。
+          diceHarassHuman: true,
           neutralRepaintAfter: 8,
           counterOfudaBuy: { sheets: 20 },
           levelPumpSignal: {
