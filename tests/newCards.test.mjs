@@ -14,6 +14,7 @@ const { Game } = await vite.ssrLoadModule('/src/game.js');
 const battle = await vite.ssrLoadModule('/src/battle.js');
 const { TileType, MAPS } = await vite.ssrLoadModule('/src/board.js');
 const { STORY_STAGES } = await vite.ssrLoadModule('/src/story.js');
+const { WIP_CARD_NAMES, reclaimReleasedWipHoldings } = await vite.ssrLoadModule('/src/cardCatalog.js');
 test.after(() => vite.close());
 
 const mon = (name, hp, atk, extra = {}) => ({ id: name, name, element: 'fire', rarity: 'N', hp, atk, ...extra });
@@ -78,6 +79,41 @@ test('新カードはカタログに載り、参照している画像が実在�
   assert.equal(ITEM_CATALOG.diamondShield.atkBonus, -20);
   assert.equal(ITEM_CATALOG.diamondShield.hpBonus, 60);
   assert.ok(ITEM_CATALOG.diamondShield.traits.includes('lastStrike'));
+});
+
+test('甲鉄要塞は公開済みで、成長型の未公開は無属性だけ', () => {
+  assert.equal(MONSTER_CATALOG.koutetsuYousai.wip, undefined);
+  assert.deepEqual(WIP_CARD_NAMES, ['積み上がった伝票']);
+  // 火水雷森は入手可能枚数が N11/S8/R5 で揃っていること（無属性だけ別枠）。
+  for (const element of ['fire', 'water', 'thunder', 'forest']) {
+    const live = Object.values(MONSTER_CATALOG)
+      .filter((c) => c.element === element && !c.wip && !c.npcExclusive);
+    const n = (r) => live.filter((c) => c.rarity === r).length;
+    assert.deepEqual([n('N'), n('S'), n('R')], [11, 8, 5], `${element}の枚数が揃っていない`);
+  }
+});
+
+test('公開されたwipカードは退避分が所持へ戻り、再ログインしても増えない', () => {
+  const character = {
+    ownedCards: { ナイフ: 2 },
+    // 甲鉄要塞=公開された / 積み上がった伝票=まだ未公開 / 溶鉱炉=改名で廃止
+    wipCardHoldings: { 甲鉄要塞: 3, 積み上がった伝票: 2, 溶鉱炉: 4 },
+  };
+  assert.equal(reclaimReleasedWipHoldings(character), true);
+  assert.equal(character.ownedCards.甲鉄要塞, 3, '公開済みは所持へ戻る');
+  assert.equal(character.ownedCards.溶鉱炉, undefined, '廃止カードは復活しない');
+  assert.deepEqual(character.wipCardHoldings, { 積み上がった伝票: 2 }, '未公開分は退避したまま');
+
+  // 2回目以降は何も起きない（＝ログインのたびに増殖しない）。
+  assert.equal(reclaimReleasedWipHoldings(character), false);
+  assert.equal(character.ownedCards.甲鉄要塞, 3);
+});
+
+test('既に持っている枚数のほうが多ければ、退避分で減らさない', () => {
+  const character = { ownedCards: { 甲鉄要塞: 5 }, wipCardHoldings: { 甲鉄要塞: 3 } };
+  reclaimReleasedWipHoldings(character);
+  assert.equal(character.ownedCards.甲鉄要塞, 5);
+  assert.equal(character.wipCardHoldings, undefined, '空になった記録は消す');
 });
 
 test('塞ぎ込んだ男の固定デッキは指定札を含む40枚', () => {

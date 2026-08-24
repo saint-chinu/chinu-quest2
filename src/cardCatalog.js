@@ -40,3 +40,47 @@ export function isLegacyPlaceholderCardName(name) {
 export const WIP_CARD_NAMES = Object.values(MONSTER_CATALOG)
   .filter((card) => card.wip)
   .map((card) => card.name);
+
+/**
+ * 現在配布されている（wipでもNPC専用でもない）正規カード名の集合。
+ * wipCardHoldingsへ退避した枚数を配り直してよいかの判定に使う
+ * （main.jsのapplyWipRollback ③）。ここに無い名前は「まだ未公開」か
+ * 「改名・廃止されて今のカタログに存在しない」のどちらかで、前者は
+ * WIP_CARD_NAMESで先に弾かれるので、残りは配り直しようがない。
+ */
+export const RELEASED_CARD_NAMES = new Set([
+  ...Object.values(MONSTER_CATALOG).filter((card) => !card.wip && !card.npcExclusive).map((card) => card.name),
+  ...Object.values(ITEM_CATALOG).map((card) => card.name),
+  ...Object.values(SPELL_CATALOG).map((card) => card.name),
+]);
+
+/**
+ * wipCardHoldingsへ退避してある枚数のうち、公開済みになったカードを
+ * ownedCardsへ戻す（main.jsのapplyWipRollback ③の本体）。
+ *
+ * ・戻し方は退避時と同じ「最大値」。ログインのたびに走るので、加算に
+ *   すると再ログインで際限なく増える。
+ * ・改名・廃止で今のカタログに無い名前は戻す先が無いため、記録だけ捨てる。
+ * ・まだwipのカードは触らない（退避したまま次の公開を待つ）。
+ *
+ * DOMに触らない純粋な関数として切り出してある。この経路は1アカウントに
+ * つき一度きり・無言で走るので、壊れると「カードが消えた」「増えた」に
+ * 直結する。tests/newCards.test.mjsで検証すること。
+ * 変更があればtrueを返す。
+ */
+export function reclaimReleasedWipHoldings(character) {
+  const holdings = character?.wipCardHoldings;
+  if (!holdings) return false;
+  const stillWip = new Set(WIP_CARD_NAMES);
+  let changed = false;
+  for (const [name, count] of Object.entries(holdings)) {
+    if (stillWip.has(name)) continue;
+    delete holdings[name];
+    changed = true;
+    if (!RELEASED_CARD_NAMES.has(name)) continue;
+    character.ownedCards = character.ownedCards || {};
+    character.ownedCards[name] = Math.max(character.ownedCards[name] || 0, count);
+  }
+  if (Object.keys(holdings).length === 0) delete character.wipCardHoldings;
+  return changed;
+}

@@ -6,7 +6,7 @@ import { Game } from './game.js';
 import { CardType, CARD_COLOR, ELEMENT_LABEL, Element, Rarity, RARITY_COLOR, RARITY_SELL_PRICE, TYPE_ICON } from './cards.js';
 import { STARTER_DECKS, buildStarterDeckList, buildThemedDeckList, buildCharacterDeckList, MONSTER_CATALOG, ITEM_CATALOG, SPELL_CATALOG, catalogIdOf } from './battleCards.js';
 import { loginOrRegister, saveCharacter } from './auth.js';
-import { getCardCatalog, isLegacyPlaceholderCardName, WIP_CARD_NAMES } from './cardCatalog.js';
+import { getCardCatalog, isLegacyPlaceholderCardName, WIP_CARD_NAMES, reclaimReleasedWipHoldings } from './cardCatalog.js';
 import { PACKS, drawPack } from './shopPacks.js';
 import { CARD_EFFECTS, saveCustomCard, saveCustomCardsBulk, setCloudCustomCardUser, validateCustomCard } from './customCards.js';
 import { loadCharacterIconPresets, fileToCharacterIcon, resolveCharacterIcon, iconFromDataUrl, compactCharacterIconDataUrl } from './playerIcons.js';
@@ -4797,6 +4797,10 @@ function ensureBreedFields(character) {
  * ②未公開に戻したカード(cardCatalog.jsのWIP_CARD_NAMES)を手元とデッキから
  *   外す。ただし引いてしまった枚数はcharacter.wipCardHoldingsへ残す
  *   （公開時にこの記録を見て配り直すため、上書きではなく最大値を保持する）。
+ * ③②で退避した分のうち、既に公開されたカードを所持へ戻す。②と同じく
+ *   最大値で入れるので、何度ログインしても増殖しない。改名・廃止されて
+ *   今のカタログに無い名前（溶鉱炉・氷結ドック・大樹の砦）は配り直しよう
+ *   がないので、記録だけ捨てる。
  *
  * 変更があったかどうかを返す。呼び出し元はtrueならクラウドへ保存し直す。
  */
@@ -4827,6 +4831,11 @@ function applyWipRollback(character) {
     }
     if (Object.keys(holdings).length > 0) character.wipCardHoldings = holdings;
   }
+
+  // ③公開済みになったカードの配り直し。未公開カードが1枚も無くなった後も
+  // 退避分は残りうるので、上のifの外で必ず通す。中身はcardCatalog.js側
+  // （DOMに触らない純粋な関数なのでテストできる）。
+  if (reclaimReleasedWipHoldings(character)) changed = true;
 
   return changed;
 }

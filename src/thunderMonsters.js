@@ -49,8 +49,6 @@ export const THUNDER_MONSTER_CATALOG = {
   //   素 40/10 → 1周 50/10 → 2周 65/20 → 3周 強制停止
   koutetsuYousai: thunderMonster('koutetsuYousai', '甲鉄要塞', Rarity.S, 40, 10, {
     cost: 40,
-    // 制作中。パック・デッキ編集・図鑑には出さず、CPUのキャラ専用デッキでのみ使う。
-    wip: true,
     traits: ['immovableByMoveCommand', 'emptyTileOnly'],
     effect: {
       type: 'lapGrowth',
