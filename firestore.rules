@@ -44,6 +44,20 @@ service cloud.firestore {
       allow create, update, delete: if isAdmin();
     }
 
+    // ストーリー対戦の記録（バランス調整用）。本人だけが自分の対戦を作成でき、
+    // 閲覧は管理者のみ。他プレイヤーのデッキ内容や戦績を互いに覗けないようにする。
+    // 一度書いた記録は本人にも改変・削除させない（集計の信頼性のため）。
+    match /battleLogs/{id} {
+      allow create: if request.auth != null
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.keys().hasOnly([
+          'uid', 'playerName', 'stageKey', 'stageTitle', 'won', 'isReplay',
+          'turnCount', 'players', 'deck', 'counters', 'lines', 'createdAt'
+        ]);
+      allow read: if isAdmin();
+      allow update, delete: if false;
+    }
+
     // 対戦相手のフレンド一覧。相互登録は各端末が「自分の一覧」だけへ書く。
     match /pvpFriends/{uid}/entries/{friendUid} {
       allow read, create, update, delete: if request.auth != null && request.auth.uid == uid;

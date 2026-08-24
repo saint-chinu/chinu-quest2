@@ -236,6 +236,18 @@
             <button id="admin-compose-send" class="pg-button" type="button">この内容で配信する</button>
             <p id="admin-compose-status" class="admin-compose-status"></p>
           </section>
+          <section id="admin-battlelog" class="admin-compose">
+            <h3 class="admin-compose-title">📋 対戦ログ</h3>
+            <p class="admin-compose-hint">ストーリー対戦の記録です。バランス調整の材料に使います（テストプレイは記録しません）。</p>
+            <div class="admin-compose-cardrow">
+              <select id="admin-battlelog-pick" class="admin-compose-input"></select>
+              <button id="admin-battlelog-reload" class="pg-button pg-button-secondary" type="button">再読込</button>
+              <button id="admin-battlelog-copy" class="pg-button" type="button">この対戦をコピー</button>
+            </div>
+            <textarea id="admin-battlelog-export" class="admin-compose-textarea" readonly placeholder="対戦を選んで「この対戦をコピー」を押すと、ここに中身が出ます"></textarea>
+            <p id="admin-battlelog-status" class="admin-compose-status"></p>
+          </section>
+
           <section id="admin-testplay" class="admin-compose">
             <h3 class="admin-compose-title">🧪 テストプレイ</h3>
             <p class="admin-compose-hint">制作中を含む全ステージを、登録プレイヤーのデッキで試せます。進行度・報酬・図鑑には一切記録されません。</p>

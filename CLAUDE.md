@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v197`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v198`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## 未実装: Firebase App Check
@@ -20,6 +20,20 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
   `VITE_FIREBASE_APPCHECK_SITE_KEY`として登録してからデプロイする。
 - 先にApp Checkのリクエスト指標を監視し、正規プレイヤーのトークン送信を確認してから
   Firestore等のenforcementを有効化する。キー未設定のまま強制化してはいけない。
+
+## ⑬のバランス調整ループ（ひなんじょ・29ch の実戦ログ）
+
+- ストーリー対戦は終了時に Firestore の `battleLogs` へ1試合1ドキュメントで
+  自動保存される（`recordStoryBattleLog`）。テストプレイと対人戦は記録しない。
+  読めるのは管理者だけ（`firestore.rules`）。
+- 取り出し方: 管理ダッシュボードの「📋 対戦ログ」で対戦を選び「この対戦をコピー」。
+  最終資産・使用デッキ・通行料の収支・スペル/召喚の使用回数・全ログが入る。
+- **セッションは毎回まっさらなコンテナなので、こちらから本番Firestoreは読めない。**
+  解析を頼む時は、上のコピーを会話に貼ること。
+- 調整の制約（ユーザー指定）: **基本ルールは変えない。デッキとAIの調整だけで**
+  CPUがこの2人に勝てるようにする。盤面・勝利条件・カード効果の仕様には触らない。
+- 検証は `scratchpad/pilotrun.mjs`（主人公を手動操作してCPUと戦わせる）。
+  シード固定なので設定違いを同じ出目で比較できる。n=120未満の差は誤差。
 
 ## ⚠️ 並行開発 (Codex) — 必ず守る
 別のエージェント Codex（git author「セイントチヌ」/「saint-chinu」, 同一ユーザー

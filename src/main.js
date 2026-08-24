@@ -3245,6 +3245,11 @@ function startBattle(character, storyOptions = {}) {
     scene,
     onLog: (message) => {
       logEl.textContent = message;
+      // バランス調整用にストーリー対戦のログを溜める（記録の実体は
+      // recordStoryBattleLog。テストプレイと対人戦は対象外）。
+      if (storyBattleLogLines && storyBattleLogLines.length < STORY_LOG_LINE_CAP) {
+        storyBattleLogLines.push(message);
+      }
     },
     onStateChange: ({
       turnText,
@@ -3772,6 +3777,11 @@ const adminScreen = document.getElementById('admin-screen');
 const adminContent = document.getElementById('admin-content');
 const adminBack = document.getElementById('admin-back');
 const adminRefresh = document.getElementById('admin-refresh');
+const adminBattlelogPick = document.getElementById('admin-battlelog-pick');
+const adminBattlelogReload = document.getElementById('admin-battlelog-reload');
+const adminBattlelogCopy = document.getElementById('admin-battlelog-copy');
+const adminBattlelogExport = document.getElementById('admin-battlelog-export');
+const adminBattlelogStatus = document.getElementById('admin-battlelog-status');
 const adminTestplayStage = document.getElementById('admin-testplay-stage');
 const adminTestplayDeck = document.getElementById('admin-testplay-deck');
 const adminTestplayStart = document.getElementById('admin-testplay-start');
@@ -4625,6 +4635,7 @@ async function showAdminDashboard(forceReload = false) {
   // ステージ一覧はプレイヤーの読み込みを待たずに埋める（Firebaseに繋がらない
   // 環境でも、どのステージが選べるかは見えるようにしておく）。
   renderAdminTestplay();
+  loadAdminBattleLogs();
   if (!firebaseReady || !db) {
     adminContent.innerHTML = '<p class="admin-error">Firebaseに接続できないため集計できません。</p>';
     return;
@@ -5277,6 +5288,7 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
   activeStoryStageIndex = index;
   activeStorySessionMeta = { heroDeckList, isReplay };
   latestStoryCheckpoint = null;
+  startStoryBattleLog();
 
   const characterIcon = await resolveCharacterIcon(currentCharacter);
   const iconImage = characterIcon?.canvas ?? null;
@@ -5463,6 +5475,70 @@ async function playStoryOutroOverlay(stage, outroLines) {
   });
 }
 
+// ストーリー対戦のログ収集。1試合ぶんを溜めてFirestoreへ1ドキュメント残す。
+// 上限を切っているのは、長期戦でドキュメントサイズ上限(1MB)に当たらないため。
+const STORY_LOG_LINE_CAP = 1200;
+let storyBattleLogLines = null;
+
+function startStoryBattleLog() {
+  storyBattleLogLines = [];
+}
+
+/**
+ * 対戦の記録をFirestoreのbattleLogsへ残す。閲覧できるのは管理者だけ
+ * （firestore.rules）。失敗してもゲーム進行は止めない——記録は後追いの
+ * 分析材料であって、プレイヤーの体験を人質に取るものではない。
+ */
+async function recordStoryBattleLog(stage, index, won, isReplay) {
+  const lines = storyBattleLogLines;
+  storyBattleLogLines = null;
+  if (!lines || !game || !currentUserId) return;
+  try {
+    const deck = {};
+    for (const card of activeStorySessionMeta?.heroDeckList || []) {
+      deck[card.name] = (deck[card.name] || 0) + 1;
+    }
+    const counters = { tollPaid: {}, tollGot: {}, spells: {}, summons: {} };
+    for (const line of lines) {
+      let m = line.match(/^(.+?)は通行料を支払った \(-(\d+)G → (.+?)\)$/);
+      if (m) {
+        counters.tollPaid[m[1]] = (counters.tollPaid[m[1]] || 0) + Number(m[2]);
+        counters.tollGot[m[3]] = (counters.tollGot[m[3]] || 0) + Number(m[2]);
+        continue;
+      }
+      m = line.match(/^(.+?)は「(.+?)」を使用した/);
+      if (m) { counters.spells[`${m[1]}:${m[2]}`] = (counters.spells[`${m[1]}:${m[2]}`] || 0) + 1; continue; }
+      m = line.match(/^(.+?)は(.+?)を召喚した/);
+      if (m) counters.summons[`${m[1]}:${m[2]}`] = (counters.summons[`${m[1]}:${m[2]}`] || 0) + 1;
+    }
+    const players = game.players.map((p) => ({
+      name: p.name,
+      isCPU: !!p.isCPU,
+      currency: p.currency,
+      laps: p.lapsCompleted || 0,
+      lands: game.tiles.filter((t) => t.owner === p.id).length,
+      totalAssets: game._totalAssetsOf(p),
+      ofuda: p.ofuda || null,
+    }));
+    await fsAddDoc(collection(db, 'battleLogs'), {
+      uid: currentUserId,
+      playerName: currentCharacter?.name || '',
+      stageKey: stage?.key || String(index),
+      stageTitle: stage?.title || '',
+      won: !!won,
+      isReplay: !!isReplay,
+      turnCount: game.turnCount || 0,
+      players,
+      deck,
+      counters,
+      lines,
+      createdAt: fsServerTimestamp(),
+    });
+  } catch (err) {
+    console.warn('対戦ログの保存に失敗', err);
+  }
+}
+
 async function handleStoryBattleEnd(index, result = {}) {
   const { won } = result;
   const stage = STORY_STAGES[index];
@@ -5472,6 +5548,7 @@ async function handleStoryBattleEnd(index, result = {}) {
   // 勝敗どちらでも通るよう、他の分岐より先に処理する。
   if (storyTestPlayMode) {
     storyTestPlayMode = false;
+    storyBattleLogLines = null; // テストプレイは記録しない
     game = undefined;
     blockMusicPlayback();
     appEl.classList.add('hidden');
@@ -5483,6 +5560,8 @@ async function handleStoryBattleEnd(index, result = {}) {
     showAdminDashboard();
     return;
   }
+  // 対戦の記録。この直後にgame=undefinedになるので、盤面が生きているうちに残す。
+  await recordStoryBattleLog(stage, index, won, activeStorySessionMeta?.isReplay);
   // ストーリー本編・再戦共通の「4%＋相手人数×3%」報酬を勝敗にかかわらず付与。
   const mReward = grantStoryBattleReward();
   // overlayNpc持ちのステージ（①②）の勝利時だけ、盤面をまだ隠さずに決着
@@ -5646,6 +5725,59 @@ function adminTestplayDeckOptions() {
   return options;
 }
 
+// 対戦ログの閲覧。読めるのは管理者だけ（firestore.rules）。
+// 解析はこの画面ではなく、書き出したテキストを外に持ち出して行う想定。
+let adminBattleLogDocs = [];
+
+async function loadAdminBattleLogs() {
+  if (!adminBattlelogPick) return;
+  adminBattlelogStatus.textContent = '読込中…';
+  try {
+    const snap = await fsGetDocs(fsQuery(collection(db, 'battleLogs'), fsOrderBy('createdAt', 'desc')));
+    adminBattleLogDocs = snap.docs.slice(0, 100).map((d) => d.data());
+    adminBattlelogPick.replaceChildren();
+    adminBattleLogDocs.forEach((row, i) => {
+      const option = document.createElement('option');
+      option.value = String(i);
+      const when = row.createdAt?.toDate ? row.createdAt.toDate().toLocaleString('ja-JP') : '';
+      option.textContent = `${when} ${row.playerName}／${row.stageTitle}／${row.won ? '勝ち' : '負け'}`;
+      adminBattlelogPick.appendChild(option);
+    });
+    adminBattlelogStatus.textContent = adminBattleLogDocs.length
+      ? `${adminBattleLogDocs.length}件（新しい順）`
+      : 'まだ記録がありません';
+  } catch (err) {
+    adminBattlelogStatus.textContent = `読込に失敗しました：${err?.message || err}`;
+  }
+}
+
+function buildBattleLogText(row) {
+  const head = [
+    `プレイヤー: ${row.playerName}`,
+    `ステージ: ${row.stageTitle}${row.isReplay ? '（再戦）' : ''}`,
+    `結果: ${row.won ? '勝ち' : '負け'}　ターン数: ${row.turnCount}`,
+    '',
+    '[最終状態]',
+    ...(row.players || []).map((p) => `  ${p.name}${p.isCPU ? '(CPU)' : ''} 総資産${p.totalAssets}G 所持${p.currency}G 土地${p.lands} 周回${p.laps}`),
+    '',
+    '[使用デッキ]',
+    ...Object.entries(row.deck || {}).map(([n, c]) => `  ${c}x ${n}`),
+    '',
+    '[通行料]',
+    `  受取: ${JSON.stringify(row.counters?.tollGot || {})}`,
+    `  支払: ${JSON.stringify(row.counters?.tollPaid || {})}`,
+    '',
+    '[スペル使用]',
+    ...Object.entries(row.counters?.spells || {}).map(([k, v]) => `  ${k} = ${v}`),
+    '',
+    '[召喚]',
+    ...Object.entries(row.counters?.summons || {}).map(([k, v]) => `  ${k} = ${v}`),
+    '',
+    '[全ログ]',
+  ];
+  return [...head, ...(row.lines || [])].join('\n');
+}
+
 function renderAdminTestplay() {
   if (!adminTestplayStage || !adminTestplayDeck) return;
   const keepStage = adminTestplayStage.value;
@@ -5695,6 +5827,24 @@ if (adminTestplayStart) {
 }
 
 if (adminTestplayCopy) {
+  adminBattlelogReload?.addEventListener('click', () => { loadAdminBattleLogs(); });
+  adminBattlelogCopy?.addEventListener('click', async () => {
+    const row = adminBattleLogDocs[Number(adminBattlelogPick.value)];
+    if (!row) {
+      adminBattlelogStatus.textContent = 'コピーする対戦を選んでください。';
+      return;
+    }
+    const text = buildBattleLogText(row);
+    adminBattlelogExport.value = text;
+    adminBattlelogExport.select();
+    try {
+      await navigator.clipboard.writeText(text);
+      adminBattlelogStatus.textContent = 'コピーしました。';
+    } catch {
+      adminBattlelogStatus.textContent = '下の欄を選択してコピーしてください。';
+    }
+  });
+
   adminTestplayCopy.addEventListener('click', async () => {
     const options = adminTestplayDeckOptions();
     const entry = options[Number(adminTestplayDeck.value)];
