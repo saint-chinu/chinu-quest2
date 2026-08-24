@@ -4861,6 +4861,7 @@ loginSubmit.addEventListener('click', async () => {
     // ensureBreedFieldsの中では呼ばない - あちらは何度も通るので、
     // 「変わったから保存する」の判定がここで取れなくなる。
     if (applyWipRollback(currentCharacter)) saveCharacter(currentUserId, currentCharacter);
+    if (await shrinkOversizedBreedImage(currentCharacter)) saveCharacter(currentUserId, currentCharacter);
     showHubScreen();
   }
 });
@@ -6092,6 +6093,44 @@ function showCardEditor() {
 editorType.addEventListener('change', updateEditorFields);
 
 /** Shared by the single-card editor and the CSV bulk-import: downscales to maxSide and re-encodes as webp so custom-card images stay small in localStorage. */
+// 既に保存されているdataURLを縮め直す。File版と同じ768px/webp 0.82。
+function resizeDataUrl(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.addEventListener('load', () => {
+      const maxSide = 768;
+      const scale = Math.min(1, maxSide / Math.max(image.naturalWidth, image.naturalHeight));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+      canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/webp', 0.82));
+    });
+    image.addEventListener('error', () => reject(new Error('image decode failed')));
+    image.src = dataUrl;
+  });
+}
+
+/**
+ * リサイズ導入前にアップロードされたブリード画像を、ログイン時に一度だけ縮める。
+ * 大きいままだと対人戦の戦闘アイテム選択でペイロードが1MB上限を超え、相手に
+ * 選択画面が出ないまま素手で戦うことになる（カード定義ごと中継されるため）。
+ * 失敗しても黙って諦める——絵が少し重いだけで、ログインを妨げる理由にはならない。
+ */
+const BREED_IMAGE_SHRINK_THRESHOLD = 200_000;
+async function shrinkOversizedBreedImage(character) {
+  const current = character?.breedMonster?.imageDataUrl;
+  if (!current || current.length <= BREED_IMAGE_SHRINK_THRESHOLD) return false;
+  try {
+    const shrunk = await resizeDataUrl(current);
+    if (!shrunk || shrunk.length >= current.length) return false;
+    character.breedMonster.imageDataUrl = shrunk;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function resizeImageFileToDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -7590,7 +7629,14 @@ breedName.addEventListener('change', () => {
   saveCharacter(currentUserId, currentCharacter);
 });
 
-breedImage.addEventListener('change', () => {
+// ブリードモンスターの絵は、カスタムカードと同じく768px/webpへ縮めてから
+// 保存する。以前は撮った画像をそのままdataURLにしていたため、
+//  ・セーブ(players/{uid})がFirestoreの1MB上限に当たって保存に失敗する
+//  ・対人戦の戦闘アイテム選択（カード定義ごと中継される）でペイロードが
+//    1MBを超え、相手に選択画面が出ないまま素手で戦うことになる
+// という2つの形で表に出ていた。絵そのものは対人戦の醍醐味なので、落とすのは
+// 画素数だけにして、表示には影響しない範囲に収める。
+breedImage.addEventListener('change', async () => {
   const file = breedImage.files?.[0];
   if (!file) return;
   if (!file.type.startsWith('image/')) {
@@ -7598,22 +7644,25 @@ breedImage.addEventListener('change', () => {
     breedError.classList.remove('hidden');
     return;
   }
-  const reader = new FileReader();
-  reader.addEventListener('load', () => {
-    const dataUrl = String(reader.result);
-    try {
-      currentCharacter.breedMonster.imageDataUrl = dataUrl;
-      saveCharacter(currentUserId, currentCharacter);
-    } catch {
-      breedError.textContent = '画像を保存できませんでした。画像サイズを小さくしてください';
-      breedError.classList.remove('hidden');
-      return;
-    }
-    breedImagePreview.src = dataUrl;
-    breedImagePreview.classList.remove('hidden');
-    breedError.classList.add('hidden');
-  });
-  reader.readAsDataURL(file);
+  let dataUrl;
+  try {
+    dataUrl = await resizeImageFileToDataUrl(file);
+  } catch {
+    breedError.textContent = '画像を読み込めませんでした。別の画像を試してください';
+    breedError.classList.remove('hidden');
+    return;
+  }
+  try {
+    currentCharacter.breedMonster.imageDataUrl = dataUrl;
+    saveCharacter(currentUserId, currentCharacter);
+  } catch {
+    breedError.textContent = '画像を保存できませんでした。画像サイズを小さくしてください';
+    breedError.classList.remove('hidden');
+    return;
+  }
+  breedImagePreview.src = dataUrl;
+  breedImagePreview.classList.remove('hidden');
+  breedError.classList.add('hidden');
 });
 
 breedImageReset.addEventListener('click', () => {
