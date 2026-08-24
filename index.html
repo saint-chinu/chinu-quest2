@@ -571,7 +571,9 @@
       <div id="game-menu-modal" class="hidden">
         <div id="game-menu-box">
           <button id="game-menu-mute" aria-label="BGMのオン/オフ">🔊 BGM</button>
-        <button id="game-menu-speed" aria-label="盤面の速度を切り替える">⏩ 速度: 通常</button>
+          <button id="game-menu-speed" aria-label="盤面の速度を切り替える">⏩ 速度: 通常</button>
+          <button id="game-menu-battle-speed" aria-label="戦闘メッセージの速度を切り替える">⚔ メッセージ速度: 3/5</button>
+          <button id="game-menu-battle-tap" aria-label="戦闘メッセージのタップ送りを切り替える">👆 メッセージ: 自動</button>
         <button id="game-menu-pvp-wait" class="hidden" aria-label="対人戦の待機時間を短縮する">⏱ 待機カット: 0%</button>
         <button id="game-menu-help">ヘルプ</button>
         <button id="game-menu-ban" class="hidden">BAN（AIへ切替）</button>
@@ -806,12 +808,18 @@
         </div>
         <div id="battle-item-picker-box" class="hidden">
           <p id="battle-item-picker-title"></p>
+          <button id="battle-monster-detail-button" type="button">モンスターの詳細確認</button>
           <div id="battle-item-picker-choices"></div>
           <div id="battle-opponent-items" class="hidden">
             <p id="battle-opponent-items-title"></p>
             <div id="battle-opponent-items-choices"></div>
           </div>
           <button id="battle-item-picker-skip">使わない</button>
+        </div>
+        <div id="battle-monster-detail-box" class="hidden" role="dialog" aria-modal="true" aria-label="戦闘モンスターの詳細">
+          <p>モンスターの詳細確認</p>
+          <div id="battle-monster-detail-cards"></div>
+          <button id="battle-monster-detail-close" type="button">アイテム選択に戻る</button>
         </div>
         <!-- 装備できるアイテムが1枚も無い時（手札に無い／所持Gが足りない）に、
              選択画面の代わりに一瞬だけ出す通知。操作を待たずに戦闘が進む。 -->

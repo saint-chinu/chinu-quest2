@@ -3488,6 +3488,24 @@ html, body {
   background: #3f3f70;
 }
 
+.debt-sale-land-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.debt-sale-detail-button {
+  min-width: 58px;
+  border: 1px solid #7084b2;
+  border-radius: 8px;
+  background: #263957;
+  color: #e7f2ff;
+  font-weight: 800;
+}
+
+.debt-sale-detail-button:hover { background: #34517a; }
+
 .debt-sale-price {
   font-size: 17px;
   font-weight: 900;
@@ -4425,6 +4443,76 @@ html, body {
 
 #battle-item-picker-box.hidden {
   display: none;
+}
+
+#battle-monster-detail-box {
+  position: absolute;
+  z-index: 7;
+  inset: 7% 5%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid rgba(163, 220, 255, .55);
+  border-radius: 15px;
+  background: rgba(12, 18, 43, .96);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, .65);
+  color: #fff;
+}
+
+#battle-monster-detail-box.hidden { display: none; }
+#battle-monster-detail-box > p { margin: 0; font-size: 17px; font-weight: 900; }
+
+#battle-monster-detail-cards {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(135px, 1fr));
+  gap: 14px;
+  width: min(90%, 680px);
+  max-height: 62vh;
+  overflow-y: auto;
+}
+
+.battle-monster-detail-card {
+  display: grid;
+  grid-template-columns: 76px 1fr;
+  gap: 8px;
+  align-items: start;
+  padding: 9px;
+  border-radius: 10px;
+  background: rgba(255,255,255,.07);
+  text-align: left;
+}
+
+.battle-monster-detail-card .card { width: 76px; height: 106px; font-size: 10px; }
+.battle-monster-detail-copy { white-space: pre-line; font-size: 12px; line-height: 1.45; }
+
+#battle-monster-detail-button {
+  margin: 0 auto 8px;
+  border-color: #8bc6ed;
+  background: rgba(34, 83, 123, .9);
+  color: #e9f9ff;
+  font-weight: 800;
+}
+
+#battle-message-text.tap-advance {
+  cursor: pointer;
+  outline: 1px solid rgba(255, 235, 157, .65);
+  outline-offset: 5px;
+}
+
+#battle-message-text.tap-advance::after {
+  content: ' タップで進む';
+  display: block;
+  margin-top: 5px;
+  color: #ffe89a;
+  font-size: .58em;
+}
+
+@media (max-width: 620px) {
+  #battle-monster-detail-cards { grid-template-columns: 1fr; }
+  #battle-monster-detail-box { inset: 4% 3%; }
 }
 
 #battle-item-picker-title {

@@ -4580,6 +4580,9 @@ export class Game {
       ...this.getTileSummary(tile),
       salePrice: Math.round(this._landValueOfTile(tile) / 2),
       unitRarity: tile.unit ? tile.unit.def.rarity : null,
+      // 売却前に詳細を確認するUI用。配置モンスターは強制売却時に消滅するため、
+      // 選択画面へカード定義を明示的に渡しておく。
+      unitCard: tile.unit ? tile.unit.def : null,
     };
   }
 
@@ -6666,6 +6669,8 @@ export class Game {
             ownerName: attackerPlayer.name,
             opponentName: defenderPlayer.name,
             unitName: attackerUnit.def.name,
+            attackerCard: attackerUnit.def,
+            defenderCard: defenderUnit.def,
             // 装備にはコスト(G)がかかるので、選択UIで払えるかどうかを出し分ける。
             currency: attackerPlayer.currency,
           },
@@ -6681,6 +6686,8 @@ export class Game {
             ownerName: defenderPlayer.name,
             opponentName: attackerPlayer.name,
             unitName: defenderUnit.def.name,
+            attackerCard: attackerUnit.def,
+            defenderCard: defenderUnit.def,
             currency: defenderPlayer.currency,
           },
           defenderPlayer.id,

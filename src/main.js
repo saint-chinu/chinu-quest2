@@ -221,6 +221,10 @@ const battleOpponentItems = document.getElementById('battle-opponent-items');
 const battleOpponentItemsTitle = document.getElementById('battle-opponent-items-title');
 const battleOpponentItemsChoices = document.getElementById('battle-opponent-items-choices');
 const battleItemPickerSkip = document.getElementById('battle-item-picker-skip');
+const battleMonsterDetailButton = document.getElementById('battle-monster-detail-button');
+const battleMonsterDetailBox = document.getElementById('battle-monster-detail-box');
+const battleMonsterDetailCards = document.getElementById('battle-monster-detail-cards');
+const battleMonsterDetailClose = document.getElementById('battle-monster-detail-close');
 const battleMessageText = document.getElementById('battle-message-text');
 
 const BLINK_MS = 600;
@@ -743,6 +747,28 @@ function promptConfirmMove() {
  * 能動的に売る手段は無い - game.js _resolveNegativeCurrency参照）。
  * マイナスが解消するまで1件売るたびにまた同じ形で呼ばれる。
  */
+function appendDebtSaleLandChoice(tile, onPick) {
+  const row = document.createElement('div');
+  row.className = 'debt-sale-land-row';
+  const sell = document.createElement('button');
+  sell.className = 'debt-sale-choice';
+  const unitLine = tile.unitName
+    ? `${tile.unitName}（${tile.unitRarity}） ATK${tile.unitAtk} / HP${tile.unitHp}`
+    : '（配置モンスターなし）';
+  sell.innerHTML = `<span class="debt-sale-price">+${tile.salePrice}G</span><span class="debt-sale-unit">土地売却：${unitLine}</span>`;
+  sell.addEventListener('click', onPick);
+  row.appendChild(sell);
+  if (tile.unitCard) {
+    const detail = document.createElement('button');
+    detail.type = 'button';
+    detail.className = 'debt-sale-detail-button';
+    detail.textContent = '詳細';
+    detail.addEventListener('click', () => showCardDetail(tile.unitCard));
+    row.appendChild(detail);
+  }
+  debtSaleChoices.appendChild(row);
+}
+
 function promptPickSellLandForDebt({ tiles, deficit }) {
   return new Promise((resolve) => {
     function cleanup(result) {
@@ -759,20 +785,7 @@ function promptPickSellLandForDebt({ tiles, deficit }) {
     debtSaleTitle.textContent = `Gがマイナスです（不足額 ${deficit}G）。売却する土地を選んでください`;
     debtSaleChoices.replaceChildren();
     for (const tile of tiles) {
-      const el = document.createElement('button');
-      el.className = 'debt-sale-choice';
-      const unitLine = tile.unitName
-        ? `${tile.unitName}（${tile.unitRarity}） ATK${tile.unitAtk} / HP${tile.unitHp}`
-        : '（配置モンスターなし）';
-      const price = document.createElement('span');
-      price.className = 'debt-sale-price';
-      price.textContent = `+${tile.salePrice}G`;
-      const unit = document.createElement('span');
-      unit.className = 'debt-sale-unit';
-      unit.textContent = unitLine;
-      el.append(price, unit);
-      el.addEventListener('click', () => cleanup(tile.id));
-      debtSaleChoices.appendChild(el);
+      appendDebtSaleLandChoice(tile, () => cleanup(tile.id));
     }
     debtSaleModal.classList.remove('hidden');
     registerPromptCanceller(cancelSelf);
@@ -884,14 +897,7 @@ function promptPickDebtRecovery({ tiles = [], ofuda = [], deficit }) {
       debtSaleChoices.appendChild(el);
     }
     for (const tile of tiles) {
-      const el = document.createElement('button');
-      el.className = 'debt-sale-choice';
-      const unitLine = tile.unitName
-        ? `${tile.unitName}（${tile.unitRarity}） ATK${tile.unitAtk} / HP${tile.unitHp}`
-        : '（配置モンスターなし）';
-      el.innerHTML = `<span class="debt-sale-price">+${tile.salePrice}G</span><span class="debt-sale-unit">土地売却：${unitLine}</span>`;
-      el.addEventListener('click', () => cleanup({ type: 'land', id: tile.id }));
-      debtSaleChoices.appendChild(el);
+      appendDebtSaleLandChoice(tile, () => cleanup({ type: 'land', id: tile.id }));
     }
     debtSaleModal.classList.remove('hidden');
     registerPromptCanceller(cancelSelf);
@@ -2113,6 +2119,32 @@ const BATTLE_ACTION_GAP_MS = 550;
 const BATTLE_RETREAT_MS = 600;
 const BATTLE_FADE_OUT_MS = 450;
 
+// 戦闘メッセージ専用の速度。盤面移動や通信待ちには触れず、読ませる文章だけを
+// 5段階で調整する（3/5が従来と同じ時間）。
+const BATTLE_MESSAGE_SPEED_MULTIPLIERS = [0.55, 0.75, 1, 1.3, 1.7];
+let battleMessageSpeedLevel = Math.max(1, Math.min(5, Number(localStorage.getItem('chinuBattleMessageSpeed')) || 3));
+let battleMessageTapAdvance = localStorage.getItem('chinuBattleMessageTapAdvance') === '1';
+
+function battleMessageWait(ms) {
+  // 対人戦のゲスト側は演出キューが通信イベントと直列。ここで無期限に待つと
+  // 次の同期を描画できなくなるため、タップ送りはホスト/ストーリー盤面だけで有効。
+  if (!battleMessageTapAdvance || pvpMatch) {
+    const multiplier = BATTLE_MESSAGE_SPEED_MULTIPLIERS[battleMessageSpeedLevel - 1] || 1;
+    return new Promise((resolve) => setTimeout(resolve, Math.max(120, Math.round(ms / multiplier))));
+  }
+  return new Promise((resolve) => {
+    const advance = () => {
+      battleMessageText.removeEventListener('click', advance);
+      battleMessageText.classList.remove('tap-advance');
+      unregisterPromptCanceller(advance);
+      resolve();
+    };
+    battleMessageText.classList.add('tap-advance');
+    battleMessageText.addEventListener('click', advance, { once: true });
+    registerPromptCanceller(advance);
+  });
+}
+
 /** Resets one side's panel/card/item-overlay/matchup-label to a fresh state and fills in this battle's base stats + bonuses. */
 function renderBattleStat(sideEls, data) {
   const currentHp = Math.max(0, Math.min(data.currentHp ?? data.hp, data.hp));
@@ -2178,8 +2210,32 @@ function promptBattleSceneEnter({ attacker, defender }) {
  * 見て決められない既存の秘匿フローを維持する。「使わない」はnullを返す。
  */
 let cancelActiveBattleItemPicker = null;
+let activeBattleMonsterDetails = null;
 
-function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, opponentName = '相手', unitName, currency = Infinity }) {
+function showBattleMonsterDetails(details) {
+  const { attackerCard, defenderCard, ownerName, opponentName, side } = details || {};
+  if (!attackerCard || !defenderCard) return;
+  const attackerOwner = side === 'attacker' ? ownerName : opponentName;
+  const defenderOwner = side === 'defender' ? ownerName : opponentName;
+  battleMonsterDetailCards.replaceChildren();
+  for (const [label, card] of [[`${attackerOwner}（侵略側）`, attackerCard], [`${defenderOwner}（防衛側）`, defenderCard]]) {
+    const row = document.createElement('div');
+    row.className = 'battle-monster-detail-card';
+    const face = document.createElement('div');
+    face.className = 'card';
+    renderCardEl(face, card);
+    const copy = document.createElement('div');
+    copy.className = 'battle-monster-detail-copy';
+    copy.textContent = `${label}\n${describeCardDetail(card)}`;
+    row.append(face, copy);
+    battleMonsterDetailCards.appendChild(row);
+  }
+  battleMonsterDetailBox.classList.remove('hidden');
+}
+
+battleMonsterDetailClose.addEventListener('click', () => battleMonsterDetailBox.classList.add('hidden'));
+
+function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, opponentName = '相手', unitName, currency = Infinity, attackerCard = null, defenderCard = null }) {
   return new Promise((resolve) => {
     let settled = false;
     let confirming = false;
@@ -2215,6 +2271,9 @@ function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, oppone
     }
     battleItemPickerTitle.textContent =
       `${ownerName}の${unitName}: 使うアイテムを選んでください（所持${currency}G）`;
+    activeBattleMonsterDetails = { attackerCard, defenderCard, ownerName, opponentName, side };
+    battleMonsterDetailButton.disabled = !(attackerCard && defenderCard);
+    battleMonsterDetailButton.onclick = () => showBattleMonsterDetails(activeBattleMonsterDetails);
     battleItemPickerChoices.replaceChildren();
     for (const card of hand) {
       const choice = document.createElement('div');
@@ -2305,6 +2364,9 @@ function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, oppone
       if (autoSkipTimer !== null) clearTimeout(autoSkipTimer);
       battleItemPickerBox.classList.add('hidden');
       battleOpponentItems.classList.add('hidden');
+      battleMonsterDetailBox.classList.add('hidden');
+      battleMonsterDetailButton.onclick = null;
+      activeBattleMonsterDetails = null;
       battleItemPickerSkip.removeEventListener('click', onSkip);
       if (cancelActiveBattleItemPicker === cancelPicker) cancelActiveBattleItemPicker = null;
       resolve(result);
@@ -2368,7 +2430,7 @@ async function promptBattleAttack({ side, item, message, damage = 0, element, at
         attackerEls.atkFill.style.width = `${Math.min(100, ((attackPower + elementBonus) / 150) * 100)}%`;
         battleMessageText.textContent = `得意属性120%　ATK ${attackPower} + ${elementBonus} = ${attackPower + elementBonus}`;
         battleMessageText.classList.remove('hidden');
-        await new Promise((resolve) => setTimeout(resolve, 1300));
+        await battleMessageWait(1300);
         battleMessageText.classList.add('hidden');
       }
       attackerEls.atk.dataset.built = 'true';
@@ -2388,12 +2450,12 @@ async function promptBattleAttack({ side, item, message, damage = 0, element, at
     battleMessageText.classList.remove('hidden');
     if (hasSpecial) attackerEls.el.classList.add('battle-special-glow');
     if (targetDied) {
-      await new Promise((resolve) => setTimeout(resolve, 1800));
+      await battleMessageWait(1800);
       targetEls.card.classList.add('battle-crumble');
       battleMessageText.textContent = `${targetName || 'モンスター'}は倒された`;
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      await battleMessageWait(1000);
     } else {
-      await new Promise((resolve) => setTimeout(resolve, BATTLE_MESSAGE_HOLD_MS));
+      await battleMessageWait(BATTLE_MESSAGE_HOLD_MS);
     }
     attackerEls.el.classList.remove('battle-attacking', 'battle-special-glow');
     targetEls.el.classList.remove('battle-hit');
@@ -2420,7 +2482,7 @@ async function promptBattleEquip({ side, item, unitName, baseAtk, baseHp, baseCu
     battleMessageText.classList.add('special');
     battleMessageText.classList.remove('hidden');
     sideEls.el.classList.add('battle-special-glow');
-    await new Promise((resolve) => setTimeout(resolve, 1800));
+    await battleMessageWait(1800);
     sideEls.el.classList.remove('battle-special-glow');
     battleMessageText.classList.add('hidden');
     battleMessageText.classList.remove('special');
@@ -2457,7 +2519,7 @@ async function promptBattleEquip({ side, item, unitName, baseAtk, baseHp, baseCu
     sideEls.hpFill.style.width = `${Math.max(0, Math.min(100, (nextCurrent / Math.max(nextMax, 1)) * 100))}%`;
   });
   sideEls.el.classList.add('battle-equip-boost');
-  await new Promise((resolve) => setTimeout(resolve, 1800));
+  await battleMessageWait(1800);
   sideEls.el.classList.remove('battle-equip-boost');
   battleMessageText.classList.add('hidden');
 }
@@ -2504,7 +2566,7 @@ async function promptBattleItemDestroy({ targetSide, sourceName = 'アイテム�
   targetEls.item.classList.add('hidden');
   targetEls.item.replaceChildren();
   shatter.remove();
-  await new Promise((resolve) => setTimeout(resolve, 650));
+  await battleMessageWait(650);
   battleMessageText.classList.add('hidden');
   battleMessageText.classList.remove('special');
 }
@@ -2561,7 +2623,7 @@ async function promptBattleItemSteal({ fromSide, toSide, items = [] }) {
   toEls.item.appendChild(stolenCard);
   toEls.item.classList.remove('hidden');
   toEls.item.classList.add('equip-show');
-  await new Promise((resolve) => setTimeout(resolve, 900));
+  await battleMessageWait(900);
   battleMessageText.classList.add('hidden');
   battleMessageText.classList.remove('special');
 }
@@ -2574,7 +2636,7 @@ async function promptBattleTraitReveal({ side, labels, stripHpBonus = null }) {
   battleMessageText.classList.remove('hidden');
   battleMessageText.classList.add('special');
   sideEls.card.classList.add('trait-reveal');
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+  await battleMessageWait(1500);
   sideEls.card.classList.remove('trait-reveal');
   battleMessageText.classList.add('hidden');
   battleMessageText.classList.remove('special');
@@ -2605,7 +2667,7 @@ async function promptBattleTraitReveal({ side, labels, stripHpBonus = null }) {
         battleMessageText.classList.remove('hidden');
         battleMessageText.classList.add('special');
         targetEls.el.classList.add('battle-hit');
-        await new Promise((resolve) => setTimeout(resolve, 1400));
+        await battleMessageWait(1400);
         targetEls.el.classList.remove('battle-hit');
         battleMessageText.classList.add('hidden');
         battleMessageText.classList.remove('special');
@@ -2628,7 +2690,9 @@ async function promptBattleLightningRod({ protectedUnitName, rodCard }) {
   battleMessageText.classList.remove('hidden');
   battleMessageText.classList.add('special');
   sideEls.el.classList.add('battle-lightning-rod-flash');
-  await new Promise((resolve) => setTimeout(resolve, 2200));
+  // 身代わりの点滅は先に最低限見せ、残りのメッセージ時間は設定に従う。
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  await battleMessageWait(1500);
   card.classList.add('battle-item-breaking');
   await new Promise((resolve) => setTimeout(resolve, 700));
   sideEls.el.classList.remove('battle-lightning-rod-flash');
@@ -2815,24 +2879,19 @@ function promptBattleRetreat() {
 }
 
 /** "〇〇の□□は土地を奪った/守った" - holds 1.5秒, then fades the whole battle scene back out to the board. */
-function promptBattleOutcome({ won, mutualDestruction, ownerName, unitName }) {
+async function promptBattleOutcome({ won, mutualDestruction, ownerName, unitName }) {
   playSfx('hit');
-  return new Promise((resolve) => {
-    battleMessageText.textContent = mutualDestruction
-      ? '誰も生き残らなかった'
-      : `${ownerName}の${unitName}は${won ? '土地を奪った' : '土地を守った'}`;
-    battleMessageText.classList.remove('hidden');
-    setTimeout(() => {
-      battleStage.classList.remove('show');
-      battleFade.classList.remove('show');
-      setTimeout(() => {
-        battleMessageText.classList.add('hidden');
-        battleSceneModal.classList.add('hidden');
-        playMapTheme(currentMapId);
-        resolve();
-      }, BATTLE_FADE_OUT_MS);
-    }, BATTLE_MESSAGE_HOLD_MS);
-  });
+  battleMessageText.textContent = mutualDestruction
+    ? '誰も生き残らなかった'
+    : `${ownerName}の${unitName}は${won ? '土地を奪った' : '土地を守った'}`;
+  battleMessageText.classList.remove('hidden');
+  await battleMessageWait(BATTLE_MESSAGE_HOLD_MS);
+  battleStage.classList.remove('show');
+  battleFade.classList.remove('show');
+  await new Promise((resolve) => setTimeout(resolve, BATTLE_FADE_OUT_MS));
+  battleMessageText.classList.add('hidden');
+  battleSceneModal.classList.add('hidden');
+  playMapTheme(currentMapId);
 }
 
 /** "「card.name」を捨てますか？" yes/no, reusing the same confirm modal as land-command actions. */
@@ -3390,6 +3449,8 @@ const landInfoButton = document.getElementById('land-info-button');
 const gameMenuModal = document.getElementById('game-menu-modal');
 const gameMenuMute = document.getElementById('game-menu-mute');
 const gameMenuSpeed = document.getElementById('game-menu-speed');
+const gameMenuBattleSpeed = document.getElementById('game-menu-battle-speed');
+const gameMenuBattleTap = document.getElementById('game-menu-battle-tap');
 const gameMenuPvpWait = document.getElementById('game-menu-pvp-wait');
 const gameMenuHelp = document.getElementById('game-menu-help');
 const gameMenuBan = document.getElementById('game-menu-ban');
@@ -3425,6 +3486,25 @@ gameMenuSpeed.addEventListener('click', () => {
   syncSpeedButtonLabel();
 });
 
+function syncBattleMessageButtons() {
+  gameMenuBattleSpeed.textContent = `⚔ メッセージ速度: ${battleMessageSpeedLevel}/5`;
+  const tapEnabled = battleMessageTapAdvance && !pvpMatch;
+  gameMenuBattleTap.textContent = `👆 メッセージ: ${tapEnabled ? 'タップ送り' : '自動'}`;
+  gameMenuBattleTap.title = pvpMatch && battleMessageTapAdvance
+    ? '対人戦では同期を保つため自動送りになります'
+    : '戦闘メッセージの送り方を切り替えます';
+}
+gameMenuBattleSpeed.addEventListener('click', () => {
+  battleMessageSpeedLevel = (battleMessageSpeedLevel % 5) + 1;
+  localStorage.setItem('chinuBattleMessageSpeed', String(battleMessageSpeedLevel));
+  syncBattleMessageButtons();
+});
+gameMenuBattleTap.addEventListener('click', () => {
+  battleMessageTapAdvance = !battleMessageTapAdvance;
+  localStorage.setItem('chinuBattleMessageTapAdvance', battleMessageTapAdvance ? '1' : '0');
+  syncBattleMessageButtons();
+});
+
 // 対人戦専用: 固定待機時間を何%削るかを選ぶ。0%は従来どおり。
 const PVP_WAIT_CUT_CYCLE = [0, 0.3, 0.5, 0.7];
 // 対人戦の既定は30%カット。0%は1手番あたりの固定待ち（着地後400ms・CP900ms等）が
@@ -3448,6 +3528,7 @@ menuButton.addEventListener('click', () => {
   // サイコロ回転中にメニューを開いたら回転を止める（確定前の中断）。
   if (diceState === 'spinning') resetDice();
   gameMenuModal.classList.remove('hidden');
+  syncBattleMessageButtons();
   gameMenuBan.classList.toggle('hidden', !(pvpMatch?.isHost && game));
   // 進行速度の混線を避けるため変更権限はホストだけ。参加者へは公開状態で
   // 同じ率を同期し、全端末の表示待ちを揃える。
