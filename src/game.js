@@ -86,6 +86,9 @@ const CPU_DECISION_MS = 900;
 const LEVEL_CAP = 5;
 // カルドセプト ビギンズ系
 const CHAIN_MULTIPLIER = { 1: 1.0, 2: 1.5, 3: 2.0, 4: 2.5, 5: 3.0 };
+// 強制停止マスを踏む分岐へのペナルティ上限。CP/ゴールへの距離は×10000で
+// 効いているので、それを覆さない範囲に必ず収める。
+const FORCED_STOP_AVOIDANCE_CAP = 4000;
 const TOLL_RATE = { 1: 0.3, 2: 0.3, 3: 0.4, 4: 0.6, 5: 0.8 };
 // ビギンズのLv1からの累計投資額（Lv2=50、Lv3=250、Lv4=650、Lv5=1250）。
 const LEVEL_INVESTMENT = { 1: 0, 2: 50, 3: 250, 4: 650, 5: 1250 };
@@ -2855,7 +2858,7 @@ export class Game {
     // チュートリアルは台本進行を守るため分岐を自動選択する（このマップで
     // 分岐が出るのはスタート地点の初回だけ。id最小＝時計回り側で固定）。
     if (this.tutorialMode) return Math.min(...optionIds);
-    if (player.isCPU) return this._cpuChooseNextTile(player, optionIds);
+    if (player.isCPU) return this._cpuChooseNextTile(player, optionIds, fromTile, remainingSteps);
 
     const options = optionIds.map((id) => {
       const tile = this.tiles[id];
@@ -2879,7 +2882,7 @@ export class Game {
    * 「勝てる可能性がある限りは攻める」性格のキャラも成立させるため、
    * あくまで確率を歪めるだけで完全に排除はしない）。
    */
-  _cpuChooseNextTile(player, optionIds) {
+  _cpuChooseNextTile(player, optionIds, fromTile = null, remainingSteps = 0) {
     const profile = player.aiProfile;
     // 全CPU共通: 未通過CPがあればCP、全CP通過後はゴールを絶対優先。
     // 同属性空き地・高額土地・個別AI判断は、その最短経路が同点の時だけ
@@ -2948,6 +2951,26 @@ export class Game {
           this._estimateWinProbability(card, player.id, player.hand, tile, true),
         ), 0);
         if (bestRate < 0.8) score -= 1000;
+      }
+
+      // 強制停止（アリジゴクの呪い・甲鉄要塞の3周目覚醒）がかかった敵地は、
+      // 通り抜けができず必ずそこで止まって通行料を払わされる。普通の敵地は
+      // 出目次第で素通りできるので、これは別枠で嫌う必要がある。
+      // _forwardDestinationIdsFromは「強制停止マスは着地点になる」という
+      // ルールを既に織り込んでいるので、この出目で止まりうるマスがそのまま出る。
+      // 重みは距離(×10000)を絶対に覆さない大きさに抑える。迂回路が無い盤面で
+      // ここを強くしすぎると、CPUがCP・ゴールへ向かわなくなって周回が壊れる。
+      const stopTiles = [];
+      if (this._isForcedStopFor(player, tile)) stopTiles.push(tile);
+      if (fromTile && remainingSteps > 0) {
+        for (const id of this._forwardDestinationIdsFrom(player, tile.id, fromTile.id, remainingSteps)) {
+          const landing = this.tiles[id];
+          if (landing && landing.id !== tile.id && this._isForcedStopFor(player, landing)) stopTiles.push(landing);
+        }
+      }
+      if (stopTiles.length > 0) {
+        const penalty = stopTiles.reduce((sum, t) => sum + 200 + this._tollOfTile(t) * 0.6, 0);
+        score -= Math.min(penalty, FORCED_STOP_AVOIDANCE_CAP);
       }
       return score;
     });
@@ -3417,6 +3440,8 @@ export class Game {
       let ownUpgradable = 0;
       let enemyLands = 0;
       let enemyToll = 0;
+      let forcedStopLands = 0;
+      let forcedStopToll = 0;
       for (const t of this.tiles) {
         if (!reach.has(t.id) || t.type !== TileType.LAND) continue;
         if (t.owner == null) {
@@ -3436,6 +3461,13 @@ export class Game {
         if (owner && this._isAllyOf(owner, player)) continue;
         enemyLands += 1;
         enemyToll += this._tollOfTile(t);
+        // 強制停止（アリジゴクの呪い・甲鉄要塞の覚醒）がかかった敵地は、
+        // その島に入ると必ず止まって通行料を払わされる。分岐では細い通路
+        // ばかりで迂回できないことが多いので、島を選ぶこの段階で嫌う。
+        if (this._isForcedStopFor(player, t)) {
+          forcedStopLands += 1;
+          forcedStopToll += this._tollOfTile(t);
+        }
       }
       // 空き地が枯れている島でだけ、自陣の育成余地を代わりの狙いとして見る。
       // 空き地が残っている限りは土地を取る方が優先なので0にする（ここを
@@ -3472,6 +3504,8 @@ export class Game {
         + ownUpgradable * ownWeight
         - enemyLands * 6
         - enemyToll * 0.05
+        // 関所のある島は避ける。周回(×100000)は覆さない上限に抑える。
+        - Math.min(forcedStopLands * 150 + forcedStopToll * 0.3, FORCED_STOP_AVOIDANCE_CAP)
         - occupied
         - (Number.isFinite(approach) ? approach * 3 : 0);
     };
