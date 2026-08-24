@@ -32,7 +32,10 @@ const TRACK_SRC = {
 // フォールバックする。
 const MAP_TRACK = {
   tutorial: 'finalAlliance',
+  // ①は初戦だけ別マップ(hitode-first)で始まる（main.jsのstartStoryBattle参照）。
+  // 両方を同じ曲に繋がないと、全プレイヤーが最初に聴く初戦だけ共通曲のままになる。
   hitode: 'hitode',
+  'hitode-first': 'hitode',
   madai: 'madai',
   budou: 'budou',
   'q-train': 'qTrain',
