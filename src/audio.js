@@ -11,7 +11,8 @@
 import { assetUrl } from './assetUrl.js';
 
 const TRACK_SRC = {
-  board: assetUrl('/audio/board-theme.mp3'), // ①ヒトデの縄張り・専用曲の無いマップの既定
+  board: assetUrl('/audio/board-theme.mp3'), // 専用曲の無いマップの既定
+  hitode: assetUrl('/audio/stage1newbgm.mp3'), // ①ヒトデの縄張り
   battle: assetUrl('/audio/newbattle.mp3'), // 全マップ共通の戦闘シーン曲
   madai: assetUrl('/audio/stage2-theme.mp3'), // ②マダイの岩礁
   budou: assetUrl('/audio/stage3-theme.mp3'), // ③決闘の浜辺
@@ -31,6 +32,7 @@ const TRACK_SRC = {
 // フォールバックする。
 const MAP_TRACK = {
   tutorial: 'finalAlliance',
+  hitode: 'hitode',
   madai: 'madai',
   budou: 'budou',
   'q-train': 'qTrain',
