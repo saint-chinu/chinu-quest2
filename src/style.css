@@ -2608,6 +2608,18 @@ html, body {
   background: rgba(0, 0, 0, 0.5);
 }
 
+/* 横持ちスマホではメニュー項目が画面高を超える。モーダル外周とボックスの
+   両方を縦スクロール可能にし、iOSでも指スワイプを奪われないようにする。 */
+#game-menu-modal {
+  box-sizing: border-box;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right))
+    max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+}
+
 #game-menu-modal.hidden,
 #help-modal.hidden {
   display: none;
@@ -2684,10 +2696,20 @@ html, body {
   flex-direction: column;
   gap: 10px;
   min-width: 220px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100vh - 24px);
+  max-height: calc(100dvh - 24px);
+  box-sizing: border-box;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-y;
+  flex: 0 1 auto;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
 }
 
 #game-menu-box button {
+  flex: 0 0 auto;
   border: none;
   border-radius: 8px;
   padding: 12px 18px;
