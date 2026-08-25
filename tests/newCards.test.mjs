@@ -102,6 +102,7 @@ test('新カードはカタログに載り、参照している画像が実在�
   // imageDataUrlが指す先が本当にpublic/にあるかまで見る。
   const cards = [
     ...['russianRoulette', 'diamondShield', 'satsutabaGuard'].map((id) => [id, ITEM_CATALOG[id]]),
+    ['bombBokkuri', MONSTER_CATALOG.bombBokkuri],
     ...['kotai', 'pandemic', 'horizon', 'delayTactics', 'ashToDust', 'landlessOne'].map((id) => [id, SPELL_CATALOG[id]]),
   ];
   for (const [id, card] of cards) {
@@ -119,12 +120,14 @@ test('新カードはカタログに載り、参照している画像が実在�
 test('甲鉄要塞は公開済みで、成長型の未公開は無属性だけ', () => {
   assert.equal(MONSTER_CATALOG.koutetsuYousai.wip, undefined);
   assert.deepEqual(WIP_CARD_NAMES, ['積み上がった伝票']);
-  // 火水雷森は入手可能枚数が N11/S8/R5 で揃っていること（無属性だけ別枠）。
+  // 火水雷は入手可能枚数がN11/S8/R5で揃っている（無属性だけ別枠）。
+  // 森はボムボックリ追加分でS9（2026-08）。
+  const expected = { fire: [11, 8, 5], water: [11, 8, 5], thunder: [11, 8, 5], forest: [11, 9, 5] };
   for (const element of ['fire', 'water', 'thunder', 'forest']) {
     const live = Object.values(MONSTER_CATALOG)
       .filter((c) => c.element === element && !c.wip && !c.npcExclusive);
     const n = (r) => live.filter((c) => c.rarity === r).length;
-    assert.deepEqual([n('N'), n('S'), n('R')], [11, 8, 5], `${element}の枚数が揃っていない`);
+    assert.deepEqual([n('N'), n('S'), n('R')], expected[element], `${element}の枚数が揃っていない`);
   }
 });
 
@@ -159,10 +162,18 @@ test('塞ぎ込んだ男の固定デッキは指定札を含む40枚', () => {
   assert.equal(count('pandemic'), 2);
   assert.equal(count('horizon'), 2);
   assert.equal(count('landlessOne'), 2);
-  assert.equal(count('shinkenShirahadori'), 4);
+  assert.equal(count('shinkenShirahadori'), 3);
   assert.equal(count('poisonMist'), 2);
   assert.equal(count('delayTactics'), 2);
   assert.equal(count('diceOne'), 2);
+  assert.equal(count('thunderbird'), 4);
+  assert.equal(count('denchuwoUeruOtoko'), 4);
+  assert.equal(count('battleTrain'), 2);
+  assert.equal(count('sacrificeCar'), 2);
+  assert.equal(count('bombBokkuri'), 2);
+  assert.equal(count('psychokinesis'), 1);
+  assert.equal(count('iCanFly'), 1);
+  assert.equal(count('senbonZakura'), 1);
 });
 
 test('ステージ14は専用マップ・会話・塞ぎ込んだ男へ正しく接続されている', () => {
@@ -172,10 +183,11 @@ test('ステージ14は専用マップ・会話・塞ぎ込んだ男へ正しく
   assert.equal(stage.title, '⑭ 王都の番人？？（仮公開）');
   assert.equal(stage.opponents[0].deckKey, 'fusagikonda');
   assert.equal(stage.opponents[0].name, '塞ぎ込んだ男');
-  assert.equal(map.rows.join('').split('C').length - 1, 4, 'CPは4か所');
+  assert.equal(map.rows.join('').split('C').length - 1, 1, 'CPは1か所');
   for (const symbol of ['F', 'W', 'M', 'T']) {
-    assert.equal(map.rows.join('').split(symbol).length - 1, 6, `${symbol}属性は6マス`);
+    assert.equal(map.rows.join('').split(symbol).length - 1, 9, `${symbol}属性は9マス`);
   }
+  assert.equal(map.rows.join('').split('N').length - 1, 3, '無属性は3マス');
 });
 
 test('ステージ専用のEXスペルはショップマスの品揃えに並ばない', () => {
@@ -236,7 +248,8 @@ test('塞ぎ込んだ男AIは灰塵を最優先し、次にホライズン、6�
   });
   const comboHand = ['ashToDust', 'horizon', 'pandemic', 'landlessOne'].map((id) => spellCopy(SPELL_CATALOG[id]));
   const ashPlayer = { id: 'A', name: '塞ぎ込んだ男', currency: 1000, spellUsedThisTurn: false, hand: comboHand, landlessGoalBonus: 0 };
-  const ashGame = makeCpuStub(makeOwned(7, 2, true), [ashPlayer]);
+  // 閾値は7→5に緩和済み（2026-08）。境界の5マスで発動することを確認する。
+  const ashGame = makeCpuStub(makeOwned(5, 2, true), [ashPlayer]);
   await ashGame._cpuMaybeUseFusagikondaCombo(ashPlayer);
   assert.equal(ashGame.casts[0].name, '灰塵');
 
@@ -249,6 +262,63 @@ test('塞ぎ込んだ男AIは灰塵を最優先し、次にホライズン、6�
   const pandemicGame = makeCpuStub(makeOwned(6, 1, false), [pandemicPlayer]);
   await pandemicGame._cpuMaybeUseFusagikondaCombo(pandemicPlayer);
   assert.equal(pandemicGame.casts[0].name, 'パンデミック');
+});
+
+test('ボムボックリは死因を問わず空き地にボックリを2体召喚し、空き地切れで打ち切る', async () => {
+  const meshTile = (id) => makeTile(id, { mesh: { material: { color: { set: () => {} } } } });
+  const player = { id: 'A', name: 'ア', currency: 0, toughnessTurnsRemaining: 0 };
+
+  const tiles = [meshTile(0), meshTile(1), meshTile(2)];
+  const g = makeStub(tiles, [player]);
+  g._deadMonstersThisMatch = [];
+  await g._handleUnitDeath(unit(MONSTER_CATALOG.bombBokkuri, 'A'), player);
+  const bokkuriTiles = tiles.filter((t) => (t.unit?.def?.catalogId || t.unit?.def?.id) === 'bokkuri');
+  assert.equal(bokkuriTiles.length, 2);
+  for (const t of bokkuriTiles) {
+    assert.equal(t.unit.def.name, 'ボックリ');
+    assert.equal(t.owner, 'A');
+  }
+
+  // 空き地が1つしか無ければ1体で打ち切り（例外を投げず、2体目は不発）。
+  const oneEmpty = [meshTile(10)];
+  const g2 = makeStub(oneEmpty, [player]);
+  g2._deadMonstersThisMatch = [];
+  await g2._handleUnitDeath(unit(MONSTER_CATALOG.bombBokkuri, 'A'), player);
+  assert.equal(oneEmpty.filter((t) => t.unit).length, 1);
+});
+
+test('ボムボックリの捨て駒運用: アイテム未装備・侵略見送りの代替・強制売却で最優先', async () => {
+  const g = Object.create(Game.prototype);
+  // sacrificeWithoutItemを立てたユニットにはCPUが何も装備しない。
+  const marked = unit(MONSTER_CATALOG.bombBokkuri, 'A');
+  marked.def = { ...marked.def, sacrificeWithoutItem: true };
+  assert.equal(g._cpuChooseBattleItem({ hand: [] }, marked, null, null, false), null);
+
+  // 勝てるカードが無い（見送り）状況の代替として、手札にあれば必ず使う。
+  const bombCard = { ...MONSTER_CATALOG.bombBokkuri, id: 'bomb-hand', catalogId: 'bombBokkuri' };
+  const decision = g._cpuMaybeSacrificeBombBokkuri([bombCard]);
+  assert.equal(decision.card.sacrificeWithoutItem, true);
+  assert.equal(g._cpuMaybeSacrificeBombBokkuri([]), null);
+
+  // 一時フラグは捨て札へ残さず、再ドロー後の通常戦闘では装備可能に戻す。
+  let discarded = null;
+  g._discardUsedCard({ deck: { discard: (card) => { discarded = card; } } }, decision.card);
+  assert.equal(discarded.sacrificeWithoutItem, undefined);
+});
+
+test('塞ぎ込んだ男はCP・ゴール最短が同点なら左下ループの空き地を優先する', () => {
+  const g = Object.create(Game.prototype);
+  const ordinary = makeTile(1, { owner: null });
+  const loopNear = makeTile(2, { owner: null, fusagikondaLoop: true, price: 100 });
+  const loopFar = makeTile(3, { owner: null, fusagikondaLoop: true, price: 200 });
+  g.tiles = [ordinary, loopNear, loopFar];
+  g._affordableMonsterCards = () => [{ ...MONSTER_CATALOG.bombBokkuri, id: 'bomb-hand', catalogId: 'bombBokkuri' }];
+  g._forwardTileDistance = (_from, _previous, target) => (target === loopFar.id ? 4 : 2);
+  g._landValueOfTile = (tile) => tile.price;
+
+  assert.equal(g._nearestFusagikondaLoopEmptyLandTileId({ tileId: 0, previousTileId: null }), loopNear.id);
+  loopNear.owner = 'enemy';
+  assert.equal(g._nearestFusagikondaLoopEmptyLandTileId({ tileId: 0, previousTileId: null }), loopFar.id);
 });
 
 test('ロシアンルーレットはステータスを無視して出目だけで決まる', () => {

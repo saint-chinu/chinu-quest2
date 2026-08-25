@@ -1481,14 +1481,28 @@ export const CHARACTER_DECKS = {
     composition: {
       monsters: [
         { def: MONSTER_CATALOG.thunderbird, count: 4 },
-        { def: MONSTER_CATALOG.dryad, count: 4 },
-        { def: MONSTER_CATALOG.mysteriousInvader, count: 4 },
-        { def: MONSTER_CATALOG.kyousenshi, count: 4 },
+        // 電柱を植える男(80G): 土地コマンドでランダムな空き地に電柱を召喚する
+        // ばら撒き役。CPがあるGループ(fusagikondaLoop)へ優先配置される
+        // (_cpuChooseSummonCardForFusagikonda, game.js)。
+        { def: MONSTER_CATALOG.denchuwoUeruOtoko, count: 4 },
         { def: MONSTER_CATALOG.kontonNoAtama, count: 2 },
         { def: MONSTER_CATALOG.tetsuo, count: 1 },
+        // 戦闘列車/供物車両(2026-08): dryad2/未知の侵略者4/狂戦士4の代わりに追加。
+        // 互いを戦闘中に装備すると合体する(_trainFusionDef, game.js)ので召喚時は
+        // 温存せず、_cpuChooseSummonCardForFusagikondaが安いほうから普通の
+        // ばら撒き札として据える。合体・防御装備としての優先はCPU共通の
+        // _chooseBattleItemByOutcome/_bestBattleItemFromHandが自動で行うため
+        // 追加実装不要（isBattleItemCardがdualUseItemを装備候補に含める）。
+        { def: MONSTER_CATALOG.battleTrain, count: 2 },
+        { def: MONSTER_CATALOG.sacrificeCar, count: 2 },
+        // ボムボックリ(2026-08): 死亡すると空き地にボックリ2体を呼ぶ捨て駒。
+        // 勝てない侵略の代わりに使う・Lv1地は積極的に狙って死なせる
+        // (_cpuMaybeSacrificeBombBokkuri, game.js)。列車/車両を1枚ずつ
+        // 減らして分を確保（ナンカのお守りは減らさない）。
+        { def: MONSTER_CATALOG.bombBokkuri, count: 2 },
       ],
       items: [
-        { def: ITEM_CATALOG.shinkenShirahadori, count: 4 },
+        { def: ITEM_CATALOG.shinkenShirahadori, count: 3 },
         { def: ITEM_CATALOG.zangokuKen, count: 1 },
         { def: ITEM_CATALOG.lifeJacket, count: 1 },
         { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
@@ -1501,6 +1515,11 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.poisonMist, count: 2 },
         { def: SPELL_CATALOG.delayTactics, count: 2 },
         { def: SPELL_CATALOG.diceOne, count: 2 },
+        { def: SPELL_CATALOG.iCanFly, count: 1 },
+        { def: SPELL_CATALOG.senbonZakura, count: 1 },
+        // 敵地のアリジゴクを剥がす/高額地を潰す用途（psychokinesisTargetAntlion）。
+        // 真剣白刃取りを1枚減らして分を確保。
+        { def: SPELL_CATALOG.psychokinesis, count: 1 },
       ],
     },
   },

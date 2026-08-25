@@ -60,16 +60,73 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 
 ## ⑭「王都の番人？？（仮公開）」(royal-guard)
 - **1vs1**（vs 塞ぎ込んだ男）。goalCurrency 15000／再戦17000、startingCurrency 500、
-  checkpointBonus 150。BGM未登録（`MAP_TRACK`に無いので`playTrack`が既定の
-  `board`へフォールバックする＝無音にはならない）。
-- 盤面`ROYAL_GUARD_ROWS`: 7×7の「田」型（外周＋中央の十字）。全33マス
-  （土地28／CP4／ゴール1）。属性は火水雷森が各6＋無属性4。行き止まりゼロ、
-  4方向分岐は中央の1マスのみ。全CPを踏んでゴールまで最短18マス（約5ターン）。
+  checkpointBonus 150。BGMは`stage14bgm.mp3`（`src/audio.js`の`TRACK_SRC.royalGuard`
+  ＋`MAP_TRACK['royal-guard']`、2026-08登録）。
+- 盤面`ROYAL_GUARD_ROWS`（2026-08、ユーザー指定の不整形マップへ全面差し替え。
+  旧7×7の「田」型は廃止）: 8行×最大9列。上部は2本の櫛状通路(row1/2、串団子型)が
+  1本の横通路(row3)へ収束し、右端の縦通路(col7、全8行を貫通)で下まで降りる。
+  左下はGスタート直結の12マスのループ（無火火C→雷/水→雷/水→G森森無、
+  `tile.fusagikondaLoop`でタグ付け、board.js `createBoard`参照）で、外へ出る道は
+  row4のcol1一本のみ。全41マス（土地39／CP1／ゴール1）。属性は火水雷森が各9・
+  無属性3。ヘッドレスBFSで全マス到達を確認済み。
 - **敵の主戦術は「撒く→ゾンビ化→均す→灰塵」**。安い札を空き地へ広げ、
   パンデミックで全部ゾンビ（＝無属性）にし、ホライズンで全土地Lv2へ揃え、
   灰塵で自分の無属性地を地価の200%で一括換金する。`_cpuMaybeUseFusagikondaCombo`が
   灰塵＞ホライズン＞パンデミックの優先度で回す。
-  検証時の実測: 灰塵1回で**9.3マス・4539G**、パンデミック1回で9体、ホライズン1回で10.3マス。
+  検証時の実測（旧7×7盤面）: 灰塵1回で**9.3マス・4539G**、パンデミック1回で9体、
+  ホライズン1回で10.3マス（新盤面での再計測はTODO）。
+- ⚠️ **灰塵の発動閾値を7→5に緩和**（2026-08、ユーザー報告「パンデミック後に
+  使ってなさそう」への対応）。旧条件（自分の無属性土地7マスが同時にLv2）は、
+  プレイヤーが土地を取り返すたびに壊れて事実上発動しなくなっていた
+  （`_cpuMaybeUseFusagikondaCombo`, game.js）。
+- **`fusagikonda`デッキ構成（2026-08時点、40枚）**: モンスター17
+  （サンダーバード4／電柱を植える男4／混沌の頭2／鉄男1／戦闘列車2／
+  供物車両2／ボムボックリ2）、アイテム6（真剣白刃取り3／斬〇剣1／
+  ライフジャケット1／ナンカのお守り1）、スペル17（灰塵2／パンデミック2／
+  ホライズン2／持たざる者2／毒霧2／遅延行為2／1のダイス2／
+  アイキャンフライ1／千本桜1／サイコキネシス1）。dryad/未知の侵略者/狂戦士は
+  全廃し、戦闘列車・供物車両・ボムボックリ・サイコキネシスへ入れ替えた。
+- **空き地への召喚優先順位はサンダーバード＞ボムボックリ＞電柱を植える男**
+  （`_cpuChooseSummonCardForFusagikonda`, game.js。手札にある分だけで比較する
+  ので2種でも3種でも順位は変わらない）。3枚とも無ければ戦闘列車/供物車両を
+  安いほうから通常のばら撒き札として据える。
+- 分岐ではCP未通過ならCP、全CP通過後はゴールへの最短を最優先したうえで、
+  同距離の経路なら`fusagikondaLoop`内の空き地を優先する
+  （`_nearestFusagikondaLoopEmptyLandTileId`, game.js）。
+- **城(START)・CP到達時はサンダーバード/電柱を植える男の土地コマンドを
+  最優先で撃つ**（`_cpuUseAccessibleLandCommand`先頭、game.js）。通常移動で
+  通過しただけ（召喚コマンドを使わない時）も同様に最優先。
+- **戦闘列車/供物車両の「変身」は戦闘中に相方を装備した瞬間に発生する**
+  （`_trainFusionDef`）。CPU共通の`_chooseBattleItemByOutcome`/
+  `_bestBattleItemFromHand`が装備候補として自動評価する（`isBattleItemCard`が
+  dualUseItemを含めるため）ので、召喚時に温存する意味は無く追加実装も不要。
+  被侵略時にアイテムとして使うのも同じ理由で既存ロジックがそのまま拾う。
+- **ボムボックリ**（森S、HP1/ATK1、40G、2026-08新規）: 戦闘・スペル・
+  土地コマンドいずれの死因でも（自分から侵略して死んでも）ランダムな空き地に
+  「ボックリ」（森N、HP1/ATK0、召喚コスト0G、電柱と同じく図鑑非登録の
+  専用モンスター、`BOKKURI_FIELD_MONSTER`, forestMonsters.js）を2体召喚する
+  （`_handleUnitDeath`の`deathSummonScatter`, game.js）。空き地が無くなった
+  時点で以降は不発（差し戻し等のフォールバックはしない）。演出はカード画像が
+  空から降ってきて着地する専用アニメ（`scene.js`の`playCardDropSummon`、
+  `onSummonEffect`に`cardImageUrl`を渡した時だけ発動。無指定時は従来通りの
+  光の放射バースト）＋「◯◯が召喚された」のメッセージ。
+  - **捨て駒運用**（`_cpuMaybeSacrificeBombBokkuri`, game.js）: 本来なら
+    勝てず見送る侵略の代替として、手札にあれば必ず使う。装備は一切しない
+    （召喚したカード自身に`sacrificeWithoutItem`を立て、`_cpuChooseBattleItem`
+    がこれを見て即nullを返す＝延命させない）。Lv1の土地は普通に勝算があっても
+    ボムボックリの的として優先的に狙う。
+  - **強制売却時はボックリ入りの土地を最優先で売る**（`_resolveNegativeCurrency`
+    のCPU分岐、game.js）。ボックリは死亡効果でこの土地コマンド判定より前に
+    湧いているため、地価比較より先に問答無用で売る対象にする。
+- **毒霧はアリジゴク対策として温存する**（`aiProfile.poisonMistCounterAntlion`,
+  `_cpuMaybeUsePoisonSpell`, game.js）。相手のデッキ（手札・山札）にアリジゴク
+  (`curseForcedStop`)が残っている間は撃たず、使い切ったら通常運用に戻る
+  （`_opponentHoldsSpellEffect`、聖域のsanctuaryCounterForcedStopと同じ判定
+  ヘルパーを流用）。相手のデッキに元々無ければ最初から通常運用のまま。
+- **サイコキネシスは敵地のアリジゴクを最優先で剥がす**
+  （`aiProfile.psychokinesisTargetAntlion`, game.js）。対象の敵ユニットを
+  強制移動させれば土地が空き地に戻り罠が無力化する。無ければ従来通り
+  高額地優先（既存のsource.level×1000＋地価のスコアリングそのまま）。
 - ⚠️ **灰塵はrewardOnly必須**。付け忘れるとショップマス（①と⑩）の品揃えに
   100Gで並ぶ。`_resolveShopTile`は`card.cost`をそのまま請求するので、ペーの杖と
   同じ「実質バグ価格」になる。ステージ専用EXスペルは全てrewardOnlyで揃えること
@@ -363,6 +420,37 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   （見た目確認時にハマった）。`resolveCharacterIcon`→`imageSourceToIcon`が
   外周から白をフラッドフィルで透過済みにしてから返すので、これを経由すれば
   背景画像の上にそのまま馴染む。
+
+## 新カード「ボムボックリ／ボックリ」(2026-08、⑭塞ぎ込んだ男デッキ用)
+- **ボムボックリ** 森Sモンスター40G、HP1/ATK1。死因を問わず
+  （戦闘・スペル・土地コマンド、自分から侵略して死んだ場合も含む）
+  `effect: { type: 'deathSummonScatter', monster: BOKKURI_FIELD_MONSTER, count: 2 }`
+  が発動し、ランダムな空き地に「ボックリ」を2体まで召喚する
+  （`_handleUnitDeath`, game.js）。空き地が無くなった時点でそれ以降は
+  不発（G化などのフォールバックはしない）。カードアートは
+  `tools/gen_card_art.py`の`bomb_bokkuri()`（爆弾×松ぼっくりのポップな
+  炸裂バースト）で生成。
+- **ボックリ**: 森N、HP1/ATK0、召喚コスト0G。電柱（`DENCHU_FIELD_MONSTER`）
+  と同じく`BOKKURI_FIELD_MONSTER`(forestMonsters.js)として単体export
+  されるだけで、`FOREST_MONSTER_CATALOG`には含めない＝図鑑・デッキ編集に
+  出ない専用モンスター。アートは`gen_card_art.py`の`bokkuri()`（同じ
+  鱗片モチーフを流用した簡素な絵）。
+- **専用の召喚演出**: 「カードが空から降ってきて着地しモンスターとして
+  展開する」専用アニメ（`scene.js`の`playCardDropSummon`、
+  `playFireballImpact`と同じ加速度落下＋着地インパクトの型を流用し、
+  画像は`loadUnitCardArt`経由）。`onSummonEffect`のペイロードに
+  `cardImageUrl`を足しただけで既存の呼び出し元は無変更（未指定時は
+  従来の光の放射バースト`playSummonBurst`のまま）。ログは
+  「◯◯が召喚された」。
+  画像の404・通信失敗時は通常の召喚光へフォールバックしてPromiseを必ず完了し、
+  盤面をフリーズさせない（`loadUnitCardArt`の`onError`）。
+- **塞ぎ込んだ男AIの運用**（詳細は⑭節参照）: 空き地への召喚は
+  サンダーバード＞ボムボックリ＞電柱を植える男の順、侵略は「本来勝てず
+  見送る局面の代替」＋「Lv1地は勝算があっても積極的に狙う」捨て駒運用、
+  装備は一切させず（`sacrificeWithoutItem`）、強制売却時はボックリの
+  土地を最優先で売る。
+- 回帰テストは`npm run test:cards`に追加済み（死亡効果の2体召喚・
+  空き地切れでの打ち切り・アイテム未装備・侵略見送りの代替）。
 
 ## チュートリアル (Codex追加)
 - ログイン前のタイトルからも遊べるデモ。`mapId: 'tutorial'`（3×3外周の8マス、

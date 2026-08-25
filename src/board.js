@@ -281,18 +281,20 @@ const KESSAN_ROWS = [
   '....NNGNN....',
 ];
 
-// ⑭王都の番人？？。王都の路地を外周で巡り、中央の細道を横断できる
-// コンパクトな回廊型。4属性は各6マス、CPは外周上段2か所＋中央2か所。
-// 無属性地も4か所置き、パンデミック後の灰塵だけでなく通常の無属性召喚にも
-// 逃げ道を残す。ゴールは上段中央。
+// ⑭王都の番人？？（2026-08、ユーザー指定の不整形マップへ全面差し替え）。
+// 上部は「串団子」状の2本の櫛(row1/2)が1本の横通路(row3)へ収束し、右端の
+// 縦通路(col7、row1〜8を貫通)で下まで降りる。左下は無火火C→雷雷→森森無と
+// 進むGスタート直結のループ（fusagikondaLoop、下記参照）で、外へ出る道は
+// 1本(row4のcol1)だけ。属性は火水雷森が各9・無属性3。
 const ROYAL_GUARD_ROWS = [
-  'CFFGWWC',
-  'M..F..T',
-  'M..F..T',
-  'MMCNCTT',
-  'M..W..T',
-  'M..W..T',
-  'NWWNFFN',
+  'F.F.F.T..',
+  'M.T.W.M..',
+  'WTMWTMFWT',
+  'M.....W..',
+  'NFFC..TWF',
+  'T..W..M..',
+  'T..W..WNT',
+  'GMMNFMF..',
 ];
 
 /**
@@ -588,6 +590,16 @@ export function createBoard(mapId) {
       if (tile.type !== TileType.EVENT) continue;
       tile.checkpointKind = kessanAreaOf(tile) === 'goal' ? 1 : 2;
       tile.checkpointNumber = tile.checkpointKind;
+    }
+  }
+
+  // ⑭左下のG直結ループ（無火火C/雷雷/水水/森森無）に印を付ける。塞ぎ込んだ男の
+  // 専用AI(_cpuChooseSummonCardForFusagikonda, game.js)が、周回のたびに必ず
+  // 通るこの区画へサンダーバード/電柱を植える男を優先配置し、土地コマンドで
+  // 毎周モンスターをばらまけるようにするための目印。
+  if (map.id === 'royal-guard') {
+    for (const tile of tiles) {
+      if (tile.gridZ >= 4 && tile.gridZ <= 7 && tile.gridX <= 3) tile.fusagikondaLoop = true;
     }
   }
 

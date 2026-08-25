@@ -540,6 +540,113 @@ def delay_tactics():
     return img
 
 
+def pop_burst(d, cx, cy, spikes, r_out, r_in, fill):
+    """星形の放射バースト（ポップな爆発演出用）。"""
+    pts = []
+    n = spikes * 2
+    for i in range(n):
+        ang = i / n * 2 * math.pi - math.pi / 2
+        r = r_out if i % 2 == 0 else r_in
+        pts.append((cx + math.cos(ang) * r, cy + math.sin(ang) * r * 0.88))
+    poly(d, pts, fill=fill)
+
+
+def pinecone_scales(d, cx, base_y, w, h, rows, tone_a, tone_b, outline):
+    """下すぼまりの松ぼっくり本体。行ごとに鱗片(楕円)を互い違いに並べ、
+    上に行くほど幅を絞って先端を尖らせる。"""
+    for row in range(rows):
+        t = row / max(1, rows - 1)
+        row_w = w * (1 - 0.68 * t)
+        row_y = base_y - h * t
+        scale_h = (h / rows) * 1.8
+        cols = max(2, round(5 * (1 - 0.5 * t)))
+        stagger = (row % 2) * (row_w / cols) * 0.5
+        color = tone_a if row % 2 == 0 else tone_b
+        for c in range(cols + 1):
+            sx = cx - row_w / 2 + (row_w / cols) * c + stagger
+            sw = row_w / cols * 1.2
+            d.ellipse([sx - sw / 2, row_y - scale_h / 2, sx + sw / 2, row_y + scale_h / 2],
+                      fill=color, outline=outline, width=3)
+
+
+# ---------- 8. ボムボックリ ----------
+
+def bomb_bokkuri():
+    """爆弾×松ぼっくりのポップな新カード。背景は炸裂バースト、本体は
+    松ぼっくりの鱗片で覆われた丸い爆弾で、頭には導火線と火花。"""
+    bg = radial((255, 210, 92), (24, 58, 30), cy=0.34, radius=0.95, power=0.9)
+    base = to_img(vignette(grain(bg, 6), 0.32))
+
+    cx, cy = W / 2, H * 0.44
+
+    burst = layer()
+    bd = ImageDraw.Draw(burst)
+    pop_burst(bd, cx, cy, 12, 470, 190, (255, 150, 40, 140))
+    pop_burst(bd, cx, cy, 12, 360, 140, (255, 224, 110, 170))
+    img = over(base, burst.filter(ImageFilter.GaussianBlur(4)))
+
+    # 本体（丸い爆弾シルエット＋松ぼっくり鱗片）
+    body = layer()
+    bod = ImageDraw.Draw(body)
+    body_cx, body_top, body_h, body_w = cx, cy - 40, 470, 430
+    bod.ellipse([body_cx - body_w / 2 - 10, body_top - 10, body_cx + body_w / 2 + 10, body_top + body_h + 14],
+                fill=(24, 14, 10, 255))
+    pinecone_scales(bod, body_cx, body_top + body_h, body_w, body_h, 7,
+                     (150, 92, 44, 255), (108, 62, 30, 255), (40, 22, 10, 255))
+    img = over(img, body)
+
+    # 導火線キャップ + くるっとした導火線 + 先端の火花
+    fuse = layer()
+    fd = ImageDraw.Draw(fuse)
+    cap_y = body_top - 26
+    fd.rectangle([body_cx - 46, cap_y - 30, body_cx + 46, cap_y + 20], fill=(20, 12, 10, 255))
+    fd.line([(body_cx, cap_y - 30), (body_cx + 60, cap_y - 120), (body_cx - 10, cap_y - 190)],
+            fill=(70, 44, 24, 255), width=14, joint='curve')
+    img = over(img, fuse)
+
+    spark = layer()
+    sd = ImageDraw.Draw(spark)
+    pop_burst(sd, body_cx - 10, cap_y - 200, 6, 46, 16, (255, 245, 180, 255))
+    img = glow(img, spark, 22, 1.6)
+    img = over(img, spark)
+
+    # ポップな顔（丸い目＋への字口）でキャラクター感を出す
+    face = layer()
+    fcd = ImageDraw.Draw(face)
+    eye_y = body_top + body_h * 0.34
+    for sgn in (-1, 1):
+        ex = body_cx + sgn * 78
+        fcd.ellipse([ex - 26, eye_y - 30, ex + 26, eye_y + 30], fill=(255, 255, 255, 255))
+        fcd.ellipse([ex - 12, eye_y - 12, ex + 12, eye_y + 12], fill=(20, 14, 10, 255))
+    fcd.arc([body_cx - 50, eye_y + 40, body_cx + 50, eye_y + 110], 200, 340, fill=(20, 14, 10, 255), width=10)
+    img = over(img, face)
+
+    return img
+
+
+# ---------- 9. ボックリ（ボムボックリの死亡効果専用・図鑑非登録） ----------
+
+def bokkuri():
+    """ボムボックリが死亡すると空き地に湧く小さな松ぼっくり。素朴に手早く。"""
+    bg = radial((92, 150, 70), (14, 28, 16), cy=0.4, radius=0.9, power=1.0)
+    base = to_img(vignette(grain(bg, 5), 0.4))
+
+    cx, base_y = W / 2, H * 0.66
+    body = layer()
+    bd = ImageDraw.Draw(body)
+    pinecone_scales(bd, cx, base_y, 300, 340, 6, (150, 92, 44, 255), (110, 64, 32, 255), (40, 22, 10, 255))
+    img = over(base, body)
+
+    face = layer()
+    fd = ImageDraw.Draw(face)
+    eye_y = base_y - 240
+    for sgn in (-1, 1):
+        ex = cx + sgn * 46
+        fd.ellipse([ex - 14, eye_y - 16, ex + 14, eye_y + 16], fill=(20, 14, 10, 255))
+    img = over(img, face)
+    return img
+
+
 CARDS = {
     'russianRoulette': russian_roulette,
     'diamondShield': diamond_shield,
@@ -548,6 +655,8 @@ CARDS = {
     'pandemic': pandemic,
     'horizon': horizon,
     'delayTactics': delay_tactics,
+    'bombBokkuri': bomb_bokkuri,
+    'bokkuri': bokkuri,
 }
 
 if __name__ == '__main__':

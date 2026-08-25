@@ -1790,15 +1790,24 @@ async function promptSpellCastEffect({ targetPlayerId, targetTileId, targetPosit
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1);
 }
 
-async function promptSummonEffect({ tileId, unitName }) {
+async function promptSummonEffect({ tileId, unitName, cardImageUrl = null }) {
   const tile = tiles.find((entry) => entry.id === tileId);
   if (!tile || !scene) return;
   const savedFocus = { x: scene.focus.x, z: scene.focus.z };
   await scene.focusAndZoom(tile.position.x, tile.position.z, 1.28, pvpWaitCut(320));
-  await Promise.all([
-    scene.playSummonBurst(tile.position),
-    showTargetEffectMessage(tile.position, `${unitName} 召喚！`),
-  ]);
+  // cardImageUrl指定時（ボムボックリの死亡効果等）はカード画像そのものが
+  // 空から降ってくる専用演出。それ以外は従来の光の放射バースト。
+  if (cardImageUrl) {
+    await Promise.all([
+      scene.playCardDropSummon(tile.position, cardImageUrl),
+      showTargetEffectMessage(tile.position, `${unitName}が召喚された`),
+    ]);
+  } else {
+    await Promise.all([
+      scene.playSummonBurst(tile.position),
+      showTargetEffectMessage(tile.position, `${unitName} 召喚！`),
+    ]);
+  }
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, pvpWaitCut(320));
 }
 

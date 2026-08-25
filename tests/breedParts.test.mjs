@@ -23,13 +23,13 @@ test('通常抽選のR・S・Nをそのまま維持する', () => {
   assert.deepEqual(parts.map((part) => part.rarity), ['R', 'S', 'N']);
 });
 
-test('ブリードパーツは種類にかかわらず重複込みで合計8個まで装着できる', () => {
+test('ブリードパーツは種類にかかわらず重複込みで合計9個まで装着できる', () => {
   const part = { id: 'test-part' };
-  const sevenEquipped = { equippedPartIds: Array(7).fill(part.id) };
-  assert.equal(canEquipPart(sevenEquipped, part).ok, true);
+  const eightEquipped = { equippedPartIds: Array(8).fill(part.id) };
+  assert.equal(canEquipPart(eightEquipped, part).ok, true);
 
-  const eightEquipped = { equippedPartIds: Array(BREED_MAX_EQUIPPED_PARTS).fill(part.id) };
-  const result = canEquipPart(eightEquipped, part);
+  const nineEquipped = { equippedPartIds: Array(BREED_MAX_EQUIPPED_PARTS).fill(part.id) };
+  const result = canEquipPart(nineEquipped, part);
   assert.equal(result.ok, false);
-  assert.match(result.error, /合計8個まで/);
+  assert.match(result.error, /合計9個まで/);
 });

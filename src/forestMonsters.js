@@ -23,8 +23,35 @@ const forestMonster = (id, name, rarity, hp, atk, options = {}) => ({
   imageDataUrl: options.imageDataUrl ?? assetUrl(`/images/card-art/${id}.jpg`),
 });
 
+/**
+ * ボムボックリの死亡効果が生成する専用カード。図鑑登録はせず
+ * （FOREST_MONSTER_CATALOGに含めない）、game.jsの_handleUnitDeathが直接
+ * importしてこの定義から即席インスタンスを作る（電柱と同じ扱い）。
+ * 手札に戻った場合でも召喚コストは0G。
+ */
+export const BOKKURI_FIELD_MONSTER = {
+  id: 'bokkuri',
+  catalogId: 'bokkuri',
+  type: CardType.MONSTER,
+  name: 'ボックリ',
+  element: Element.FOREST,
+  rarity: Rarity.N,
+  hp: 1,
+  atk: 0,
+  cost: 0,
+  imageDataUrl: assetUrl('/images/card-art/bokkuri.jpg'),
+};
+
 /** 森属性モンスター20種。画像未指定時はcardArt.jsの森属性共通画像を使う。 */
 export const FOREST_MONSTER_CATALOG = {
+  // 戦闘・スペル・土地コマンドいずれの死因でも(自分から侵略して死んでも)
+  // 発動する。灰塵など「死亡ではなく手放す」経路は_handleUnitDeathを
+  // 通らないため対象外（意図通り）。空き地が無ければ以降の分も含め不発。
+  bombBokkuri: forestMonster('bombBokkuri', 'ボムボックリ', Rarity.S, 1, 1, {
+    cost: 40,
+    effect: { type: 'deathSummonScatter', monster: BOKKURI_FIELD_MONSTER, count: 2 },
+    effectDescription: 'このカードが死亡すると、ランダムな空き地に「ボックリ」を2体召喚する（戦闘・スペル・土地コマンドいずれの死因でも発動）',
+  }),
   // 周回成長型の壁。2周目に再生、3周目には味方の森属性全体を強化する繁栄を覚える。
   //   素 HP55/ATK10 → 1周 65/15 → 2周 75/20＋再生 → 3周 繁栄
   kyochinhei: forestMonster('kyochinhei', '巨珍兵', Rarity.S, 55, 10, {

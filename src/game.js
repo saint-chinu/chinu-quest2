@@ -899,6 +899,14 @@ export class Game {
   /** 元デッキ外から一時生成されたカードは、使用・破棄後に捨て札へ混ぜず消滅させる。 */
   _discardUsedCard(player, card) {
     if (!card || card.generatedOutsideDeck) return;
+    // CPUの捨て駒判断など、その戦闘だけに使うフラグはデッキへ持ち越さない。
+    // そのまま捨て札へ入れると再シャッフル後も装備禁止が永続してしまう。
+    if (card.sacrificeWithoutItem) {
+      const cleanCard = { ...card };
+      delete cleanCard.sacrificeWithoutItem;
+      player.deck.discard(cleanCard);
+      return;
+    }
     player.deck.discard(card);
   }
 
@@ -3052,7 +3060,12 @@ export class Game {
     // 従来どおり同属性空き地。
     const gearLandTarget = isDanball ? this._nearestGearPlaceableEmptyLandTileId(player) : null;
     const matchingElementTarget = this._nearestSummonableMatchingEmptyLandTileId(player);
-    const secondaryTarget = isDanball ? (gearLandTarget ?? matchingElementTarget) : matchingElementTarget;
+    const fusagikondaLoopTarget = player.name === '塞ぎ込んだ男'
+      ? this._nearestFusagikondaLoopEmptyLandTileId(player)
+      : null;
+    const secondaryTarget = isDanball
+      ? (gearLandTarget ?? matchingElementTarget)
+      : (fusagikondaLoopTarget ?? matchingElementTarget);
     const leadingOniku = player.name === '暴君マダイ' ? this._leadingOnikuOpponent(player) : null;
     const onikuLands = leadingOniku ? this.tiles.filter((tile) => tile.owner === leadingOniku.id) : [];
     const scores = optionIds.map((id) => {
@@ -3209,6 +3222,27 @@ export class Game {
       const countFor = (element) => this._affordableMonsterCards(player)
         .filter((card) => card.element === element).length;
       return countFor(tile.element) > countFor(best.element) ? tile : best;
+    }).id;
+  }
+
+  /**
+   * 塞ぎ込んだ男専用。ばら撒き役を召喚できる時は、CPとゴールへの最短を
+   * 崩さない範囲で、毎周通る左下ループの空き地を優先する。
+   */
+  _nearestFusagikondaLoopEmptyLandTileId(player) {
+    const scatterIds = new Set(['thunderbird', 'bombBokkuri', 'denchuwoUeruOtoko']);
+    const canScatter = this._affordableMonsterCards(player)
+      .some((card) => scatterIds.has(catalogIdOf(card)));
+    if (!canScatter) return null;
+    const candidates = this.tiles.filter(
+      (tile) => tile.fusagikondaLoop && tile.type === TileType.LAND && tile.owner == null,
+    );
+    if (candidates.length === 0) return null;
+    return candidates.reduce((best, tile) => {
+      const distance = this._forwardTileDistance(player.tileId, player.previousTileId, tile.id);
+      const bestDistance = this._forwardTileDistance(player.tileId, player.previousTileId, best.id);
+      if (distance !== bestDistance) return distance < bestDistance ? tile : best;
+      return this._landValueOfTile(tile) > this._landValueOfTile(best) ? tile : best;
     }).id;
   }
 
@@ -4881,7 +4915,12 @@ export class Game {
           await this._presentOfudaPriceChange(best.element, result.before);
           continue;
         }
-        const cheapest = candidates.reduce((min, t) => (this._landValueOfTile(t) < this._landValueOfTile(min) ? t : min));
+        // ボムボックリの死亡でボックリが空き地に湧くのは強制売却の判定より
+        // 前（_handleUnitDeath）なので、この時点で既に盤面にいる。ボックリは
+        // 実質価値ゼロの捨て駒なので、地価比較より先に問答無用で売る。
+        const bokkuriTile = candidates.find((t) => catalogIdOf(t.unit?.def) === 'bokkuri');
+        const cheapest = bokkuriTile
+          ?? candidates.reduce((min, t) => (this._landValueOfTile(t) < this._landValueOfTile(min) ? t : min));
         await this._sellLandTile(player, cheapest);
         continue;
       }
@@ -5447,6 +5486,8 @@ export class Game {
             ? this._cpuChooseSummonCardForKare(pool, tile, profile, player)
           : player.name === 'クエ'
             ? this._cpuChooseSummonCardForQue(pool, tile, profile, player)
+          : player.name === '塞ぎ込んだ男'
+            ? this._cpuChooseSummonCardForFusagikonda(pool, tile, profile, player)
             : this._cpuChooseSummonCard(pool, tile, profile, player);
       player.hand = player.hand.filter((c) => c.id !== card.id);
       this._discardUsedCard(player, card);
@@ -5479,7 +5520,16 @@ export class Game {
       this.onLog(`${player.name}は通行料を払えなくなる恐れがあるため侵略を見送った`);
       return;
     }
-    const decision = this._cpuDecideInvasion(player, tile, survivableOptions, profile);
+    // 塞ぎ込んだ男: Lv1の土地は普通に勝算があってもボムボックリの的として
+    // 優先的に狙う（安い土地は取れなくてもボックリの元手として十分な価値）。
+    const level1Sacrifice = player.name === '塞ぎ込んだ男' && tile.level === 1
+      ? this._cpuMaybeSacrificeBombBokkuri(survivableOptions)
+      : null;
+    const decision = level1Sacrifice
+      ?? this._cpuDecideInvasion(player, tile, survivableOptions, profile)
+      // 本来なら勝てるカードが無く見送る場面でも、ボムボックリがあれば
+      // 通行料を払うだけより価値がある捨て駒侵略に切り替える。
+      ?? this._cpuMaybeSacrificeBombBokkuri(survivableOptions);
     if (!decision) {
       this.onLog(`${player.name}はこの土地への侵略を見送った`);
       return;
@@ -5502,6 +5552,17 @@ export class Game {
   async _cpuUseAccessibleLandCommand(player, candidates) {
     const accessible = candidates.filter((tile) => tile?.owner === player.id && tile.unit);
     if (accessible.length === 0) return false;
+
+    // 塞ぎ込んだ男: サンダーバード/電柱を植える男の土地コマンド（空き地への
+    // モンスターばら撒き）を他の何よりも優先する。城(START)・CPに止まって
+    // 全所有地へアクセスできる時はもちろん、召喚コマンドを使わない通常移動
+    // （通過しただけ／空き地に止まっていない）でも同様に最優先で撃つ。
+    if (player.name === '塞ぎ込んだ男') {
+      for (const tile of accessible) {
+        if (!['thunderbird', 'denchuwoUeruOtoko'].includes(catalogIdOf(tile.unit?.def))) continue;
+        if (await this._cpuMaybeAcquireHighValueLandByAbility(player, tile)) return true;
+      }
+    }
 
     // アサシンユニット運用（ガシャーン／未知の侵略者）。固有AIも権限候補を必ず
     // 受け取り、盤面上の任意のユニットを直接動かすことは禁止する。
@@ -5998,6 +6059,31 @@ export class Game {
     return this._cpuChooseSummonCard(attackers.length > 0 ? attackers : options, tile, profile, player);
   }
 
+  /**
+   * 塞ぎ込んだ男専用の空き地召喚優先順位: サンダーバード＞ボムボックリ＞
+   * 電柱を植える男（手札にある分だけで比較するので、2種でも3種でも
+   * この順位のまま）。サンダーバード/電柱を植える男は土地コマンドで
+   * 空き地へモンスターをばら撒く能力を持ち、ボムボックリは死亡時に
+   * ボックリを2体ばら撒く（どこに置いても発火するので置き場所を選ばない）。
+   * 3枚とも無ければ戦闘列車/供物車両を安いほうから通常のばら撒き札として
+   * 据え、それも無ければ通常選択。
+   * 戦闘列車/供物車両の「変身」は戦闘中の装備でしか起きない
+   * （_trainFusionDef、実際に戦って相方を装備した瞬間に合体する）ので、
+   * 召喚時に温存する意味が無い。変身の優先・被侵略時のアイテム転用は
+   * CPU共通の_chooseBattleItemByOutcome/_bestBattleItemFromHandが自動で
+   * 行う（isBattleItemCardがdualUseItemを装備候補に含めるため追加実装不要）。
+   */
+  _cpuChooseSummonCardForFusagikonda(options, tile, profile, player) {
+    const priority = ['thunderbird', 'bombBokkuri', 'denchuwoUeruOtoko'];
+    for (const id of priority) {
+      const found = options.find((card) => catalogIdOf(card) === id);
+      if (found) return found;
+    }
+    const trains = options.filter((card) => ['battleTrain', 'sacrificeCar'].includes(catalogIdOf(card)));
+    if (trains.length > 0) return this._cpuChooseScatterSummonCard(trains, tile);
+    return this._cpuChooseSummonCard(options, tile, profile, player);
+  }
+
   /** Q専用: 合体素材になる列車2種を通常の雷モンスターより優先して配置する。 */
   _cpuChooseSummonCardForQ(options, tile, profile, player) {
     const trainIds = [BATTLE_TRAIN_ID, SACRIFICE_CAR_ID];
@@ -6175,6 +6261,18 @@ export class Game {
     if (best.noItemRate >= threshold) return { card: best.card };
     if (best.withItemRate >= threshold && Math.random() < profile.itemGambleChance) return { card: best.card };
     return null;
+  }
+
+  /**
+   * ボムボックリを侵略の捨て駒として使う判断。手札にあれば必ず使う
+   * （HP1/ATK1でほぼ確実に死ぬので、勝敗のシミュレーションは行わない）。
+   * `sacrificeWithoutItem`を立てて返し、_cpuChooseBattleItemがこれを見て
+   * アイテムを一切装備しないようにする（延命させず確実にボックリを呼ぶ）。
+   */
+  _cpuMaybeSacrificeBombBokkuri(options) {
+    const card = options.find((c) => catalogIdOf(c) === 'bombBokkuri');
+    if (!card) return null;
+    return { card: { ...card, sacrificeWithoutItem: true } };
   }
 
   /**
@@ -6505,6 +6603,9 @@ export class Game {
    * 試行して平均で判断する。
    */
   _cpuChooseBattleItem(player, unit, opponentUnit, tile, isDefender, trials = 12) {
+    // ボムボックリの捨て駒運用: 確実に死んでボックリを呼ぶのが目的なので、
+    // 生存率を上げるアイテムは一切装備しない（_cpuMaybeSacrificeBombBokkuri参照）。
+    if (unit?.def?.sacrificeWithoutItem) return null;
     return this._chooseBattleItemByOutcome(
       player.hand, player.name, unit, opponentUnit, tile, isDefender, trials, player.currency,
     );
@@ -7137,6 +7238,11 @@ export class Game {
     await this._enforceHandLimit(attackerPlayer);
     await this._enforceHandLimit(defenderPlayer);
 
+    // sacrificeWithoutItemは捨て駒侵略を選んだ今回の戦闘だけの印。
+    // 生き残って土地を奪った場合や引き分けで手札へ戻る場合も永続させない。
+    if (attackerUnit.def?.sacrificeWithoutItem) delete attackerUnit.def.sacrificeWithoutItem;
+    if (defenderUnit.def?.sacrificeWithoutItem) delete defenderUnit.def.sacrificeWithoutItem;
+
     return result;
   }
 
@@ -7361,6 +7467,28 @@ export class Game {
       def: { ...unit.def },
       originalOwnerId: ownerPlayer.id,
     });
+
+    // ボムボックリ: 死因を問わず（戦闘・スペル・土地コマンド・自分から
+    // 侵略して死んだ場合も含む）ランダムな空き地へ「ボックリ」を2体まで
+    // 召喚する。演出はカードが空から降ってくる専用のもの
+    // (onSummonEffectのcardImageUrl、main.js/scene.js参照)。空き地が
+    // 無くなった時点でそれ以降は不発（差し戻しやG化はしない）。
+    if (unit.def.effect?.type === 'deathSummonScatter') {
+      const { monster, count = 1 } = unit.def.effect;
+      for (let i = 0; i < count; i++) {
+        const emptyLands = this.tiles.filter((t) => t.type === TileType.LAND && t.owner == null);
+        if (emptyLands.length === 0) break;
+        const targetTile = emptyLands[Math.floor(Math.random() * emptyLands.length)];
+        const summonCard = {
+          ...monster,
+          id: `${monster.id}-${ownerPlayer.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        };
+        this._placeUnit(targetTile, ownerPlayer, summonCard);
+        this.onLog(`${summonCard.name}が召喚された`);
+        this._notifyState();
+        await this.onSummonEffect?.({ tileId: targetTile.id, unitName: summonCard.name, cardImageUrl: summonCard.imageDataUrl });
+      }
+    }
 
     if (unit.def.effect?.type === 'deathRespawnChance' && Math.random() < unit.def.effect.chance) {
       const emptyLands = this.tiles.filter((t) => t.type === TileType.LAND && t.owner == null);
@@ -8459,7 +8587,9 @@ export class Game {
    * ⑭「塞ぎ込んだ男」専用の一本道AI。
    *  1. 盤面全体で6体以上になったらパンデミック
    *  2. 自分が7体以上撒いたらホライズンで全領地をLv2へ
-   *  3. 自分の7体以上がゾンビ化済みかつLv2なら灰塵で200%換金
+   *  3. 自分の5体以上がゾンビ化済みかつLv2なら灰塵で200%換金
+   *     （元は7体だったが、プレイヤーが取り返すたびに条件が壊れて事実上
+   *     発動しなくなっていたため2026-08に緩和）
    * 条件外のターンだけ持たざる者を自分へ準備する。各カードが手札に無い
    * 場合は飛ばし、引けた時点で続きを再開するためドロー順には依存しない。
    */
@@ -8475,7 +8605,7 @@ export class Game {
     const neutralOwned = owned.filter((tile) => tile.unit.def.element === Element.NEUTRAL);
 
     const ash = affordable('cashOutAllNeutralMonsterLands');
-    if (ash && neutralOwned.length >= 7 && neutralOwned.every((tile) => tile.level === 2)) {
+    if (ash && neutralOwned.length >= 5 && neutralOwned.every((tile) => tile.level === 2)) {
       await this._cpuCastSpell(player, ash, {});
       return;
     }
@@ -8683,10 +8813,17 @@ export class Game {
         if (intoOwnLand && attackerWinRate > CPU_PSYCHOKINESIS_MAX_ATTACKER_WIN_RATE) continue;
         const defenderPower = (destination.unit.currentHp || 0) + (destination.unit.def.atk || 0)
           + this._elementHpBonus(destination.unit, destination);
+        // aiProfile.psychokinesisTargetAntlion: 敵地にアリジゴク(forcedStopCursed)
+        // が張られていれば最優先で引き剥がす。守備モンスターがいなくなればその
+        // 土地は所有者ごと空き地に戻り、アリジゴクの罠として機能しなくなる。
+        // source.level*1000（下のスコア基準）を確実に上回る値を足して、
+        // 通常の高額地優先（source.level*1000 + 地価）より必ず先に選ばせる。
+        const antlionBonus = player.aiProfile?.psychokinesisTargetAntlion && source.forcedStopCursed
+          ? 100000 : 0;
         plans.push({
           source,
           destination,
-          score: source.level * 1000 + this._landValueOfTile(source) + defenderPower
+          score: antlionBonus + source.level * 1000 + this._landValueOfTile(source) + defenderPower
             // 迎撃は守備側が有利なほど高評価。敵同士の同士討ちはさらに上乗せ。
             + Math.round((1 - attackerWinRate) * 400)
             + (intoOwnLand ? 0 : 600),
@@ -8751,6 +8888,15 @@ export class Game {
     if (player.spellUsedThisTurn) return;
     const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'poisonArea');
     if (!card || player.currency < (card.cost || 0)) return;
+
+    // aiProfile.poisonMistCounterAntlion: 相手のデッキにアリジゴク
+    // (curseForcedStop)が残っている間は毒霧を温存する。アリジゴクを
+    // 使い切ってしまえば（手札にも山札にも無くなれば）通常運用に戻る。
+    // 相手のデッキに元々アリジゴクが無ければこの判定は最初から不発なので、
+    // 常に通常運用のまま変わらない。_opponentHoldsSpellEffectは
+    // sanctuaryCounterForcedStopと共通のヘルパー。
+    if (player.aiProfile?.poisonMistCounterAntlion
+      && this._opponentHoldsSpellEffect(player, 'curseForcedStop')) return;
 
     let best = null;
     for (const center of this.tiles) {

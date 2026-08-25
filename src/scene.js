@@ -293,20 +293,25 @@ const unitCardArtCache = new Map();
  * ゲーム全体がフリーズする）。失敗はキャッシュから外し、コールバックも
  * 呼ばない＝イラスト無しで描画させる。
  */
-function loadUnitCardArt(url, onLoad) {
+function loadUnitCardArt(url, onLoad, onError = () => {}) {
   const isUsable = (img) => img.complete && img.naturalWidth > 0;
   const cached = unitCardArtCache.get(url);
   if (cached) {
     if (cached.complete) {
       if (isUsable(cached)) onLoad(cached);
+      else onError();
       return;
     }
     cached.addEventListener('load', () => { if (isUsable(cached)) onLoad(cached); }, { once: true });
+    cached.addEventListener('error', onError, { once: true });
     return;
   }
   const img = new Image();
   img.addEventListener('load', () => { if (isUsable(img)) onLoad(img); }, { once: true });
-  img.addEventListener('error', () => { unitCardArtCache.delete(url); }, { once: true });
+  img.addEventListener('error', () => {
+    unitCardArtCache.delete(url);
+    onError();
+  }, { once: true });
   img.src = url;
   unitCardArtCache.set(url, img);
 }
@@ -905,6 +910,52 @@ export class GameScene {
 
     this.scene.remove(sprite);
     sprite.material.dispose();
+  }
+
+  /**
+   * ボムボックリの死亡効果でボックリが湧く時の演出: カード画像そのものが
+   * 空から降ってきて着地した瞬間にモンスターとして展開する。
+   * playFireballImpactと同じ加速度落下＋着地インパクトの型を流用するが、
+   * 画像はloadUnitCardArt（失敗画像を弾く安全な読み込み）経由で取得する。
+   */
+  playCardDropSummon(tilePosition, imageUrl) {
+    return new Promise((resolve) => {
+      loadUnitCardArt(imageUrl, (img) => {
+        const texture = new THREE.Texture(img);
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.needsUpdate = true;
+        const w = 0.85;
+        const h = 1.28;
+        const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: texture, transparent: true }));
+        sprite.scale.set(w, h, 1);
+        const startY = 8;
+        const landY = PIECE_REST_Y + 0.5;
+        sprite.position.set(tilePosition.x, startY, tilePosition.z);
+        this.scene.add(sprite);
+
+        (async () => {
+          // 自由落下っぽく見えるよう加速度的なease-inで落とす（playFireballImpactと同じ型）。
+          await tween(480, (t) => {
+            const eased = t * t;
+            sprite.position.y = startY + (landY - startY) * eased;
+            sprite.rotation.z = (1 - t) * 0.35;
+          });
+          await tween(240, (t) => {
+            const scale = 1 + Math.sin(t * Math.PI) * 0.22;
+            sprite.scale.set(w * scale, h * scale, 1);
+          });
+          this.scene.remove(sprite);
+          sprite.material.dispose();
+          texture.dispose();
+          resolve();
+        })();
+      }, async () => {
+        // 画像が404・通信失敗でも召喚処理のawaitを永久停止させない。
+        // 通常の召喚光へフォールバックして必ず完了させる。
+        await this.playSummonBurst(tilePosition);
+        resolve();
+      });
+    });
   }
 
   /**

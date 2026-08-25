@@ -1063,22 +1063,25 @@ export const STORY_STAGES = [
       '塞ぎ込んだ男': 'left',
     },
     intro: [
-      { speaker: '???', text: '豪華客船を降りた主人公は、王都の細い路地を歩いていた。人通りの途切れた角に、黒いフードの男がひとり、体育座りで塞ぎ込んでいる。' },
-      { speaker: '???', text: 'フードの奥から何かぶつぶつ聞こえるが、言葉までは聞き取れない。' },
-      { speaker: '主人公', text: '（うわ……アレはアレやな）' },
-      { speaker: '???', text: '主人公は目を合わせず、そのまま通り過ぎようとした。' },
-      { speaker: '塞ぎ込んだ男', text: '……勝手に進むな。ここから先にいくなら、カード全部おいていけ。' },
-      { speaker: '主人公', text: '（ちょっとアレな人がなんか言ってる……オカンからこういう人とはかかわるなって言われてるから、無視しよ）' },
-      { speaker: '塞ぎ込んだ男', text: '俺を無視するな！！ おこったゾウ！！' },
-      { speaker: '主人公', text: 'いや、急に元気になるなよ！' },
-      { speaker: '???', text: '男の足元から灰色のカードが噴き上がり、静かな路地を一瞬で埋め尽くした。王都へ続く道を賭けた勝負が始まる！' },
+      { speaker: '主人公', text: '長い船旅だった、ここが王都か。・・・ん？' },
+      { speaker: '???', text: '目の前には、黒ずくめの男が塞ぎ込んでいる。' },
+      { speaker: '主人公', text: '（なんかやばそうなヤツだな、さっさと通り過ぎよう。道が狭いな・・・）' },
+      { speaker: '???', text: 'ぎゅ' },
+      { speaker: '主人公', text: 'ｷﾞｮｯ' },
+      { speaker: '塞ぎ込んだ男', text: '俺は、神だ' },
+      { speaker: '主人公', text: '（離せよ！！ヒレを掴むな！！）' },
+      { speaker: '塞ぎ込んだ男', text: 'ルールは俺が決める' },
+      { speaker: '主人公', text: 'やめてください' },
+      { speaker: '塞ぎ込んだ男', text: 'お前も俺を無視するのか？ぶっ殺すぞ？' },
+      { speaker: '主人公', text: 'やめてください' },
+      { speaker: '塞ぎ込んだ男', text: 'ケリをつけよう' },
+      { speaker: '主人公', text: 'いやぁぁぁぁぁぁぁ' },
     ],
     outro: [
-      { speaker: '塞ぎ込んだ男', text: '……全部、灰になった。土地も、カードも、俺の作戦も……。' },
-      { speaker: '主人公', text: '自分で売り払ったんだろ。灰にしたのも自分だろ。' },
-      { speaker: '塞ぎ込んだ男', text: '……勝手に行け。もう誰も、俺を見なくていい。' },
-      { speaker: '主人公', text: '最初から無視して通るつもりだったんだよ！' },
-      { speaker: '???', text: '塞ぎ込んだ男は再び膝を抱え、今度こそ何も言わなくなった。主人公は呆れながら、王都の奥へ進んでいく。' },
+      { speaker: '塞ぎ込んだ男', text: '神に勝つとは、お前やるな。ライバルとして認めてやる。' },
+      { speaker: '主人公', text: '結構です。' },
+      { speaker: '???', text: 'ぎゅ' },
+      { speaker: '主人公', text: 'ｷﾞｮｯ！！！' },
     ],
     opponents: [
       {
@@ -1090,6 +1093,14 @@ export const STORY_STAGES = [
           scatterSummons: true,
           diceHarassHuman: true,
           offElementSummonChance: 1,
+          // 相手のデッキにアリジゴクがある間は毒霧を温存し、使い切ってから
+          // 通常運用に戻す（_cpuMaybeUsePoisonSpell, game.js）。
+          poisonMistCounterAntlion: true,
+          // サイコキネシスは敵地のアリジゴク(forcedStopCursed)を最優先で狙う。
+          // 守備モンスターを引き剥がせばその土地は空き地に戻り罠が無力化する
+          // （_cpuMaybeUsePsychokinesisSpell, game.js）。無ければ通常どおり
+          // 高額地優先。
+          psychokinesisTargetAntlion: true,
         },
       },
     ],
