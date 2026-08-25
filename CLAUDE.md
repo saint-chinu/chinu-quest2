@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v213`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v214`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## 未実装: Firebase App Check
@@ -77,6 +77,24 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - 検証ハーネスは`tools/sim-stage14.mjs`（プロジェクト直下へコピーして実行）。
   **エンジンのコールバックは返り値の形を間違えると無限ループする**ので、
   ハーネス冒頭の注意書きを読んでから触ること。
+
+## ⚠️ 盤面セッションの破棄（Codex追加, 2026-08）
+分岐選択やモーダルの入力待ちPromiseは、退出・別セッション開始時に
+`cancelAllActivePrompts()`が**nullで解決**する。つまり「キャンセルされた」と
+「何も選ばなかった」が同じ形で返る。ここで`_isCancelled`を見ずに続行すると、
+**破棄済みの旧Gameが新しい盤面と同じDOMへ土地コマンドを出し、次のプレイヤー
+まで進めてしまう**（⑬の分岐で発生）。
+- `rollDice`は**ユーザー入力を挟む各フェーズの直後**で必ず
+  `if (this._isCancelled || this.storyEnded) return;` する。入力待ちを増やす
+  時は同じガードを足すこと。
+- `startBattle`は新しい盤面を作る**前**に、旧`game.cancel()`＋
+  `cancelActiveBattleItemPicker`＋`cancelAllActivePrompts()`＋UIフラグ
+  （`boardMovementActive`/`branchChoiceActive`/モーダル類）を全部落とす。
+- `deferInit`で会話後に`init()`する経路は、`game !== startedGame ||
+  startedGame._isCancelled`なら**initしない**（会話中に別の盤面へ移った場合、
+  グローバル`game`は既に別物なので二重initになる）。
+- `cancel()`の呼び出し元は退出系だけ（チュートリアル終了・対人終了・
+  途中退室・pagehide・startBattleの作り直し）。通常進行では絶対に立たない。
 
 ## ⚠️ 並行開発 (Codex) — 必ず守る
 別のエージェント Codex（git author「セイントチヌ」/「saint-chinu」, 同一ユーザー
