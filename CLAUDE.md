@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v214`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v217`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## 未実装: Firebase App Check
@@ -127,6 +127,18 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
   （`aiProfile.psychokinesisTargetAntlion`, game.js）。対象の敵ユニットを
   強制移動させれば土地が空き地に戻り罠が無力化する。無ければ従来通り
   高額地優先（既存のsource.level×1000＋地価のスコアリングそのまま）。
+  - ⚠️ **`tile.forcedStopCursed`はtruthy判定してはいけない**（2026-08、
+    Codex実装のバグを修正）。この値は`true`（ほこら）か**詠唱者のplayer.id
+    （0始まり）**が入る（`curseForcedStop`, game.js）。詠唱者がid 0（＝
+    通常は人間側）の時、`if (tile.forcedStopCursed)`や`!tile.forcedStopCursed`
+    は`0`をfalsyとして「呪い無し」に誤判定する。初出のpsychokinesisTargetAntlion
+    実装はまさにこれで、人間がid 0でアリジゴクを張った時だけサイレントに
+    不発になっていた。必ず`_isForcedStopCursed(tile)`
+    （`tile.forcedStopCursed != null && tile.forcedStopCursed !== false`）
+    を経由すること。`_cpuMaybeUseSanctuarySpell`・`_cpuMaybeUseAntlionSpell`の
+    候補地フィルタも同じ理由でこのヘルパーへ統一済み。
+    回帰テスト: tests/newCards.test.mjs「詠唱者がid=0でも…」
+    「サイコキネシスのアリジゴク対策は…」。
 - ⚠️ **灰塵はrewardOnly必須**。付け忘れるとショップマス（①と⑩）の品揃えに
   100Gで並ぶ。`_resolveShopTile`は`card.cost`をそのまま請求するので、ペーの杖と
   同じ「実質バグ価格」になる。ステージ専用EXスペルは全てrewardOnlyで揃えること

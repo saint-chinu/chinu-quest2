@@ -321,6 +321,53 @@ test('塞ぎ込んだ男はCP・ゴール最短が同点なら左下ループの
   assert.equal(g._nearestFusagikondaLoopEmptyLandTileId({ tileId: 0, previousTileId: null }), loopFar.id);
 });
 
+test('アリジゴクの詠唱者がid=0でも、forcedStopCursedのtruthy判定崩れで無視されない', () => {
+  // player.idは0始まりなので、forcedStopCursedへ詠唱者id(0)が入ると
+  // 素朴な!!/if(tile.forcedStopCursed)判定は「呪い無し」と誤認する
+  // (_isForcedStopCursedが無い旧実装の再発防止)。
+  const cursedByHuman = makeTile(1, { forcedStopCursed: 0 });
+  const cursedByShrine = makeTile(2, { forcedStopCursed: true });
+  const uncursed = makeTile(3, {});
+  const clearedFlag = makeTile(4, { forcedStopCursed: false });
+  const g = Object.create(Game.prototype);
+  assert.equal(g._isForcedStopCursed(cursedByHuman), true);
+  assert.equal(g._isForcedStopCursed(cursedByShrine), true);
+  assert.equal(g._isForcedStopCursed(uncursed), false);
+  assert.equal(g._isForcedStopCursed(clearedFlag), false);
+});
+
+test('サイコキネシスのアリジゴク対策は、詠唱者id=0の土地でも最優先で選ぶ', async () => {
+  const antlionUnit = unit(mon('弱い見張り', 10, 1), 0);
+  const decoyUnit = unit(mon('育った壁', 200, 20), 0);
+  // アリジゴクが張られた土地はLv1・低地価だが、詠唱者(人間側=id 0)が
+  // かけたものなので forcedStopCursed には player.id である 0 が入る。
+  const antlionSource = makeTile(1, { owner: 0, unit: antlionUnit, level: 1, price: 100, forcedStopCursed: 0 });
+  // おとりは通常のスコア計算だけならこちらが勝つ高レベル・高地価の土地。
+  const decoySource = makeTile(2, { owner: 0, unit: decoyUnit, level: 5, price: 500 });
+  const destA = makeTile(10, { owner: 1, unit: unit(mon('自軍地', 50, 5), 1) });
+  const destB = makeTile(11, { owner: 1, unit: unit(mon('自軍地2', 50, 5), 1) });
+
+  const player = {
+    id: 1,
+    name: '塞ぎ込んだ男',
+    currency: 1000,
+    spellUsedThisTurn: false,
+    aiProfile: { psychokinesisTargetAntlion: true },
+    hand: [spellCopy(SPELL_CATALOG.psychokinesis)],
+  };
+  const humanOwner = { id: 0, name: 'human' };
+
+  const g = makeCpuStub([antlionSource, decoySource, destA, destB], [player, humanOwner]);
+  g._moveCommandCandidates = (source) => [{ tile: source === antlionSource ? destA : destB }];
+  g._estimateUnitBattleWinProbability = () => 0.1;
+  g._elementHpBonus = () => 0;
+  g._landValueOfTile = (tile) => tile.price;
+
+  await g._cpuMaybeUsePsychokinesisSpell(player);
+  assert.equal(g.casts.length, 1);
+  assert.equal(g.casts[0].cast.targetTileId, antlionSource.id, 'アリジゴク済みの土地を最優先で剥がすべき');
+});
+
 test('ロシアンルーレットはステータスを無視して出目だけで決まる', () => {
   let attackerWins = 0;
   let defenderWins = 0;

@@ -2991,11 +2991,20 @@ export class Game {
   }
 
   /**
-   * 強制停止の呪いが今このプレイヤーに対して効くか。`tile.forcedStopCursed`は
-   * 通常`true`（ほこら効果 - 免除対象は土地の所有者本人）だが、アリジゴク
-   * （スペル）は免除対象を「詠唱者」に変えたいので、代わりに免除する
-   * プレイヤーidそのものを入れておける（数値idはtruthyなので`true`同様に
-   * 呪いあり判定される）。免除対象の同盟仲間も素通りできる。
+   * `tile.forcedStopCursed`に呪いが実際に乗っているか。通常`true`（ほこら効果）
+   * だが、アリジゴク（スペル）は免除対象を「詠唱者」に変えたいので、代わりに
+   * 免除するプレイヤーidそのものを入れておける。player.idは0始まりなので、
+   * 詠唱者がプレイヤー0の時`!tile.forcedStopCursed`だと`!0`=trueになり
+   * 「呪い無し」と誤判定してしまう - null/undefined/falseだけを
+   * 「呪い無し」として明示的に弾き、呼び出し元全員がこれを経由すること。
+   */
+  _isForcedStopCursed(tile) {
+    return tile.forcedStopCursed != null && tile.forcedStopCursed !== false;
+  }
+
+  /**
+   * 強制停止の呪いが今このプレイヤーに対して効くか。免除対象の同盟仲間も
+   * 素通りできる。
    */
   _isForcedStopFor(player, tile) {
     const permanentForcedStop = this._unitHasTrait(tile.unit, 'permanentForcedStop');
@@ -3005,10 +3014,7 @@ export class Game {
       if (owner?.allianceId != null && owner.allianceId === player.allianceId) return false;
       return true;
     }
-    // player.idは0始まりなので、免除idがプレイヤー0の時に`!tile.forcedStopCursed`
-    // だと`!0`=trueになり「呪い無し」と誤判定してしまう - null/undefined/false
-    // だけを「呪い無し」として明示的に弾く。
-    if (tile.forcedStopCursed == null || tile.forcedStopCursed === false) return false;
+    if (!this._isForcedStopCursed(tile)) return false;
     if (tile.type !== TileType.LAND || tile.owner == null) return false;
     const exemptId = tile.forcedStopCursed === true ? tile.owner : tile.forcedStopCursed;
     if (exemptId === player.id) return false;
@@ -7683,9 +7689,7 @@ export class Game {
         imageFit: tile.unit.def.imageFit ?? null,
       } : null,
       hasAbility: !!tile.unit?.def.ability,
-      // forcedStopCursedはtrue（ほこら）かプレイヤーid（アリジゴク、0始まり）が
-      // 入る - !!だとid=0がfalseに化けるので明示的にnull/false判定する。
-      cursed: tile.forcedStopCursed != null && tile.forcedStopCursed !== false,
+      cursed: this._isForcedStopCursed(tile),
       transparentCursed: !!tile.transparentCursed,
     };
   }
@@ -8337,7 +8341,7 @@ export class Game {
       .filter((t) => t.type === TileType.LAND && t.owner === player.id && t.unit && !t.transparentCursed)
       // アリジゴク済みの土地は除外（聖域は通行料ゼロ化なので、強制停止で
       // 搾る土地にかけると互いに台無しになる）。
-      .filter((t) => !t.forcedStopCursed)
+      .filter((t) => !this._isForcedStopCursed(t))
       .filter((t) => t.level >= 3 && this._chainCount(player.id, t.element) >= 2)
       .sort((a, b) => b.level - a.level || this._landValueOfTile(b) - this._landValueOfTile(a));
     if (candidates.length === 0) return;
@@ -8394,7 +8398,7 @@ export class Game {
     if (!card || player.currency < (card.cost || 0)) return;
     const candidates = this.tiles
       .filter((t) => t.type === TileType.LAND && t.owner === player.id && t.unit
-        && !t.transparentCursed && !t.forcedStopCursed
+        && !t.transparentCursed && !this._isForcedStopCursed(t)
         && !this._unitHasTrait(t.unit, 'permanentForcedStop'))
       .map((t) => ({ tile: t, toll: this._tollOfTile(t) }))
       .filter(({ toll }) => toll >= (card.cost || 0))
@@ -8818,7 +8822,7 @@ export class Game {
         // 土地は所有者ごと空き地に戻り、アリジゴクの罠として機能しなくなる。
         // source.level*1000（下のスコア基準）を確実に上回る値を足して、
         // 通常の高額地優先（source.level*1000 + 地価）より必ず先に選ばせる。
-        const antlionBonus = player.aiProfile?.psychokinesisTargetAntlion && source.forcedStopCursed
+        const antlionBonus = player.aiProfile?.psychokinesisTargetAntlion && this._isForcedStopCursed(source)
           ? 100000 : 0;
         plans.push({
           source,
