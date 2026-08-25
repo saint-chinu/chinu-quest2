@@ -309,6 +309,11 @@ export const SPELL_CATALOG = {
       '自分の無属性モンスターが配置された土地をすべて手放し、地価の200%で換金する。配置モンスターは消滅し、土地は空き地Lv1に戻る',
     ),
     imageDataUrl: assetUrl('/images/card-art/ashToDust.jpg'),
+    // ⑭の塞ぎ込んだ男専用。rewardOnlyを付けないと盤面のショップマス
+    // （①と⑩にある）の品揃えへ100Gで並んでしまう。1回で地価の200%を
+    // 何マスぶんも一括換金するカードなので、ペーの杖と同じ「実質バグ価格」
+    // になる（_resolveShopTileはcard.costをそのまま請求する）。
+    rewardOnly: true,
   },
   landlessOne: {
     ...spell(

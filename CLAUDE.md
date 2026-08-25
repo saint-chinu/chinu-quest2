@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v212`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v213`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## 未実装: Firebase App Check
@@ -57,6 +57,26 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
   帰巣本能はSレアで、登録プレイヤーのデッキ3つ中1つに1枚あっただけ。この抜け道を
   塞ぐために勝利条件へCPを足すと、全13ステージのクリア感に影響するほうが大きい。
   修正しないこと。
+
+## ⑭「王都の番人？？（仮公開）」(royal-guard)
+- **1vs1**（vs 塞ぎ込んだ男）。goalCurrency 15000／再戦17000、startingCurrency 500、
+  checkpointBonus 150。BGM未登録（`MAP_TRACK`に無いので`playTrack`が既定の
+  `board`へフォールバックする＝無音にはならない）。
+- 盤面`ROYAL_GUARD_ROWS`: 7×7の「田」型（外周＋中央の十字）。全33マス
+  （土地28／CP4／ゴール1）。属性は火水雷森が各6＋無属性4。行き止まりゼロ、
+  4方向分岐は中央の1マスのみ。全CPを踏んでゴールまで最短18マス（約5ターン）。
+- **敵の主戦術は「撒く→ゾンビ化→均す→灰塵」**。安い札を空き地へ広げ、
+  パンデミックで全部ゾンビ（＝無属性）にし、ホライズンで全土地Lv2へ揃え、
+  灰塵で自分の無属性地を地価の200%で一括換金する。`_cpuMaybeUseFusagikondaCombo`が
+  灰塵＞ホライズン＞パンデミックの優先度で回す。
+  検証時の実測: 灰塵1回で**9.3マス・4539G**、パンデミック1回で9体、ホライズン1回で10.3マス。
+- ⚠️ **灰塵はrewardOnly必須**。付け忘れるとショップマス（①と⑩）の品揃えに
+  100Gで並ぶ。`_resolveShopTile`は`card.cost`をそのまま請求するので、ペーの杖と
+  同じ「実質バグ価格」になる。ステージ専用EXスペルは全てrewardOnlyで揃えること
+  （回帰テスト: tests/newCards.test.mjs「ショップマスの品揃えに並ばない」）。
+- 検証ハーネスは`tools/sim-stage14.mjs`（プロジェクト直下へコピーして実行）。
+  **エンジンのコールバックは返り値の形を間違えると無限ループする**ので、
+  ハーネス冒頭の注意書きを読んでから触ること。
 
 ## ⚠️ 並行開発 (Codex) — 必ず守る
 別のエージェント Codex（git author「セイントチヌ」/「saint-chinu」, 同一ユーザー

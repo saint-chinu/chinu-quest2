@@ -357,7 +357,7 @@ export const MAPS = [
   // 上限120Gに張り付いてしまう）。
   { id: 'kessan', name: '⑬ 豪華客船（仮公開）', wip: true, rows: KESSAN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, ofuda: { startPrice: 3, initialCount: 14 }, background: assetUrl('/images/stage/stage13-luxury-liner.png'), spacing: 2.8 },
   // ストーリー専用として実装。対戦モードへは調整完了後にwipを外して公開する。
-  { id: 'royal-guard', name: '⑭ 王都の番人？？', wip: true, rows: ROYAL_GUARD_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage14-royal-alley.jpg'), spacing: 2.8 },
+  { id: 'royal-guard', name: '⑭ 王都の番人？？（仮公開）', wip: true, rows: ROYAL_GUARD_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage14-royal-alley.jpg'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {

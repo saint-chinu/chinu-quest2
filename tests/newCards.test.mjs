@@ -9,12 +9,12 @@ import { existsSync } from 'node:fs';
 import { createServer } from 'vite';
 
 const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' });
-const { ITEM_CATALOG, SPELL_CATALOG, MONSTER_CATALOG, buildCharacterCardList } = await vite.ssrLoadModule('/src/battleCards.js');
+const { ITEM_CATALOG, SPELL_CATALOG, MONSTER_CATALOG, buildCharacterCardList, isRewardOnlyCard } = await vite.ssrLoadModule('/src/battleCards.js');
 const { Game } = await vite.ssrLoadModule('/src/game.js');
 const battle = await vite.ssrLoadModule('/src/battle.js');
 const { TileType, MAPS } = await vite.ssrLoadModule('/src/board.js');
 const { STORY_STAGES } = await vite.ssrLoadModule('/src/story.js');
-const { WIP_CARD_NAMES, reclaimReleasedWipHoldings } = await vite.ssrLoadModule('/src/cardCatalog.js');
+const { WIP_CARD_NAMES, reclaimReleasedWipHoldings, getCardCatalog } = await vite.ssrLoadModule('/src/cardCatalog.js');
 test.after(() => vite.close());
 
 const mon = (name, hp, atk, extra = {}) => ({ id: name, name, element: 'fire', rarity: 'N', hp, atk, ...extra });
@@ -134,13 +134,25 @@ test('ステージ14は専用マップ・会話・塞ぎ込んだ男へ正しく
   const stage = STORY_STAGES.find((entry) => entry.key === 'royal-guard');
   const map = MAPS.find((entry) => entry.id === 'royal-guard');
   assert.ok(stage && map);
-  assert.equal(stage.title, '⑭ 王都の番人？？');
+  assert.equal(stage.title, '⑭ 王都の番人？？（仮公開）');
   assert.equal(stage.opponents[0].deckKey, 'fusagikonda');
   assert.equal(stage.opponents[0].name, '塞ぎ込んだ男');
   assert.equal(map.rows.join('').split('C').length - 1, 4, 'CPは4か所');
   for (const symbol of ['F', 'W', 'M', 'T']) {
     assert.equal(map.rows.join('').split(symbol).length - 1, 6, `${symbol}属性は6マス`);
   }
+});
+
+test('ステージ専用のEXスペルはショップマスの品揃えに並ばない', () => {
+  // _resolveShopTileは getCardCatalog() から !isRewardOnlyCard のカードを
+  // 抽選し、card.cost をそのまま請求する（ショップマスは①と⑩にある）。
+  // EXは強力なうえ安いので、rewardOnlyを付け忘れると実質バグ価格になる。
+  const sellable = getCardCatalog().filter((c) => c.cost != null && !isRewardOnlyCard(c));
+  const leakedEx = sellable.filter((c) => c.rarity === 'EX').map((c) => `${c.name}(${c.cost}G)`);
+  assert.ok(!leakedEx.includes('灰塵(100G)'), `灰塵がショップに並んでいる: ${leakedEx.join(', ')}`);
+  assert.equal(isRewardOnlyCard(SPELL_CATALOG.ashToDust), true);
+  // 専用デッキはSPELL_CATALOGを直接見るので、rewardOnlyでも積める。
+  assert.equal(buildCharacterCardList('fusagikonda').filter((c) => (c.catalogId || c.id) === 'ashToDust').length, 2);
 });
 
 test('灰塵は自分の無属性モンスター土地だけを全て200%換金する', async () => {

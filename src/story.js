@@ -1052,7 +1052,7 @@ export const STORY_STAGES = [
   },
   {
     key: 'royal-guard',
-    title: '⑭ 王都の番人？？',
+    title: '⑭ 王都の番人？？（仮公開）',
     format: '1vs1',
     goalCurrency: 15000,
     startingCurrency: 500,
