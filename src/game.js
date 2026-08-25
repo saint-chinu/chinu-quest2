@@ -2104,23 +2104,33 @@ export class Game {
     // 「awaitingRoll→isBusy」の切り替わりしか届かない。そのため参加者側は
     // 出目を見ないまま駒が動き出し、移動が瞬間移動に見えていた。
     await this.onDiceResult?.({ playerId: player.id, steps, reverse });
+    if (this._isCancelled) return;
 
     if (reverse) {
       await this._movePlayerBackward(player, steps);
     } else {
       await this._movePlayer(player, steps);
     }
-    if (this.storyEnded) return;
+    // 分岐選択などのクリック待ち中に盤面を退出／別セッションへ移った場合、
+    // cancel()後に選択Promiseだけがnullで解決される。ここでcancelを見ずに
+    // 続けると、破棄済みの旧盤面が新盤面の上へ土地コマンドを出し、さらに
+    // 次のプレイヤーの手番まで進めてしまう。各ユーザー入力フェーズの直後で
+    // 必ず打ち切り、旧セッションのUI・ターン処理を一切再開させない。
+    if (this._isCancelled || this.storyEnded) return;
     this.onMoveComplete?.();
     await this._resolveSpecialTile(player);
-    if (this.storyEnded) return;
+    if (this._isCancelled || this.storyEnded) return;
     await this._runLandCommand(player);
+    if (this._isCancelled || this.storyEnded) return;
     await delay(400);
+    if (this._isCancelled) return;
 
     // 相手側が戦闘中の略奪特性等でマイナスになっている可能性もあるので、
     // 今操作したプレイヤーだけでなく全員をチェックする。
-    for (const p of this.players) await this._resolveNegativeCurrency(p);
-    if (this.storyEnded) return; // ストーリーモードで決着がついたらターン進行を止める
+    for (const p of this.players) {
+      await this._resolveNegativeCurrency(p);
+      if (this._isCancelled || this.storyEnded) return;
+    }
 
     this._nextTurn();
     await this._beginTurn();

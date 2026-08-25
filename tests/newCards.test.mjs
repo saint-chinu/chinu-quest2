@@ -61,6 +61,41 @@ function makeCpuStub(tiles, players) {
 }
 const spellCopy = (def) => ({ ...def, catalogId: def.id, id: `${def.id}-hand` });
 
+test('分岐待ち中に破棄された旧盤面は着地処理や次ターンへ進まない', async () => {
+  const g = Object.create(Game.prototype);
+  let moveComplete = 0;
+  let specialTile = 0;
+  let landCommand = 0;
+  let nextTurn = 0;
+  Object.assign(g, {
+    _isCancelled: false,
+    storyEnded: false,
+    isBusy: false,
+    awaitingRoll: true,
+    tutorialMode: false,
+    players: [{ id: 0, name: '主人公', diceCurse: null, isCPU: false }],
+    currentPlayerIndex: 0,
+    onLog: () => {},
+    onDiceResult: async () => {},
+    _notifyState: () => {},
+    // ステージ13中央2マス目の分岐で、旧盤面を閉じた状況を再現する。
+    // 実画面ではcancelAllActivePromptsが選択Promiseをnullで解決する。
+    _movePlayer: async () => { g.cancel(); },
+    onMoveComplete: () => { moveComplete += 1; },
+    _resolveSpecialTile: async () => { specialTile += 1; },
+    _runLandCommand: async () => { landCommand += 1; },
+    _resolveNegativeCurrency: async () => {},
+    _nextTurn: () => { nextTurn += 1; },
+    _beginTurn: async () => {},
+  });
+
+  await g.rollDice(4);
+  assert.equal(moveComplete, 0);
+  assert.equal(specialTile, 0);
+  assert.equal(landCommand, 0);
+  assert.equal(nextTurn, 0);
+});
+
 test('新カードはカタログに載り、参照している画像が実在する', () => {
   // 画像が404だと <img> がbroken化し、drawImageのInvalidStateErrorが
   // 召喚処理のawait連鎖を壊して盤面が固まる（CLAUDE.md参照）。

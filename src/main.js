@@ -3258,6 +3258,24 @@ function animate() {
  * CPU, Gameコンストラクタ側のフォールバックが組む)。
  */
 function startBattle(character, storyOptions = {}) {
+  // 盤面開始処理が連続した時（ストーリー選択の再入・会話終了との競合等）、
+  // 以前のGameが分岐やモーダルのPromise待ちで残っていると、後からその続きが
+  // 新盤面共通のDOMへ土地コマンドやターン表示を出してしまう。新しい盤面を
+  // 作る前に旧Gameと全入力待ちを必ず破棄し、1画面につき1本の進行処理にする。
+  if (game) {
+    game.cancel?.();
+    cancelActiveBattleItemPicker?.();
+    cancelActiveBattleItemPicker = null;
+    cancelAllActivePrompts();
+  }
+  stopMoveDestinationHighlight?.();
+  stopMoveDestinationHighlight = null;
+  boardMovementActive = false;
+  branchChoiceActive = false;
+  landCommandModal.classList.add('hidden');
+  cameraWorkOverlay.classList.add('hidden');
+  cameraWorkOverlay.classList.remove('no-back');
+
   // ストーリー／CPU戦を含む盤面中は、対人招待の通知や参加操作を出さない。
   // 招待データ自体は残し、盤面終了後にハブへ戻った時点で再表示する。
   hidePvpInviteNoticeDuringActivity();
@@ -3290,7 +3308,7 @@ function startBattle(character, storyOptions = {}) {
   tiles = createBoard(storyOptions.mapId);
   scene.buildBoard(tiles);
 
-  game = new Game({
+  const startedGame = new Game({
     tiles,
     mapId: storyOptions.mapId,
     scene,
@@ -3423,11 +3441,13 @@ function startBattle(character, storyOptions = {}) {
         }
       : undefined,
   });
+  game = startedGame;
 
-  if (!storyOptions.deferInit) game.init(storyOptions.resumeState || null);
+  if (!storyOptions.deferInit) startedGame.init(storyOptions.resumeState || null);
   allowMusicPlayback();
   playMapTheme(currentMapId);
   requestAnimationFrame(animate);
+  return startedGame;
 }
 
 // ---- Pre-game: login → (first time only) character creation → mode hub ----
@@ -5421,7 +5441,7 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
 
   preGame.classList.add('hidden');
   appEl.classList.remove('hidden');
-  startBattle(currentCharacter, {
+  const startedGame = startBattle(currentCharacter, {
     storyMode: true,
     // ヒトデ初戦だけ短い導入用マップ。再戦は従来の長いhitodeマップを使う。
     mapId: !isReplay && stage.key === 'hitode' ? 'hitode-first' : stage.key,
@@ -5478,7 +5498,10 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
     });
     // Only now deal the opening hand and start the first turn. This prevents
     // draw/reveal UI and CPU activity from running under the intro dialogue.
-    game.init();
+    // 会話中に別の開始処理へ移った場合、グローバルgameは既に別物になっている。
+    // その新しいGameを誤って二重initせず、この呼び出しが作った盤面だけを開始する。
+    if (game !== startedGame || startedGame._isCancelled) return;
+    startedGame.init();
   }
 }
 
