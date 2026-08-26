@@ -87,6 +87,10 @@ export const FIRE_MONSTER_CATALOG = {
     cost: 30,
     imageDataUrl: assetUrl('/images/card-art/yakiTomorokoshiHei.png'),
   }),
+  funenGolem: fireMonster('funenGolem', '不燃ゴーレム', Rarity.N, 60, 0, {
+    cost: 30,
+    imageDataUrl: assetUrl('/images/card-art/funenGolem.png'),
+  }),
 
   flameChallenger: fireMonster('flameChallenger', '炎のバクチ打ち', Rarity.S, 30, 40, {
     traits: ['firstStrike'],

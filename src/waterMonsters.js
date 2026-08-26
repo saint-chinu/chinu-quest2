@@ -91,6 +91,12 @@ export const WATER_MONSTER_CATALOG = {
     cost: 30,
     imageDataUrl: assetUrl('/images/card-art/baketsuRelayTai.png'),
   }),
+  gyakuryuKajiki: waterMonster('gyakuryuKajiki', '逆流カジキ', Rarity.N, 10, 50, {
+    cost: 30,
+    traits: ['lastStrike'],
+    effectDescription: '後攻',
+    imageDataUrl: assetUrl('/images/card-art/gyakuryuKajiki.png'),
+  }),
 
   kaizokuS: waterMonster('kaizokuS', '海賊S', Rarity.S, 30, 30, {
     cost: 100,

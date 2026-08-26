@@ -97,6 +97,12 @@ export const THUNDER_MONSTER_CATALOG = {
     cost: 30,
     imageDataUrl: assetUrl('/images/card-art/juudenGireRobot.png'),
   }),
+  bousouCoil: thunderMonster('bousouCoil', '暴走コイル', Rarity.N, 20, 45, {
+    cost: 30,
+    effect: { type: 'chanceSelfDamageOnAttack', chance: 0.5, damage: 10 },
+    effectDescription: '攻撃時、50%の確率で自身も10ダメージを受ける',
+    imageDataUrl: assetUrl('/images/card-art/bousouCoil.png'),
+  }),
 
   thunderbird: thunderMonster('thunderbird', 'サンダーバード', Rarity.S, 30, 30, {
     traits: ['firstStrike'],

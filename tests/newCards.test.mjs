@@ -104,6 +104,7 @@ test('新カードはカタログに載り、参照している画像が実在�
     ...['russianRoulette', 'diamondShield', 'satsutabaGuard'].map((id) => [id, ITEM_CATALOG[id]]),
     ['bombBokkuri', MONSTER_CATALOG.bombBokkuri],
     ['ryanmenSukuna', MONSTER_CATALOG.ryanmenSukuna],
+    ...['funenGolem', 'gyakuryuKajiki', 'karekiNoKyojin', 'bousouCoil'].map((id) => [id, MONSTER_CATALOG[id]]),
     ...['kotai', 'pandemic', 'horizon', 'delayTactics', 'ashToDust', 'landlessOne'].map((id) => [id, SPELL_CATALOG[id]]),
   ];
   for (const [id, card] of cards) {
@@ -121,9 +122,9 @@ test('新カードはカタログに載り、参照している画像が実在�
 test('甲鉄要塞は公開済みで、成長型の未公開は無属性だけ', () => {
   assert.equal(MONSTER_CATALOG.koutetsuYousai.wip, undefined);
   assert.deepEqual(WIP_CARD_NAMES, ['積み上がった伝票']);
-  // 火雷はN11/S8/R5、水はリャンメンすくな追加でR6（無属性だけ別枠）。
+  // Nは各属性12枚。水はリャンメンすくな追加でR6（無属性だけ別枠）。
   // 森はボムボックリ追加分でS9（2026-08）。
-  const expected = { fire: [11, 8, 5], water: [11, 8, 6], thunder: [11, 8, 5], forest: [11, 9, 5] };
+  const expected = { fire: [12, 8, 5], water: [12, 8, 6], thunder: [12, 8, 5], forest: [12, 9, 5] };
   for (const element of ['fire', 'water', 'thunder', 'forest']) {
     const live = Object.values(MONSTER_CATALOG)
       .filter((c) => c.element === element && !c.wip && !c.npcExclusive);
@@ -463,6 +464,20 @@ test('札束ガードはツインハンマーの2発目を止める', () => {
   const gold = new battle.GoldLedger({ A: 0, D: 1000 });
   battle.resolveBattle(a, d, gold);
   assert.equal(1000 - gold.balances.D, (40 + 10) * 3, '1発ぶんしか支払わない');
+});
+
+test('4属性の追加Nモンスターは指定どおり尖った性能と欠点を持つ', () => {
+  const fire = MONSTER_CATALOG.funenGolem;
+  const water = MONSTER_CATALOG.gyakuryuKajiki;
+  const forest = MONSTER_CATALOG.karekiNoKyojin;
+  const thunder = MONSTER_CATALOG.bousouCoil;
+  assert.deepEqual([fire.rarity, fire.hp, fire.atk, fire.cost], ['N', 60, 0, 30]);
+  assert.deepEqual([water.rarity, water.hp, water.atk, water.cost], ['N', 10, 50, 30]);
+  assert.ok(water.traits.includes('lastStrike'));
+  assert.deepEqual([forest.rarity, forest.hp, forest.atk, forest.cost], ['N', 50, 15, 25]);
+  assert.deepEqual(forest.effect, { type: 'selfDamageAfterBattle', damage: 10 });
+  assert.deepEqual([thunder.rarity, thunder.hp, thunder.atk, thunder.cost], ['N', 20, 45, 30]);
+  assert.deepEqual(thunder.effect, { type: 'chanceSelfDamageOnAttack', chance: 0.5, damage: 10 });
 });
 
 test('リャンメンすくなは装備込みの最終ATKで2回攻撃する', () => {

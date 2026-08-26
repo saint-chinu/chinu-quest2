@@ -107,6 +107,12 @@ export const FOREST_MONSTER_CATALOG = {
     cost: 30,
     imageDataUrl: assetUrl('/images/card-art/donguriInvestor.png'),
   }),
+  karekiNoKyojin: forestMonster('karekiNoKyojin', '枯れ木の巨人', Rarity.N, 50, 15, {
+    cost: 25,
+    effect: { type: 'selfDamageAfterBattle', damage: 10 },
+    effectDescription: '戦闘終了時にHPが10減少する',
+    imageDataUrl: assetUrl('/images/card-art/karekiNoKyojin.png'),
+  }),
 
   trufuButa: forestMonster('trufuButa', 'トリュフ豚', Rarity.S, 30, 30, {
     effect: { type: 'chanceGoldAfterBattle', chance: 1 / 3, amount: 150 },
