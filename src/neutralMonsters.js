@@ -234,7 +234,12 @@ export const NEUTRAL_MONSTER_CATALOG = {
     }),
     imageDataUrl: assetUrl('images/card-art/mysteriousInvader.png'),
   },
-  thirtyBreedMonster: neutralMonster('thirtyBreedMonster', 'サーティーのブリモン', Rarity.R, 40, 40, {
+  // 2026-08強化: 40/40・cost80は無条件召喚のRとしては見劣りする
+  // （同コスト帯の他Rは大抵1連鎖必須か特殊効果付きで、無条件・無効果の
+  // 素の40/40はコスパで負けていた）。同デッキの看板R（王道っぽいドラゴン／
+  // ビッグマーメイド、55/55・cost120・1連鎖必須）と同じ最大値まで引き上げ、
+  // かつ連鎖条件を課さない（＝サーティーの専属機として常に即戦力）形にした。
+  thirtyBreedMonster: neutralMonster('thirtyBreedMonster', 'サーティーのブリモン', Rarity.R, 55, 55, {
     cost: 80,
     npcExclusive: true,
     exclusiveOwnerName: 'サーティー',
