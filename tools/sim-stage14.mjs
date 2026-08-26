@@ -123,7 +123,14 @@ async function runOne(seed) {
             return 'summon';
           }
         }
-        if (!landActionDone && levelUpTarget()) return 'land';
+        // ★ 'land'は「今ターン通過した土地」だけが候補になる
+        //    (this._turnPathIds、game.jsの_handleLandingParticipant)。
+        //    バックファイアで後退距離が短く(tileHistory不足で)実質0マスしか
+        //    動かなかったターンは候補が空になり、「選択できる土地がありません」
+        //    →continueで同じ選択肢が返り続け無限ループする。levelUpTarget()は
+        //    全所有地から探すため、今ターンの経路と噛み合わずこの罠を踏む。
+        //    「今ターンに一度試したら結果に関わらず終わり」にして防ぐ。
+        if (!landActionDone && levelUpTarget()) { landActionDone = true; return 'land'; }
         return 'end';
       },
       onPickBrowseTile: async () => {

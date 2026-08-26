@@ -159,21 +159,21 @@ test('塞ぎ込んだ男の固定デッキは指定札を含む40枚', () => {
   const count = (id) => cards.filter((card) => (card.catalogId || card.id) === id).length;
   assert.equal(cards.length, 40);
   assert.equal(count('ashToDust'), 2);
-  assert.equal(count('pandemic'), 2);
+  assert.equal(count('pandemic'), 4);
   assert.equal(count('horizon'), 2);
-  assert.equal(count('landlessOne'), 2);
-  assert.equal(count('shinkenShirahadori'), 3);
+  assert.equal(count('landlessOne'), 1);
+  assert.equal(count('shinkenShirahadori'), 1);
   assert.equal(count('poisonMist'), 2);
-  assert.equal(count('delayTactics'), 2);
-  assert.equal(count('diceOne'), 2);
+  assert.equal(count('delayTactics'), 1);
+  assert.equal(count('diceOne'), 1);
   assert.equal(count('thunderbird'), 4);
   assert.equal(count('denchuwoUeruOtoko'), 4);
   assert.equal(count('battleTrain'), 2);
   assert.equal(count('sacrificeCar'), 2);
-  assert.equal(count('bombBokkuri'), 2);
+  assert.equal(count('bombBokkuri'), 4);
   assert.equal(count('psychokinesis'), 1);
-  assert.equal(count('iCanFly'), 1);
-  assert.equal(count('senbonZakura'), 1);
+  assert.equal(count('backfire'), 4);
+  assert.equal(count('tetsuo'), 0);
 });
 
 test('ステージ14は専用マップ・会話・塞ぎ込んだ男へ正しく接続されている', () => {
@@ -253,8 +253,23 @@ test('塞ぎ込んだ男AIは灰塵を最優先し、次にホライズン、6�
   await ashGame._cpuMaybeUseFusagikondaCombo(ashPlayer);
   assert.equal(ashGame.casts[0].name, '灰塵');
 
+  // 灰塵の効果自体はLv2を要求しない（地価そのままで換金するだけ）ので、
+  // AI側の「全部同時にLv2」という発動条件も撤去済み（2026-08）。
+  // レベルがバラついていても5マス以上あれば発動することを確認する
+  // （プレイヤーの奪還・新規空き地の確保でLv1が混ざっても発動が
+  // 事実上死なないようにするための修正）。
+  const mixedLevelTiles = makeOwned(5, 2, true);
+  mixedLevelTiles[0].level = 1;
+  mixedLevelTiles[1].level = 1;
+  const mixedPlayer = { ...ashPlayer, spellUsedThisTurn: false, hand: comboHand };
+  const mixedGame = makeCpuStub(mixedLevelTiles, [mixedPlayer]);
+  await mixedGame._cpuMaybeUseFusagikondaCombo(mixedPlayer);
+  assert.equal(mixedGame.casts[0].name, '灰塵');
+
+  // ゾンビ(無属性)が5体未満ならまだ灰塵の対象外なので、7体所有かつ
+  // 未レベルアップ(Lv1)ならホライズンが選ばれる。
   const horizonPlayer = { ...ashPlayer, spellUsedThisTurn: false, hand: comboHand };
-  const horizonGame = makeCpuStub(makeOwned(7, 1, true), [horizonPlayer]);
+  const horizonGame = makeCpuStub(makeOwned(7, 1, false), [horizonPlayer]);
   await horizonGame._cpuMaybeUseFusagikondaCombo(horizonPlayer);
   assert.equal(horizonGame.casts[0].name, 'ホライズン');
 

@@ -4723,13 +4723,16 @@ html, body {
 }
 
 /* 装備できるアイテムが無い時の通知。戦闘メッセージと同じ見た目にして、
-   選択画面を出さずに一瞬だけ知らせる。 */
+   選択画面を出さずに一瞬だけ知らせる。自身はタップ操作を持たないので
+   pointer-events:noneにし、中央付近に重なる自分側の装備アイテム表示
+   （.battle-item-overlay）へのタップを奪わないようにする。 */
 #battle-item-none-notice {
   position: absolute;
   z-index: 5;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
+  pointer-events: none;
   font-family: var(--font-display);
   font-size: 21px;
   font-weight: 800;

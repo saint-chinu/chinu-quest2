@@ -1486,7 +1486,6 @@ export const CHARACTER_DECKS = {
         // (_cpuChooseSummonCardForFusagikonda, game.js)。
         { def: MONSTER_CATALOG.denchuwoUeruOtoko, count: 4 },
         { def: MONSTER_CATALOG.kontonNoAtama, count: 2 },
-        { def: MONSTER_CATALOG.tetsuo, count: 1 },
         // 戦闘列車/供物車両(2026-08): dryad2/未知の侵略者4/狂戦士4の代わりに追加。
         // 互いを戦闘中に装備すると合体する(_trainFusionDef, game.js)ので召喚時は
         // 温存せず、_cpuChooseSummonCardForFusagikondaが安いほうから普通の
@@ -1495,31 +1494,33 @@ export const CHARACTER_DECKS = {
         // 追加実装不要（isBattleItemCardがdualUseItemを装備候補に含める）。
         { def: MONSTER_CATALOG.battleTrain, count: 2 },
         { def: MONSTER_CATALOG.sacrificeCar, count: 2 },
-        // ボムボックリ(2026-08): 死亡すると空き地にボックリ2体を呼ぶ捨て駒。
-        // 勝てない侵略の代わりに使う・Lv1地は積極的に狙って死なせる
-        // (_cpuMaybeSacrificeBombBokkuri, game.js)。列車/車両を1枚ずつ
-        // 減らして分を確保（ナンカのお守りは減らさない）。
-        { def: MONSTER_CATALOG.bombBokkuri, count: 2 },
+        // ボムボックリ(2026-08、2→4に増量): 死亡すると空き地にボックリ2体を呼ぶ
+        // 捨て駒。勝てない侵略の代わりに使う・Lv1地は積極的に狙って死なせる
+        // (_cpuMaybeSacrificeBombBokkuri, game.js)。鉄男(1枚)を抜いて枠を確保。
+        { def: MONSTER_CATALOG.bombBokkuri, count: 4 },
       ],
       items: [
-        { def: ITEM_CATALOG.shinkenShirahadori, count: 3 },
+        // 灰塵の発動条件を緩和した分、真剣白刃取りは温存より枚数を削って
+        // パンデミック/バックファイア/ボムボックリの増量分に回す。
+        { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
         { def: ITEM_CATALOG.zangokuKen, count: 1 },
         { def: ITEM_CATALOG.lifeJacket, count: 1 },
         { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
       ],
       spells: [
         { def: SPELL_CATALOG.ashToDust, count: 2 },
-        { def: SPELL_CATALOG.pandemic, count: 2 },
+        // パンデミックは灰塵コンボの起点なので最大枚数(2026-08、2→4)。
+        { def: SPELL_CATALOG.pandemic, count: 4 },
         { def: SPELL_CATALOG.horizon, count: 2 },
-        { def: SPELL_CATALOG.landlessOne, count: 2 },
+        { def: SPELL_CATALOG.landlessOne, count: 1 },
         { def: SPELL_CATALOG.poisonMist, count: 2 },
-        { def: SPELL_CATALOG.delayTactics, count: 2 },
-        { def: SPELL_CATALOG.diceOne, count: 2 },
-        { def: SPELL_CATALOG.iCanFly, count: 1 },
-        { def: SPELL_CATALOG.senbonZakura, count: 1 },
+        { def: SPELL_CATALOG.delayTactics, count: 1 },
+        { def: SPELL_CATALOG.diceOne, count: 1 },
         // 敵地のアリジゴクを剥がす/高額地を潰す用途（psychokinesisTargetAntlion）。
-        // 真剣白刃取りを1枚減らして分を確保。
         { def: SPELL_CATALOG.psychokinesis, count: 1 },
+        // バックファイア(2026-08新規、最大枚数): 相手を後退させる妨害札。
+        // アイキャンフライ/千本桜を抜いて枠を確保。
+        { def: SPELL_CATALOG.backfire, count: 4 },
       ],
     },
   },

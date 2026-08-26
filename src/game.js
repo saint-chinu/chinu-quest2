@@ -8591,9 +8591,14 @@ export class Game {
    * ⑭「塞ぎ込んだ男」専用の一本道AI。
    *  1. 盤面全体で6体以上になったらパンデミック
    *  2. 自分が7体以上撒いたらホライズンで全領地をLv2へ
-   *  3. 自分の5体以上がゾンビ化済みかつLv2なら灰塵で200%換金
-   *     （元は7体だったが、プレイヤーが取り返すたびに条件が壊れて事実上
-   *     発動しなくなっていたため2026-08に緩和）
+   *  3. 自分の5体以上がゾンビ化済みなら灰塵で200%換金
+   *     （元は「7体かつ全部Lv2」だったが、プレイヤーが取り返す・新しい
+   *     空き地を確保するたびに「全部同時にLv2」の一瞬の窓を外れて
+   *     事実上発動しなくなっていた。2026-08にまず7→5へ緩和したが
+   *     それでも発動率が低かったため、効果自体はLv2を要求しない
+   *     （`cashOutAllNeutralMonsterLands`は地価そのままで換金するだけ）ことを
+   *     踏まえ、「全部Lv2」条件そのものを撤去。ホライズン後の方が1マス
+   *     あたりの換金額は伸びるが、発動しないよりはるかに良い）
    * 条件外のターンだけ持たざる者を自分へ準備する。各カードが手札に無い
    * 場合は飛ばし、引けた時点で続きを再開するためドロー順には依存しない。
    */
@@ -8609,7 +8614,7 @@ export class Game {
     const neutralOwned = owned.filter((tile) => tile.unit.def.element === Element.NEUTRAL);
 
     const ash = affordable('cashOutAllNeutralMonsterLands');
-    if (ash && neutralOwned.length >= 5 && neutralOwned.every((tile) => tile.level === 2)) {
+    if (ash && neutralOwned.length >= 5) {
       await this._cpuCastSpell(player, ash, {});
       return;
     }
