@@ -239,15 +239,16 @@ export const NEUTRAL_MONSTER_CATALOG = {
   // 素の40/40はコスパで負けていた）。同デッキの看板R（王道っぽいドラゴン／
   // ビッグマーメイド、55/55・cost120・1連鎖必須）と同じ最大値まで引き上げ、
   // かつ連鎖条件を課さない（＝サーティーの専属機として常に即戦力）形にした。
-  // 1/2無効化(unpierceableChanceNegate)追加（2026-08、ユーザー指定）。
-  // アイランドホエールの3周目覚醒と同じ特性 - 50%で攻撃を完全無効化し、
-  // 貫通でも突破できない（battle.jsのdealDamage参照）。
+  // 被ダメージ半減(halfDamage)追加（2026-08、ユーザー指定）。ブリードパーツの
+  // 「被ダメージ半減」(breedParts.js, costDelta: 60)と同じ特性を、同じ
+  // コスト換算(+60)で載せた: 80→140。貫通されると打ち消される
+  // （battle.jsのincomingDamageMultiplier参照、ブリードパーツ版と同一挙動）。
   thirtyBreedMonster: neutralMonster('thirtyBreedMonster', 'サーティーのブリモン', Rarity.R, 55, 55, {
-    cost: 80,
+    cost: 140,
     npcExclusive: true,
     exclusiveOwnerName: 'サーティー',
-    traits: ['unpierceableChanceNegate'],
-    effectDescription: 'サーティーが連れている専用ブリードモンスター。汎用性の高い無属性アタッカー。1/2無効化（50%で攻撃を完全無効化。貫通でも突破できない）',
+    traits: ['halfDamage'],
+    effectDescription: 'サーティーが連れている専用ブリードモンスター。汎用性の高い無属性アタッカー。被ダメージ半減（貫通されると無効）',
     imageDataUrl: assetUrl('/images/card-art/burimon.png'),
   }),
 };
