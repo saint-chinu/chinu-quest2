@@ -1509,18 +1509,18 @@ export const CHARACTER_DECKS = {
       ],
       spells: [
         { def: SPELL_CATALOG.ashToDust, count: 2 },
-        // パンデミックは灰塵コンボの起点なので最大枚数(2026-08、2→4)。
-        { def: SPELL_CATALOG.pandemic, count: 4 },
+        // パンデミックは灰塵コンボの起点（2026-08、4→3に調整）。
+        { def: SPELL_CATALOG.pandemic, count: 3 },
         { def: SPELL_CATALOG.horizon, count: 2 },
         { def: SPELL_CATALOG.landlessOne, count: 1 },
         { def: SPELL_CATALOG.poisonMist, count: 2 },
-        { def: SPELL_CATALOG.delayTactics, count: 1 },
-        { def: SPELL_CATALOG.diceOne, count: 1 },
+        { def: SPELL_CATALOG.delayTactics, count: 2 },
+        { def: SPELL_CATALOG.diceOne, count: 2 },
         // 敵地のアリジゴクを剥がす/高額地を潰す用途（psychokinesisTargetAntlion）。
         { def: SPELL_CATALOG.psychokinesis, count: 1 },
-        // バックファイア(2026-08新規、最大枚数): 相手を後退させる妨害札。
-        // アイキャンフライ/千本桜を抜いて枠を確保。
-        { def: SPELL_CATALOG.backfire, count: 4 },
+        // バックファイア(2026-08、4→2に調整): 相手を後退させる妨害札。
+        { def: SPELL_CATALOG.backfire, count: 2 },
+        { def: SPELL_CATALOG.senbonZakura, count: 1 },
       ],
     },
   },

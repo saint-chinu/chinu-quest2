@@ -159,20 +159,21 @@ test('塞ぎ込んだ男の固定デッキは指定札を含む40枚', () => {
   const count = (id) => cards.filter((card) => (card.catalogId || card.id) === id).length;
   assert.equal(cards.length, 40);
   assert.equal(count('ashToDust'), 2);
-  assert.equal(count('pandemic'), 4);
+  assert.equal(count('pandemic'), 3);
   assert.equal(count('horizon'), 2);
   assert.equal(count('landlessOne'), 1);
   assert.equal(count('shinkenShirahadori'), 1);
   assert.equal(count('poisonMist'), 2);
-  assert.equal(count('delayTactics'), 1);
-  assert.equal(count('diceOne'), 1);
+  assert.equal(count('delayTactics'), 2);
+  assert.equal(count('diceOne'), 2);
   assert.equal(count('thunderbird'), 4);
   assert.equal(count('denchuwoUeruOtoko'), 4);
   assert.equal(count('battleTrain'), 2);
   assert.equal(count('sacrificeCar'), 2);
   assert.equal(count('bombBokkuri'), 4);
   assert.equal(count('psychokinesis'), 1);
-  assert.equal(count('backfire'), 4);
+  assert.equal(count('backfire'), 2);
+  assert.equal(count('senbonZakura'), 1);
   assert.equal(count('tetsuo'), 0);
 });
 
