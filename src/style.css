@@ -3174,6 +3174,17 @@ html, body {
   width: 100%;
 }
 
+.card-hacking-mask {
+  position: absolute;
+  inset: auto 8% 10%;
+  color: #70f7ff;
+  font-size: clamp(.75rem, 2vw, 1.25rem);
+  font-weight: 900;
+  letter-spacing: .18em;
+  text-align: center;
+  text-shadow: 0 0 8px #00d9ff, 0 0 14px #f03;
+}
+
 .card-hand-monster-stats {
   position: absolute;
   left: 3px;

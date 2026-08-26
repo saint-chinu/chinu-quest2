@@ -107,6 +107,18 @@ export const FOREST_MONSTER_CATALOG = {
     cost: 30,
     imageDataUrl: assetUrl('/images/card-art/donguriInvestor.png'),
   }),
+  karekiNoKyojin: forestMonster('karekiNoKyojin', '枯れ木の巨人', Rarity.N, 50, 15, {
+    cost: 25,
+    effect: { type: 'selfDamageAfterBattle', damage: 10 },
+    effectDescription: '戦闘終了時にHPが10減少する',
+    imageDataUrl: assetUrl('/images/card-art/karekiNoKyojin.png'),
+  }),
+  morikakeRisu: forestMonster('morikakeRisu', '森駆けリス', Rarity.N, 15, 25, {
+    cost: 20,
+    traits: ['firstStrike'],
+    effectDescription: '先制',
+    imageDataUrl: assetUrl('/images/card-art/morikakeRisu.png'),
+  }),
 
   trufuButa: forestMonster('trufuButa', 'トリュフ豚', Rarity.S, 30, 30, {
     effect: { type: 'chanceGoldAfterBattle', chance: 1 / 3, amount: 150 },
@@ -170,5 +182,12 @@ export const FOREST_MONSTER_CATALOG = {
     effect: { type: 'tollMultiplier', tollMultiplier: 1.3 },
     effectDescription: '召喚条件: 森の土地2連鎖以上。この土地の通行料が1.3倍になる',
     imageDataUrl: assetUrl('/images/card-art/shinrinChouzeikan.png'),
+  }),
+  nazoNoKyotou: forestMonster('nazoNoKyotou', '謎の巨頭', Rarity.R, 10, 40, {
+    cost: 60,
+    traits: ['pierce'],
+    effect: { type: 'battleStatBonus', hp: 50 },
+    effectDescription: '貫通。戦闘中HP+50',
+    imageDataUrl: assetUrl('/images/card-art/nazoNoKyotou.png'),
   }),
 };
