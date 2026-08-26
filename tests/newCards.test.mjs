@@ -103,6 +103,7 @@ test('新カードはカタログに載り、参照している画像が実在�
   const cards = [
     ...['russianRoulette', 'diamondShield', 'satsutabaGuard'].map((id) => [id, ITEM_CATALOG[id]]),
     ['bombBokkuri', MONSTER_CATALOG.bombBokkuri],
+    ['ryanmenSukuna', MONSTER_CATALOG.ryanmenSukuna],
     ...['kotai', 'pandemic', 'horizon', 'delayTactics', 'ashToDust', 'landlessOne'].map((id) => [id, SPELL_CATALOG[id]]),
   ];
   for (const [id, card] of cards) {
@@ -120,9 +121,9 @@ test('新カードはカタログに載り、参照している画像が実在�
 test('甲鉄要塞は公開済みで、成長型の未公開は無属性だけ', () => {
   assert.equal(MONSTER_CATALOG.koutetsuYousai.wip, undefined);
   assert.deepEqual(WIP_CARD_NAMES, ['積み上がった伝票']);
-  // 火水雷は入手可能枚数がN11/S8/R5で揃っている（無属性だけ別枠）。
+  // 火雷はN11/S8/R5、水はリャンメンすくな追加でR6（無属性だけ別枠）。
   // 森はボムボックリ追加分でS9（2026-08）。
-  const expected = { fire: [11, 8, 5], water: [11, 8, 5], thunder: [11, 8, 5], forest: [11, 9, 5] };
+  const expected = { fire: [11, 8, 5], water: [11, 8, 6], thunder: [11, 8, 5], forest: [11, 9, 5] };
   for (const element of ['fire', 'water', 'thunder', 'forest']) {
     const live = Object.values(MONSTER_CATALOG)
       .filter((c) => c.element === element && !c.wip && !c.npcExclusive);
@@ -462,6 +463,15 @@ test('札束ガードはツインハンマーの2発目を止める', () => {
   const gold = new battle.GoldLedger({ A: 0, D: 1000 });
   battle.resolveBattle(a, d, gold);
   assert.equal(1000 - gold.balances.D, (40 + 10) * 3, '1発ぶんしか支払わない');
+});
+
+test('リャンメンすくなは装備込みの最終ATKで2回攻撃する', () => {
+  const a = unit(MONSTER_CATALOG.ryanmenSukuna, 'A');
+  const d = unit(mon('守', 100, 0, { element: 'water' }), 'D');
+  battle.equipItem(a, ITEM_CATALOG.knife); // ATK20+10=30
+  const r = battle.resolveBattle(a, d, new battle.GoldLedger());
+  assert.equal(r.dmgToDefender, 60, '最終ATK30を2回与える');
+  assert.equal(r.exchanges.filter((exchange) => exchange.side === 'attacker').length, 2);
 });
 
 test('鋼体は基礎HPを底上げし、呪いの上書きでも消えない', async () => {

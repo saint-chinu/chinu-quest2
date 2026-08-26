@@ -26,7 +26,7 @@ const waterMonster = (id, name, rarity, hp, atk, options = {}) => ({
 });
 
 /**
- * 水属性モンスター20種。画像未指定時はcardArt.jsの水属性共通画像を使う。
+ * 水属性モンスター。画像未指定時はcardArt.jsの水属性共通画像を使う。
  * `minatoJoshi`（港〇女子）は元々ここではなくbattleCards.jsに直書きされた
  * 仮ステータス（R/ATK15/HP30、battle.js側にハードコードされた耐性+ダメージ
  * 分ゴールドを奪う特性）だったが、正式な水属性モンスター表が届いたので
@@ -158,5 +158,10 @@ export const WATER_MONSTER_CATALOG = {
     traits: ['permanentForcedStop'],
     effectDescription: '召喚条件: 水の土地1連鎖以上。敵はこの土地で必ず停止する',
     imageDataUrl: assetUrl('/images/card-art/kaikyouSekishoKurage.png'),
+  }),
+  ryanmenSukuna: waterMonster('ryanmenSukuna', 'リャンメンすくな', Rarity.R, 30, 20, {
+    effect: { type: 'doubleStrike' },
+    effectDescription: '装備アイテムを含む最終ATKで2回攻撃する（1回目で相手を倒した場合、2回目は行わない）',
+    imageDataUrl: assetUrl('/images/card-art/ryanmenSukuna.png'),
   }),
 };

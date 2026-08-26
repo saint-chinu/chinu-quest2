@@ -743,10 +743,10 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     if (orderSpecial) log.push(orderSpecial);
   }
 
-  // ツインハンマー(doubleStrike): 装備している側は自分の番に1回ではなく
-  // 連続2回攻撃する（相手が1発目で力尽きれば2発目は撃たない）。単発の場合
-  // strikeCount=1なのでループは従来通り1回で終わる。
-  const strikeCount = (unit) => (unit.items.some((i) => i.effect?.type === 'doubleStrike') ? 2 : 1);
+  // doubleStrike（ツインハンマー／リャンメンすくな）: 装備またはモンスター
+  // 固有効果で2回攻撃する。各攻撃はstatTotalsを取り直すため、装備・呪い・
+  // 応援等をすべて足した最終ATKが両方へ適用される。重複しても2回のまま。
+  const strikeCount = (unit) => (getEffect(unit, 'doubleStrike') ? 2 : 1);
 
   // performStrike/dealDamageは特殊効果が発動するたびに専用のlog行を
   // 追加で積む（毒付与・G略奪・即死・反射・無効化等）。この一撃の間に
