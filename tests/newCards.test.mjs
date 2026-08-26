@@ -465,6 +465,28 @@ test('札束ガードはツインハンマーの2発目を止める', () => {
   assert.equal(1000 - gold.balances.D, (40 + 10) * 3, '1発ぶんしか支払わない');
 });
 
+test('ナンカのお守りはツインハンマー等の2発目もまとめて1回分で無効化する', () => {
+  // 1発目を無効化した同じチャージが2発目も守る（ユーザー指定、2026-08）。
+  const a = unit(mon('攻', 100, 40), 'A');
+  const d = unit(mon('守', 100, 10), 'D');
+  battle.equipItem(a, ITEM_CATALOG.twinHammer);
+  battle.equipItem(d, ITEM_CATALOG.nankaNoOmamori);
+  const r = battle.resolveBattle(a, d, new battle.GoldLedger());
+  assert.equal(r.dmgToDefender, 0, '2発とも無効化されノーダメージのまま');
+  assert.ok(r.defenderSurvived);
+  assert.equal(r.exchanges.filter((e) => e.side === 'attacker').length, 2, '攻撃自体は2回発生する');
+  assert.ok(r.exchanges.every((e) => e.side !== 'attacker' || e.damage === 0));
+});
+
+test('ナンカのお守りは貫通に無効化されるので、2発目も普通に通る', () => {
+  const a = unit(mon('攻', 100, 40, { traits: ['pierce'] }), 'A');
+  const d = unit(mon('守', 200, 10), 'D');
+  battle.equipItem(a, ITEM_CATALOG.twinHammer);
+  battle.equipItem(d, ITEM_CATALOG.nankaNoOmamori);
+  const r = battle.resolveBattle(a, d, new battle.GoldLedger());
+  assert.equal(r.dmgToDefender, 100, '貫通なのでお守りは発動せず(ATK40+10)を2発とも通す');
+});
+
 test('リャンメンすくなは装備込みの最終ATKで2回攻撃する', () => {
   const a = unit(MONSTER_CATALOG.ryanmenSukuna, 'A');
   const d = unit(mon('守', 100, 0, { element: 'water' }), 'D');

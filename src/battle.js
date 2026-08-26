@@ -231,12 +231,27 @@ function damageReductionMultiplier(defenderUnit, attackerUnit) {
 // ダメージを0にする）。通常攻撃だけでなく、反射(くねくね/ハリネズミの服)や
 // 道連れ(deathRetaliation)など dealDamage を通らない戦闘ダメージにも共通で使う。
 // アイテム本体にconsumedを立てて再発動を防ぐ（itemsは戦闘終了時に必ずクリア）。
-function consumeDamageNegation(unit, log) {
+// 貫通には弱い（呼び出し側がpiercesの時はこの関数自体を呼ばない）が、
+// ツインハンマー／リャンメンすくな等のdoubleStrikeには2発分効く（ユーザー
+// 指定、2026-08）: 1発目を無効化したら、同じ攻撃者からの2発目も追加の
+// チャージ消費なしでまとめて無効化する（`unit._omamoriShieldedAttacker`に
+// 攻撃者を控えておき、次のdealDamageで同じ攻撃者ならそのまま無効化）。
+function consumeDamageNegation(unit, log, attacker = null) {
+  if (attacker && unit._omamoriShieldedAttacker === attacker) {
+    unit._omamoriShieldedAttacker = null;
+    const message = `${unit.def.name}は「${unit._omamoriShieldName}」で追撃も無効化した`;
+    log.push(message);
+    return message;
+  }
   const item = unit.items.find((i) => i.effect?.type === 'negateNextDamage' && !i.consumed);
   if (!item) return null;
   item.consumed = true;
   const message = `${unit.def.name}は「${item.name}」でダメージを無効化した`;
   log.push(message);
+  if (attacker && getEffect(attacker, 'doubleStrike')) {
+    unit._omamoriShieldedAttacker = attacker;
+    unit._omamoriShieldName = item.name;
+  }
   return message;
 }
 
@@ -310,8 +325,9 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus, gold) {
   }
 
   // ナンカのお守り(negateNextDamage): このアイテムで1回だけダメージを完全無効化。
+  // 攻撃者を渡すことで、ツインハンマー等の2発目もまとめて無効化できる。
   if (!pierces && damage > 0) {
-    const negatedMsg = consumeDamageNegation(defenderUnit, log);
+    const negatedMsg = consumeDamageNegation(defenderUnit, log, attackerUnit);
     if (negatedMsg) return { damage: 0, message: negatedMsg };
   }
 
