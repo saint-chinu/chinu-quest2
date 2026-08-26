@@ -61,6 +61,39 @@ function makeCpuStub(tiles, players) {
 }
 const spellCopy = (def) => ({ ...def, catalogId: def.id, id: `${def.id}-hand` });
 
+test('破産すると土地だけでなく保有お札もすべて手放す', async () => {
+  // 旧実装はお札を一切クリアしなかったため、_netWorthOfが「まだお札の
+  // 価値がある」と評価し続け、実際には一度も現金化できないまま同じ
+  // 保有枚数を抱えて即破産を繰り返せた（ユーザー報告のバグ）。
+  const tile = makeTile(0, { owner: 'A', level: 3 });
+  const startTile = makeTile(1, { type: TileType.START });
+  const player = {
+    id: 'A',
+    name: 'テスト',
+    currency: -9999,
+    ofuda: { fire: 0, water: 20, thunder: 0, forest: 0 },
+    ofudaAvgCost: { fire: 0, water: 15, thunder: 0, forest: 0 },
+    homeGoalTileId: null,
+  };
+  const g = Object.create(Game.prototype);
+  Object.assign(g, {
+    tiles: [tile, startTile],
+    hasOfuda: true,
+    storyMode: false,
+    mapId: 'some-map',
+    scene: { updateTileLevelBorder: () => {} },
+    onLog: () => {},
+    onBankruptcy: async () => {},
+    _notifyState: () => {},
+    _repaintTileToElement: () => {},
+  });
+  await g._triggerBankruptcy(player);
+  assert.deepEqual(player.ofuda, { fire: 0, water: 0, thunder: 0, forest: 0 });
+  assert.deepEqual(player.ofudaAvgCost, { fire: 0, water: 0, thunder: 0, forest: 0 });
+  assert.equal(player.currency, 500);
+  assert.equal(tile.owner, null, '土地も同時に手放している');
+});
+
 test('分岐待ち中に破棄された旧盤面は着地処理や次ターンへ進まない', async () => {
   const g = Object.create(Game.prototype);
   let moveComplete = 0;

@@ -5016,6 +5016,14 @@ export class Game {
     // （スタート地点へのワープ＋「500Gで再スタート」表示）は出さない。演出の
     // 後で判定すると「500Gで再スタート」と出てから敗北が告げられて嘘になる。
     const suddenDeath = this.storyMode && this.mapId === 'ofuda-field';
+    // 破産は土地と同じく保有お札も手放す（現金化ではなく消滅）。ここを
+    // 忘れると_netWorthOfが「まだお札の価値がある」と評価し続け、実際には
+    // 一度も売って現金化できないまま同じ保有枚数を抱えて即破産を繰り返す
+    // （ユーザー報告のバグ: 森札20枚を売らずに破産し続ける）。
+    if (this.hasOfuda) {
+      player.ofuda = Object.fromEntries(OFUDA_ELEMENTS.map((element) => [element, 0]));
+      player.ofudaAvgCost = Object.fromEntries(OFUDA_ELEMENTS.map((element) => [element, 0]));
+    }
     await this.onBankruptcy({
       playerId: player.id,
       playerName: player.name,

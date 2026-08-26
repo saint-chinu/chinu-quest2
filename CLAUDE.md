@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v219`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v223`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## 未実装: Firebase App Check
@@ -241,10 +241,21 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   `_cpuChooseNextTile`は「最寄り未通過CP→全通過後ゴール」への距離を×10000で絶対優先。
 - **同盟(alliance)**: `player.allianceId`。両者non-null&同値で味方。妨害スペルは非味方へ、
   強化/連鎖/応援/通行料免除は味方も対象。
-- **破産 ※仕様変更(cb14266)**: 判定は隠し正味財産(通貨+清算価値)。処理は
-  **全モード共通**になった—ストーリーでも脱落せず(`defeated=false`)、残存土地を
-  全清算（モンスター消滅・**土地Lvも1へ**）→500Gを受け取り**自分のhomeGoal**から
-  再スタート。破産では`_checkStoryWinCondition`は呼ばれない。
+- **破産 ※仕様変更(cb14266)**: 判定は隠し正味財産(通貨+清算価値+お札評価額、
+  `_netWorthOf`)。処理は**全モード共通**になった—ストーリーでも脱落せず
+  (`defeated=false`)、残存土地を全清算（モンスター消滅・**土地Lvも1へ**）
+  →500Gを受け取り**自分のhomeGoal**から再スタート。破産では
+  `_checkStoryWinCondition`は呼ばれない。
+  - ⚠️ **保有お札も土地と同時に手放す**（2026-08、ユーザー報告のバグ修正）。
+    `_netWorthOf`はお札評価額を破産回避の材料として数えるのに、
+    `_triggerBankruptcy`が`player.ofuda`をクリアし忘れていた。すると
+    再スタート後も同じ保有枚数を抱えたままなので、次に`_netWorthOf`が
+    評価される時も同じお札を「まだ価値がある」と数え続け、一度も
+    売って現金化しないまま同じ枚数を抱えて即破産を繰り返せてしまう
+    （⑬のような`hasOfuda`マップで再現）。土地と同じタイミングで
+    `player.ofuda`/`ofudaAvgCost`を全属性0にリセットして解消。
+    回帰テスト: tests/newCards.test.mjs「破産すると土地だけでなく
+    保有お札もすべて手放す」。
 - **未知との遭遇(encounterUnknown)** EXスペル: デッキ内の未ドロー無属性モンスターを
   1体**手札へ移動**(複製ではない—`_reclaimCardFromDeck`でデッキから除去)。ギア
   (`fusionSummon`)とガシャーンは候補除外。全種遭遇済みなら200G+2ドロー。
