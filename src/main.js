@@ -1422,6 +1422,23 @@ const ELEMENT_EMOJI = Object.freeze({
 
 /** レア度・属性/種類・名前・モンスター基礎値/戦闘特性をカード上へ描画する。 */
 function renderCardEl(el, card, { showMonsterStats = false } = {}) {
+  if (card.hiddenByHacking) {
+    el.style.backgroundColor = '#202538';
+    el.style.backgroundImage = 'repeating-linear-gradient(135deg, rgba(65,230,255,.12) 0 8px, rgba(255,45,180,.10) 8px 16px)';
+    el.style.backgroundPosition = 'center';
+    el.style.backgroundSize = 'auto';
+    el.style.backgroundRepeat = 'repeat';
+    el.replaceChildren();
+    const type = document.createElement('span');
+    type.className = 'card-name-text';
+    type.textContent = card.name;
+    const noise = document.createElement('span');
+    noise.className = 'card-hacking-mask';
+    noise.textContent = '???';
+    el.append(type, noise);
+    el.setAttribute('aria-label', `ハッキング中：${card.name}`);
+    return;
+  }
   const artUrl = card.imageDataUrl || defaultCardArtUrl(card);
   if (artUrl) {
     el.style.backgroundColor = cardColor(card);
@@ -1598,6 +1615,11 @@ function renderHand(hand, spellUsable = false) {
     const spellAllowedInTutorial = !guidedSpell
       || (guidedSpell.event === 'spell' && guidedSpell.requireCard === catalogIdOf(card));
     const canUseThis = card.type === CardType.SPELL && spellUsable && spellAllowedInTutorial;
+    if (card.hiddenByHacking) {
+      el.setAttribute('aria-disabled', 'true');
+      handPanel.appendChild(el);
+      continue;
+    }
     el.addEventListener('click', () => {
       // サイコロを振り始めてから確定前に手札（コマンド選択）へ戻った場合は、
       // 回転を止めてリセットする（放置すると裏で回り続けてしまう）。
@@ -8937,12 +8959,21 @@ function applyPvpPublicState(publicState) {
     renderPlayerPanels(publicState.players, publicState.checkpointNumbers, pvpLastRoom?.goalCurrency);
     lastPvpPanelSignature = panelSignature;
   }
-  const handSignature = `${isMyTurn && showCenter && !publicState.spellUsedThisTurn ? 1 : 0}|${(pvpMatch.myHand || []).map((card) => card.id).join(',')}`;
+  const me = publicState.players.find((p) => p.id === pvpMatch.localPlayerId);
+  const displayedHand = me?.hackingTurnsRemaining > 0
+    ? (pvpMatch.myHand || []).map((card) => ({
+        id: card.id,
+        type: card.type,
+        name: TYPE_LABEL[card.type] || 'カード',
+        rarity: Rarity.N,
+        hiddenByHacking: true,
+      }))
+    : (pvpMatch.myHand || []);
+  const handSignature = `${isMyTurn && showCenter && !publicState.spellUsedThisTurn ? 1 : 0}|${me?.hackingTurnsRemaining || 0}|${displayedHand.map((card) => card.id).join(',')}`;
   if (handSignature !== lastPvpHandSignature) {
-    renderHand(pvpMatch.myHand, isMyTurn && showCenter && !publicState.spellUsedThisTurn);
+    renderHand(displayedHand, isMyTurn && showCenter && !publicState.spellUsedThisTurn && !(me?.hackingTurnsRemaining > 0));
     lastPvpHandSignature = handSignature;
   }
-  const me = publicState.players.find((p) => p.id === pvpMatch.localPlayerId);
   if (me) {
     pvpMatch.lastCurrency = me.currency;
     pvpMatch.lastAssets = me.totalAssets;

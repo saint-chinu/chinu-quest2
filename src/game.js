@@ -440,6 +440,9 @@ export class Game {
       // 固定で強制移動させる（ほこらのforcedDiceRemainingと同じ仕組み、
       // こちらは全体ではなく対象プレイヤー個人にだけ効く）。
       hasteTurnsRemaining: 0,
+      // ハッキング: 対象本人の手札は種類だけの仮カード表示になり、スペルを
+      // 使用できない。残り手番数は本人の手番終了時にだけ減らす。
+      hackingTurnsRemaining: 0,
       // イカサマのサイコロ用: 直近で実際に振った（強制含む）サイコロの目。
       lastDiceSteps: 0,
       // CPUの意思決定に使う性格パラメータ（aiProfiles.js）。人間プレイヤーでも
@@ -567,6 +570,7 @@ export class Game {
       defeated: false,
       passedCheckpoints: new Set(),
       hasteTurnsRemaining: 0,
+      hackingTurnsRemaining: 0,
       lastDiceSteps: 0,
       // ステージ側（story.jsのopponent/ally定義のaiProfile）から名前ベースの
       // プロファイルを部分上書きできる。同名キャラをステージごとに違う性格で
@@ -837,6 +841,10 @@ export class Game {
   async useSpell(card) {
     if (this.isBusy || !this.awaitingRoll || this.currentPlayer.isCPU) return;
     const player = this.currentPlayer;
+    if (player.hackingTurnsRemaining > 0) {
+      this.onLog('ハッキング中はスペルを使えません');
+      return;
+    }
     if (player.spellUsedThisTurn) return;
     if (card.type !== CardType.SPELL) return;
     if (!player.hand.some((c) => c.id === card.id)) return;
@@ -910,6 +918,30 @@ export class Game {
     player.deck.discard(card);
   }
 
+  /** ハッキング中の表示・選択UIへ渡す、種類とidだけを残した仮カード。 */
+  _maskedCard(card) {
+    if (!card) return card;
+    return {
+      id: card.id,
+      type: card.type,
+      name: CARD_TYPE_LABEL[card.type] || 'カード',
+      rarity: Rarity.N,
+      element: card.type === CardType.MONSTER ? Element.NEUTRAL : undefined,
+      hp: 0,
+      atk: 0,
+      cost: 0,
+      hiddenByHacking: true,
+    };
+  }
+
+  _displayHand(player, cards = player?.hand || []) {
+    return player?.hackingTurnsRemaining > 0 ? cards.map((card) => this._maskedCard(card)) : cards;
+  }
+
+  _isSingleTargetImmuneUnit(unit) {
+    return this._unitHasTrait(unit, 'singleTargetImmune');
+  }
+
   /**
    * カードのtargetに応じた対象選択UIを出し、`{}`（対象なし）や
    * `{targetTileId}`/`{targetPlayerId}`/`{targetTileIds:[a,b]}`のような
@@ -960,6 +992,7 @@ export class Game {
     if (target === 'enemyMonster' || target === 'anyMonster' || target === 'ownMonster') {
       const tiles = this.tiles.filter((t) => {
         if (!t.unit) return false;
+        if (this._isSingleTargetImmuneUnit(t.unit)) return false;
         if (target === 'enemyMonster') return t.unit.ownerId !== player.id;
         if (target === 'ownMonster') return t.unit.ownerId === player.id;
         return true;
@@ -1164,6 +1197,13 @@ export class Game {
     const targetPlayer = cast.targetPlayerId != null
       ? this.players.find((p) => p.id === cast.targetPlayerId)
       : (card.target === 'self' ? player : null);
+
+    if (targetTile?.unit
+      && ['enemyMonster', 'anyMonster', 'ownMonster'].includes(card.target)
+      && this._isSingleTargetImmuneUnit(targetTile.unit)) {
+      this.onLog(`${targetTile.unit.def.name}は単体スペルの対象にならない`);
+      return false;
+    }
 
     switch (effect.type) {
       case 'drawRandomCardOfChosenType': {
@@ -1483,6 +1523,7 @@ export class Game {
         player.guaranteedNextInvasionWin = false;
         player.allTilesAccessTurnsRemaining = 0;
         player.toughnessTurnsRemaining = 0;
+        player.hackingTurnsRemaining = 0;
         player.landlessGoalBonus = 0;
         if (targetTile?.unit) targetTile.unit.curses = [];
         this.onLog(`${player.name}は呪いを解除した`);
@@ -2184,7 +2225,7 @@ export class Game {
     if (player.isCPU) {
       this.onLog(`${player.name}はカードを1枚引いた`);
     } else {
-      await this.onCardReveal(card, player.id);
+      await this.onCardReveal(this._displayHand(player, [card])[0], player.id);
     }
 
     player.hand.push(card);
@@ -2201,7 +2242,8 @@ export class Game {
         await delay(CPU_DECISION_MS);
         discarded = this._cpuChooseDiscard(player);
       } else {
-        discarded = await this.onDiscardChoice(player.hand, player.id);
+        const picked = await this.onDiscardChoice(this._displayHand(player), player.id);
+        discarded = player.hand.find((card) => card.id === picked?.id) || null;
       }
       if (this._isCancelled || !discarded) return;
       player.hand = player.hand.filter((c) => c.id !== discarded.id);
@@ -4431,7 +4473,8 @@ export class Game {
       return false;
     }
 
-    const card = await this.onPickMonsterCard(options, player.id);
+    const pickedCard = await this.onPickMonsterCard(this._displayHand(player, options), player.id);
+    const card = options.find((candidate) => candidate.id === pickedCard?.id);
     if (!card) return false;
 
     const actionType = tile.owner == null ? 'summon' : tile.owner === player.id ? 'swap' : 'invade';
@@ -5120,7 +5163,8 @@ export class Game {
         if (t.owner == null || t.owner === player.id) return false;
         const owner = this.players.find((p) => p.id === t.owner);
         if (owner?.allianceId != null && owner.allianceId === player.allianceId) return false;
-        return this._tileDistance(tile.id, t.id) <= ability.range;
+        return this._tileDistance(tile.id, t.id) <= ability.range
+          && !this._isSingleTargetImmuneUnit(t.unit);
       });
       if (targets.length === 0) {
         this.onLog('射程内に敵がいません');
@@ -5283,7 +5327,7 @@ export class Game {
         if (t.owner == null || t.owner === player.id) return false;
         const owner = this.players.find((p) => p.id === t.owner);
         if (owner?.allianceId != null && owner.allianceId === player.allianceId) return false;
-        return true;
+        return !this._isSingleTargetImmuneUnit(t.unit);
       });
       if (targets.length === 0) {
         this.onLog('対象の敵がいません');
@@ -5335,6 +5379,55 @@ export class Game {
       this.onLog(`${player.name}の${unitDef.name}が「${card.name}」を入手した`);
       this._notifyState();
       await this._enforceHandLimit(player);
+      return true;
+    }
+
+    if (ability.type === 'grantSpell') {
+      const spellDef = SPELL_CATALOG[ability.spellId];
+      if (!spellDef || !(await confirmAndSpend())) return false;
+      const card = {
+        ...spellDef,
+        id: `granted-spell-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        generatedOutsideDeck: true,
+      };
+      player.hand.push(card);
+      this.onLog(`${player.name}の${unitDef.name}が「${card.name}」を手札に加えた`);
+      this._notifyState();
+      await this._enforceHandLimit(player);
+      return true;
+    }
+
+    if (ability.type === 'curseOwnerDoubleDice') {
+      if (!(await confirmAndSpend())) return false;
+      player.diceCurse = { type: 'double' };
+      this.onLog(`${player.name}の次のサイコロの出目が2倍になる`);
+      this._notifyState();
+      return true;
+    }
+
+    if (ability.type === 'cursePlayerHacking') {
+      const targets = this.players.filter((candidate) => (
+        !candidate.defeated && candidate.id !== player.id && !this._isAllyOf(candidate, player)
+      ));
+      if (targets.length === 0) {
+        this.onLog('対象にできるプレイヤーがいません');
+        return false;
+      }
+      const targetId = await this.onPickAbilityTarget(
+        targets.map((candidate) => ({ id: candidate.id, label: `${candidate.name}をハッキングする` })),
+        player.id,
+      );
+      if (targetId == null || !(await confirmAndSpend())) return false;
+      const target = this.players.find((candidate) => candidate.id === targetId);
+      target.hackingTurnsRemaining = ability.turns;
+      target.hand = randomSample(target.hand, target.hand.length);
+      this.onLog(`${player.name}の${unitDef.name}が${target.name}を${ability.turns}ターン、ハッキングした`);
+      this._notifyState();
+      await this.onTargetEffect?.({
+        playerId: target.id,
+        position: this.tiles[target.tileId]?.position ?? null,
+        message: `ハッキング：${ability.turns}ターン`,
+      });
       return true;
     }
 
@@ -5480,7 +5573,9 @@ export class Game {
       // 同属性HPボーナスにも土地レベルにも関与しない「ただの目印」なので、
       // そこへ強いカードを置くのは丸損。色が付いた土地では通常の選択に戻り、
       // ちゃんと強いカードを据える。
-      const card = profile?.scatterSummons && tile.element === Element.NEUTRAL
+      const card = player.hackingTurnsRemaining > 0
+        ? pool[Math.floor(Math.random() * pool.length)]
+        : profile?.scatterSummons && tile.element === Element.NEUTRAL
         ? this._cpuChooseScatterSummonCard(pool, tile)
         : this._isDanballBoss(player)
         ? this._cpuChooseSummonCardForDanball(pool, tile, player)
@@ -5531,7 +5626,9 @@ export class Game {
     const level1Sacrifice = player.name === '塞ぎ込んだ男' && tile.level === 1
       ? this._cpuMaybeSacrificeBombBokkuri(survivableOptions)
       : null;
-    const decision = level1Sacrifice
+    const decision = player.hackingTurnsRemaining > 0
+      ? { card: survivableOptions[Math.floor(Math.random() * survivableOptions.length)] }
+      : level1Sacrifice
       ?? this._cpuDecideInvasion(player, tile, survivableOptions, profile)
       // 本来なら勝てるカードが無く見送る場面でも、ボムボックリがあれば
       // 通行料を払うだけより価値がある捨て駒侵略に切り替える。
@@ -5707,6 +5804,42 @@ export class Game {
       };
       player.hand.push(card);
       this.onLog(`${player.name}の${unitDef.name}が「${card.name}」を入手した (-${cost}G)`);
+      this._notifyState();
+      return true;
+    }
+
+    if (ability.type === 'grantSpell') {
+      const spellDef = SPELL_CATALOG[ability.spellId];
+      if (player.hand.length >= HAND_LIMIT || !spellDef) return false;
+      spend();
+      player.hand.push({
+        ...spellDef,
+        id: `cpu-granted-spell-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        generatedOutsideDeck: true,
+      });
+      this.onLog(`${player.name}の${unitDef.name}が「${spellDef.name}」を手札に加えた (-${cost}G)`);
+      this._notifyState();
+      return true;
+    }
+
+    if (ability.type === 'curseOwnerDoubleDice') {
+      if (player.diceCurse?.type === 'double') return false;
+      spend();
+      player.diceCurse = { type: 'double' };
+      this.onLog(`${player.name}は${unitDef.name}の能力で次のサイコロが2倍になった (-${cost}G)`);
+      this._notifyState();
+      return true;
+    }
+
+    if (ability.type === 'cursePlayerHacking') {
+      const target = this.players
+        .filter((candidate) => !candidate.defeated && !this._isAllyOf(candidate, player))
+        .sort((a, b) => this._totalAssetsOf(b) - this._totalAssetsOf(a))[0];
+      if (!target || target.hackingTurnsRemaining > 0) return false;
+      spend();
+      target.hackingTurnsRemaining = ability.turns;
+      target.hand = randomSample(target.hand, target.hand.length);
+      this.onLog(`${player.name}の${unitDef.name}が${target.name}を${ability.turns}ターン、ハッキングした (-${cost}G)`);
       this._notifyState();
       return true;
     }
@@ -6366,6 +6499,10 @@ export class Game {
       hp += 10;
       this.onLog(`${unit.def.name}は古代のギアCの応援でHP+10`);
     }
+    if (unit.def.element === Element.WATER && this._hasFieldTraitOnBoard('waterAtkAura30')) {
+      atk += 30;
+      this.onLog(`${unit.def.name}はゆきおんなの加護でATK+30`);
+    }
     // 巨珍兵の3周目覚醒「繁栄」。巨珍兵自身を含む、設置者本人または
     // 同盟仲間の森属性モンスターへ戦闘中ATK/HP+20。敵の巨珍兵からは受けない。
     const prosperity = this._forestProsperityBonus(unit);
@@ -6461,6 +6598,12 @@ export class Game {
     } else if (effect.type === 'atkMultiplier') {
       bonus.atkMultiplier = (bonus.atkMultiplier || 1) * effect.multiplier;
       this.onLog(`${unit.def.name}の最終ATK${effect.multiplier}倍が発動`);
+    } else if (effect.type === 'battleStatBonus') {
+      const atk = effect.atk || 0;
+      const hp = effect.hp || 0;
+      bonus.atk += atk;
+      bonus.hp += hp;
+      if (atk > 0 || hp > 0) this.onLog(`${unit.def.name}は戦闘中ATK+${atk}/HP+${hp}`);
     } else if (effect.type === 'statsPerTotalChain') {
       const totalChain = [Element.FIRE, Element.WATER, Element.THUNDER, Element.FOREST].reduce(
         (sum, el) => sum + this._chainCount(unit.ownerId, el),
@@ -6612,6 +6755,10 @@ export class Game {
     // ボムボックリの捨て駒運用: 確実に死んでボックリを呼ぶのが目的なので、
     // 生存率を上げるアイテムは一切装備しない（_cpuMaybeSacrificeBombBokkuri参照）。
     if (unit?.def?.sacrificeWithoutItem) return null;
+    if (player.hackingTurnsRemaining > 0) {
+      const usable = player.hand.filter(isBattleItemCard).filter((card) => (card.cost || 0) <= player.currency);
+      return usable.length > 0 ? usable[Math.floor(Math.random() * usable.length)] : null;
+    }
     return this._chooseBattleItemByOutcome(
       player.hand, player.name, unit, opponentUnit, tile, isDefender, trials, player.currency,
     );
@@ -6957,12 +7104,12 @@ export class Game {
     // 実際に装備した見た目の演出(onBattleEquip)は両者の選択が確定した
     // "後" にまとめて再生する - 選択中に相手の装備が画面上に見えることは
     // ない。
-    const attackerItem = attackerPlayer.isCPU
+    const attackerItemPicked = attackerPlayer.isCPU
       ? this._cpuChooseBattleItem(attackerPlayer, attackerUnit, defenderUnit, battleTile, false)
       : await this.onPickBattleItem(
           {
-            hand: attackerPlayer.hand.filter(isBattleItemCard),
-            opponentHand: defenderPlayer.hand.filter(isBattleItemCard),
+            hand: this._displayHand(attackerPlayer, attackerPlayer.hand.filter(isBattleItemCard)),
+            opponentHand: this._displayHand(defenderPlayer, defenderPlayer.hand.filter(isBattleItemCard)),
             side: 'attacker',
             ownerName: attackerPlayer.name,
             opponentName: defenderPlayer.name,
@@ -6974,12 +7121,15 @@ export class Game {
           },
           attackerPlayer.id,
         );
-    const defenderItem = defenderPlayer.isCPU
+    const attackerItem = attackerPlayer.isCPU ? attackerItemPicked
+      : attackerPlayer.hand.find((card) => card.id === attackerItemPicked?.id
+        && isBattleItemCard(card) && (card.cost || 0) <= attackerPlayer.currency) || null;
+    const defenderItemPicked = defenderPlayer.isCPU
       ? this._cpuChooseBattleItem(defenderPlayer, defenderUnit, attackerUnit, battleTile, true)
       : await this.onPickBattleItem(
           {
-            hand: defenderPlayer.hand.filter(isBattleItemCard),
-            opponentHand: attackerPlayer.hand.filter(isBattleItemCard),
+            hand: this._displayHand(defenderPlayer, defenderPlayer.hand.filter(isBattleItemCard)),
+            opponentHand: this._displayHand(attackerPlayer, attackerPlayer.hand.filter(isBattleItemCard)),
             side: 'defender',
             ownerName: defenderPlayer.name,
             opponentName: attackerPlayer.name,
@@ -6990,6 +7140,9 @@ export class Game {
           },
           defenderPlayer.id,
         );
+    const defenderItem = defenderPlayer.isCPU ? defenderItemPicked
+      : defenderPlayer.hand.find((card) => card.id === defenderItemPicked?.id
+        && isBattleItemCard(card) && (card.cost || 0) <= defenderPlayer.currency) || null;
     if (this._isCancelled) return null;
 
     const equippedAttackerItem = this._consumeBattleItem(attackerPlayer, attackerUnit, attackerItem);
@@ -7708,6 +7861,10 @@ export class Game {
     // タフネスは対象プレイヤーが手番を終えた時に1消費する。開始時に減らすと、
     // 同盟者へかけた直後の最初の手番が2扱いになり、3ターン分使えなくなる。
     if (this.currentPlayer.toughnessTurnsRemaining > 0) this.currentPlayer.toughnessTurnsRemaining -= 1;
+    if (this.currentPlayer.hackingTurnsRemaining > 0) {
+      this.currentPlayer.hackingTurnsRemaining -= 1;
+      if (this.currentPlayer.hackingTurnsRemaining === 0) this.onLog(`${this.currentPlayer.name}のハッキングが解除された`);
+    }
     do {
       this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
     } while (this.players[this.currentPlayerIndex].defeated);
@@ -7852,7 +8009,8 @@ export class Game {
       this.rollDice(steps);
       return;
     }
-    if (await this._cpuMaybeUseHomingInstinctSpell(this.currentPlayer)) {
+    const canUseSpells = this.currentPlayer.hackingTurnsRemaining <= 0;
+    if (canUseSpells && await this._cpuMaybeUseHomingInstinctSpell(this.currentPlayer)) {
       for (const player of this.players) await this._resolveNegativeCurrency(player);
       if (!this.storyEnded) {
         this._nextTurn();
@@ -7864,7 +8022,11 @@ export class Game {
     // ルーチンのスペル群より先に判定する。後ろに置くと、その手番に別の
     // スペルを使ってしまって(spellUsedThisTurn)打ち返せないまま
     // 通行料を払い続けることになる。
-    await this._cpuMaybeCounterForcedStopWithSanctuary(this.currentPlayer);
+    if (canUseSpells) await this._cpuMaybeCounterForcedStopWithSanctuary(this.currentPlayer);
+    if (!canUseSpells) {
+      this.onLog(`${this.currentPlayer.name}はハッキング中のためスペルを使えない`);
+    }
+    if (canUseSpells) {
     await this._cpuMaybeUseCapitalismIncarnateSpell(this.currentPlayer);
     await this._cpuMaybeUseForcedAscensionSpell(this.currentPlayer);
     // ダンボール男は③手札の「未知との遭遇」を最優先で使う（無属性モンスター＝ギアを
@@ -7917,6 +8079,7 @@ export class Game {
     await this._cpuMaybeUseDivinationSpell(this.currentPlayer);
     await this._cpuMaybeUseImmediateSpell(this.currentPlayer);
     await this._cpuMaybeUseDiceSpell(this.currentPlayer);
+    }
     const fixedDiceValue = this.currentPlayer.diceCurse?.type === 'fixed'
       ? this.currentPlayer.diceCurse.value
       : this._tutorialDiceValue();
@@ -7939,6 +8102,7 @@ export class Game {
     if (target === 'enemyMonster' || target === 'anyMonster' || target === 'ownMonster') {
       const candidates = this.tiles.filter((tile) => {
         if (!tile.unit) return false;
+        if (this._isSingleTargetImmuneUnit(tile.unit)) return false;
         if (target === 'enemyMonster') return tile.unit.ownerId !== player.id;
         if (target === 'ownMonster') return tile.unit.ownerId === player.id;
         return true;
@@ -8854,7 +9018,9 @@ export class Game {
     const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'directDamage');
     if (!card || player.currency < (card.cost || 0)) return;
 
-    const candidates = this.tiles.filter((t) => t.unit && !this._isFriendlyUnitTile(t, player));
+    const candidates = this.tiles.filter((t) => t.unit
+      && !this._isFriendlyUnitTile(t, player)
+      && !this._isSingleTargetImmuneUnit(t.unit));
     const target = this._cpuPickDamageTarget(candidates, card.effect.amount);
     if (!target) return;
 
@@ -9052,7 +9218,8 @@ export class Game {
       if (t.owner == null || t.owner === player.id) return false;
       const owner = this.players.find((p) => p.id === t.owner);
       if (owner?.allianceId != null && owner.allianceId === player.allianceId) return false;
-      return this._tileDistance(tile.id, t.id) <= ability.range;
+      return this._tileDistance(tile.id, t.id) <= ability.range
+        && !this._isSingleTargetImmuneUnit(t.unit);
     });
     const target = this._cpuPickDamageTarget(candidates, ability.power);
     if (!target) return false;
@@ -9332,6 +9499,12 @@ export class Game {
    * 直接渡す。
    */
   async _cpuCastSpell(player, card, cast) {
+    const targetTile = cast?.targetTileId != null ? this.tiles[cast.targetTileId] : null;
+    if (targetTile?.unit
+      && ['enemyMonster', 'anyMonster', 'ownMonster'].includes(card.target)
+      && this._isSingleTargetImmuneUnit(targetTile.unit)) {
+      return false;
+    }
     this.onCardSeen?.(card);
     player.hand = player.hand.filter((c) => c.id !== card.id);
     this._discardUsedCard(player, card);
@@ -9444,6 +9617,7 @@ export class Game {
       // このラップで通過済みのチェックポイント番号（未達成ならボーナス
       // 無しでゴールを通過しても消えない - _grantGoalBonus参照）。
       passedCheckpointNumbers: [...p.passedCheckpoints].map((id) => this.tiles[id].checkpointNumber),
+      hackingTurnsRemaining: p.hackingTurnsRemaining || 0,
     }));
     this.onStateChange({
       turnText: `${this.currentPlayer.name}のターン`,
@@ -9452,9 +9626,9 @@ export class Game {
       checkpointNumbers: this.checkpointNumbers,
       ofudaMarket: this.hasOfuda ? this._ofudaMarketSummary() : null,
       players: playersPayload,
-      hand: human?.hand ?? [],
+      hand: human ? this._displayHand(human) : [],
       showCenter,
-      centerHand: this.currentPlayer.hand,
+      centerHand: this._displayHand(this.currentPlayer),
       currentPlayerIsCPU: this.currentPlayer.isCPU,
       spellUsedThisTurn: this.currentPlayer.spellUsedThisTurn,
       fixedDiceValue: this.currentPlayer.diceCurse?.type === 'fixed'
@@ -9514,7 +9688,7 @@ export class Game {
       // 発火し、3〜5KBの手札が1手番に何度も再送されていた。表示の出し分けは
       // ゲスト側がshowCenterで行っており（選択中以外は伏せる）、同一手番中の
       // 手札は選択時点と同じものなので公開範囲も実質変わらない。
-      turnHand: this.currentPlayer.hand,
+      turnHand: this._displayHand(this.currentPlayer),
       checkpointNumbers: this.checkpointNumbers,
       ofudaMarket: this.hasOfuda ? this._ofudaMarketSummary() : null,
       players: playersPayload,

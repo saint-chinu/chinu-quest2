@@ -97,6 +97,10 @@ export const WATER_MONSTER_CATALOG = {
     effectDescription: '後攻',
     imageDataUrl: assetUrl('/images/card-art/gyakuryuKajiki.png'),
   }),
+  mizutamariNamazu: waterMonster('mizutamariNamazu', '水たまりナマズ', Rarity.N, 30, 10, {
+    cost: 10,
+    imageDataUrl: assetUrl('/images/card-art/mizutamariNamazu.png'),
+  }),
 
   kaizokuS: waterMonster('kaizokuS', '海賊S', Rarity.S, 30, 30, {
     cost: 100,
@@ -164,6 +168,12 @@ export const WATER_MONSTER_CATALOG = {
     traits: ['permanentForcedStop'],
     effectDescription: '召喚条件: 水の土地1連鎖以上。敵はこの土地で必ず停止する',
     imageDataUrl: assetUrl('/images/card-art/kaikyouSekishoKurage.png'),
+  }),
+  yukiOnna: waterMonster('yukiOnna', 'ゆきおんな', Rarity.S, 15, 35, {
+    cost: 50,
+    traits: ['firstStrike', 'waterAtkAura30'],
+    effectDescription: '先制。配置されている間、全ての水属性モンスターは戦闘中ATK+30（複数配置しても重複しない）',
+    imageDataUrl: assetUrl('/images/card-art/yukiOnna.png'),
   }),
   ryanmenSukuna: waterMonster('ryanmenSukuna', 'リャンメンすくな', Rarity.R, 30, 20, {
     effect: { type: 'doubleStrike' },

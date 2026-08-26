@@ -105,6 +105,9 @@ test('新カードはカタログに載り、参照している画像が実在�
     ['bombBokkuri', MONSTER_CATALOG.bombBokkuri],
     ['ryanmenSukuna', MONSTER_CATALOG.ryanmenSukuna],
     ...['funenGolem', 'gyakuryuKajiki', 'karekiNoKyojin', 'bousouCoil'].map((id) => [id, MONSTER_CATALOG[id]]),
+    ...['hinokoSlime', 'mizutamariNamazu', 'morikakeRisu', 'taidenMimizu',
+      'honooNoMadoushi', 'yukiOnna', 'accelerPopper', 'nitron', 'nazoNoKyotou', 'dennouNoKaii']
+      .map((id) => [id, MONSTER_CATALOG[id]]),
     ...['kotai', 'pandemic', 'horizon', 'delayTactics', 'ashToDust', 'landlessOne'].map((id) => [id, SPELL_CATALOG[id]]),
   ];
   for (const [id, card] of cards) {
@@ -122,9 +125,8 @@ test('新カードはカタログに載り、参照している画像が実在�
 test('甲鉄要塞は公開済みで、成長型の未公開は無属性だけ', () => {
   assert.equal(MONSTER_CATALOG.koutetsuYousai.wip, undefined);
   assert.deepEqual(WIP_CARD_NAMES, ['積み上がった伝票']);
-  // Nは各属性12枚。水はリャンメンすくな追加でR6（無属性だけ別枠）。
-  // 森はボムボックリ追加分でS9（2026-08）。
-  const expected = { fire: [12, 8, 5], water: [12, 8, 6], thunder: [12, 8, 5], forest: [12, 9, 5] };
+  // 2026-08追加後は4属性ともN/S/Rが13/9/6で揃う（無属性だけ別枠）。
+  const expected = { fire: [13, 9, 6], water: [13, 9, 6], thunder: [13, 9, 6], forest: [13, 9, 6] };
   for (const element of ['fire', 'water', 'thunder', 'forest']) {
     const live = Object.values(MONSTER_CATALOG)
       .filter((c) => c.element === element && !c.wip && !c.npcExclusive);
@@ -487,6 +489,83 @@ test('リャンメンすくなは装備込みの最終ATKで2回攻撃する', (
   const r = battle.resolveBattle(a, d, new battle.GoldLedger());
   assert.equal(r.dmgToDefender, 60, '最終ATK30を2回与える');
   assert.equal(r.exchanges.filter((exchange) => exchange.side === 'attacker').length, 2);
+});
+
+test('追加10体の基本仕様と戦闘補正が定義どおり', () => {
+  assert.deepEqual(
+    ['hinokoSlime', 'mizutamariNamazu', 'morikakeRisu', 'taidenMimizu']
+      .map((id) => [MONSTER_CATALOG[id].cost, MONSTER_CATALOG[id].hp, MONSTER_CATALOG[id].atk]),
+    [[10, 20, 20], [10, 30, 10], [20, 15, 25], [15, 10, 30]],
+  );
+  assert.ok(MONSTER_CATALOG.morikakeRisu.traits.includes('firstStrike'));
+  assert.deepEqual([MONSTER_CATALOG.honooNoMadoushi.cost, MONSTER_CATALOG.honooNoMadoushi.hp, MONSTER_CATALOG.honooNoMadoushi.atk], [40, 40, 30]);
+  assert.ok(MONSTER_CATALOG.honooNoMadoushi.traits.includes('singleTargetImmune'));
+  assert.deepEqual(MONSTER_CATALOG.honooNoMadoushi.ability, { type: 'grantSpell', spellId: 'fireball' });
+  assert.ok(MONSTER_CATALOG.yukiOnna.traits.includes('waterAtkAura30'));
+  assert.deepEqual(MONSTER_CATALOG.accelerPopper.ability, { type: 'curseOwnerDoubleDice' });
+  assert.ok(MONSTER_CATALOG.nitron.traits.includes('firstStrike'));
+  assert.ok(MONSTER_CATALOG.nitron.traits.includes('pierce'));
+  assert.deepEqual(MONSTER_CATALOG.nazoNoKyotou.effect, { type: 'battleStatBonus', hp: 50 });
+  assert.deepEqual(MONSTER_CATALOG.dennouNoKaii.ability, { type: 'cursePlayerHacking', turns: 2 });
+});
+
+test('ゆきおんなは全水モンスターへATK+30を1回だけ付与し、謎の巨頭は戦闘中HP+50', () => {
+  const waterTile = makeTile(0, { owner: 'A', element: 'water' });
+  waterTile.unit = unit(MONSTER_CATALOG.yukiOnna, 'A');
+  const g = makeStub([waterTile], [{ id: 'A', name: 'ア', currency: 0, allianceId: null }]);
+  g._elementHpBonus = () => 0;
+  g._cheerAtkBonus = () => 0;
+  const water = unit(mon('水兵', 20, 20, { element: 'water' }), 'A');
+  assert.deepEqual(g._battleBonus(water, waterTile, waterTile), { atk: 30, hp: 0 });
+  const giant = unit(MONSTER_CATALOG.nazoNoKyotou, 'A');
+  const bonus = { atk: 0, hp: 0 };
+  g._applyEffectBonus(giant, water, bonus);
+  assert.deepEqual(bonus, { atk: 0, hp: 50 });
+});
+
+test('炎の魔導士は単体スペル対象から除外されるが全体効果ではダメージを受ける', async () => {
+  const protectedTile = makeTile(0, { owner: 'B' });
+  protectedTile.unit = unit(MONSTER_CATALOG.honooNoMadoushi, 'B');
+  const normalTile = makeTile(1, { owner: 'B' });
+  normalTile.unit = unit(mon('通常', 30, 10), 'B');
+  const players = [{ id: 'A', name: 'ア', currency: 100 }, { id: 'B', name: 'イ', currency: 100 }];
+  const g = makeStub([protectedTile, normalTile], players);
+  let choices = [];
+  g.onPickAbilityTarget = async (items) => { choices = items; return items[0]?.id ?? null; };
+  await g._resolveSpellCast(players[0], SPELL_CATALOG.fireball);
+  assert.deepEqual(choices.map((choice) => choice.id), [1]);
+  const before = protectedTile.unit.currentHp;
+  g._spellDamageAllUnits = Game.prototype._spellDamageAllUnits.bind(g);
+  g.onDamageEffect = async () => {};
+  g._handleUnitDeath = async () => {};
+  await g._applySpellEffect(players[0], { target: 'none', effect: { type: 'damageAllUnits', amount: 5 } }, {});
+  assert.equal(protectedTile.unit.currentHp, before - 5);
+});
+
+test('ハッキングは種類だけの仮カード表示・スペル禁止で、本人の2手番終了後に必ず解除', async () => {
+  const spell = { ...SPELL_CATALOG.fireball, id: 'spell-hand' };
+  const monster = { ...MONSTER_CATALOG.hinokoSlime, id: 'monster-hand' };
+  const players = [
+    { id: 'A', name: 'ア', hand: [spell, monster], hackingTurnsRemaining: 2, toughnessTurnsRemaining: 0, defeated: false, isCPU: false },
+    { id: 'B', name: 'イ', hand: [], hackingTurnsRemaining: 0, toughnessTurnsRemaining: 0, defeated: false, isCPU: true },
+  ];
+  const g = makeStub([], players);
+  g.currentPlayerIndex = 0;
+  g.isBusy = false;
+  g.awaitingRoll = true;
+  g._isCancelled = false;
+  const masked = g._displayHand(players[0]);
+  assert.deepEqual(masked.map((card) => [card.id, card.name, card.hiddenByHacking]), [
+    ['spell-hand', 'スペル', true], ['monster-hand', 'モンスター', true],
+  ]);
+  await g.useSpell(spell);
+  assert.equal(players[0].hand.length, 2, 'ハッキング中はスペルを消費しない');
+  g._nextTurn();
+  assert.equal(players[0].hackingTurnsRemaining, 1);
+  g.currentPlayerIndex = 0;
+  g._nextTurn();
+  assert.equal(players[0].hackingTurnsRemaining, 0);
+  assert.equal(g._displayHand(players[0])[0].name, 'ファイヤーボール');
 });
 
 test('鋼体は基礎HPを底上げし、呪いの上書きでも消えない', async () => {

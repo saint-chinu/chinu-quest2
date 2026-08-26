@@ -91,6 +91,10 @@ export const FIRE_MONSTER_CATALOG = {
     cost: 30,
     imageDataUrl: assetUrl('/images/card-art/funenGolem.png'),
   }),
+  hinokoSlime: fireMonster('hinokoSlime', '火の粉スライム', Rarity.N, 20, 20, {
+    cost: 10,
+    imageDataUrl: assetUrl('/images/card-art/hinokoSlime.png'),
+  }),
 
   flameChallenger: fireMonster('flameChallenger', '炎のバクチ打ち', Rarity.S, 30, 40, {
     traits: ['firstStrike'],
@@ -133,6 +137,14 @@ export const FIRE_MONSTER_CATALOG = {
     effectDescription: '先制',
     imageDataUrl: assetUrl('/images/card-art/rengokuMonbanhei.png'),
   }),
+  honooNoMadoushi: fireMonster('honooNoMadoushi', '炎の魔導士', Rarity.S, 40, 30, {
+    cost: 40,
+    commandCost: 30,
+    traits: ['singleTargetImmune'],
+    ability: { type: 'grantSpell', spellId: 'fireball' },
+    effectDescription: '単体スペル・他のモンスターの土地コマンドの対象にならない（全体効果は受ける）。土地コマンド（30G）: ファイヤーボールを1枚手札に加える',
+    imageDataUrl: assetUrl('/images/card-art/honooNoMadoushi.png'),
+  }),
 
   hezumaDragon: fireMonster('hezumaDragon', 'ヘチマ竜', Rarity.R, 50, 50, {
     effect: { type: 'chanceSelfDamageOnAttack', chance: 0.5, damage: 10 },
@@ -162,5 +174,11 @@ export const FIRE_MONSTER_CATALOG = {
     traits: ['immovableByMoveCommand', 'permanentForcedStop'],
     effectDescription: '召喚条件: 火の土地2連鎖以上。通常の移動不可。敵はこの土地で必ず停止する',
     imageDataUrl: assetUrl('/images/card-art/kakouFudoumyouou.png'),
+  }),
+  nitron: fireMonster('nitron', 'ニトロン', Rarity.R, 10, 45, {
+    cost: 60,
+    traits: ['firstStrike', 'pierce'],
+    effectDescription: '先制・貫通',
+    imageDataUrl: assetUrl('/images/card-art/nitron.png'),
   }),
 };

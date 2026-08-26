@@ -103,6 +103,10 @@ export const THUNDER_MONSTER_CATALOG = {
     effectDescription: '攻撃時、50%の確率で自身も10ダメージを受ける',
     imageDataUrl: assetUrl('/images/card-art/bousouCoil.png'),
   }),
+  taidenMimizu: thunderMonster('taidenMimizu', '帯電ミミズ', Rarity.N, 10, 30, {
+    cost: 15,
+    imageDataUrl: assetUrl('/images/card-art/taidenMimizu.png'),
+  }),
 
   thunderbird: thunderMonster('thunderbird', 'サンダーバード', Rarity.S, 30, 30, {
     traits: ['firstStrike'],
@@ -144,6 +148,14 @@ export const THUNDER_MONSTER_CATALOG = {
     effectDescription: '先制。攻撃後、自身の基礎HPの20%ダメージを受ける',
     imageDataUrl: assetUrl('/images/card-art/kadenryuuCheetah.png'),
   }),
+  accelerPopper: thunderMonster('accelerPopper', 'アクセルポッパー', Rarity.S, 15, 30, {
+    cost: 60,
+    commandCost: 20,
+    traits: ['firstStrike'],
+    ability: { type: 'curseOwnerDoubleDice' },
+    effectDescription: '先制。土地コマンド（20G）: 所有者に次のサイコロの出目が2倍になる呪いをかける',
+    imageDataUrl: assetUrl('/images/card-art/accelerPopper.png'),
+  }),
 
   gandamu: thunderMonster('gandamu', 'ロボ戦士', Rarity.R, 30, 55, {
     cost: 120,
@@ -172,5 +184,12 @@ export const THUNDER_MONSTER_CATALOG = {
     effect: { type: 'chanceDestroyItemBeforeAttack', chance: 0.5 },
     effectDescription: '召喚条件: 雷の土地2連鎖以上。戦闘開始時、50%の確率で相手の装備アイテムを無効化する',
     imageDataUrl: assetUrl('/images/card-art/rakuraiYohoushi.png'),
+  }),
+  dennouNoKaii: thunderMonster('dennouNoKaii', '電脳の怪異', Rarity.R, 10, 10, {
+    cost: 60,
+    commandCost: 50,
+    ability: { type: 'cursePlayerHacking', turns: 2 },
+    effectDescription: '土地コマンド（50G）: 対象プレイヤーに2ターン「ハッキング」の呪いをかける。ハッキング＝手札が見えず、スペルが使えなくなる',
+    imageDataUrl: assetUrl('/images/card-art/dennouNoKaii.png'),
   }),
 };
