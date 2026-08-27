@@ -615,6 +615,127 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   **`npm run test:rules`**（firebase emulators:exec + node --test）で実行できる。
   フレンド/招待/プレゼンス/部屋可視性のケースを含む。ルール変更時は必ず回すこと。
 
+## PvPゲスト切断復帰 (2026-08)
+- **対象はゲスト参加のみ**。ホスト権威モデル（本物の`Game`はホストだけが持つ）
+  なので、ホスト自身が落ちた場合の復帰は未対応（検知手段もまだ無い）。
+- 復帰対象はlocalStorage（`chinuquest2-pvp-rejoin:{uid}`、`main.js`の
+  `savePvpRejoinSession`/`loadPvpRejoinSession`/`clearPvpRejoinSession`）に
+  `{roomCode}`だけを保存する。盤面自体はFirestoreの`publicState`が常に
+  「今の完全な状態」を保持しており、`prompts/{uid}`の未読演出も
+  `ackedThrough`基準で再購読時に再生されるため、ローカルに盤面を
+  持ち直す必要はない。
+- 保存は`startPvpGuestBattle()`冒頭、削除は3箇所（BAN検知・
+  `status:'finished'`検知・`gameMenuExit`のゲスト分岐）。
+- 復帰は**PvPメニュー上部の「復帰する」ボタン**（`#pvp-rejoin-button`）。
+  `showPvpMenuScreen()`はメニューを即表示したうえで
+  `refreshPvpRejoinOffer()`を投げっぱなしで呼び、`fetchPvpRoomOnce`で
+  部屋を一度読んで「`status==='battling'` かつ `hostUid!==自分` かつ
+  `participantUids`に自分がいる」時だけボタンを出す。押すと
+  `enterPvpRoomScreen({roomCode, uid, isHost:false})`（`joinPvpRoom`の
+  戻り値と同じ最小の形。`joinPvpRoom`自体は呼ばない＝参加者追加
+  トランザクションを再実行しない）。無効なら黙って
+  `clearPvpRejoinSession`。
+- ⚠️ **メニューを開いた瞬間に確認モーダルを出す設計にしてはいけない**
+  （2026-08、ユーザー報告「部屋が作れない・はいを押しても進まない」）。
+  初版は`showPvpMenuScreen()`の先頭で`confirmYesNo`を`await`していたが、
+  **部屋は`finishPvpRoom`が`status:'finished'`を書くまで`'battling'`のまま
+  永久に残る**（ホストが落ちた部屋を片付ける仕組みは無い＝TTLも
+  クリーンアップジョブも無い）。そのため古い記録が1つ残っているだけで
+  メニューを開くたびにモーダルが割り込み、**「部屋を作る」へ一生
+  たどり着けなくなる**。しかも「はい」を押すと既に死んでいる部屋へ
+  ゲストとして入り、ホストのGameが存在しないので何も進まず固まる。
+  復帰は必ず「任意で押せるボタン」にすること。
+- ⚠️ **ホストは復帰対象から除外する**（`room.hostUid !== currentUserId`）。
+  `participantUids`にはホスト自身も入っているので、この条件が無いと
+  「自分がホストだった死んだ部屋」へ`isHost:false`で入ってしまい、
+  本物のGameを持つ者が誰もいない盤面で固まる。
+- ロビーの「退出」（`pvpRoomLeave`）でも`clearPvpRejoinSession`する
+  ＝自分の意思で離れた部屋はもう復帰候補にしない。
+- **AI化（`isCPU=true`）を復帰時に人間操作へ戻す**:
+  `player.pvpAutoCpu`フラグを新設し、自動AI化した2箇所（30秒ハートビート
+  切れの`HostParticipantActionListener`のonOffline、45秒応答タイムアウトの
+  `relayable`）でだけ立てる。ホストの手動BAN（`main.js:3615`付近）は
+  このフラグを立てないので、BAN済みプレイヤーは今まで通り永久にCPUのまま。
+  heartbeatを受けたら`pvpHumanRestorePending`だけを立てる。`isCPU=false`への
+  復帰は`Game._beginTurn`冒頭の`onTurnBoundary`でのみ行い、CPU実行途中の
+  戦闘・選択処理へ人間UIが混ざらないようにする。
+
+### 実戦で見つかった追加バグ3件（2026-08、ユーザー報告）
+
+- ⚠️ **スマホでアプリ切り替えしただけでセッション全損していた**。
+  `forceTerminateBoardSession`（pagehide/beforeunloadで発火）の早期returnは
+  「ロビー待機画面（`#app`が非表示）ならセッションを壊さない」条件だけで、
+  **対戦中（`#app`が表示中）は素通りしていた**。iOS Safari等はアプリ切替の
+  たびbfcache退避で`pagehide`を出すことが多く（本当のクローズではない）、
+  対戦中にDiscord等へ切り替えるたびに`game`/`pvpMatch`/`scene`/`tiles`を
+  全部破棄してログイン画面まで戻していた。ゲスト参加中は`pvpMatch &&
+  !pvpMatch.isHost`の時この早期returnを追加し、`pageshow`のbfcache復元強制
+  ログアウトも同様にスキップするよう修正（ホストは本物のGameを手放すと
+  復帰手段が無いため従来通り破棄）。localStorageの復帰セッション自体は
+  以前から保存されていたが、**ログイン画面まで戻された後にPvPメニューへ
+  たどり着かないと`maybeOfferPvpRejoin`が発火しない**ため、実質「部屋番号が
+  わからず復帰できない」体験になっていた。
+- ⚠️ **対戦中ハートビートがバックグラウンド化を考慮していなかった**。
+  `GuestActionSender`（`src/pvp.js`）の10秒間隔ハートビートは素の
+  `setInterval`で、ロビー在席（`updatePvpPresence`）と違い
+  `visibilitychange`を一切見ていなかった。モバイルはバックグラウンドタブの
+  タイマーを間引く/止めるため、一瞬のアプリ切替でも30秒無応答判定に
+  引っかかりやすい。フォアグラウンド復帰時に即ハートビートを送るよう修正。
+- ⚠️ **4人対戦でスペルを使うとタイムアウトでAI化しやすかった**。
+  `GuestHostListener._pumpBatch`（`src/pvp.js`）は届いた演出イベントを
+  厳密なFIFOで1件ずつawaitして処理する。ところが「自分への質問」
+  （スペルの対象選択等、`wantValue`付き・ホストが発行した瞬間から45秒
+  タイマーが動く）も、他プレイヤー分の演出（見ているだけのブロードキャスト）
+  も同じキューに並ぶ。参加者が多いほど自分以外の演出がキューに積み上がり
+  やすく、それを律儀に消化してから質問を処理したのでは間に合わず、
+  画面に選択肢が出る前にタイムアウト→勝手にAI操作へ切り替わっていた。
+  初版では質問を他の演出より先に取り出したが、分岐質問が駒の到着より先に
+  出るうえ、大きいイベントidをACKして手前の未再生イベントまでホストから
+  消す重大な欠陥になった。**質問を含め必ずFIFOを守る**。バックログ時は
+  `pvpQueueAnimationScale`でゲストの歩行尺だけを短縮し、順序を変えず追いつく。
+  ACKは`PvpContiguousAckTracker`で「連続して処理済みの水位」だけを返す。
+
+## PvP体感速度のチューニング (2026-08、「めっちゃ重い」対応)
+重さの主因は2つで、どちらもホストの進行がFirestore往復に直列ブロック
+される構造だった。**ゲーム進行の因果順序はFIFOのまま維持し、送信量・重複
+購読・再描画・演出尺だけを削る。質問イベントの追い越しは禁止。**
+- **`onPieceMove`のawaitRemoteを撤去**（main.js）: 以前は移動区間ごとに
+  「操作する本人のゲストが歩行を再生し終えてACKを書く」まで待っていた
+  （＝区間ごとに往復1回、数百ms〜1秒超）。①歩行→分岐質問の順序はゲストの
+  キュー自体が保証する ②publicStateが歩行より先に届く順序逆転は
+  `guestPendingWalk`/`guestWalkWindow`が元々吸収している（観戦側は以前から
+  この順序）③ホストのペースはローカル歩行アニメが引き続き律速、なので
+  待ちを外しても壊れない。分岐選択の体感が主にこれで改善する。
+  `onShrineEffect`のawaitRemoteは残した（低頻度・全員同期の見せ場）。
+- **publicStateのtiles部分を400msに間引き**（`flushPvpSync`、
+  `PVP_TILES_WRITE_INTERVAL_MS`）: tilesはpublicStateの9割超のサイズで、
+  召喚・スペル解決中は`_notifyState`のたび数十KBの書き込みが直列に詰まり、
+  後続の質問・演出（prompts/{uid}）の配信まで遅れていた＝「召喚・スペルが
+  重い」の主犯。見送った分は必ずトレーリングタイマーで最終状態を再送する。
+  ⚠️ **`_lastTilesJson`キャッシュは実際に送った時だけ更新する**こと。
+  見送り分まで更新すると「送信済み」扱いになりトレーリング再送が空振りして
+  盤面が古いまま固まる。軽い項目（awaitingRoll等、ダイスUIをゲートする）と
+  turnHandは従来どおり即時。`tilesRevision`が変わらないroom更新では、ゲストは
+  土地・モンスターの全再構築を省略し、駒位置だけ反映する。
+- **質問は追い越さず、移動アニメだけ適応短縮**（`pvpQueue.js`）:
+  待ち行列6件以上で歩行尺を段階的に短縮し、16件以上でも40%までに留める。
+  イベント削除・順序変更はしない。`pieceMove`の経路まとめは再接続・欠落時の
+  補修として残す。
+- **heartbeatはactionを上書きしない**: `actions/{uid}`のheartbeatは
+  `lastSeen`だけを部分更新する。heartbeatを新しいactionIdで書くと、直前の
+  ダイス／スペル操作をFirestoreのスナップショット合体で消すため禁止。
+  入力監視と切断監視は`HostParticipantActionListener`の1購読へ統合する。
+- **切断中の古い質問を復帰後に出さない**: ホストがAI代行へ切り替えた時は
+  対象ゲストの未ACK列をfast-forwardし、`GuestHostListener`はキュー内だけで
+  なく現在回答待ちの古いモーダルも閉じる。最初のpublicStateで駒を
+  生成する前に歩行イベントをACKしないよう、演出購読は初回盤面反映後に開始する。
+- **再読込み時のID逆行を防ぐ**: 演出IDとゲスト入力IDは`Date.now()`の
+  ミリ秒値を1,000倍した基準から採番する。前ブラウザーが同一セッションで
+  多数のイベントを出した直後の再読込みでも、新しいIDを古い入力と誤判定しない。
+- **自動AIからの復帰は手番境界だけ**: heartbeat復帰時は
+  `pvpHumanRestorePending`を立て、`Game._beginTurn`冒頭の`onTurnBoundary`で
+  人間操作へ戻す。進行中のCPU戦闘・移動の途中で`isCPU`を反転させない。
+
 ## AI (game.js)
 - **ダンボール男(stage5)** `_isDanballBoss`: 召喚は
   `_cpuChooseSummonCardForDanball`でギア最優先(合体狙い)。分岐は未回収CP絶対優先(×10000)、

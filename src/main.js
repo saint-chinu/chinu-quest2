@@ -33,12 +33,12 @@ import {
   createPvpRoom,
   joinPvpRoom,
   listenToRoom,
+  fetchPvpRoomOnce,
   listenToPrivateHand,
   leavePvpRoom,
   HostGuestRelay,
   GuestHostListener,
   HostParticipantActionListener,
-  HostParticipantPresenceMonitor,
   GuestActionSender,
   normalizePvpParticipants,
   publishPublicState,
@@ -58,6 +58,7 @@ import {
 } from './pvpFriends.js';
 import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted, playSfx, allowMusicPlayback, blockMusicPlayback } from './audio.js';
 import { getSpeedMultiplier, setSpeedMultiplier, getWaitCutRate, setWaitCutRate, tween, easeInOutQuad } from './utils.js';
+import { pvpQueueAnimationScale } from './pvpQueue.js';
 
 // 盤面メニューの速度調整（1倍/1.5倍/2倍/3倍）: game.js/scene.jsはtween/delay
 // （utils.js）経由で既に倍率がかかるが、main.js自身のメッセージ表示・演出待ちは
@@ -3417,10 +3418,28 @@ function startBattle(character, storyOptions = {}) {
     onTargetEffect: relayable('targetEffect', promptTargetEffect, { broadcast: true }),
     onShrineEffect: relayable('shrineEffect', promptShrineEffect, { broadcast: true, awaitRemote: true }),
     onWarpEffect: relayable('warpEffect', promptWarpEffect, { broadcast: true }),
+    // 自動AI化から人間へ戻すのは必ず手番開始境界だけ。通信復帰通知の瞬間に
+    // isCPUを反転すると、進行中のCPU戦闘の途中から人間向け選択UIへ切り替わる。
+    onTurnBoundary: (player) => {
+      if (!(pvpMatch?.isHost && player?.pvpHumanRestorePending)) return;
+      player.pvpHumanRestorePending = false;
+      if (!player.pvpAutoCpu) return;
+      player.isCPU = false;
+      player.pvpAutoCpu = false;
+      game?.onLog?.(`${player.name}が再接続し、操作を取り戻した`);
+    },
     onTurnFocus: relayable('turnFocus', promptTurnFocus, { broadcast: true }),
     onTollPayment: relayable('tollPayment', promptTollPayment, { broadcast: true }),
     onMoveDestination: relayable('moveDestination', promptMoveDestination, { broadcast: true }),
-    onPieceMove: relayable('pieceMove', promptPieceMove, { broadcast: true, awaitRemote: true }),
+    // 歩行も投げっぱなしにする（2026-08、体感速度の改善）。以前は「操作する
+    // 本人の画面が追いつくまで」awaitRemoteで待っていたが、①ゲストの
+    // イベントキューは直列なので、歩行→分岐質問の順序はキュー自体が保証する
+    // ②publicStateが歩行より先に届く順序逆転はguestPendingWalk/
+    // guestWalkWindowが元々吸収している（観戦側では以前からこの順序で
+    // 届いていた）③ホスト自身の進行ペースはローカルの歩行アニメが引き続き
+    // 律速する。＝待ちを外しても壊れず、移動区間ごとにネットワーク往復1回分
+    // （数百ms〜1秒超）ホストの進行が速くなり、分岐質問も早く届く。
+    onPieceMove: relayable('pieceMove', promptPieceMove, { broadcast: true }),
     onPieceStep: relayable('pieceStep', promptPieceStep, { broadcast: true }),
     // 投げっぱなしで良い。ゲストのイベントキューは直列なので、この演出は
     // 必ず直後のpieceMove（歩行）より先に再生される。awaitすると1手番ごとに
@@ -4034,6 +4053,7 @@ const goalSelectConfirm = document.getElementById('goal-select-confirm');
 const goalSelectCancel = document.getElementById('goal-select-cancel');
 const battleBackButton = document.getElementById('battle-back');
 const pvpMenuScreen = document.getElementById('pvp-menu-screen');
+const pvpRejoinButton = document.getElementById('pvp-rejoin-button');
 const pvpCreateButton = document.getElementById('pvp-create-button');
 const pvpGoalCurrency = document.getElementById('pvp-goal-currency');
 const pvpPlayerCount = document.getElementById('pvp-player-count');
@@ -5059,6 +5079,35 @@ function saveStoryResume() {
   } catch {
     return false;
   }
+}
+
+// PvPゲスト切断復帰用（対人戦は状態がFirestore側にあるため、ローカルには
+// 「どの部屋に戻ればいいか」の最小限の情報だけ保存する）。
+const PVP_REJOIN_KEY_PREFIX = 'chinuquest2-pvp-rejoin:';
+
+function pvpRejoinKey(uid) {
+  return `${PVP_REJOIN_KEY_PREFIX}${uid || 'guest'}`;
+}
+
+function savePvpRejoinSession(roomCode, uid) {
+  if (!roomCode || !uid) return;
+  try {
+    localStorage.setItem(pvpRejoinKey(uid), JSON.stringify({ roomCode, savedAt: Date.now() }));
+  } catch { /* ignore */ }
+}
+
+function loadPvpRejoinSession(uid) {
+  try {
+    const value = JSON.parse(localStorage.getItem(pvpRejoinKey(uid)) || 'null');
+    if (!value?.roomCode) return null;
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+function clearPvpRejoinSession(uid) {
+  try { localStorage.removeItem(pvpRejoinKey(uid)); } catch { /* ignore */ }
 }
 
 async function selectStoryStage(index, cleared, stage) {
@@ -8078,9 +8127,51 @@ function stopPvpRoomListener() {
   }
 }
 
+let pvpRejoinCheckToken = 0;
+
+/**
+ * 進行中のPvP対戦（ゲスト参加分）が復帰可能なら、メニュー上部の
+ * 「復帰する」ボタンを出すだけ。対象はゲスト参加のみ（ホスト権威モデルなので
+ * ホスト自身は本物のGameを失っており復帰できない）。
+ *
+ * ⚠️ **メニューを開いた瞬間に確認モーダルを出してはいけない**（2026-08、
+ * ユーザー報告「部屋が作れない・はいを押しても進まない」の原因）。部屋は
+ * 対戦終了時にstatus:'finished'を書くまで'battling'のまま残り続け、ホストが
+ * 落ちた部屋は誰も片付けないので、古い記録があるとメニューを開くたびに
+ * モーダルが割り込んで「部屋を作る」へ到達できなくなる。しかも「はい」を
+ * 押すと既に死んでいる部屋へ入って固まる。復帰は必ず任意操作にすること。
+ */
+async function refreshPvpRejoinOffer() {
+  const token = ++pvpRejoinCheckToken;
+  pvpRejoinButton.classList.add('hidden');
+  const saved = loadPvpRejoinSession(currentUserId);
+  if (!saved || !currentUserId) return;
+  let room = null;
+  try {
+    room = await fetchPvpRoomOnce(saved.roomCode);
+  } catch (error) {
+    // 通信失敗では記録を消さない（次にメニューを開いた時また試せる）。
+    console.warn('PvP復帰チェックに失敗しました', error);
+    return;
+  }
+  const rejoinable = room
+    && room.status === 'battling'
+    && room.hostUid !== currentUserId
+    && (room.participantUids || []).includes(currentUserId);
+  if (!rejoinable) {
+    clearPvpRejoinSession(currentUserId);
+    return;
+  }
+  // 待っている間に別の画面へ移った／もう一度チェックが走った場合は出さない。
+  if (token !== pvpRejoinCheckToken || pvpMenuScreen.classList.contains('hidden')) return;
+  pvpRejoinButton.textContent = `進行中の対戦に復帰する（部屋 ${saved.roomCode}）`;
+  pvpRejoinButton.classList.remove('hidden');
+}
+
 function showPvpMenuScreen() {
   pvpJoinCode.value = '';
   pvpMenuError.classList.add('hidden');
+  pvpRejoinButton.classList.add('hidden');
   pvpCreateButton.disabled = !firebaseReady;
   pvpJoinButton.disabled = !firebaseReady;
   if (!firebaseReady) {
@@ -8089,7 +8180,16 @@ function showPvpMenuScreen() {
   }
   renderPvpFriendLists();
   showScreen(pvpMenuScreen);
+  // 部屋の生存確認は通信を挟むので、メニュー表示は待たせない。
+  void refreshPvpRejoinOffer();
 }
+
+pvpRejoinButton.addEventListener('click', () => {
+  const saved = loadPvpRejoinSession(currentUserId);
+  pvpRejoinButton.classList.add('hidden');
+  if (!saved) return;
+  enterPvpRoomScreen({ roomCode: saved.roomCode, uid: currentUserId, isHost: false });
+});
 
 battlePvpButton.addEventListener('click', showPvpMenuScreen);
 pvpMenuBack.addEventListener('click', () => showScreen(battleMenuScreen));
@@ -8286,6 +8386,8 @@ pvpJoinButton.addEventListener('click', async () => {
 pvpRoomLeave.addEventListener('click', async () => {
   stopPvpRoomListener();
   await clearSentPvpInvites();
+  // 自分の意思でこの部屋から離れる＝もう復帰対象にしない。
+  clearPvpRejoinSession(currentUserId);
   if (pvpMatch && !pvpMatch.isHost) {
     pvpMatch.listener?.destroy?.();
     pvpMatch.actionSender?.destroy();
@@ -8401,7 +8503,7 @@ function relayable(type, localPrompt, { broadcast = false, awaitRemote = false }
     // 質問を投げた直後に相手が切断すると、応答は45秒後にreject
     // （HostGuestRelay参照）される。ここをcatchしないとgame.js側の
     // await this.onXxx(...)が未捕捉の例外で止まり、盤面がフリーズしたまま
-    // 二度と動かなくなる（30秒無応答でCPU化するpresenceMonitorは「次の
+    // 二度と動かなくなる（30秒無応答でCPU化する参加者監視は「次の
     // ターンから」しか効かず、既に発行済みのこの質問は救済しない）。
     // タイムアウトした場合はnull（「未選択」相当、他のprompt*関数の既定の
     // キャンセル応答と同じ扱い）にフォールバックしつつ、以後の質問が
@@ -8411,6 +8513,7 @@ function relayable(type, localPrompt, { broadcast = false, awaitRemote = false }
       const player = game?.players?.find((p) => p.id === forPlayerId);
       if (player && !player.isCPU) {
         player.isCPU = true;
+        player.pvpAutoCpu = true;
         game.onLog(`${player.name}の応答がタイムアウトしたためAI操作へ切り替えました`);
         game._notifyState();
       }
@@ -8422,6 +8525,8 @@ function relayable(type, localPrompt, { broadcast = false, awaitRemote = false }
 /** ホスト側専用: Game._notifyStateのたびに呼ばれる。公開状態(手札を除く)をpublicStateへ、各プレイヤーの手札は本人のprivateドキュメントへ、別々にpublishする。 */
 let pendingPvpSync = null;
 let pvpSyncFlushRunning = false;
+// 重いtiles部分の最小書き込み間隔。詳細はflushPvpSync内コメント参照。
+const PVP_TILES_WRITE_INTERVAL_MS = 400;
 
 function handlePvpSync(snapshot) {
   if (!pvpMatch || !pvpMatch.isHost) return;
@@ -8453,24 +8558,70 @@ function flushPvpSync() {
       // 重いtiles（全体の9割超）・かさばるturnHand（公開手札3〜5KB）・頻繁に
       // 変わる軽い項目を別々に差分判定し、変わった層だけ送る。全部まとめて
       // 差分判定すると、isBusyが切り替わるたびに据え置きの手札まで再送される。
-      const { tiles: tilesPart, turnHand: turnHandPart, ...lightPart } = publicPart;
-      const lightJson = JSON.stringify(lightPart);
+      const { tiles: tilesPart, turnHand: turnHandPart, ...baseLightPart } = publicPart;
       const tilesJson = JSON.stringify(tilesPart ?? []);
       const turnHandJson = JSON.stringify(turnHandPart ?? []);
-      const lightChanged = !cacheHolder || cacheHolder._lastLightJson !== lightJson;
       const tilesChanged = !cacheHolder || cacheHolder._lastTilesJson !== tilesJson;
       const turnHandChanged = !cacheHolder || cacheHolder._lastTurnHandJson !== turnHandJson;
-      if (lightChanged || tilesChanged || turnHandChanged) {
+      // tiles（全体の9割超のサイズ）は召喚・スペル解決中に1手番で何度も
+      // 変わる。毎回書くとスマホの細い上り回線で数十KBの書き込みが直列に
+      // 詰まり、その後ろに並ぶ質問・演出（prompts/{uid}）の配信まで道連れに
+      // 遅れる＝「召喚・スペルが重い」の主犯。一定間隔(400ms)に間引き、
+      // 見送った分はトレーリングタイマーで必ず最終状態を送り直す
+      // （軽い項目とturnHandはターン進行やダイスUIを直接ゲートするので
+      // 従来どおり即時に送る）。
+      let sendTiles = tilesChanged;
+      if (tilesChanged && cacheHolder) {
+        const now = performance.now();
+        const sinceLastWrite = now - (cacheHolder._lastTilesWriteAt || 0);
+        if (sinceLastWrite < PVP_TILES_WRITE_INTERVAL_MS) {
+          sendTiles = false;
+          cacheHolder._deferredTilesJob = job;
+          if (!cacheHolder._tilesFlushTimer) {
+            cacheHolder._tilesFlushTimer = setTimeout(() => {
+              cacheHolder._tilesFlushTimer = null;
+              // 対戦が変わっていたら何もしない（旧対戦のtilesを書かない）。
+              if (pvpMatch !== cacheHolder || !cacheHolder._deferredTilesJob) return;
+              if (!pendingPvpSync) pendingPvpSync = cacheHolder._deferredTilesJob;
+              flushPvpSync();
+            }, PVP_TILES_WRITE_INTERVAL_MS - sinceLastWrite + 10);
+          }
+        } else {
+          cacheHolder._lastTilesWriteAt = now;
+          cacheHolder._deferredTilesJob = null;
+          if (cacheHolder._tilesFlushTimer) { clearTimeout(cacheHolder._tilesFlushTimer); cacheHolder._tilesFlushTimer = null; }
+        }
+      } else if (!tilesChanged && cacheHolder?._deferredTilesJob) {
+        // 400ms内に盤面が元の送信済み状態へ戻った（選択キャンセル等）なら、以前
+        // 保留した中間状態を後から送って盤面を巻き戻さない。
+        cacheHolder._deferredTilesJob = null;
+        if (cacheHolder._tilesFlushTimer) { clearTimeout(cacheHolder._tilesFlushTimer); cacheHolder._tilesFlushTimer = null; }
+      }
+      // room文書の部分更新でもゲストのdocument snapshotには古いtilesを含む完全な
+      // 文書が毎回届く。盤面が変わった送信だけrevisionを進め、ゲストは同じ番号の
+      // 更新では重い全土地・モンスター再構築を省略する（駒位置は別途毎回反映）。
+      let tilesRevision = cacheHolder?._tilesRevision || 0;
+      if (sendTiles) tilesRevision += 1;
+      const lightPart = { ...baseLightPart, tilesRevision };
+      const lightJson = JSON.stringify(lightPart);
+      const lightChanged = !cacheHolder || cacheHolder._lastLightJson !== lightJson;
+      if (lightChanged || sendTiles || turnHandChanged) {
         if (cacheHolder) {
           cacheHolder._lastLightJson = lightJson;
-          cacheHolder._lastTilesJson = tilesJson;
+          // tilesのキャッシュは実際に送った時だけ更新する。見送った分まで
+          // 更新すると「もう送った」扱いになり、トレーリング再送が空振りして
+          // 最終状態が届かないまま固まる。
+          if (sendTiles) {
+            cacheHolder._lastTilesJson = tilesJson;
+            cacheHolder._tilesRevision = tilesRevision;
+          }
           cacheHolder._lastTurnHandJson = turnHandJson;
         }
         // JSON文字列は差分判定で既に作ってあるので、それを戻して送る。
         // JSON.stringifyはundefinedのプロパティを落とすため、この経路を通せば
         // Firestoreが拒否するundefinedが混ざる余地がなくなる（追加コストなし）。
         const safePart = { ...JSON.parse(lightJson), tiles: JSON.parse(tilesJson), turnHand: JSON.parse(turnHandJson) };
-        writes.push(publishPublicState(job.roomCode, safePart, { includeTiles: tilesChanged, includeTurnHand: turnHandChanged }).catch((error) => {
+        writes.push(publishPublicState(job.roomCode, safePart, { includeTiles: sendTiles, includeTurnHand: turnHandChanged }).catch((error) => {
           // 失敗時はキャッシュを無効化して、次のnotifyで必ず再送させる。
           if (cacheHolder) { cacheHolder._lastLightJson = null; cacheHolder._lastTilesJson = null; cacheHolder._lastTurnHandJson = null; }
           throw error;
@@ -8625,6 +8776,7 @@ let lastPvpPanelSignature = '';
 let lastPvpHandSignature = '';
 let lastPvpCenterHandSignature = '';
 let lastPvpTurnUiSignature = '';
+let lastPvpTilesRevision = null;
 const GUEST_STEP_DURATION_MS = 300; // game.jsのSTEP_DURATION_MS相当（未export）
 const GUEST_STEP_HOP = 0.55;
 const GUEST_SNAPSHOT_MOVE_DURATION_MS = 220;
@@ -8647,6 +8799,7 @@ function clearPvpPieces() {
   lastPvpHandSignature = '';
   lastPvpCenterHandSignature = '';
   lastPvpTurnUiSignature = '';
+  lastPvpTilesRevision = null;
 }
 
 /**
@@ -8655,7 +8808,7 @@ function clearPvpPieces() {
  * publicStateスナップを抑止する（movingGuestPieces）。ホスト/ローカルでは
  * 何もしない（駒はgame.jsが直接動かしている）。
  */
-async function promptPieceMove({ playerId, from, path }) {
+async function promptPieceMove({ playerId, from, path }, { queueDepth = 0 } = {}) {
   if (!(pvpMatch && !pvpMatch.isHost)) return;
   if (!scene || !Array.isArray(path) || path.length === 0) return;
   const piece = pvpPieces.get(playerId);
@@ -8683,6 +8836,7 @@ async function promptPieceMove({ playerId, from, path }) {
   pvpPieceSnapshotTargets.delete(playerId);
   clearGuestPendingWalk(playerId); // 本物の歩行が始まるので猶予待ちは不要
   movingGuestPieces.add(playerId);
+  const animationScale = pvpQueueAnimationScale(queueDepth);
   try {
     for (let i = 1; i < points.length; i++) {
       if (pieceMoveGen.get(playerId) !== myGen) return; // 新しい移動に上書きされた
@@ -8690,7 +8844,7 @@ async function promptPieceMove({ playerId, from, path }) {
       const b = points[i];
       // ホスト側と同じく、移動先が画面外へ出る前にカメラを追従させる。
       if (scene.isOutsideSafeView(b.x, b.z) || i % 3 === 0) scene.panTo(b.x, b.z);
-      await tween(GUEST_STEP_DURATION_MS, (t) => {
+      await tween(GUEST_STEP_DURATION_MS * animationScale, (t) => {
         const e = easeInOutQuad(t);
         const hop = Math.sin(Math.PI * t) * GUEST_STEP_HOP;
         piece.position.set(a.x + (b.x - a.x) * e, PIECE_REST_Y + hop, a.z + (b.z - a.z) * e);
@@ -8714,7 +8868,7 @@ async function promptPieceMove({ playerId, from, path }) {
  * なら「もう到着済み」で即終わる。イベントは直列キューで届くので、
  * 1歩tweenが重なって走ることはない。
  */
-async function promptPieceStep({ playerId, from, to }) {
+async function promptPieceStep({ playerId, from, to }, { queueDepth = 0 } = {}) {
   if (!(pvpMatch && !pvpMatch.isHost)) return;
   if (!scene || !to || !Number.isFinite(to.x) || !Number.isFinite(to.z)) return;
   const piece = pvpPieces.get(playerId);
@@ -8730,7 +8884,10 @@ async function promptPieceStep({ playerId, from, to }) {
     // 現在位置からtoへ歩く（ワープさせない。最終位置はpieceMove/スナップが正す）。
     const a = { x: piece.position.x, z: piece.position.z };
     if (scene.isOutsideSafeView(to.x, to.z)) scene.panTo(to.x, to.z);
-    await tween(GUEST_STEP_DURATION_MS, (t) => {
+    // キューが詰まった端末だけ歩行尺を短縮する。イベント自体を飛ばしたり
+    // 質問を追い越したりしないので、分岐・着地・戦闘の順序は常に維持される。
+    const animationScale = pvpQueueAnimationScale(queueDepth);
+    await tween(GUEST_STEP_DURATION_MS * animationScale, (t) => {
       if (pieceMoveGen.get(playerId) !== myGen) return;
       const e = easeInOutQuad(t);
       const hop = Math.sin(Math.PI * t) * GUEST_STEP_HOP;
@@ -8782,11 +8939,12 @@ function glidePvpPieceToTile(playerId, piece, tilePosition) {
 }
 
 /** ゲスト側専用: publicStateの土地(所有者/レベル/属性/配置モンスター)と各プレイヤーの駒位置をローカルのtiles/sceneへそのまま反映する。ホストのように1マスずつアニメーションはしない（毎回のsync時点の最終状態へスナップするだけ）。 */
-function applyPvpBoardState(publicState) {
+function applyPvpBoardState(publicState, { applyTiles = true } = {}) {
   if (!publicState || !tiles) return;
-  for (const tileState of publicState.tiles) {
-    const tile = tiles[tileState.id];
-    if (!tile) continue;
+  if (applyTiles) {
+    for (const tileState of (publicState.tiles || [])) {
+      const tile = tiles[tileState.id];
+      if (!tile) continue;
     const previous = pvpTileRenderState.get(tileState.id) || {};
     tile.owner = tileState.owner;
     tile.level = tileState.level;
@@ -8852,7 +9010,7 @@ function applyPvpBoardState(publicState) {
       tile.mesh.material.color.set(CARD_COLOR[tile.element]);
     }
     if (previous.level !== tileState.level) scene.updateTileLevelBorder(tile);
-    pvpTileRenderState.set(tileState.id, {
+      pvpTileRenderState.set(tileState.id, {
       owner: tileState.owner,
       level: tileState.level,
       element: tileState.element,
@@ -8861,7 +9019,8 @@ function applyPvpBoardState(publicState) {
       unitMaxHp: tileState.unit?.maxHp ?? null,
       unitToll: tileState.unit?.toll ?? 0,
       ownerName: ownerPlayer?.name ?? '',
-    });
+      });
+    }
   }
 
   for (const p of publicState.players) {
@@ -9015,6 +9174,7 @@ function applyPvpPublicState(publicState) {
     pvpMatch.lastAllianceSize = me.allianceSize || 1;
     if (me.banned && !pvpMatch.isHost && !pvpMatch.banned) {
       pvpMatch.banned = true;
+      clearPvpRejoinSession(pvpMatch.uid);
       window.alert('ホストにBANされました。盤面から退出します。');
       pvpMatch.stopPublicListener?.();
       pvpMatch.stopHandListener?.();
@@ -9046,7 +9206,12 @@ function applyPvpPublicState(publicState) {
     lastPvpCenterHandSignature = centerHandSignature;
   }
 
-  applyPvpBoardState(publicState);
+  const tilesRevision = Number.isFinite(Number(publicState.tilesRevision))
+    ? Number(publicState.tilesRevision)
+    : null;
+  const applyTiles = tilesRevision == null || tilesRevision !== lastPvpTilesRevision;
+  applyPvpBoardState(publicState, { applyTiles });
+  if (applyTiles && tilesRevision != null) lastPvpTilesRevision = tilesRevision;
 
   const activeIndex = publicState.players.findIndex((player) => player.id === publicState.currentPlayerId);
   if (activeIndex >= 0) {
@@ -9076,6 +9241,9 @@ function applyPvpPublicState(publicState) {
 /** ゲスト側専用: room.statusが'battling'になった合図で呼ばれる（enterPvpRoomScreen参照）。ホストと同じcreateBoard(mapId)で作った盤面をローカルに構築し、以後はpublicState/自分の手札の購読だけで描画し続ける（Gameインスタンスは持たない）。 */
 async function startPvpGuestBattle() {
   const startingMatch = pvpMatch;
+  // 切断復帰用: この部屋に戻れるよう最小限の情報だけ保存する
+  // （盤面自体はFirestoreのpublicStateが真実なので、ここではroomCodeだけで十分）。
+  savePvpRejoinSession(startingMatch?.roomCode, startingMatch?.uid);
   // ロビー監視は盤面用のpublicState監視へ交代させる。以前は両方が対戦中ずっと
   // room文書を購読し、参加者端末だけ同じ更新を二重に受け続けていた。
   stopPvpRoomListener();
@@ -9148,10 +9316,12 @@ async function startPvpGuestBattle() {
   allowMusicPlayback();
   playMapTheme(currentMapId);
 
-  // sceneと盤面が完成してから演出キューを開く。開始前にホストが送ったイベントも
-  // Firestoreの未ACKバッチから順番に再生される。
+  // 旧リスナーはここで破棄し、最初のpublicStateを盤面に反映した後に
+  // 演出キューを開く。駒がまだ作られていない状態でpieceStepをACKし、
+  // 参加者側だけ歩行が飛ぶ競合を防ぐ。未ACKバッチなので開始を遅らせても
+  // イベントは消えず、状態反映後にFIFOで再生される。
   pvpMatch.listener?.destroy?.();
-  pvpMatch.listener = new GuestHostListener(pvpMatch.roomCode, pvpMatch.uid, pvpGuestHandlers);
+  pvpMatch.listener = null;
 
   pvpMatch.stopPublicListener = listenToRoom(pvpMatch.roomCode, (room) => {
     if (!room || room.status === 'finished') {
@@ -9163,6 +9333,7 @@ async function startPvpGuestBattle() {
       // （でなければゲストは無報酬のまま追い出されてしまう）。
       const endingAssetsShare = (pvpMatch?.lastAssets ?? pvpMatch?.lastCurrency ?? 0) / (pvpMatch?.lastAllianceSize || 1);
       const { earnedM } = grantExitReward(endingAssetsShare);
+      clearPvpRejoinSession(pvpMatch?.uid);
       pvpMatch?.stopPublicListener?.();
       pvpMatch?.stopHandListener?.();
       pvpMatch?.listener?.destroy();
@@ -9178,7 +9349,23 @@ async function startPvpGuestBattle() {
       showHubScreen();
       return;
     }
-    if (room.publicState) applyPvpPublicState(room.publicState);
+    if (room.publicState) {
+      applyPvpPublicState(room.publicState);
+      if (pvpMatch && !pvpMatch.listener) {
+        pvpMatch.listener = new GuestHostListener(
+          pvpMatch.roomCode,
+          pvpMatch.uid,
+          pvpGuestHandlers,
+          {
+            onFastForward: () => {
+              cancelActiveBattleItemPicker?.();
+              cancelActiveBattleItemPicker = null;
+              cancelAllActivePrompts();
+            },
+          },
+        );
+      }
+    }
   });
   pvpMatch.stopHandListener = listenToPrivateHand(pvpMatch.roomCode, pvpMatch.uid, (hand) => {
     pvpMatch.myHand = hand || [];
@@ -9211,18 +9398,44 @@ pvpRoomStart.addEventListener('click', async () => {
     relay,
     uidByPlayerId: Object.fromEntries(roster.map((participant) => [participant.playerId, participant.uid])),
   };
+  const findPlayerByUid = (uid) => {
+    const playerId = Object.entries(pvpMatch.uidByPlayerId).find(([, participantUid]) => participantUid === uid)?.[0];
+    return game?.players?.find((entry) => entry.id === Number(playerId));
+  };
+  const remoteUids = (pvpLastRoom.participants || [])
+    .map((participant) => participant.uid)
+    .filter((uid) => uid !== pvpSession.uid);
   pvpMatch.participantActionListener = new HostParticipantActionListener(
     pvpSession.roomCode,
-    (pvpLastRoom.participants || []).map((participant) => participant.uid).filter((uid) => uid !== pvpSession.uid),
+    remoteUids,
     handlePvpGuestAction,
-  );
-  pvpMatch.presenceMonitor = new HostParticipantPresenceMonitor(
-    pvpSession.roomCode,
-    (pvpLastRoom.participants || []).map((participant) => participant.uid).filter((uid) => uid !== pvpSession.uid),
-    (uid) => {
-      const playerId = Object.entries(pvpMatch.uidByPlayerId).find(([, participantUid]) => participantUid === uid)?.[0];
-      const player = game?.players?.find((entry) => entry.id === Number(playerId));
-      if (player && !player.isCPU) { player.isCPU = true; game.onLog(`${player.name}の通信が切断されたためAIへ切り替え`); game._notifyState(); }
+    {
+      onOffline: (uid) => {
+        const player = findPlayerByUid(uid);
+        // 既に発行済みの質問も即座に解除し、45秒タイムアウトまで盤面全体を
+        // 待たせない。切断端末はpublicStateから現在盤面へ復帰できる。
+        pvpMatch?.relay?.markParticipantOffline?.(uid);
+        if (player?.pvpAutoCpu) player.pvpHumanRestorePending = false;
+        if (player && !player.isCPU) {
+          player.isCPU = true;
+          player.pvpAutoCpu = true;
+          player.pvpHumanRestorePending = false;
+          game.onLog(`${player.name}の通信が切断されたためAIへ切り替え`);
+          game._notifyState();
+        }
+      },
+      // 45秒質問タイムアウトでAI化された場合はheartbeat自体が途切れていない
+      // ことがある。復帰イベントだけに頼らず、生存更新が届けば次回手番で
+      // 人間へ戻す予約を立てる（手動BANにはpvpAutoCpuが無いので対象外）。
+      onHeartbeat: (uid) => {
+        pvpMatch?.relay?.markParticipantOnline?.(uid);
+        const player = findPlayerByUid(uid);
+        if (player?.pvpAutoCpu && !player.pvpHumanRestorePending) {
+          player.pvpHumanRestorePending = true;
+          game.onLog(`${player.name}の再接続を確認。次の手番から操作へ復帰します`);
+          game._notifyState();
+        }
+      },
     },
   );
 
@@ -9369,7 +9582,6 @@ async function handlePvpBattleEnd(result = {}) {
   battleMessageText.classList.add('hidden');
   pvpMatch.relay?.destroy?.();
   pvpMatch.participantActionListener?.destroy?.();
-  pvpMatch.presenceMonitor?.destroy?.();
   // Firestoreが一時的に遅くてもホストの画面復帰を待たせない。ゲストへの
   // finished通知は非同期で送信し、ホスト自身は報酬保存後すぐメニューへ戻る。
   Promise.resolve(finishPvpRoom(roomCode)).catch((error) => {
@@ -9495,9 +9707,11 @@ gameMenuExit.addEventListener('click', async () => {
   if (pvpMatch?.isHost) {
     pvpMatch.relay.destroy();
     pvpMatch.participantActionListener?.destroy();
-    pvpMatch.presenceMonitor?.destroy();
     finishPvpRoom(pvpMatch.roomCode);
   } else if (isPvpGuest) {
+    // 自分の意思で退出する場合は復帰対象から外す（次にPvPメニューを
+    // 開いた時に「復帰しますか？」を出さない）。
+    clearPvpRejoinSession(pvpMatch.uid);
     pvpMatch.stopPublicListener?.();
     pvpMatch.stopHandListener?.();
     pvpMatch.listener.destroy();
@@ -9530,6 +9744,14 @@ function forceTerminateBoardSession() {
   // ルーム待機画面など盤面開始前の最小化/pagehideではセッションを破棄しない。
   // iOSでLINEやDiscordへ切り替えて部屋コードを共有しても、そのまま戻れる。
   if (appEl?.classList.contains('hidden')) return;
+  // PvPゲスト参加中の対戦中も同様に破棄しない（2026-08）。スマホでアプリを
+  // 切り替えるとpagehideが飛ぶことが多いが、その大半はbfcacheへの一時退避
+  // で本当のクローズではない。ゲストの本体状態はFirestore側（publicState）
+  // にあるので手元のGame/scene/tilesを壊す必要が無く、むしろ壊すとログイン
+  // 画面まで戻され、部屋コードを知らないゲストは復帰する手段を失う。
+  // ホストは本物のGameエンジンそのものを手放すことになり復帰手段が無いため、
+  // これまで通り破棄してfinishPvpRoomで部屋を終わらせる。
+  if (pvpMatch && !pvpMatch.isHost) return;
   // ブラウザ終了・pagehideでは新規保存を作らない。既に「途中退室」で確定保存
   // されたデータも削除しない。盤面/BGMを破棄するだけに限定する。
   game?.cancel?.();
@@ -9542,7 +9764,6 @@ function forceTerminateBoardSession() {
   if (pvpMatch?.isHost) {
     pvpMatch.relay?.destroy?.();
     pvpMatch.participantActionListener?.destroy?.();
-    pvpMatch.presenceMonitor?.destroy?.();
     Promise.resolve(finishPvpRoom(pvpMatch.roomCode)).catch(() => {});
   } else if (pvpMatch) {
     pvpMatch.stopPublicListener?.();
@@ -9569,6 +9790,11 @@ window.addEventListener('beforeunload', forceTerminateBoardSession);
 window.addEventListener('pageshow', (event) => {
   // iOS Safariがページをbfcacheから復元した場合も、盤面を再開させない。
   if (!event.persisted) return;
+  // PvPゲスト参加中はbfcache復元をそのまま使わせる（forceTerminateBoardSession
+  // 参照）。JSの状態(game/pvpMatch/リスナー類)はbfcache中も保持されている
+  // ので、ここで手を出さなければハートビートも含めて何事もなかったように
+  // 動き続ける。
+  if (pvpMatch && !pvpMatch.isHost) return;
   if (!appEl?.classList.contains('hidden')) {
     forceTerminateBoardSession();
     showScreen(loginScreen);

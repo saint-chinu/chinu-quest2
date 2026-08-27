@@ -1,4 +1,5 @@
 import { readFile } from 'node:fs/promises';
+import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
 import { initializeTestEnvironment, assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
 import { collection, deleteDoc, doc, getDoc, getDocs, query, setDoc, updateDoc, where } from 'firebase/firestore';
@@ -100,6 +101,34 @@ test('private hands are readable only by their participant and writable only by 
   await assertFails(getDoc(doc(env.authenticatedContext('stranger').firestore(), 'pvpRooms', ROOM, 'private', 'guest')));
   await assertFails(setDoc(guestHand, { hand: [] }));
   await assertFails(setDoc(hostWritingGuestHand, { hand: Array(8).fill({ name: 'x' }) }));
+});
+
+test('participant heartbeat may update lastSeen without replacing the latest action', async () => {
+  await seedRoom({
+    ...roomData(),
+    guestUid: 'guest', guestName: 'ゲスト', guestColor: 456,
+    guestDeckList: Array(40).fill({ name: 'x' }),
+    participants: [
+      roomData().participants[0],
+      { uid: 'guest', name: 'ゲスト', color: 456, iconDataUrl: '', deckList: Array(40).fill({ name: 'x' }), ready: true },
+    ],
+    participantUids: ['host', 'guest'],
+    status: 'battling',
+  });
+  const guestDb = env.authenticatedContext('guest').firestore();
+  const actionRef = doc(guestDb, 'pvpRooms', ROOM, 'actions', 'guest');
+  await assertSucceeds(setDoc(actionRef, {
+    actionId: 100,
+    action: { type: 'rollDice', playerId: 1 },
+    uid: 'guest',
+    lastSeen: new Date(),
+  }));
+  await assertSucceeds(updateDoc(actionRef, { lastSeen: new Date() }));
+  const hostActionRef = doc(env.authenticatedContext('host').firestore(), 'pvpRooms', ROOM, 'actions', 'guest');
+  const saved = (await getDoc(hostActionRef)).data();
+  assert.equal(saved.actionId, 100);
+  assert.equal(saved.action.type, 'rollDice');
+  await assertFails(updateDoc(doc(env.authenticatedContext('stranger').firestore(), 'pvpRooms', ROOM, 'actions', 'guest'), { lastSeen: new Date() }));
 });
 
 test('friend entries are private to their owner', async () => {

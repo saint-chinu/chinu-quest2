@@ -165,6 +165,7 @@ export class Game {
     onTargetEffect,
     onShrineEffect,
     onWarpEffect,
+    onTurnBoundary,
     onTurnFocus,
     onTollPayment,
     onMoveDestination,
@@ -253,6 +254,7 @@ export class Game {
     this.onTargetEffect = onTargetEffect;
     this.onShrineEffect = onShrineEffect || (() => Promise.resolve());
     this.onWarpEffect = onWarpEffect || (() => Promise.resolve());
+    this.onTurnBoundary = onTurnBoundary || (() => {});
     this.onTurnFocus = onTurnFocus;
     this.onTollPayment = onTollPayment || (() => Promise.resolve());
     this.onMoveDestination = onMoveDestination || (() => {});
@@ -785,6 +787,12 @@ export class Game {
 
   /** Runs automatically whenever a turn starts: draw, then hand control to the player (or CPU). */
   async _beginTurn() {
+    // 通信復帰など「手番の境界でだけ反映したい」外部状態を、CPU/人間判定や
+    // ドローより前に確定する。途中の戦闘・移動中に操作主体を変えないための
+    // 明示的な安全境界で、通常戦ではno-op。
+    try { this.onTurnBoundary(this.currentPlayer); } catch (error) {
+      console.warn('turn-boundary callback failed', error);
+    }
     this.isBusy = true;
     this.awaitingRoll = false;
     this.turnCount += 1;
@@ -2554,8 +2562,8 @@ export class Game {
     // 次のサイコロから通常どおりゴール方向へ進み直せるようにする。
     player.previousTileId = player.tileHistory[1] ?? null;
     if (destinationId != null) this.onMoveDestination({ tileId: destinationId, active: false });
-    // _broadcastPieceMoveはasync（ゲストの歩行アニメ完了まで待つ）。awaitしないと
-    // 後退の演出が終わる前に着地処理が進み、ゲスト画面で駒と進行がズレる。
+    // 経路まとめイベントを後続処理より先にキューへ積む。ゲスト側は同じキューを
+    // 厳密なFIFOで再生するため、通信往復を待たなくても後退→着地の順序は崩れない。
     await this._broadcastPieceMove(player, originTileId);
   }
 
@@ -3351,8 +3359,8 @@ export class Game {
    * 自分の画面で歩行アニメを全部流し終えてから経路をまとめて配信していた
    * ため、参加者側は「しばらく無反応→遅れて一気に歩く」二重再生になって
    * いた。1歩ごとに流せば参加者の駒もほぼ同時に歩き出す。セグメント末尾の
-   * onPieceMove（経路まとめ）は同期バリア兼取りこぼし補修として残る -
-   * 全歩が届いていれば参加者側は「もう到着済み」で即ACKするだけになる。
+   * onPieceMove（経路まとめ）は取りこぼし・再接続時の補修として残る。
+   * 全歩が届いていれば参加者側は「もう到着済み」で即終了する。
    */
   _emitPieceStep(player, from, to) {
     this.onPieceStep?.({

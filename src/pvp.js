@@ -9,6 +9,7 @@
 // 同期はFirestoreのリアルタイムリスナー（onSnapshot）を使う - ターン制
 // ゲームなので数百ms単位のレイテンシで十分「滑らか」に感じられる。
 import { db, ensurePvpUser } from './firebase.js';
+import { PvpContiguousAckTracker, pvpSequenceBase } from './pvpQueue.js';
 import {
   doc,
   getDoc,
@@ -136,6 +137,12 @@ export function listenToRoom(roomCode, onChange) {
   return onSnapshot(roomRef(roomCode), (snap) => onChange(snap.exists() ? snap.data() : null));
 }
 
+/** ゲスト切断復帰用: 購読を張る前に一度だけ部屋の現況を読む（存在確認・状態確認）。 */
+export async function fetchPvpRoomOnce(roomCode) {
+  const snap = await getDoc(roomRef(roomCode));
+  return snap.exists() ? snap.data() : null;
+}
+
 /** Subscribes to `uid`'s private hand within the room (only that uid can read it per firestore.rules). */
 export function listenToPrivateHand(roomCode, uid, onChange) {
   return onSnapshot(privateHandRef(roomCode, uid), (snap) => onChange(snap.exists() ? snap.data().hand : []));
@@ -214,7 +221,7 @@ function stripUndefined(value) {
 }
 
 export class HostGuestRelay {
-  constructor(roomCode) {
+  constructor(roomCode, { enableLegacy = false } = {}) {
     this.roomCode = roomCode;
     this.nextRequestId = 1;
     this.pending = null; // { requestId, resolve, reject, timer }
@@ -231,7 +238,13 @@ export class HostGuestRelay {
     //         respUnsub }
     this.participants = new Map();
     this.destroyed = false;
-    this.unsubscribe = listenToRoom(roomCode, (room) => {
+    this.unsubscribe = null;
+    if (enableLegacy) this._ensureLegacyListener();
+  }
+
+  _ensureLegacyListener() {
+    if (this.unsubscribe) return;
+    this.unsubscribe = listenToRoom(this.roomCode, (room) => {
       if (!room || !this.pending) return;
       if (room.guestResponseId === this.pending.requestId) {
         const { resolve, timer } = this.pending;
@@ -243,6 +256,7 @@ export class HostGuestRelay {
   }
 
   ask(type, payload) {
+    this._ensureLegacyListener();
     const task = this.legacyQueue.catch(() => {}).then(() => this._askLegacyNow(type, payload));
     this.legacyQueue = task.catch(() => {});
     return task;
@@ -268,7 +282,7 @@ export class HostGuestRelay {
       outbox: [],
       // ホストの再読込をまたいでも必ず増加するよう時刻起点で採番する
       // （GuestActionSenderと同じ理屈。ゲスト側はid比較だけで新旧を判定する）。
-      nextId: Date.now(),
+      nextId: pvpSequenceBase(),
       lastFlushedId: 0,
       flushing: false,
       dirty: false,
@@ -276,6 +290,8 @@ export class HostGuestRelay {
       valueWaiters: new Map(),
       respUnsub: null,
       degraded: false,
+      generation: 0,
+      offline: false,
     };
     state.respUnsub = onSnapshot(promptResponseRef(this.roomCode, uid), (snap) => {
       const data = snap.data();
@@ -336,6 +352,12 @@ export class HostGuestRelay {
   enqueueParticipant(uid, type, payload, mode = 'value') {
     if (this.destroyed) return Promise.reject(new Error('対戦リレーが終了しました'));
     const state = this._participantState(uid);
+    // 切断中の端末へ演出列を積み続けない。復帰時はpublicStateの完全状態を先に
+    // 適用するため、見ていなかった装飾イベントを全再生する必要はない。
+    if (state.offline) {
+      if (mode === 'fire') return Promise.resolve();
+      return Promise.reject(new Error('参加者はオフラインです'));
+    }
     clearTimeout(state.cleanupTimer);
     // 応答が滞っている相手('done'が一度時間切れした相手)には、以後の演出同期を
     // 待たない。相手のイベント列が人間の入力待ち等で止まっている間、こちらは
@@ -374,6 +396,55 @@ export class HostGuestRelay {
     return this.enqueueParticipant(uid, type, payload, awaitDone ? 'done' : 'fire');
   }
 
+  /**
+   * A disconnected guest cannot answer its already-issued prompt. Reject the
+   * host wait immediately and fast-forward that guest's cosmetic backlog; the
+   * authoritative publicState rebuilds the current board on reconnect.
+   */
+  markParticipantOffline(uid) {
+    // まだ演出を1件も送っていない相手でも切断状態を保持する。
+    // get()だけにすると、その後の最初の質問で新規stateがoffline=false
+    // として作られ、45秒の応答待ちに入ってしまう。
+    const state = this._participantState(uid);
+    const resetThrough = Math.max(
+      state.ackedThrough || 0,
+      state.lastFlushedId || 0,
+      state.outbox[state.outbox.length - 1]?.id || 0,
+    );
+    const error = new Error('参加者の通信が切断されました');
+    for (const waiter of state.doneWaiters) {
+      clearTimeout(waiter.timer);
+      waiter.reject(error);
+    }
+    for (const waiter of state.valueWaiters.values()) {
+      clearTimeout(waiter.timer);
+      waiter.reject(error);
+    }
+    state.doneWaiters = [];
+    state.valueWaiters.clear();
+    state.outbox = [];
+    state.ackedThrough = resetThrough;
+    state.lastFlushedId = resetThrough;
+    state.degraded = true;
+    state.offline = true;
+    state.dirty = false;
+    state.generation += 1;
+    clearTimeout(state.cleanupTimer);
+    if (state.flushTimer) { clearTimeout(state.flushTimer); state.flushTimer = null; }
+    setDoc(promptRef(this.roomCode, uid), {
+      requestId: resetThrough,
+      type: '__batch',
+      payload: { events: [], ackedThrough: resetThrough },
+    }).catch(() => {});
+  }
+
+  markParticipantOnline(uid) {
+    const state = this.participants.get(uid);
+    if (!state) return;
+    state.offline = false;
+    state.degraded = false;
+  }
+
   _scheduleFlush(uid, urgent) {
     const state = this._participantState(uid);
     if (urgent) {
@@ -408,13 +479,17 @@ export class HostGuestRelay {
     if (requestId === state.lastFlushedId && !state.dirty) return;
     state.flushing = true;
     state.lastFlushedId = requestId;
+    const generation = state.generation;
     // 旧ルールのフィールド制限（requestId/type/payload）の枠内に収める:
     // type='__batch'、payload.eventsに未ACKイベント一覧。スナップショットが
     // 合体しても常に「未ACKの全件」が入っているので取りこぼさない。
     // ackedThroughはゲストがACK済みの水位。ゲストの再読込直後、文書に残る
     // 処理済みイベントをもう一度再生してしまわないための基準線になる。
     Promise.resolve()
-      .then(() => setDoc(promptRef(this.roomCode, uid), { requestId, type: '__batch', payload: { events, ackedThrough: state.ackedThrough || 0 } }))
+      .then(() => {
+        if (state.generation !== generation) return null;
+        return setDoc(promptRef(this.roomCode, uid), { requestId, type: '__batch', payload: { events, ackedThrough: state.ackedThrough || 0 } });
+      })
       .catch((error) => console.warn('PvP prompt flush failed', error))
       .finally(() => {
         state.flushing = false;
@@ -448,7 +523,7 @@ export class HostGuestRelay {
       state.valueWaiters.clear();
     }
     this.participants.clear();
-    this.unsubscribe();
+    this.unsubscribe?.();
   }
 }
 
@@ -459,7 +534,7 @@ export class HostGuestRelay {
  * を渡す想定 - ローカル対戦のUIをそのまま再利用できる。
  */
 export class GuestHostListener {
-  constructor(roomCode, uid, handlers) {
+  constructor(roomCode, uid, handlers, { enableLegacy = false, onFastForward = null } = {}) {
     this.roomCode = roomCode;
     this.uid = uid;
     this.handlers = handlers;
@@ -472,14 +547,22 @@ export class GuestHostListener {
     this.batchLastSeenId = 0;
     this.batchQueue = [];
     this.batchPumping = false;
+    this.batchAckTracker = new PvpContiguousAckTracker();
+    this.currentBatchEventId = null;
+    this.onFastForward = onFastForward;
     this.lastInteractiveAnswer = null; // { id, v } 直近の対話回答（応答文書に常に同梱）
     this.destroyed = false;
-    this.unsubscribe = listenToRoom(roomCode, (room) => {
-      if (!room || !room.hostRequest) return;
-      if (room.hostRequestId <= this.lastHandledRequestId) return;
-      this.lastHandledRequestId = room.hostRequestId;
-      this._handle(room.hostRequestId, room.hostRequest);
-    });
+    // 現行クライアントは参加者別prompts文書だけを使う。旧room.hostRequestの
+    // 購読を通常時は張らず、同じ巨大room文書をpublicState購読と二重に
+    // 受信・デコードする負荷を避ける。互換確認が必要な時だけ明示的に有効化可能。
+    this.unsubscribe = enableLegacy
+      ? listenToRoom(roomCode, (room) => {
+          if (!room || !room.hostRequest) return;
+          if (room.hostRequestId <= this.lastHandledRequestId) return;
+          this.lastHandledRequestId = room.hostRequestId;
+          this._handle(room.hostRequestId, room.hostRequest);
+        })
+      : null;
     this.promptUnsubscribe = onSnapshot(promptRef(roomCode, uid), (snap) => {
       const prompt = snap.data();
       if (!prompt) return;
@@ -488,11 +571,26 @@ export class GuestHostListener {
         // 水位（ackedThrough）までは再生済みとして飛ばす（再生し直すと
         // 過去の演出が一斉に流れてしまう）。それ以降の未ACK分は再生する＝
         // 切断直前に届いていなかった演出・質問の自然な復元になる。
-        const base = Math.max(this.batchLastSeenId, Number(prompt.payload?.ackedThrough) || 0);
+        const ackedThrough = Number(prompt.payload?.ackedThrough) || 0;
+        this.batchAckTracker.advanceBase(ackedThrough);
+        // 切断中にホストがAI代行した場合、回答待ちの古いモーダルを
+        // 開いたままにしない。キューにまだ入っている未開始イベントだけで
+        // なく、現在await中の質問もキャンセルしてpublicStateへ追いつく。
+        if (this.currentBatchEventId != null && ackedThrough >= this.currentBatchEventId) {
+          try { this.onFastForward?.(this.currentBatchEventId); } catch { /* 復帰処理を止めない */ }
+        }
+        // ホストが切断中の演出列を破棄してpublicStateへ追いつかせた場合、既に
+        // ローカルキューへ入っていた古いイベントもここで捨てる。これが無いと
+        // 復帰後に終わった手番の質問モーダルが出る。
+        if (ackedThrough > 0 && this.batchQueue.length > 0) {
+          this.batchQueue = this.batchQueue.filter((event) => event.id > ackedThrough);
+        }
+        const base = Math.max(this.batchLastSeenId, ackedThrough);
         if (base > this.batchLastSeenId) this.batchLastSeenId = base;
         for (const event of prompt.payload?.events || []) {
           if (!event || !(event.id > this.batchLastSeenId)) continue;
           this.batchLastSeenId = event.id;
+          this.batchAckTracker.noteReceived(event.id);
           this.batchQueue.push(event);
         }
         this._pumpBatch();
@@ -520,12 +618,21 @@ export class GuestHostListener {
     this.batchPumping = true;
     try {
       while (this.batchQueue.length > 0 && !this.destroyed) {
+        // 質問も演出も必ず到着順に処理する。質問だけを追い越させると、分岐UIが
+        // 駒の到着より先に出るだけでなく、その大きいidをACKした瞬間にホストが
+        // 手前の未再生イベントまで削除してしまう。遅延時の追いつきはmain.js側で
+        // 移動アニメの尺だけ短縮し、因果順序そのものは崩さない。
         const event = this.batchQueue.shift();
+        this.currentBatchEventId = event.id;
         let result = null;
         try {
-          result = this.handlers[event.type] ? await this.handlers[event.type](event.payload) : null;
+          result = this.handlers[event.type]
+            ? await this.handlers[event.type](event.payload, { queueDepth: this.batchQueue.length })
+            : null;
         } catch { /* 演出の失敗で列全体を止めない */ }
         if (event.wantValue) this.lastInteractiveAnswer = { id: event.id, v: result ?? null };
+        const ackedThrough = this.batchAckTracker.markProcessed(event.id);
+        this.currentBatchEventId = null;
         // 応答文書は {requestId: 処理済み水位, value: 直近の対話回答} の固定形。
         // 毎イベント書くと往復直列化が復活するので、ホストが待つイベント
         // （ack）とキューを飲み干した時だけ「待つ書き込み」をする。valueを
@@ -535,7 +642,7 @@ export class GuestHostListener {
           // 書き込み完了は待たない。ホストは応答スナップショットの到着だけを
           // 見ており、同一クライアントの書き込みは順序保証されるので、ここで
           // awaitして次の演出（歩行の次の1歩等）を遅らせる意味がない。
-          const body = { requestId: event.id, value: this.lastInteractiveAnswer };
+          const body = { requestId: ackedThrough, value: this.lastInteractiveAnswer };
           void setDoc(promptResponseRef(this.roomCode, this.uid), body)
             .catch(() => setDoc(promptResponseRef(this.roomCode, this.uid), body).catch(() => {}));
           this._lastAckWriteAt = performance.now();
@@ -545,7 +652,7 @@ export class GuestHostListener {
           // 送信済みイベントまで全部再送されて書き込み量が雪だるま式に膨らむ
           // （実測で1ターン36KB。歩行ストリーミング化で件数も増えるため必須）。
           this._lastAckWriteAt = performance.now();
-          const body = { requestId: event.id, value: this.lastInteractiveAnswer };
+          const body = { requestId: ackedThrough, value: this.lastInteractiveAnswer };
           void setDoc(promptResponseRef(this.roomCode, this.uid), body).catch(() => {});
         }
       }
@@ -565,7 +672,11 @@ export class GuestHostListener {
   destroy() {
     this.destroyed = true;
     this.batchQueue.length = 0;
-    this.unsubscribe();
+    if (this.currentBatchEventId != null) {
+      try { this.onFastForward?.(this.currentBatchEventId); } catch { /* 終了処理を止めない */ }
+    }
+    this.currentBatchEventId = null;
+    this.unsubscribe?.();
     this.promptUnsubscribe?.();
   }
 }
@@ -591,14 +702,36 @@ export function sendParticipantAction(roomCode, uid, actionId, action) {
   return setDoc(participantActionRef(roomCode, uid), { actionId, action, uid, lastSeen: serverTimestamp() });
 }
 
+/**
+ * Heartbeat updates only lastSeen.  Sending it as a new action used to bump
+ * actionId and overwrite a dice/spell action in the same single document;
+ * Firestore snapshot coalescing could then deliver only the heartbeat and the
+ * real input was lost.  The initial action document is created by the
+ * constructor heartbeat below, so normal heartbeats can safely be field-only.
+ */
+function touchParticipantHeartbeat(roomCode, uid) {
+  return updateDoc(participantActionRef(roomCode, uid), { lastSeen: serverTimestamp() });
+}
+
 /** ゲスト側で使う、送信ごとにactionIdを自動採番する薄いラッパー。 */
 export class GuestActionSender {
   constructor(roomCode, uid) {
     this.roomCode = roomCode;
     this.uid = uid;
     // 再接続・再読込後も以前のactionIdより必ず大きくなるよう時刻を起点にする。
-    this.nextActionId = Date.now();
-    this.heartbeat = setInterval(() => this.send({ type: 'heartbeat' }).catch(() => {}), 10000);
+    this.nextActionId = pvpSequenceBase();
+    // 最初の購読スナップショットが実操作になって取り落とされないよう、生成直後
+    // に基準用heartbeat文書を作る。以後のheartbeatはactionを上書きしない。
+    this.send({ type: 'heartbeat' }).catch(() => {});
+    this.heartbeat = setInterval(() => this._touchHeartbeat(), 10000);
+    // モバイルはバックグラウンドタブのタイマーを間引く/止めるため、10秒
+    // 間隔だけに頼るとアプリ切り替え程度でもホスト側の30秒無応答判定に
+    // 引っかかりやすい。フォアグラウンド復帰の瞬間に即送って追いつく
+    // （lobby側のupdatePvpPresenceと同じ考え方）。
+    this._onVisible = () => {
+      if (!document.hidden) this._touchHeartbeat();
+    };
+    document.addEventListener('visibilitychange', this._onVisible);
   }
   send(action) {
     const actionId = this.nextActionId;
@@ -606,31 +739,59 @@ export class GuestActionSender {
     const payload = { ...action, actionId, uid: this.uid };
     return sendParticipantAction(this.roomCode, this.uid, actionId, payload);
   }
-  destroy() { if (this.heartbeat) clearInterval(this.heartbeat); }
-}
-
-export class HostParticipantPresenceMonitor {
-  constructor(roomCode, participantUids, onOffline) {
-    this.lastSeen = new Map();
-    this.timers = (participantUids || []).filter(Boolean).map((uid) => setInterval(() => {
-      const seen = this.lastSeen.get(uid);
-      if (seen && Date.now() - seen > 30000) { this.lastSeen.delete(uid); onOffline(uid); }
-    }, 10000));
-    this.unsubscribe = (participantUids || []).filter(Boolean).map((uid) => onSnapshot(participantActionRef(roomCode, uid), (snap) => {
-      const ts = snap.data()?.lastSeen;
-      if (ts?.toMillis) this.lastSeen.set(uid, ts.toMillis());
-    }));
+  _touchHeartbeat() {
+    // 初回setDocがまだ完了していない／文書が掃除された場合だけ、完全な形で
+    // 作り直す。通常経路ではactionId/actionを触らないので入力を消さない。
+    return touchParticipantHeartbeat(this.roomCode, this.uid)
+      .catch((error) => {
+        if (error?.code === 'not-found') return this.send({ type: 'heartbeat' });
+        throw error;
+      })
+      .catch(() => {});
   }
-  destroy() { this.timers.forEach(clearInterval); this.unsubscribe.forEach((stop) => stop()); }
+  destroy() {
+    if (this.heartbeat) clearInterval(this.heartbeat);
+    document.removeEventListener('visibilitychange', this._onVisible);
+  }
 }
 
 export class HostParticipantActionListener {
-  constructor(roomCode, participantUids, onAction) {
+  constructor(roomCode, participantUids, onAction, {
+    onOffline = null,
+    onReconnect = null,
+    onHeartbeat = null,
+    offlineAfterMs = 30000,
+  } = {}) {
     this.unsubscribers = [];
     this.lastHandled = new Map();
-    for (const uid of (participantUids || []).filter(Boolean)) {
+    this.lastSeen = new Map();
+    this.offlineUids = new Set();
+    const uids = (participantUids || []).filter(Boolean);
+    const startedAt = Date.now();
+    for (const uid of uids) this.lastSeen.set(uid, startedAt);
+    // actions/{uid}は入力とheartbeatを同じ文書で持つ。以前は入力監視と在席監視が
+    // それぞれonSnapshotを張っていたため、参加人数ぶん同じ更新を二重処理して
+    // いた。1購読・1タイマーへ統合する。
+    this.offlineTimer = setInterval(() => {
+      const now = Date.now();
+      for (const uid of uids) {
+        const seen = this.lastSeen.get(uid);
+        if (seen != null && now - seen > offlineAfterMs && !this.offlineUids.has(uid)) {
+          this.offlineUids.add(uid);
+          onOffline?.(uid);
+        }
+      }
+    }, Math.min(10000, Math.max(1000, Math.floor(offlineAfterMs / 3))));
+    for (const uid of uids) {
       const unsubscribe = onSnapshot(participantActionRef(roomCode, uid), (snap) => {
         const data = snap.data();
+        if (data?.lastSeen) {
+          // サーバー時刻と端末時刻を直接比較すると時計ずれで誤切断になるため、
+          // スナップショットを受け取ったローカル時刻を生存時刻として使う。
+          this.lastSeen.set(uid, Date.now());
+          onHeartbeat?.(uid);
+          if (this.offlineUids.delete(uid)) onReconnect?.(uid);
+        }
         // 購読開始時にFirestoreへ残っている前回の操作は基準値として記録し、
         // 現在の対戦で新しく届いた操作だけを実行する。
         if (!this.lastHandled.has(uid)) {
@@ -644,5 +805,8 @@ export class HostParticipantActionListener {
       this.unsubscribers.push(unsubscribe);
     }
   }
-  destroy() { this.unsubscribers.splice(0).forEach((unsubscribe) => unsubscribe()); }
+  destroy() {
+    if (this.offlineTimer) clearInterval(this.offlineTimer);
+    this.unsubscribers.splice(0).forEach((unsubscribe) => unsubscribe());
+  }
 }
