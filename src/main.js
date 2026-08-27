@@ -1787,7 +1787,22 @@ async function showCentralSpellEffectMessage(message, holdMs = 1800) {
   spellEffectModal.classList.remove('spell-effect-result');
 }
 
-async function promptSpellCastEffect({ targetPlayerId, targetTileId, targetPosition, effectMessage }) {
+async function playPandemicBoardEffect() {
+  playSfx('ominous');
+  const fog = document.createElement('div');
+  fog.className = 'fx-pandemic-fog';
+  appEl.appendChild(fog);
+  await new Promise((resolve) => requestAnimationFrame(() => {
+    fog.classList.add('active');
+    resolve();
+  }));
+  await new Promise((resolve) => setTimeout(resolve, 1800));
+  fog.classList.add('fade-out');
+  await new Promise((resolve) => setTimeout(resolve, 350));
+  fog.remove();
+}
+
+async function promptSpellCastEffect({ targetPlayerId, targetTileId, targetPosition, effectMessage, effectType }) {
   if (!scene) return;
   const savedFocus = { x: scene.focus.x, z: scene.focus.z };
   const isPvpGuest = pvpMatch && !pvpMatch.isHost;
@@ -1805,6 +1820,11 @@ async function promptSpellCastEffect({ targetPlayerId, targetTileId, targetPosit
     } else {
       await new Promise((resolve) => setTimeout(resolve, 350));
     }
+  } else if (effectType === 'replaceAllUnitsWithZombie') {
+    await Promise.all([
+      playPandemicBoardEffect(),
+      showCentralSpellEffectMessage(effectMessage, 1800),
+    ]);
   } else {
     await showCentralSpellEffectMessage(effectMessage);
   }
@@ -2274,11 +2294,9 @@ function promptPickBattleItem({ hand, opponentHand = [], side, ownerName, oppone
     // 装備にはカードのコスト(G)がかかる。払えないアイテムは選べないので、
     // カードを灰色にして必要Gを赤字で重ねる。
     const canAfford = (card) => (card.cost || 0) <= currency;
-    const affordableCount = hand.filter(canAfford).length;
-    // 装備できるカードが1枚も無い（手札に無い／所持Gが足りない）場合は、
-    // 選ぶものが存在しないので選択画面そのものを出さない。「装備なし」を
-    // 短く見せるだけで、ボタン操作を待たずに戦闘を進める。
-    if (affordableCount === 0) {
+    // 本当に装備カードを1枚も持っていない場合だけ「装備なし」で自動進行する。
+    // 所持G不足の場合は、選択画面へ並べて灰色＋必要Gを表示する。
+    if (hand.length === 0) {
       const finishNotice = () => {
         if (settled) return;
         settled = true;

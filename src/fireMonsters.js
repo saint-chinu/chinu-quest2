@@ -38,7 +38,7 @@ export const FIRE_MONSTER_CATALOG = {
         { atk: 10, trait: 'absoluteFirstStrike', label: '絶対先制' },
       ],
     },
-    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主の周回で成長する（1周目 ATK+10・先制 → 2周目 HP+5/ATK+10 → 3周目 ATK+10・絶対先制。相手の先制や装備にかかわらず先に攻撃する）',
+    effectDescription: '空き地への通常召喚専用で、移動・侵略には使えない（自分の土地との入れ替えは可能）。持ち主の周回で成長する（1周目 ATK+10・先制 → 2周目 HP+5/ATK+10 → 3周目 ATK+10・絶対先制。相手の先制や装備にかかわらず先に攻撃する）',
     imageDataUrl: assetUrl('/images/card-art/lavaDragon.png'),
   }),
   salarymander: fireMonster('salarymander', 'サラリーマンダー', Rarity.N, 30, 30, {

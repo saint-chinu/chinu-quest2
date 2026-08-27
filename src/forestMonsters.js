@@ -65,7 +65,7 @@ export const FOREST_MONSTER_CATALOG = {
         { trait: 'forestProsperity', label: '繁栄' },
       ],
     },
-    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主の周回で成長する（1周目 HP+10/ATK+5 → 2周目 HP+10/ATK+5・再生 → 3周目「繁栄」を覚え、味方の森属性モンスターは自身を含め戦闘中HP/ATK+20）',
+    effectDescription: '空き地への通常召喚専用で、移動・侵略には使えない（自分の土地との入れ替えは可能）。持ち主の周回で成長する（1周目 HP+10/ATK+5 → 2周目 HP+10/ATK+5・再生 → 3周目「繁栄」を覚え、味方の森属性モンスターは自身を含め戦闘中HP/ATK+20）',
     imageDataUrl: assetUrl('/images/card-art/kyochinhei.png'),
   }),
   takenokoha: forestMonster('takenokoha', 'タケノコ派', Rarity.N, 30, 30, {

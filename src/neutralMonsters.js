@@ -77,8 +77,8 @@ export const GASHAAN_FIELD_MONSTER = {
 export const NEUTRAL_MONSTER_CATALOG = {
   // ■周回成長型の壁（5属性それぞれに1種ずつある新カード型）
   //
-  //  ・置き方の制限: 移動コマンドで動かせず(immovableByMoveCommand)、侵略にも
-  //    自分の土地の入れ替えにも使えない(emptyTileOnly＝空き地への召喚専用)。
+  //  ・置き方の制限: 移動コマンドで動かせず(immovableByMoveCommand)、敵地への
+  //    侵略には使えない。自分の土地のモンスターとの入れ替えは可能。
   //    代わりに安く、ATKは低く、HPだけが高い。
   //  ・成長(effect.type: 'lapGrowth'): 置いたあと持ち主が1周するごとに
   //    effect.steps を1段ずつ適用する。1周目・2周目でステータスが伸び、
@@ -110,7 +110,7 @@ export const NEUTRAL_MONSTER_CATALOG = {
         { trait: 'halfDamage', label: 'ダメージ半減' },
       ],
     },
-    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主の周回で成長する（1周目 HP50 → 2周目 HP60/ATK20 → 3周目「ダメージ半減」を覚え、受けるダメージが半分になる）',
+    effectDescription: '空き地への通常召喚専用で、移動・侵略には使えない（自分の土地との入れ替えは可能）。持ち主の周回で成長する（1周目 HP50 → 2周目 HP60/ATK20 → 3周目「ダメージ半減」を覚え、受けるダメージが半分になる）',
     imageDataUrl: assetUrl('/images/card-art/neutral.png'),
   }),
   battleTrain: neutralMonster(BATTLE_TRAIN_ID, '戦闘列車', Rarity.S, 20, 30, {

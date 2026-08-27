@@ -48,7 +48,7 @@ export const WATER_MONSTER_CATALOG = {
         { hp: 10, trait: 'unpierceableChanceNegate', label: '1/2無効化' },
       ],
     },
-    effectDescription: '空き地にしか召喚できず、移動・侵略にも使えない。持ち主の周回で成長する（1周目 HP+5/ATK+10 → 2周目 HP+10/ATK+5・先制 → 3周目 HP+10・攻撃を1/2の確率で完全無効化。この無効化は貫通でも突破できない）',
+    effectDescription: '空き地への通常召喚専用で、移動・侵略には使えない（自分の土地との入れ替えは可能）。持ち主の周回で成長する（1周目 HP+5/ATK+10 → 2周目 HP+10/ATK+5・先制 → 3周目 HP+10・攻撃を1/2の確率で完全無効化。この無効化は貫通でも突破できない）',
     imageDataUrl: assetUrl('/images/card-art/islandWhale.png'),
   }),
   su: waterMonster('su', '酢', Rarity.EX, 60, 60, {

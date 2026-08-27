@@ -267,6 +267,39 @@ export function playSfx(type = 'hit') {
     const ctx = sfxContext;
     if (ctx.state === 'suspended') ctx.resume();
     const now = ctx.currentTime;
+    if (type === 'ominous') {
+      const duration = 1.65;
+      const drone = ctx.createOscillator();
+      const droneGain = ctx.createGain();
+      drone.type = 'sawtooth';
+      drone.frequency.setValueAtTime(92, now);
+      drone.frequency.exponentialRampToValueAtTime(38, now + duration);
+      droneGain.gain.setValueAtTime(0.001, now);
+      droneGain.gain.linearRampToValueAtTime(muted ? 0.001 : 0.075, now + 0.12);
+      droneGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+      drone.connect(droneGain).connect(ctx.destination);
+      drone.start(now);
+      drone.stop(now + duration + 0.02);
+
+      const frameCount = Math.max(1, Math.floor(ctx.sampleRate * duration));
+      const noiseBuffer = ctx.createBuffer(1, frameCount, ctx.sampleRate);
+      const noiseData = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < frameCount; i += 1) noiseData[i] = Math.random() * 2 - 1;
+      const noise = ctx.createBufferSource();
+      const filter = ctx.createBiquadFilter();
+      const noiseGain = ctx.createGain();
+      noise.buffer = noiseBuffer;
+      filter.type = 'lowpass';
+      filter.frequency.setValueAtTime(720, now);
+      filter.frequency.exponentialRampToValueAtTime(150, now + duration);
+      noiseGain.gain.setValueAtTime(0.001, now);
+      noiseGain.gain.linearRampToValueAtTime(muted ? 0.001 : 0.045, now + 0.08);
+      noiseGain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+      noise.connect(filter).connect(noiseGain).connect(ctx.destination);
+      noise.start(now);
+      noise.stop(now + duration + 0.02);
+      return;
+    }
     if (type === 'checkpoint' || type === 'goal' || type === 'fanfare' || type === 'coin') {
       const notes = type === 'checkpoint'
         ? [[659.25, 0, 0.11], [783.99, 0.11, 0.11], [1046.5, 0.22, 0.22]]

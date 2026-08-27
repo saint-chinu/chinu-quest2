@@ -668,6 +668,27 @@ test('パンデミックは配置モンスターだけを置き換え、土地�
   assert.equal(tiles[2].unit, null, '空き地には湧かない');
 });
 
+test('パンデミックの演出ペイロードには専用効果種別が含まれる', () => {
+  const tile = makeTile(0);
+  const player = { id: 'A', name: 'ア', tileId: 0 };
+  const g = makeStub([tile], [player]);
+  const payload = g._buildSpellCastEffectPayload(player, {}, SPELL_CATALOG.pandemic);
+  assert.equal(payload.cardId, SPELL_CATALOG.pandemic.id);
+  assert.equal(payload.effectType, 'replaceAllUnitsWithZombie');
+});
+
+test('防御型は敵地へ侵略できないが自分の土地との入れ替えには使える', () => {
+  const ownTile = makeTile(0, { owner: 'A' });
+  ownTile.unit = unit(mon('自軍', 20, 10), 'A');
+  const enemyTile = makeTile(1, { owner: 'B' });
+  enemyTile.unit = unit(mon('敵軍', 20, 10), 'B');
+  const wall = { ...MONSTER_CATALOG.islandWhale, id: 'wall-hand', catalogId: 'islandWhale' };
+  const player = { id: 'A', name: 'ア', currency: 100, hand: [wall] };
+  const g = makeStub([ownTile, enemyTile], [player, { id: 'B', name: 'イ', hand: [] }]);
+  assert.equal(g._affordableMonsterCards(player, ownTile).length, 1, '自領地との入れ替え候補には出る');
+  assert.equal(g._affordableMonsterCards(player, enemyTile).length, 0, '敵地への侵略候補には出ない');
+});
+
 test('ホライズンは全所有地をLv2に均し、総資産の増減を各自の頭上に出す', async () => {
   const tiles = [
     makeTile(0, { owner: 'A', level: 5 }),

@@ -4041,14 +4041,14 @@ export class Game {
 
   /**
    * 今召喚できるモンスターカード。tileを渡すと、その土地に置けないカードも
-   * 除く: 壁形モンスター(emptyTileOnly)は空き地への召喚専用で、敵地への
-   * 侵略にも自分の土地の入れ替えにも使えない。
+   * 除く: 防御型モンスター(emptyTileOnly)は敵地へ侵略できない。ただし、
+   * 自分の土地にいるモンスターとの入れ替えには使用できる。
    */
   _affordableMonsterCards(player, tile = null) {
-    const occupied = tile != null && tile.owner != null;
+    const invadingEnemy = tile != null && tile.owner != null && tile.owner !== player.id;
     return player.hand.filter(
       (c) => c.type === CardType.MONSTER && c.cost <= player.currency
-        && !(occupied && c.traits?.includes('emptyTileOnly'))
+        && !(invadingEnemy && c.traits?.includes('emptyTileOnly'))
         && this._meetsChainRequirement(player, c) && this._meetsSacrificeRequirement(player, c),
     );
   }
@@ -9498,6 +9498,8 @@ export class Game {
     return {
       casterId: player.id,
       casterPosition: casterPosition ? { x: casterPosition.x, z: casterPosition.z } : null,
+      cardId: card ? catalogIdOf(card) : null,
+      effectType: card?.effect?.type ?? null,
       targetPlayerId: cast.targetPlayerId ?? null,
       targetTileId: cast.targetTileId ?? null,
       targetPosition: targetPosition ? { x: targetPosition.x, z: targetPosition.z } : null,
