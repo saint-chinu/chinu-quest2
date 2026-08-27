@@ -1526,6 +1526,11 @@ export class Game {
         player.hackingTurnsRemaining = 0;
         player.landlessGoalBonus = 0;
         if (targetTile?.unit) targetTile.unit.curses = [];
+        // 増税通知(tollReductionRatio)はカード自身が「通行料30%減の呪いを
+        // かける」と明言しているのに、土地側のプロパティなのでunit.cursesの
+        // クリアだけでは解除できていなかった（ユーザー報告）。選択した
+        // モンスターが乗っている、その土地自体の呪いとして一緒に解除する。
+        if (targetTile) targetTile.tollReductionRatio = null;
         this.onLog(`${player.name}は呪いを解除した`);
         return false;
 
@@ -5253,6 +5258,9 @@ export class Game {
         if (!t.unit) continue;
         t.unit.curses = [];
         t.unit.currentHp = this._baseStats(t.unit).hp;
+        // 増税通知(tollReductionRatio)は土地側の呪いなのでunit.cursesには
+        // 乗らない。「呪いを解除した」と謳う以上、ここも一緒に外す。
+        t.tollReductionRatio = null;
         healedCount += 1;
       }
       this.onLog(`${player.name}の${unitDef.name}が味方全体を回復し、呪いを解除した（${healedCount}体）`);
@@ -5749,13 +5757,14 @@ export class Game {
       const ownedUnits = this._ownedTiles(player).filter((candidate) => candidate.unit);
       const needsHealing = ownedUnits.some((candidate) => {
         const maxHp = this._baseStats(candidate.unit).hp + this._elementHpBonus(candidate.unit, candidate);
-        return candidate.unit.currentHp < maxHp || (candidate.unit.curses?.length || 0) > 0;
+        return candidate.unit.currentHp < maxHp || (candidate.unit.curses?.length || 0) > 0 || candidate.tollReductionRatio;
       });
       if (!needsHealing) return false;
       spend();
       for (const candidate of ownedUnits) {
         candidate.unit.curses = [];
         candidate.unit.currentHp = this._baseStats(candidate.unit).hp;
+        candidate.tollReductionRatio = null;
       }
       this.onLog(`${player.name}の${unitDef.name}が味方全体を回復し、呪いを解除した (-${cost}G)`);
       this._notifyState();

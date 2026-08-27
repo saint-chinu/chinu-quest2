@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v223`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v224`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## 未実装: Firebase App Check
@@ -261,6 +261,15 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   (`fusionSummon`)とガシャーンは候補除外。全種遭遇済みなら200G+2ドロー。
 - **占術(divination)** N40G(Codex追加): モンスター/アイテム/スペルから1種選び、
   デッキ内の該当をランダム1枚手札へ。
+- ⚠️ **土地側の「呪い」はunit.cursesに乗らない**（2026-08、ユーザー報告のバグ修正）。
+  増税通知(taxHike)の`tile.tollReductionRatio`はカード自身が「通行料30%減の
+  呪いをかける」と明言しているのに、呪い解除(cleanseCurses)・鉄火の料理人／
+  海の家店長(healAllOwnedAndCleanse)はどれも`unit.curses`しかクリアしておらず、
+  土地側のこのプロパティには触れていなかった。3箇所とも該当タイルの
+  `tollReductionRatio`もあわせて解除するよう修正（CPU判断側の
+  `needsHealing`判定にも追加し、HP/呪いが万全でも増税通知だけ残っている
+  なら発動する）。回帰テスト: tests/newCards.test.mjs「呪い解除は
+  増税通知(通行料30%減)も一緒に解除する」。
 - **ステージ専用カードの図鑑登録（配布なし）**（2026-08）: 「開示請求」（EXスペル、
   「彼」＝stage.key `kare`専用デッキにのみ入っている）はショップ抽選が出せる上限が
   Rareまで（`shopPacks.js`の`rollRarity`にEXが無い）で、他に入手経路が無いため

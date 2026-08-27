@@ -94,6 +94,20 @@ test('破産すると土地だけでなく保有お札もすべて手放す', as
   assert.equal(tile.owner, null, '土地も同時に手放している');
 });
 
+test('呪い解除は増税通知(通行料30%減)も一緒に解除する', async () => {
+  // 増税通知はカード自身が「通行料30%減の呪いをかける」と明言しているのに、
+  // tollReductionRatioは土地側のプロパティでunit.cursesに乗らないため、
+  // 呪い解除(cleanseCurses)でも鉄火の料理人系の全体回復+呪い解除でも
+  // 解除できていなかった（ユーザー報告のバグ）。
+  const tile = makeTile(0, { owner: 'A', tollReductionRatio: 0.3 });
+  tile.unit = unit(mon('壁', 50, 10), 'A');
+  const player = { id: 'A', name: 'テスト', diceCurse: null };
+  const g = Object.create(Game.prototype);
+  Object.assign(g, { tiles: [tile], onLog: () => {}, _notifyState: () => {} });
+  await g._applySpellEffect(player, { effect: { type: 'cleanseCurses' }, target: 'ownMonster' }, { targetTileId: tile.id });
+  assert.equal(tile.tollReductionRatio, null);
+});
+
 test('分岐待ち中に破棄された旧盤面は着地処理や次ターンへ進まない', async () => {
   const g = Object.create(Game.prototype);
   let moveComplete = 0;
