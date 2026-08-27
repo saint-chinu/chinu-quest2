@@ -5764,6 +5764,19 @@ async function handleStoryBattleEnd(index, result = {}) {
   if (stage.key === 'chin-harbor') {
     markCatalogSeen(MONSTER_CATALOG.su);
   }
+  // 邪神ヒトデマソ（ステージ⑩）を撃破したら、専用EXスペル「強制成仏」を
+  // 図鑑に登録する。onCardSeen経由の汎用検出（盤面で実際に使われた時だけ
+  // 拾う）だけだと、40枚デッキの中でその試合にたまたま引かれなければ
+  // ステージを倒しても空欄のままになる（ユーザー報告）ため、開示請求/酢と
+  // 同じ「初回撃破で確実に図鑑登録」の安全網を追加する。
+  if (stage.key === 'hitodemaso') {
+    markCatalogSeen(SPELL_CATALOG.forcedAscension);
+  }
+  // 闇・ホフク/暗・少女A（ステージ⑪）を撃破したら、両者のデッキに入っている
+  // 専用EXスペル「国士無双！！」を図鑑に登録する（理由は強制成仏と同じ）。
+  if (stage.key === 'mahjong-duo') {
+    markCatalogSeen(SPELL_CATALOG.kokushiMusou);
+  }
   const queBankruptcy = claimQueBankruptcyReward(stage, result);
   const outroLines = queBankruptcy?.lines || stage.outro || [];
   if (index + 1 > (currentCharacter.storyProgress || 0)) {

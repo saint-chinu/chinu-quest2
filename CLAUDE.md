@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v224`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v225`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## 未実装: Firebase App Check
@@ -299,6 +299,20 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   `sortedCatalog()`だけを拡張し、`MONSTER_CATALOG`から`npcExclusive && isCatalogSeen`
   なものを都度足し込んで表示する（`effectiveCatalog()`／デッキ編集は無改変のまま
   ＝そちらには絶対出ない）。⑧「朕と酢の花火港」クリアで`markCatalogSeen(su)`。
+  - ⚠️ **`onCardSeen`（`handleCardSeen`）だけに頼ると空欄が埋まらないことがある**
+    （2026-08、ユーザー報告）。EX/npcExclusive/rewardOnlyなカードは、盤面で
+    実際に**使われた瞬間**（`Game`の召喚・詠唱・装備、game.js側の`onCardSeen`
+    呼び出し4箇所）にも汎用的に`markCatalogSeen`される仕組みは既にあるが、
+    これは「その試合でたまたま引かれて使われたら」しか発火しない。40枚デッキの
+    中の数枚（強制成仏×3＝⑩邪神ヒトデマソ、国士無双！！×2×2＝⑪闇・ホフク／
+    暗・少女A）は、ステージを倒しても引かれず終わることがあり、正規プレイで
+    永久に図鑑が埋まらない事例が実際にあった。開示請求(⑥)/酢(⑧)と同じ
+    「初回撃破で確実に`markCatalogSeen`する」安全網を、強制成仏(⑩)と
+    国士無双！！(⑪)にも追加済み（`handleStoryBattleEnd`、`stage.key`が
+    `hitodemaso`/`mahjong-duo`の時）。灰塵(⑭専用)はこの安全網が無いままだが、
+    ⑭の`塞ぎ込んだ男`デッキは`ashToDust`を毎試合ほぼ確実に使う設計
+    （`_cpuMaybeUseFusagikondaCombo`のコンボ核）なので、汎用検出だけで
+    実質困らない想定。
 - **キャンセルカルチャー** Nスペル: 敵の手札のスペル/アイテム1枚を捨てさせる。
 - **魔力抽出(extractManaFromHandCard)** S100G: 自分含む手札のある1人を選び、その手札を
   見て1枚捨てさせ、**捨てられた本人が+200G**。target=`anyPlayerHandCard`。詠唱中の
