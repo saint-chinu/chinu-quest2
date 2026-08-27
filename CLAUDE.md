@@ -193,6 +193,12 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - `startBattle`は新しい盤面を作る**前**に、旧`game.cancel()`＋
   `cancelActiveBattleItemPicker`＋`cancelAllActivePrompts()`＋UIフラグ
   （`boardMovementActive`/`branchChoiceActive`/モーダル類）を全部落とす。
+- ⚠️ **PvP参加者は`startBattle`を通らない**。`startPvpGuestBattle`でも同じく
+  旧Game・入力待ち・盤面モーダル・ログ・ターン表示・ダイス状態を初期化すること。
+  ストーリー途中データはlocalStorageに残し、実行時状態だけを捨てる。
+- PvP参加者の`GuestHostListener`は**盤面構築後**に作る。ロビー入室時から購読すると、
+  横持ち確認中に届いた演出が前回ストーリーのscene/DOMへ流れ込む。ロビー用room監視も
+  盤面開始時に止め、盤面用publicState監視との二重購読を残さない。
 - `deferInit`で会話後に`init()`する経路は、`game !== startedGame ||
   startedGame._isCancelled`なら**initしない**（会話中に別の盤面へ移った場合、
   グローバル`game`は既に別物なので二重initになる）。

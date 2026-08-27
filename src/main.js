@@ -8105,7 +8105,11 @@ function enterPvpRoomScreen(session) {
       uid: session.uid,
       localPlayerId: 1,
       myHand: [],
-      listener: new GuestHostListener(session.roomCode, session.uid, pvpGuestHandlers),
+      // ホストからの演出・質問は盤面構築後に購読を開始する。ここで先に
+      // GuestHostListenerを作ると、横持ち確認中に最初のturnFocus等が届き、
+      // 前回ストーリーのscene/DOMへ演出を書いてしまう。prompt文書のイベントは
+      // ACKされるまでFirestoreに残るので、開始を遅らせても取りこぼさない。
+      listener: null,
       actionSender: new GuestActionSender(session.roomCode, session.uid),
     };
   }
@@ -8265,7 +8269,7 @@ pvpRoomLeave.addEventListener('click', async () => {
   stopPvpRoomListener();
   await clearSentPvpInvites();
   if (pvpMatch && !pvpMatch.isHost) {
-    pvpMatch.listener.destroy();
+    pvpMatch.listener?.destroy?.();
     pvpMatch.actionSender?.destroy();
     pvpMatch = null;
   }
@@ -9053,7 +9057,45 @@ function applyPvpPublicState(publicState) {
 
 /** ゲスト側専用: room.statusが'battling'になった合図で呼ばれる（enterPvpRoomScreen参照）。ホストと同じcreateBoard(mapId)で作った盤面をローカルに構築し、以後はpublicState/自分の手札の購読だけで描画し続ける（Gameインスタンスは持たない）。 */
 async function startPvpGuestBattle() {
+  const startingMatch = pvpMatch;
+  // ロビー監視は盤面用のpublicState監視へ交代させる。以前は両方が対戦中ずっと
+  // room文書を購読し、参加者端末だけ同じ更新を二重に受け続けていた。
+  stopPvpRoomListener();
+
+  // ゲスト側はstartBattle()を通らないため、そこで行っている旧盤面/UIの
+  // 初期化を明示的に行う。ストーリーの途中データ(localStorage)は保持し、
+  // 実行中だったGame・表示・演出待ちだけを破棄する。
+  game?.cancel?.();
+  game = undefined;
+  cancelActiveBattleItemPicker?.();
+  cancelActiveBattleItemPicker = null;
+  cancelAllActivePrompts();
+  stopMoveDestinationHighlight?.();
+  stopMoveDestinationHighlight = null;
+  boardMovementActive = false;
+  branchChoiceActive = false;
+  landCommandModal.classList.add('hidden');
+  cameraWorkOverlay.classList.add('hidden');
+  cameraWorkOverlay.classList.remove('no-back');
+  battleSceneModal.classList.add('hidden');
+  battleItemPickerBox.classList.add('hidden');
+  battleItemNoneNotice.classList.add('hidden');
+  battleMessageText.classList.add('hidden');
+  logEl.textContent = '';
+  turnIndicator.textContent = '';
+  showCenterState = false;
+  centerShowsOpponent = false;
+  dicePromptDismissed = false;
+  resetDice();
+  storyBattleLogLines = null;
+  activeStoryStageIndex = null;
+  activeStorySessionMeta = null;
+  latestStoryCheckpoint = null;
+
   await confirmLandscapeReady();
+  // 横持ち確認中にpagehide等でセッションが破棄された場合、古い非同期処理から
+  // 盤面を復活させない。
+  if (!pvpMatch || pvpMatch !== startingMatch || pvpMatch.isHost) return;
   preGame.classList.add('hidden');
   appEl.classList.remove('hidden');
 
@@ -9087,6 +9129,11 @@ async function startPvpGuestBattle() {
   requestAnimationFrame(animate);
   allowMusicPlayback();
   playMapTheme(currentMapId);
+
+  // sceneと盤面が完成してから演出キューを開く。開始前にホストが送ったイベントも
+  // Firestoreの未ACKバッチから順番に再生される。
+  pvpMatch.listener?.destroy?.();
+  pvpMatch.listener = new GuestHostListener(pvpMatch.roomCode, pvpMatch.uid, pvpGuestHandlers);
 
   pvpMatch.stopPublicListener = listenToRoom(pvpMatch.roomCode, (room) => {
     if (!room || room.status === 'finished') {
