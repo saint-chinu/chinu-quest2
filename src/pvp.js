@@ -442,7 +442,10 @@ export class HostGuestRelay {
     const state = this.participants.get(uid);
     if (!state) return;
     state.offline = false;
-    state.degraded = false;
+    // degradedはハートビート（生存確認、約10秒ごと）ではなく応答受信
+    // （respUnsub、キューに追いついた時点）でのみ解除する。ここで毎回
+    // 解除すると、生きてはいるがキューが詰まっているだけの参加者に対して
+    // 4秒ブロッキングのdone waitを何度も再武装してしまう。
   }
 
   _scheduleFlush(uid, urgent) {
@@ -633,6 +636,11 @@ export class GuestHostListener {
         if (event.wantValue) this.lastInteractiveAnswer = { id: event.id, v: result ?? null };
         const ackedThrough = this.batchAckTracker.markProcessed(event.id);
         this.currentBatchEventId = null;
+        // handlers[event.type]のawait中にdestroy()され得る（画面遷移等）。
+        // destroy済みならbatchQueueは空にされ再購読も解除済みなので、ここで
+        // ACKを書くと別の対戦（同じroomCodeへの再入室）にまで古い水位が
+        // 届いてホストのackedThroughを不用意に進めてしまう。
+        if (this.destroyed) break;
         // 応答文書は {requestId: 処理済み水位, value: 直近の対話回答} の固定形。
         // 毎イベント書くと往復直列化が復活するので、ホストが待つイベント
         // （ack）とキューを飲み干した時だけ「待つ書き込み」をする。valueを

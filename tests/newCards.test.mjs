@@ -818,6 +818,25 @@ test('CPUの鋼体は高価な土地の薄い守備を選び、手元が寂し�
   assert.equal(g2.casts.length, 0, '備え100Gを割ってまでは撃たない');
 });
 
+test('CPUの鋼体はnoHpBoost持ち（くぐつの剣豪）を対象から外し、無限に撃ち続けない', async () => {
+  // noHpBoostは鋼体のHP加算を無効化するので、撃ってもスコア（土地価値-HP*2）が
+  // 下がらない。除外しないと、他に薄い守備が無い盤面ではCPUが毎ターン50Gを
+  // 無駄撃ちし続けてしまう。
+  const kugutsuTile = makeTile(0, { owner: 'A', level: 4, price: 200 });
+  kugutsuTile.unit = unit(MONSTER_CATALOG.kugutsuNoKengou, 'A');
+  const players = [{ id: 'A', name: 'CPU', currency: 900, hand: [spellCopy(SPELL_CATALOG.kotai)] }];
+  const g = makeCpuStub([kugutsuTile], players);
+  await g._cpuMaybeUseToughBodySpell(players[0]);
+  assert.equal(g.casts.length, 0);
+
+  // 他に薄い守備の土地があれば、そちらは従来どおり対象になる。
+  const thinTile = makeTile(1, { owner: 'A', level: 4, price: 200 });
+  thinTile.unit = unit(mon('薄い', 20, 10), 'A');
+  const g2 = makeCpuStub([kugutsuTile, thinTile], players);
+  await g2._cpuMaybeUseToughBodySpell(players[0]);
+  assert.equal(g2.casts[0].cast.targetTileId, 1);
+});
+
 test('くぐつの剣豪は指定の性能を持ち、正式画像を参照する', () => {
   const card = MONSTER_CATALOG.kugutsuNoKengou;
   assert.equal(card.name, 'くぐつの剣豪');
@@ -862,6 +881,30 @@ test('くぐつの剣豪はアイテム・スペルのHP増加だけ受けず、
   assert.equal(battle.statTotals(unit(def, 'A'), { hp: 30 }).maxHp, 80);
 });
 
+test('くぐつの剣豪は敵からの鋼体連投で実質HPを削られない（baseMaxHpのnoHpBoost反映漏れの回帰）', () => {
+  // 鋼体はanyMonster対象＝敵も自分の剣豪へ撃てる。撃つたびcurrentHpと
+  // summonBaseHpBonusが両方+15されるが、剣豪はnoHpBoostにより実際の
+  // 最大HPは50のまま増えない。prepareForBattle/restoreOnBoardHpが使う
+  // 「持ち越しダメージの基準値」がこのnoHpBoostを見ていないと、
+  // 基準値だけがcurrentHpと一緒に膨らみ続けて次の一撃の減った分が
+  // 基準値の増加に吸収されてしまい、ATK5の雑魚相手に3戦目で倒される。
+  const def = MONSTER_CATALOG.kugutsuNoKengou;
+  const weakDef = mon('雑魚', 10, 5);
+  const kugutsu = unit(def, 'A');
+  const ledger = new battle.GoldLedger();
+  const castKotai = (u) => {
+    u.summonBaseHpBonus = Number(u.summonBaseHpBonus || 0) + 15;
+    u.currentHp += 15;
+  };
+  for (let round = 0; round < 3; round++) {
+    castKotai(kugutsu);
+    const attacker = unit(weakDef, 'B');
+    const result = battle.resolveBattle(attacker, kugutsu, ledger);
+    assert.equal(result.defenderSurvived, true, `${round + 1}戦目でATK5の雑魚に倒れてはいけない`);
+  }
+  assert.equal(kugutsu.currentHp, 45);
+});
+
 test('くぐつの剣豪の進路は無装備勝率→装備込み勝率→土地ボーナス無しの順で決まる', () => {
   const players = [{ id: 'A', name: 'ア' }, { id: 'B', name: 'イ' }];
   const build = () => {
@@ -893,6 +936,26 @@ test('くぐつの剣豪の進路は無装備勝率→装備込み勝率→土�
   c.g._estimateUnitBattleWinProbability = () => 0.5;
   c.g._elementHpBonus = (u, tile) => (tile.id === 1 ? 30 : 0);
   assert.equal(c.g._chooseAutoInvadeTarget(c.source, players[0]).id, 2);
+});
+
+test('くぐつの剣豪は候補が3つ以上でも一番勝てる的へ向かう（epsilon同点判定の非推移性の回帰）', () => {
+  // 隣接3件の勝率が0.40/0.45/0.50のように隣同士だけepsilon(0.05)以内だと、
+  // 「|a-b|<=epsilonなら同点」という比較関数はTimSortの下で0.40と0.50を
+  // 直接比較しないまま並べ、勝率最悪の的を選んでしまうことがある。
+  const players = [{ id: 'A', name: 'ア' }, { id: 'B', name: 'イ' }];
+  const source = makeTile(0, { owner: 'A', neighbors: [1, 2, 3] });
+  source.unit = unit(mon('剣豪', 50, 50), 'A');
+  const t1 = makeTile(1, { owner: 'B', neighbors: [0] }); t1.unit = unit(mon('的1', 30, 30), 'B');
+  const t2 = makeTile(2, { owner: 'B', neighbors: [0] }); t2.unit = unit(mon('的2', 30, 30), 'B');
+  const t3 = makeTile(3, { owner: 'B', neighbors: [0] }); t3.unit = unit(mon('的3', 30, 30), 'B');
+  const g = makeStub([source, t1, t2, t3], players);
+  g._elementHpBonus = () => 0;
+  const winRates = { 1: 8 / 20, 2: 9 / 20, 3: 10 / 20 };
+  g._estimateUnitBattleWinProbability = (u, pos, tile) => winRates[tile.id];
+
+  const ranked = g._rankAutoInvadeTargets(source, players[0], [t1, t2, t3]);
+  assert.deepEqual(ranked.map((t) => t.id), [3, 2, 1]);
+  assert.equal(g._chooseAutoInvadeTarget(source, players[0]).id, 3);
 });
 
 test('到達できる敵がいなければ自動行動は起きず、移動コマンドでも動かせない', async () => {

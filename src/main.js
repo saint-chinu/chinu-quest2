@@ -7234,9 +7234,15 @@ function openDeckCopyPicker(onCopied) {
     meta.textContent = `${(deck.deckList || []).length}枚`;
     button.append(label, meta);
     button.addEventListener('click', () => {
+      // カタログに存在しないキー（壊れた保存データ等）はshowDeckScreenと
+      // 同様に除外する。ここを素通りさせるとdeckTotal()には数えられるのに
+      // deckSaveの`if (!def) continue;`で保存時だけ消え、40枚のはずが
+      // コピー直後に保存すると40枚未満になる不整合が起きる。
+      const catalogByKey = new Set(effectiveCatalog().map((def) => cardKey(def)));
       const counts = new Map();
       for (const card of deck.deckList || []) {
         const key = cardKey(card);
+        if (!catalogByKey.has(key)) continue;
         counts.set(key, (counts.get(key) || 0) + 1);
       }
       let trimmed = 0;
@@ -8345,6 +8351,11 @@ function enterPvpRoomScreen(session) {
   // 開始そのものはroom.statusが'battling'になったことを下のリスナーで
   // 検知して始める）。
   if (!session.isHost) {
+    // 前回のpvpMatchが生きたまま（対戦中に部屋一覧へ戻った等）ここへ来ると、
+    // 古いactionSenderのsetIntervalとvisibilitychangeリスナーが新しい方と
+    // 二重に残り続けるので、上書きする前に必ず片付ける。
+    pvpMatch?.listener?.destroy?.();
+    pvpMatch?.actionSender?.destroy?.();
     pvpMatch = {
       isHost: false,
       roomCode: session.roomCode,
@@ -9395,6 +9406,7 @@ async function startPvpGuestBattle() {
   battleItemPickerBox.classList.add('hidden');
   battleItemNoneNotice.classList.add('hidden');
   battleMessageText.classList.add('hidden');
+  finishSpellPresentation();
   logEl.textContent = '';
   turnIndicator.textContent = '';
   showCenterState = false;
@@ -9489,6 +9501,11 @@ async function startPvpGuestBattle() {
               cancelActiveBattleItemPicker?.();
               cancelActiveBattleItemPicker = null;
               cancelAllActivePrompts();
+              // spellCastEffect/spellCompleteはfire配信（オフライン中は
+              // 破棄され得る）なので、開始だけ届いて終了が届かないと
+              // 手札パネルが隠れたまま・演出モーダルが出たままになる。
+              // 復帰・打ち切り時は必ず閉じておく。
+              finishSpellPresentation();
             },
           },
         );
@@ -9842,7 +9859,7 @@ gameMenuExit.addEventListener('click', async () => {
     clearPvpRejoinSession(pvpMatch.uid);
     pvpMatch.stopPublicListener?.();
     pvpMatch.stopHandListener?.();
-    pvpMatch.listener.destroy();
+    pvpMatch.listener?.destroy?.();
     pvpMatch.actionSender?.destroy();
   }
   pvpMatch = null;

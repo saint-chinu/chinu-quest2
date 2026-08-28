@@ -8038,16 +8038,25 @@ export class Game {
   /** 自動侵略候補を既存の戦闘評価で並べる。遠距離経路の同距離比較にも使う。 */
   _rankAutoInvadeTargets(source, player, candidates) {
     if (candidates.length === 0) return [];
-    const scored = candidates.map((tile) => ({
-      tile,
-      winNoItem: this._estimateUnitBattleWinProbability(source.unit, null, tile, 20, { itemMode: 'none' }),
-      winWithItem: this._estimateUnitBattleWinProbability(source.unit, null, tile, 20, { itemMode: 'best' }),
-      defenderUnboosted: this._elementHpBonus(tile.unit, tile) > 0 ? 0 : 1,
-      onward: this._autoInvadeOnwardCount(tile, player),
-    }));
-    const byWin = (a, b) => (Math.abs(a - b) <= AUTO_INVADE_WIN_EPSILON ? 0 : b - a);
-    scored.sort((a, b) => byWin(a.winNoItem, b.winNoItem)
-      || byWin(a.winWithItem, b.winWithItem)
+    // 誤差程度の差は同点として次の基準へ送りたいが、|a-b|<=epsilonな組だけを0点
+    // 扱いにする比較関数は推移律を満たさない（0.40〜0.45〜0.50が全て隣同士だけ同点になり、
+    // 0.40と0.50の直接比較が行われないままsortされ、3件以上では最良でない候補が
+    // 先頭に来ることがある）。epsilon刻みでバケットに丸めてから通常の数値比較をすることで、
+    // 同点判定が同値関係になり順序が安定する。
+    const quantizeWin = (value) => Math.round(value / AUTO_INVADE_WIN_EPSILON);
+    const scored = candidates.map((tile) => {
+      const winNoItem = this._estimateUnitBattleWinProbability(source.unit, null, tile, 20, { itemMode: 'none' });
+      const winWithItem = this._estimateUnitBattleWinProbability(source.unit, null, tile, 20, { itemMode: 'best' });
+      return {
+        tile,
+        winNoItemBucket: quantizeWin(winNoItem),
+        winWithItemBucket: quantizeWin(winWithItem),
+        defenderUnboosted: this._elementHpBonus(tile.unit, tile) > 0 ? 0 : 1,
+        onward: this._autoInvadeOnwardCount(tile, player),
+      };
+    });
+    scored.sort((a, b) => (b.winNoItemBucket - a.winNoItemBucket)
+      || (b.winWithItemBucket - a.winWithItemBucket)
       || (b.defenderUnboosted - a.defenderUnboosted)
       || (b.onward - a.onward)
       || (a.tile.id - b.tile.id));
@@ -8160,7 +8169,7 @@ export class Game {
       if (!next || next.type !== TileType.LAND || !next.unit || next.owner == null) return false;
       if (next.owner === player.id) return false;
       const owner = this.players.find((candidate) => candidate.id === next.owner);
-      return !this._isAllyOf(owner, player);
+      return !!owner && !this._isAllyOf(owner, player);
     }).length;
   }
 
@@ -8935,7 +8944,11 @@ export class Game {
     // 手元に残す（撃った直後に召喚も通行料も払えない状態を作らない）。
     if (!card || player.currency < (card.cost || 0) + Math.max(100, this._cpuSummonReserve(player))) return;
     const candidates = this.tiles
-      .filter((t) => t.owner === player.id && t.unit?.ownerId === player.id)
+      // noHpBoost持ち（傀儡の剣豪等）はHP加算を素通りしない。かけても
+      // _baseStats().hpが伸びずスコアが下がらないので、対象から除外して
+      // 無限に撃ち続けるのを防ぐ。
+      .filter((t) => t.owner === player.id && t.unit?.ownerId === player.id
+        && !t.unit.def.traits?.includes('noHpBoost'))
       .map((tile) => ({
         tile,
         score: tile.level * 120 + this._landValueOfTile(tile) - this._baseStats(tile.unit).hp * 2,

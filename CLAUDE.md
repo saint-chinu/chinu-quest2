@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v225`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v228`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## 未実装: Firebase App Check
@@ -545,6 +545,11 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   切り詰める。所持は全デッキ共有なので普通は素通りするが、コピー元を
   組んだ後にそのカードをショップで売っていると所持数が足りない。
   切り詰めた枚数はトーストで知らせる。
+  ⚠️ **カタログに存在しないキーも`showDeckScreen`と同様に除外する**
+  （2026-08修正）。この除外が抜けていると、壊れた保存データ由来のキーが
+  `deckWorkingCounts`に混入して総数表示・保存ボタンの活性化には数えられる
+  のに、`deckSave`側の`if (!def) continue;`（保険）で保存時だけ静かに
+  消え、コピー直後に保存すると「40/40」のはずが40枚未満で保存される。
 - **「全解除」**（`deckClearAll`）: 編集中の作業カウントを空にするだけ。
   確認ダイアログあり。
 - ⚠️ **どちらも書き換えるのは作業中の`deckWorkingCounts`だけで、保存はしない。**
@@ -605,19 +610,39 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   自動侵略だけは`_cpuMoveOwnedUnit(..., { ignoreImmovable: true })`で
   この封じを明示的に迂回する。人間・CPUの移動コマンド経路は従来どおり弾かれる。
 - **`noHpBoost`特性**: 戦闘中、**アイテム・スペル由来のHP増加を受けない**。
-  実装は`statTotals`(battle.js)と`_baseStats`(game.js)の両方で
-  `itemHp`/`curseHp`/`summonBaseHpBonus`を`Math.min(0, x)`に丸める
-  （両方直さないと戦闘画面の基礎ステ表示だけ実ダメージとズレる）。
+  実装は`statTotals`(battle.js)・`_baseStats`(game.js)・`baseMaxHp`(battle.js、
+  持ち越しダメージの基準値)の**3箇所すべて**で`itemHp`/`curseHp`/
+  `summonBaseHpBonus`を`Math.min(0, x)`に丸める（1箇所でも漏らすと下の
+  ⚠️の事故になる）。
   - **減少は通す**（斬〇剣のHP-20、HPを削る呪い）＝「増やせない」のであって
     「HP補正を全部無視する」ではない。
   - **ナンカのお守り・ライフジャケットは有効**（どちらもhpBonus:0で、
     ダメージ無効化／生存保証はHP加算ではないため自然に素通りする）。
   - **土地の同属性ボーナス・応援は乗る**（`bonus.hp`経由。アイテムでも
     スペルでもないため対象外）。
+- ⚠️ **`baseMaxHp`のnoHpBoost反映漏れ→鋼体連投で実質HP削り**（2026-08修正、
+  Codex実装のレビューで発見）。`baseMaxHp`だけ`noHpBoost`を見ておらず、
+  「持ち越しダメージの基準値」が鋼体(anyMonster対象＝敵からも撃てる)の
+  `summonBaseHpBonus`加算をそのまま素通りさせていた。`statTotals`側の戦闘用
+  最大HPは50に固定されたままなので、鋼体を連投されるほど基準値だけが
+  実HPより先に膨らみ、その差分が丸ごとcarriedDamageとして次戦へ持ち越る。
+  再現: ATK5の雑魚相手でも鋼体3連投+3戦で本来生きているはずの剣豪が死ぬ
+  （`tests/newCards.test.mjs`「鋼体連投で実質HPを削られない」参照）。
+- ⚠️ **`_rankAutoInvadeTargets`のepsilon同点判定は非推移的**（2026-08修正）。
+  `|a-b|<=epsilonなら同点`という比較関数はepsilon刻みで隣同士だけ同点になり
+  （0.40〜0.45〜0.50が全部隣接同点）、0.40と0.50を直接比較しないままsortされる
+  ため、候補3件以上だと**勝率最悪の的を選ぶ**ことがあった。修正は
+  `Math.round(value / AUTO_INVADE_WIN_EPSILON)`でバケットへ丸めてから通常の
+  数値比較にする（同値関係になるので推移律を満たす）。
+- ⚠️ **CPUの鋼体が同じ剣豪を無限に撃ち続ける事故を防止**（2026-08修正）。
+  `_cpuMaybeUseToughBodySpell`の対象選定は「撃つと`_baseStats().hp`が伸びて
+  スコアが下がる」前提だったが、noHpBoost持ちはHPが伸びずスコアが下がらない
+  ため候補から除外した。
 - 正式画像は`public/images/card-art/kugutsuNoKengou.png`。カタログから同ファイルを
   明示参照し、画像実在テストで404による盤面フリーズを防ぐ。
 - 回帰テストは`npm run test:cards`（性能・noHpBoostの3方向・進路の優先順位・
-  隣接敵なし時に動かないこと・移動コマンド拒否）。
+  隣接敵なし時に動かないこと・移動コマンド拒否・鋼体連投でHPが削れないこと・
+  候補3件以上でのepsilon非推移性・CPU鋼体の無限撃ち防止）。
 
 ## チュートリアル (Codex追加)
 - ログイン前のタイトルからも遊べるデモ。`mapId: 'tutorial'`（3×3外周の8マス、
@@ -815,6 +840,43 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 - **自動AIからの復帰は手番境界だけ**: heartbeat復帰時は
   `pvpHumanRestorePending`を立て、`Game._beginTurn`冒頭の`onTurnBoundary`で
   人間操作へ戻す。進行中のCPU戦闘・移動の途中で`isCPU`を反転させない。
+
+### このチューニングのレビューで見つかった追加バグ5件（2026-08修正）
+- ⚠️ **`pvpMatch.listener.destroy()`がoptional chaining抜けでゲストを
+  抜けられなくしていた**（`main.js`ゲスト退出処理）。このチューニングで
+  `pvpMatch.listener`は入室直後`null`になり、最初の`publicState`が届いて
+  初めて生成されるよう変わった。その窓（入室直後〜publicState到着まで）に
+  メニューから退出しようとすると`.destroy()`が非optionalでTypeErrorを投げ、
+  以降の後片付け（`pvpMatch = null`・画面遷移）が丸ごと止まって盤面へ
+  取り残される。ファイル内の他の全呼び出し箇所は元から`?.destroy?.()`だった
+  ので、ここだけ揃える形で修正。
+- ⚠️ **オフライン参加者へのfire配信の握りつぶしで、スペル演出モーダルが
+  開いたまま固まることがあった**（`enqueueParticipant`, `src/pvp.js`）。
+  `spellCastEffect`（開く）と`spellComplete`（閉じる）はどちらもfire配信。
+  開始だけ届いて30秒オフライン判定の間に終了イベントが握りつぶされると、
+  手札パネル非表示・演出モーダル表示が復帰後も解除されない。`onFastForward`
+  （フェイルセーフの強制終了経路）に`finishSpellPresentation()`を追加し、
+  ゲスト側の対戦離脱処理（`startPvpGuestBattle`の旧盤面片付け）にも同様の
+  クローズ呼び出しを足した。
+- ⚠️ **`markParticipantOnline`がハートビートのたびに`degraded`まで解除して
+  いた**（`src/pvp.js`）。`degraded`は「応答受信（キューに追いついた事実）」
+  でのみ解除する設計（コード内コメントに明記）だが、約10秒ごとに飛んでくる
+  ハートビートで毎回解除すると、演出待ちが詰まっているだけの参加者に対して
+  ホストが`awaitRemote:true`（社の演出等）のたび4秒ブロッキング待ちを
+  再武装してしまう。ハートビートからは`offline`だけを解除するよう修正。
+- ⚠️ **`GuestHostListener.destroy()`後、実行中だった`_pumpBatch`が停止済み
+  リスナーの名義でACKを書いてしまうことがあった**（`src/pvp.js`）。
+  `handlers[event.type]`のawait中に`destroy()`されるとbatchQueueは空になり
+  再購読も解除されるが、awaitから戻った直後の分岐は`destroyed`を見ておらず
+  `promptResponses/{uid}`へ書き込んでいた。同じ部屋への入室し直しだと、この
+  古いACKが新しいセッションの`ackedThrough`を不用意に進める。`destroyed`を
+  見てACK書き込みを打ち切るガードを追加。
+- ⚠️ **ロビー再入室で古い`GuestActionSender`が破棄されず、10秒
+  `setInterval`と`visibilitychange`リスナーが二重に残る**（`main.js`）。
+  対戦中の`pvpMatch`を残したまま`enterPvpRoomScreen`へ戻ると新しい
+  `pvpMatch`（新しい`actionSender`込み）で上書きされ、古い方はページを
+  閉じるまで残り続けていた。上書き前に古い`listener`/`actionSender`を
+  `destroy()`するよう修正。
 
 ## AI (game.js)
 - **ダンボール男(stage5)** `_isDanballBoss`: 召喚は

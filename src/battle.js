@@ -144,8 +144,18 @@ function getEffect(unit, type) {
  *  statOverrideInBattleだけは素のHP自体を固定値に差し替えるので考慮する。 */
 function baseMaxHp(unit) {
   const baseHp = unit.def.effect?.type === 'statOverrideInBattle' ? unit.def.effect.hp : unit.def.hp;
+  // noHpBoost(くぐつの剣豪): statTotals/_baseStatsと同じ基準にしないと、
+  // ここ（持ち越しダメージの基準値）だけタフネス・鋼体のHP加算を素通りさせて
+  // しまい、戦闘中の実際の最大HPは据え置かれたまま基準値だけが膨らむ。
+  // その差分がそのままcarriedDamageとして次の戦闘へ持ち越り、対象が
+  // ownMonsterではないanyMonsterな鋼体を敵に撃たれるたびに実質HPが
+  // 際限なく削れ続けてしまう。
+  const blocksHpBoost = unit.def.traits?.includes('noHpBoost');
+  const summonBaseHpBonus = blocksHpBoost
+    ? Math.min(0, Number(unit.summonBaseHpBonus || 0))
+    : Number(unit.summonBaseHpBonus || 0);
   return baseHp
-    + Number(unit.summonBaseHpBonus || 0)
+    + summonBaseHpBonus
     + Number(unit.lapGrowthHpBonus || 0);
 }
 
