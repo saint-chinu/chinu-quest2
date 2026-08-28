@@ -62,6 +62,11 @@ const CPU_OPPONENT_ARMED_CHANCE = 0.35;
 const STARTING_HAND_SIZE = 4;
 const HAND_LIMIT = 6;
 
+// くぐつの剣豪の進路比較で「勝率が同じ」とみなす幅。モンテカルロ(20試行)の
+// ゆらぎで毎ターン進路が揺れると、下位の判定基準（属性ボーナス・進みやすさ）が
+// 効かなくなるため、誤差程度の差は同点として次の基準へ送る。
+const AUTO_INVADE_WIN_EPSILON = 0.05;
+
 const isBattleItemCard = (card) => card?.type === CardType.GEAR || card?.dualUseItem === true;
 
 // CPUの捨て札AI（_cpuChooseDiscard）が目指す手札構成。所持土地数6以上で
@@ -810,6 +815,12 @@ export class Game {
       position: { x: turnTile.position.x, z: turnTile.position.z },
     });
     await this._maybeTriggerStoryAssistEvent();
+    if (this._isCancelled || this.storyEnded) return;
+
+    // くぐつの剣豪の自動侵略はサイコロより前。ここで走らせることで、この後の
+    // 土地コマンド・召喚の権利を一切消費しない（isBusyはまだtrueのまま＝
+    // 侵略中にサイコロを振られない）。
+    await this._runAutoInvaders(this.currentPlayer);
     if (this._isCancelled || this.storyEnded) return;
 
     this.isBusy = false;
@@ -6679,15 +6690,19 @@ export class Game {
 
   /** Base ATK/HP as shown on the battle-scene stat panel: def stats plus any永続 curses, but NOT items or the situational cheer/element bonuses (those are surfaced separately - see _runBattleScene). */
   _baseStats(unit) {
+    // noHpBoost（くぐつの剣豪）はスペル由来のHP増加を受けない。statTotalsと
+    // 同じ基準にしないと、戦闘画面の基礎ステ表示だけが実ダメージとズレる。
+    const blocksHpBoost = unit.def.traits?.includes('noHpBoost');
+    const noBoost = (value) => (blocksHpBoost ? Math.min(0, value) : value);
     const curseAtk = unit.curses.reduce((sum, c) => sum + (c.addedAtk || 0), 0);
-    const curseHp = unit.curses.reduce((sum, c) => sum + (c.addedHp || 0), 0);
+    const curseHp = noBoost(unit.curses.reduce((sum, c) => sum + (c.addedHp || 0), 0));
     // 再生(regenerate)で積み上げた恒久ATKと、タフネスで焼き込んだ基礎HPは
     // その個体の"素のステータス"として扱う（statTotalsと同じ基準にしないと、
     // 戦闘画面の基礎ステ表示だけが実際の数値とズレる）。
     return {
       // lapGrowthAtkBonus / lapGrowthHpBonus: 周回成長型が周回ごとに積み上げた恒久値。
       atk: unit.def.atk + (unit.regenAtkBonus || 0) + (unit.lapGrowthAtkBonus || 0) + curseAtk,
-      hp: unit.def.hp + (unit.summonBaseHpBonus || 0) + (unit.lapGrowthHpBonus || 0) + curseHp,
+      hp: unit.def.hp + noBoost(unit.summonBaseHpBonus || 0) + (unit.lapGrowthHpBonus || 0) + curseHp,
     };
   }
 
@@ -6957,7 +6972,12 @@ export class Game {
    * モンテカルロする。戻り値は「攻撃側が勝つ（守備側が死に攻撃側が残る）」確率。
    * 相手のアイテム使用は考慮しない（_estimateWinProbabilityと同じ簡略化）。
    */
-  _estimateUnitBattleWinProbability(attackerUnit, attackerPositionTile, defenderTile, trials = 20) {
+  /**
+   * itemMode: 省略時は従来どおり「CPUなら最善装備を仮定・人間なら無装備」。
+   * 'none'（無装備固定）/'best'（所有者を問わず最善装備を仮定）は、同じ相手を
+   * 装備あり/なしの両面で比較したい時に使う（くぐつの剣豪の進路判定）。
+   */
+  _estimateUnitBattleWinProbability(attackerUnit, attackerPositionTile, defenderTile, trials = 20, { itemMode = null } = {}) {
     if (!attackerUnit || !defenderTile?.unit) return 0;
     // 手札からの侵略側（_estimateWinProbability）と同じく、避雷針侍に
     // 守られている土地は倒しても奪えないので勝率0として扱う。
@@ -6972,7 +6992,8 @@ export class Game {
       // 人間所有のユニットが引き摺り出される場合（サイコキネシス等）は本人が
       // 選ぶので、従来どおり無装備前提のままにする。
       const owner = this.players.find((p) => p.id === attackerUnit.ownerId);
-      const plannedItem = owner?.isCPU
+      const wantsItem = owner && (itemMode === 'best' ? true : itemMode === 'none' ? false : !!owner.isCPU);
+      const plannedItem = wantsItem
         ? this._chooseBattleItemByOutcome(
             owner.hand,
             owner.name,
@@ -7966,9 +7987,189 @@ export class Game {
   }
 
   /** CPU用の隣接モンスター移動。人間の「移動」と同じ一戦・奪取処理を使う。 */
-  async _cpuMoveOwnedUnit(player, source, target) {
+  /**
+   * くぐつの剣豪（effect.type==='autoInvadeEachTurn'）の自動行動。持ち主の
+   * 手番開始時、サイコロより前に発火するので土地コマンド・召喚の権利を
+   * 消費しない。隣接敵がいれば即侵略し、いなければ空き地だけで到達できる
+   * 最短の敵へ1マス進む。配置モンスターや特殊マスは経路を塞ぐ。
+   * 侵略に失敗しても生き残っていればその場に留まり、翌ターンまた仕掛ける。
+   */
+  async _runAutoInvaders(player) {
+    // 先にユニット実体を集める。侵略で盤上の配置が変わるため、tileを持ち回すと
+    // 「奪った先のマス」を次の対象として二重に動かしてしまう。
+    const movers = this.tiles
+      .filter((tile) => tile.type === TileType.LAND
+        && tile.owner === player.id
+        && tile.unit?.ownerId === player.id
+        && tile.unit.def.effect?.type === 'autoInvadeEachTurn')
+      .map((tile) => tile.unit);
+    for (const unit of movers) {
+      if (this._isCancelled || this.storyEnded) return;
+      const source = this.tiles.find((tile) => tile.unit === unit);
+      if (!source) continue; // 直前の戦闘で倒された
+      const plan = this._planAutoInvaderStep(source, player);
+      if (!plan) continue;
+      if (plan.kind === 'invade') {
+        this.onLog(`${player.name}の${unit.def.name}が${plan.destination.unit.def.name}へ自動で斬り込む！`);
+        await this._cpuMoveOwnedUnit(player, source, plan.destination, { ignoreImmovable: true });
+      } else {
+        await this._advanceAutoInvaderToEmpty(player, source, plan.destination, plan.enemy);
+      }
+    }
+  }
+
+  /**
+   * 自動侵略の隣接目標を決定する。優先順は
+   *  ①無装備での勝率が高い方 ②装備込みでの勝率が高い方
+   *  ③防衛側が土地の同属性HPボーナスを受けていない方（＝素で弱い方）
+   *  ④そこから更に自動侵略を続けられるマスが多い方 ⑤tile.idの小さい方（決定性）。
+   * モンテカルロの誤差で順序が揺れないよう、勝率はAUTO_INVADE_WIN_EPSILON未満の
+   * 差を「同じ」とみなす。
+   */
+  _chooseAutoInvadeTarget(source, player) {
+    // 聖域・同盟・特殊マス等の侵略可否ルールは移動コマンドと同一。既存の
+    // 候補列挙をそのまま通し、そこから「敵モンスターがいる土地」だけを残す。
+    const candidates = this._moveCommandCandidates(source, player)
+      .map(({ tile }) => tile)
+      .filter((tile) => tile.unit);
+    return this._rankAutoInvadeTargets(source, player, candidates)[0] ?? null;
+  }
+
+  /** 自動侵略候補を既存の戦闘評価で並べる。遠距離経路の同距離比較にも使う。 */
+  _rankAutoInvadeTargets(source, player, candidates) {
+    if (candidates.length === 0) return [];
+    const scored = candidates.map((tile) => ({
+      tile,
+      winNoItem: this._estimateUnitBattleWinProbability(source.unit, null, tile, 20, { itemMode: 'none' }),
+      winWithItem: this._estimateUnitBattleWinProbability(source.unit, null, tile, 20, { itemMode: 'best' }),
+      defenderUnboosted: this._elementHpBonus(tile.unit, tile) > 0 ? 0 : 1,
+      onward: this._autoInvadeOnwardCount(tile, player),
+    }));
+    const byWin = (a, b) => (Math.abs(a - b) <= AUTO_INVADE_WIN_EPSILON ? 0 : b - a);
+    scored.sort((a, b) => byWin(a.winNoItem, b.winNoItem)
+      || byWin(a.winWithItem, b.winWithItem)
+      || (b.defenderUnboosted - a.defenderUnboosted)
+      || (b.onward - a.onward)
+      || (a.tile.id - b.tile.id));
+    return scored.map(({ tile }) => tile);
+  }
+
+  /** その土地が、くぐつの剣豪から見た合法な侵略終点か。経路としては通過しない。 */
+  _isAutoInvadeEnemyTile(tile, player) {
+    if (!tile || tile.type !== TileType.LAND || tile.transparentCursed || !tile.unit || tile.owner == null) return false;
+    const owner = this.players.find((candidate) => candidate.id === tile.owner);
+    return !!owner && !this._isAllyOf(owner, player);
+  }
+
+  /**
+   * 今ターンの自動行動を決める。隣接敵が最優先。いなければ完全な空き地だけを
+   * BFSでたどり、最短で到達できる敵へ向かう最初の1マスを返す。
+   * 自軍・同盟・敵を問わず配置済みマスは通り抜けず、特殊マスも通らない。
+   */
+  _planAutoInvaderStep(source, player) {
+    const adjacentEnemy = this._chooseAutoInvadeTarget(source, player);
+    if (adjacentEnemy) {
+      return { kind: 'invade', destination: adjacentEnemy, enemy: adjacentEnemy, distance: 1 };
+    }
+
+    const tilesById = new Map(this.tiles.map((tile) => [tile.id, tile]));
+    const queue = [{ tile: source, distance: 0, firstStep: null }];
+    const visited = new Set([source.id]);
+    const routes = [];
+    let queueIndex = 0;
+
+    while (queueIndex < queue.length) {
+      const current = queue[queueIndex++];
+      const neighborIds = [...current.tile.neighbors].sort((a, b) => a - b);
+      for (const neighborId of neighborIds) {
+        const next = tilesById.get(neighborId);
+        if (!next || next.type !== TileType.LAND || next.transparentCursed) continue;
+
+        if (next.unit || next.owner != null) {
+          if (current.firstStep && this._isAutoInvadeEnemyTile(next, player)) {
+            routes.push({
+              enemy: next,
+              firstStep: current.firstStep,
+              distance: current.distance + 1,
+            });
+          }
+          continue;
+        }
+
+        if (visited.has(next.id)) continue;
+        visited.add(next.id);
+        const firstStep = current.firstStep ?? next;
+        queue.push({ tile: next, distance: current.distance + 1, firstStep });
+      }
+    }
+
+    if (routes.length === 0) return null;
+    const minimumDistance = Math.min(...routes.map(({ distance }) => distance));
+    const nearestRoutes = routes.filter(({ distance }) => distance === minimumDistance);
+    const uniqueEnemies = [...new Map(nearestRoutes.map(({ enemy }) => [enemy.id, enemy])).values()];
+    const enemy = this._rankAutoInvadeTargets(source, player, uniqueEnemies)[0];
+    const chosenRoute = nearestRoutes
+      .filter((route) => route.enemy.id === enemy.id)
+      .sort((a, b) => a.firstStep.id - b.firstStep.id)[0];
+    return {
+      kind: 'advance',
+      destination: chosenRoute.firstStep,
+      enemy,
+      distance: chosenRoute.distance,
+    };
+  }
+
+  /** 空き地への自動前進。個体・現在HPを保ったまま、通常移動と同じく呪いを解除する。 */
+  async _advanceAutoInvaderToEmpty(player, source, destination, enemy = null) {
+    const movingUnit = source?.unit;
+    const isAdjacent = source?.neighbors?.includes(destination?.id);
+    if (!movingUnit
+      || source.owner !== player.id
+      || !isAdjacent
+      || destination.type !== TileType.LAND
+      || destination.transparentCursed
+      || destination.owner != null
+      || destination.unit) return false;
+
+    const sourceLandLoss = this._captureLandLoss(player, source);
+    const destinationLandGain = this._captureLandGain(player, destination, { showAnyChange: true });
+    const mesh = source.unitMesh;
+    movingUnit.curses = [];
+    source.unitMesh = null;
+    destination.unit = movingUnit;
+    destination.owner = player.id;
+    destination.unitMesh = mesh;
+    this._paintTile(destination, player.color);
+    source.unit = null;
+    source.owner = null;
+    source.transparentCursed = false;
+    this._repaintTileToElement(source);
+    const targetText = enemy?.unit?.def?.name ? `${enemy.unit.def.name}を目指して` : '';
+    this.onLog(`${player.name}の${movingUnit.def.name}が${targetText}1マス進んだ`);
+    await this._hopUnitIcon(mesh, source.position, destination.position);
+    await this._presentLandLoss(sourceLandLoss);
+    await this._presentLandGain(destinationLandGain);
+    this._notifyState();
+    return true;
+  }
+
+  /** そのマスを取った後、続けて自動侵略できそうな隣接敵ユニットの数。 */
+  _autoInvadeOnwardCount(tile, player) {
+    return tile.neighbors.filter((id) => {
+      const next = this.tiles[id];
+      if (!next || next.type !== TileType.LAND || !next.unit || next.owner == null) return false;
+      if (next.owner === player.id) return false;
+      const owner = this.players.find((candidate) => candidate.id === next.owner);
+      return !this._isAllyOf(owner, player);
+    }).length;
+  }
+
+  // ignoreImmovable: くぐつの剣豪の自動侵略だけは、移動コマンド封じ
+  // （immovableByMoveCommand）を承知のうえで動かす。人間・CPUの「移動」
+  // コマンド経路からは今までどおり弾かれる。
+  async _cpuMoveOwnedUnit(player, source, target, { ignoreImmovable = false } = {}) {
     const attackerUnit = source.unit;
-    if (attackerUnit?.def?.traits?.includes('immovableByMoveCommand')) return false;
+    if (!ignoreImmovable && attackerUnit?.def?.traits?.includes('immovableByMoveCommand')) return false;
     const defenderPlayer = this.players.find((candidate) => candidate.id === target.owner);
     const defenderUnit = target.unit;
     const sourceLandLoss = this._captureLandLoss(player, source);

@@ -3738,6 +3738,7 @@ STARTマスを通過・着地すると「基本ボーナス＋領地ボーナス
 通常抽選はN70%・S25%・R5%で、SとRは合計最大3枚です。最初の抽選がすべてNなら、最後の1枚をS85%・R15%で引き直します。
 ブリードパーツパックは150Mで3個入り、N65%・S25%・R10%、最低1個はS以上です。
 不要なカードはショップで売却できます。売却額はN8M・S15M・R50Mです。EXカードは売却できません。
+所持カードは全てのデッキで共通して使えます。デッキ1つに同じカードは4枚までしか入れられないので、5枚目以降はどのデッキにも入れられない余りです。この余りは売却画面を開いた時点で自動的に売却リストへ入ります。枚数は「＋」「−」で調整でき、実際に売れるのは「一括売却」で確認した時だけです。
 
 【カード図鑑・カードエディット】
 図鑑には所有カードの名前と枚数が表示され、未所有カードは空欄になります。カード名を選ぶと画像と詳細を確認できます。
@@ -4007,6 +4008,11 @@ const deckRarityFilters = document.getElementById('deck-rarity-filters');
 const deckCurrentTabs = document.getElementById('deck-current-tabs');
 const deckCurrentList = document.getElementById('deck-current-list');
 const deckSave = document.getElementById('deck-save');
+const deckCopyFrom = document.getElementById('deck-copy-from');
+const deckClearAll = document.getElementById('deck-clear-all');
+const deckCopyModal = document.getElementById('deck-copy-modal');
+const deckCopyList = document.getElementById('deck-copy-list');
+const deckCopyCancel = document.getElementById('deck-copy-cancel');
 const deckBack = document.getElementById('deck-back');
 const deckSelectScreen = document.getElementById('deck-select-screen');
 const deckSelectBack = document.getElementById('deck-select-back');
@@ -6597,7 +6603,7 @@ bulkCsvSubmit.addEventListener('click', async () => {
 // ---- Deck editor: browse the card catalog, +/- copies (max 4 each) until exactly 40, then save ----
 
 const MAX_COPIES_PER_CARD = 4;
-const MAX_DECKS = 3;
+const MAX_DECKS = 4;
 const DECK_SIZE = 40;
 
 /**
@@ -7038,6 +7044,8 @@ function showDeckScreen() {
     grantEncounterReward();
   }
   if (editingDeckIndex >= currentCharacter.decks.length) editingDeckIndex = 0;
+  // 別スロットへ切り替えた時に、開きっぱなしのコピー選択が残らないようにする。
+  deckCopyModal.classList.add('hidden');
   const editingDeck = currentCharacter.decks[editingDeckIndex];
   renderDeckSlotTabs();
   deckNameInput.value = editingDeck.name;
@@ -7179,9 +7187,79 @@ function showDeckScreen() {
     }
   }
 
+  // 「全解除」「他のデッキからコピー」はrenderEditor（このスコープの再描画）を
+  // 使うので、ここでonclick代入して配線する。addEventListenerだと
+  // showDeckScreenを開くたびにハンドラが積み上がって多重実行になる。
+  deckClearAll.onclick = async () => {
+    if (deckTotal() === 0) return;
+    if (!(await confirmYesNo('編集中のデッキのカードをすべて外しますか？\n（保存するまで元のデッキは変わりません）'))) return;
+    deckWorkingCounts.clear();
+    renderEditor();
+  };
+
+  deckCopyFrom.onclick = () => openDeckCopyPicker(renderEditor);
+
   renderEditor();
   showScreen(deckScreen);
 }
+
+/**
+ * 「他のデッキからコピー」。選んだデッキの中身を、編集中のデッキへ丸ごと写す。
+ * 空のスロットを作ってからコピーすれば「デッキの複製」にもなる。
+ *
+ * ⚠️ 所持枚数とデッキ上限で必ず切り詰める。所持カードは全デッキ共有なので
+ * コピー元が成立していればコピー先も成立するのが基本だが、コピー元を組んだ
+ * 後にショップでそのカードを売っていると所持数が足りなくなる。
+ * ⚠️ 書き換えるのは作業中のカウントだけ。実際の保存は従来どおり「保存」を
+ * 押した時（40枚ちょうどでないと押せない）。
+ */
+function openDeckCopyPicker(onCopied) {
+  const sources = currentCharacter.decks
+    .map((deck, index) => ({ deck, index }))
+    .filter(({ index }) => index !== editingDeckIndex);
+  deckCopyList.replaceChildren();
+  if (sources.length === 0) {
+    const empty = document.createElement('p');
+    empty.className = 'deck-copy-empty pg-label';
+    empty.textContent = 'コピーできる他のデッキがありません。';
+    deckCopyList.appendChild(empty);
+  }
+  for (const { deck, index } of sources) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    const label = document.createElement('strong');
+    label.textContent = deck.name;
+    const meta = document.createElement('span');
+    meta.className = 'deck-copy-meta';
+    meta.textContent = `${(deck.deckList || []).length}枚`;
+    button.append(label, meta);
+    button.addEventListener('click', () => {
+      const counts = new Map();
+      for (const card of deck.deckList || []) {
+        const key = cardKey(card);
+        counts.set(key, (counts.get(key) || 0) + 1);
+      }
+      let trimmed = 0;
+      deckWorkingCounts = new Map();
+      for (const [key, count] of counts) {
+        const capped = Math.min(count, MAX_COPIES_PER_CARD, ownedCountOf(key));
+        if (capped > 0) deckWorkingCounts.set(key, capped);
+        trimmed += count - capped;
+      }
+      deckCopyModal.classList.add('hidden');
+      onCopied?.();
+      if (trimmed > 0) {
+        showToast(`所持数が足りず${trimmed}枚は写せませんでした`, 2600);
+      } else {
+        showToast(`「${deck.name}」の内容をコピーしました`, 2000);
+      }
+    });
+    deckCopyList.appendChild(button);
+  }
+  deckCopyModal.classList.remove('hidden');
+}
+
+deckCopyCancel.addEventListener('click', () => deckCopyModal.classList.add('hidden'));
 
 deckSave.addEventListener('click', () => {
   if (deckSave.disabled) return;
@@ -7199,24 +7277,38 @@ deckSave.addEventListener('click', () => {
   showHubScreen();
 });
 
-deckBack.addEventListener('click', showHubScreen);
+deckBack.addEventListener('click', () => {
+  deckCopyModal.classList.add('hidden');
+  showHubScreen();
+});
 
 // ---- Shop: buy permanent card packs with M, or sell spare cards. EX never sells. ----
 
-/** Summed across every one of the character's books - a card still committed to any of them can't be sold. */
-function inDeckCountOf(key) {
-  let count = 0;
+/**
+ * 所持カードは全デッキで共有される（デッキ編集の上限は
+ * `min(MAX_COPIES_PER_CARD, ownedCountOf(key))`＝他デッキの使用分を引かない）。
+ * つまり同じ4枚を3つのデッキが同時に使える。
+ *
+ * ⚠️ したがって「売らずに残すべき枚数」は全デッキの**合算**ではなく、
+ * 一番多く使っているデッキ1つぶん（最大値）。合算で数えると、4枚を2デッキで
+ * 使っているだけで「8枚必要」と誤判定し、実際には死蔵している余りまで
+ * 売却不可にしてしまう（2026-08修正）。
+ */
+function maxDeckUsageOf(key) {
+  let most = 0;
   for (const deck of currentCharacter.decks || []) {
+    let count = 0;
     for (const card of deck.deckList || []) {
       if (cardKey(card) === key) count += 1;
     }
+    if (count > most) most = count;
   }
-  return count;
+  return most;
 }
 
 // ---- デッキ選択（対戦・ストーリー共通）: 盤面に入る直前に毎回どのデッキを使うか選ばせる ----
 
-/** 最大3件を並べ、選んだデッキを内訳付きで確認してから確定する。resolveされるのは確定した{id,name,deckList}。 */
+/** 保存済みデッキ（最大MAX_DECKS件）を並べ、選んだデッキを内訳付きで確認してから確定する。resolveされるのは確定した{id,name,deckList}。 */
 // デッキ選択は画面・ボタンを使い回す共有UIなので、前の選択が終わらないうちに
 // 別の選択が始まると、1回のクリックで両方のonYesが発火し、古い側は
 // デッキ未選択のままnullで解決してしまう（対人戦の招待受諾が二重に走ると
@@ -7336,6 +7428,37 @@ function promptDeckSelection({ onCancel = null } = {}) {
 let shopActiveMode = null;
 const shopSellSelections = new Map();
 
+/**
+ * デッキに積める上限（MAX_COPIES_PER_CARD=4）を超えて余っているぶんを、
+ * 売却リストへあらかじめ入れておく。5枚目以降はどのデッキにも入れられない
+ * 死蔵カードなので、毎回手で「＋」を押させない。
+ *
+ * ⚠️ **売却そのものは実行しない。** 選択状態を作るだけで、実際に売れるのは
+ * 従来どおりプレイヤーが「一括売却」→確認ダイアログで「はい」を押した時。
+ * ⚠️ **呼ぶのは「売却画面を開いた時」と「売却完了直後」だけ。** ±ボタンは
+ * 押すたびにshowShopScreen('sell')で再描画するので、そこで呼ぶと
+ * プレイヤーが減らした枚数をその場で元に戻してしまう。
+ *
+ * 戻り値は自動で載せた枚数（0なら何も余っていない）。
+ */
+function primeShopSellSelections() {
+  shopSellSelections.clear();
+  const byKey = new Map(getCardCatalog(currentUserId).map((def) => [cardKey(def), def]));
+  let listed = 0;
+  for (const [key, owned] of Object.entries(currentCharacter.ownedCards || {})) {
+    const def = byKey.get(key);
+    if (!def || RARITY_SELL_PRICE[def.rarity] == null) continue; // EXは売却不可
+    // 所持カードは全デッキ共有なので、1デッキに積める上限(4枚)さえ残せば
+    // どのデッキも今までどおり組める。5枚目以降は正真正銘の死蔵カード。
+    const count = Math.max(0, owned - MAX_COPIES_PER_CARD);
+    if (count > 0) {
+      shopSellSelections.set(key, count);
+      listed += count;
+    }
+  }
+  return listed;
+}
+
 function getShopSellEntries() {
   const catalog = getCardCatalog(currentUserId);
   const byKey = new Map(catalog.map((def) => [cardKey(def), def]));
@@ -7344,7 +7467,7 @@ function getShopSellEntries() {
     const def = byKey.get(key);
     const price = def ? RARITY_SELL_PRICE[def.rarity] : null;
     const owned = currentCharacter.ownedCards?.[key] || 0;
-    const surplus = Math.max(0, owned - inDeckCountOf(key));
+    const surplus = Math.max(0, owned - maxDeckUsageOf(key));
     const count = Math.min(Math.max(0, requested), surplus);
     if (def && price != null && count > 0) entries.push({ key, def, count, price });
   }
@@ -7494,7 +7617,7 @@ function showShopScreen(mode = null) {
     );
 
   for (const { key, owned, def } of sellCards) {
-    const surplus = owned - inDeckCountOf(key);
+    const surplus = owned - maxDeckUsageOf(key);
     const price = RARITY_SELL_PRICE[def.rarity];
 
     const row = document.createElement('div');
@@ -7611,8 +7734,11 @@ shopPackResultClose.addEventListener('click', () => {
 shopMenuCards.addEventListener('click', () => setShopMode('cards'));
 shopMenuParts.addEventListener('click', () => setShopMode('parts'));
 shopMenuSell.addEventListener('click', () => {
-  shopSellSelections.clear();
+  const listed = primeShopSellSelections();
   showShopScreen('sell');
+  if (listed > 0) {
+    showToast(`デッキに入れられない余り${listed}枚を売却リストに入れました`, 2600);
+  }
 });
 shopSectionBack.addEventListener('click', () => setShopMode(null));
 
@@ -7632,7 +7758,9 @@ shopSellConfirmYes.addEventListener('click', () => {
   }
   currentCharacter.m += totalPrice;
   saveCharacter(currentUserId, currentCharacter);
-  shopSellSelections.clear();
+  // 売った後もまだ上限超過が残っていれば（手動で減らして一部だけ売った等）
+  // 改めて載せ直す。売却実行は変わらずプレイヤーの操作待ち。
+  primeShopSellSelections();
   closeShopSellConfirm();
   showShopScreen('sell');
 });

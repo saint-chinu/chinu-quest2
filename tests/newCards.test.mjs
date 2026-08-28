@@ -151,6 +151,7 @@ test('新カードはカタログに載り、参照している画像が実在�
     ...['russianRoulette', 'diamondShield', 'satsutabaGuard'].map((id) => [id, ITEM_CATALOG[id]]),
     ['bombBokkuri', MONSTER_CATALOG.bombBokkuri],
     ['ryanmenSukuna', MONSTER_CATALOG.ryanmenSukuna],
+    ['kugutsuNoKengou', MONSTER_CATALOG.kugutsuNoKengou],
     ...['funenGolem', 'gyakuryuKajiki', 'karekiNoKyojin', 'bousouCoil'].map((id) => [id, MONSTER_CATALOG[id]]),
     ...['hinokoSlime', 'mizutamariNamazu', 'morikakeRisu', 'taidenMimizu',
       'honooNoMadoushi', 'yukiOnna', 'accelerPopper', 'nitron', 'nazoNoKyotou', 'dennouNoKaii']
@@ -815,4 +816,178 @@ test('CPUの鋼体は高価な土地の薄い守備を選び、手元が寂し�
   const g2 = makeCpuStub([lone], poorPlayers);
   await g2._cpuMaybeUseToughBodySpell(poorPlayers[0]);
   assert.equal(g2.casts.length, 0, '備え100Gを割ってまでは撃たない');
+});
+
+test('くぐつの剣豪は指定の性能を持ち、正式画像を参照する', () => {
+  const card = MONSTER_CATALOG.kugutsuNoKengou;
+  assert.equal(card.name, 'くぐつの剣豪');
+  assert.equal(card.rarity, 'R');
+  assert.equal(card.element, 'neutral');
+  assert.deepEqual([card.hp, card.atk, card.cost], [50, 50, 150]);
+  assert.equal(card.effect.type, 'autoInvadeEachTurn');
+  assert.ok(card.traits.includes('immovableByMoveCommand'));
+  assert.ok(card.traits.includes('noHpBoost'));
+  assert.match(card.imageDataUrl, /\/images\/card-art\/kugutsuNoKengou\.png$/);
+});
+
+test('くぐつの剣豪はアイテム・スペルのHP増加だけ受けず、減少と土地ボーナスは通る', () => {
+  const def = MONSTER_CATALOG.kugutsuNoKengou;
+  assert.equal(battle.statTotals(unit(def, 'A')).maxHp, 50);
+
+  // 不死鳥の盾(ATK+10/HP+20): ATKは乗るがHPは乗らない。
+  const shielded = unit(def, 'A');
+  battle.equipItem(shielded, ITEM_CATALOG.fushichoNoTate);
+  const shieldTotals = battle.statTotals(shielded);
+  assert.equal(shieldTotals.maxHp, 50, 'アイテムのHP増加は無効');
+  assert.equal(shieldTotals.atk, 60, 'アイテムのATK増加は有効');
+
+  // 斬〇剣(HP-20): マイナス補正は「増やせない」に当たらないのでそのまま効く。
+  const cursedBlade = unit(def, 'A');
+  battle.equipItem(cursedBlade, ITEM_CATALOG.zangokuKen);
+  assert.equal(battle.statTotals(cursedBlade).maxHp, 30, 'HP減少はそのまま');
+
+  // スペル由来（鋼体/タフネスのsummonBaseHpBonus、HP+の呪い）も無効。
+  const boosted = unit(def, 'A');
+  boosted.summonBaseHpBonus = 15;
+  boosted.curses.push({ name: 'テスト強化', addedHp: 20 });
+  assert.equal(battle.statTotals(boosted).maxHp, 50);
+
+  // ナンカのお守り・ライフジャケットはHP加算ではないので従来どおり使える。
+  const guarded = unit(def, 'A');
+  battle.equipItem(guarded, ITEM_CATALOG.nankaNoOmamori);
+  battle.equipItem(guarded, ITEM_CATALOG.lifeJacket);
+  assert.equal(battle.statTotals(guarded).maxHp, 50);
+
+  // 土地の同属性ボーナス・応援(bonus.hp)はアイテムでもスペルでもないので乗る。
+  assert.equal(battle.statTotals(unit(def, 'A'), { hp: 30 }).maxHp, 80);
+});
+
+test('くぐつの剣豪の進路は無装備勝率→装備込み勝率→土地ボーナス無しの順で決まる', () => {
+  const players = [{ id: 'A', name: 'ア' }, { id: 'B', name: 'イ' }];
+  const build = () => {
+    const source = makeTile(0, { owner: 'A', neighbors: [1, 2] });
+    source.unit = unit(MONSTER_CATALOG.kugutsuNoKengou, 'A');
+    const left = makeTile(1, { owner: 'B', neighbors: [0] });
+    left.unit = unit(mon('左', 30, 30), 'B');
+    const right = makeTile(2, { owner: 'B', neighbors: [0] });
+    right.unit = unit(mon('右', 30, 30), 'B');
+    const g = makeStub([source, left, right], players);
+    g._elementHpBonus = () => 0;
+    return { g, source };
+  };
+
+  // ①無装備で勝てる方（tile 2）へ。
+  const a = build();
+  a.g._estimateUnitBattleWinProbability = (u, pos, tile, trials, options) =>
+    (options?.itemMode === 'none' ? (tile.id === 2 ? 0.9 : 0) : 1);
+  assert.equal(a.g._chooseAutoInvadeTarget(a.source, players[0]).id, 2);
+
+  // ②無装備ではどちらも勝てない → 装備込みの勝率が高い方（tile 1）へ。
+  const b = build();
+  b.g._estimateUnitBattleWinProbability = (u, pos, tile, trials, options) =>
+    (options?.itemMode === 'none' ? 0 : (tile.id === 1 ? 0.8 : 0.2));
+  assert.equal(b.g._chooseAutoInvadeTarget(b.source, players[0]).id, 1);
+
+  // ③勝率が同点 → 防衛側が土地の同属性HPボーナスを受けていない方（tile 2）へ。
+  const c = build();
+  c.g._estimateUnitBattleWinProbability = () => 0.5;
+  c.g._elementHpBonus = (u, tile) => (tile.id === 1 ? 30 : 0);
+  assert.equal(c.g._chooseAutoInvadeTarget(c.source, players[0]).id, 2);
+});
+
+test('到達できる敵がいなければ自動行動は起きず、移動コマンドでも動かせない', async () => {
+  const players = [{ id: 'A', name: 'ア' }];
+  const source = makeTile(0, { owner: 'A', neighbors: [1] });
+  source.unit = unit(MONSTER_CATALOG.kugutsuNoKengou, 'A');
+  const emptyLand = makeTile(1, { neighbors: [0] }); // この先に敵がいないので動かない
+  const g = makeStub([source, emptyLand], players);
+  assert.equal(g._chooseAutoInvadeTarget(source, players[0]), null);
+  assert.equal(g._planAutoInvaderStep(source, players[0]), null);
+  // 土地コマンドの「移動」からは常に拒否される。
+  assert.equal(await g._humanMoveFlow(players[0], source), false);
+});
+
+test('くぐつの剣豪は隣接敵を最優先で即侵略する', () => {
+  const players = [{ id: 'A', name: 'ア' }, { id: 'B', name: '敵' }];
+  const source = makeTile(0, { owner: 'A', neighbors: [1] });
+  source.unit = unit(MONSTER_CATALOG.kugutsuNoKengou, 'A');
+  const enemy = makeTile(1, { owner: 'B', neighbors: [0, 2] });
+  enemy.unit = unit(mon('敵兵', 30, 20), 'B');
+  const empty = makeTile(2, { neighbors: [1] });
+  const g = makeStub([source, enemy, empty], players);
+  g._estimateUnitBattleWinProbability = () => 0.5;
+  g._elementHpBonus = () => 0;
+
+  const plan = g._planAutoInvaderStep(source, players[0]);
+  assert.equal(plan.kind, 'invade');
+  assert.equal(plan.destination.id, enemy.id);
+  assert.equal(plan.distance, 1);
+});
+
+test('くぐつの剣豪は空き地を毎手番1マス進み、同じ個体のまま敵へ接近する', async () => {
+  const players = [{ id: 'A', name: 'ア', color: '#f00', currency: 777 }, { id: 'B', name: '敵' }];
+  const source = makeTile(0, { owner: 'A', neighbors: [1] });
+  source.unit = unit(MONSTER_CATALOG.kugutsuNoKengou, 'A');
+  source.unit.currentHp = 17;
+  source.unit.curses = [{ name: 'テスト呪い' }];
+  const firstEmpty = makeTile(1, { neighbors: [0, 2] });
+  const secondEmpty = makeTile(2, { neighbors: [1, 3] });
+  const enemy = makeTile(3, { owner: 'B', neighbors: [2] });
+  enemy.unit = unit(mon('敵兵', 30, 20), 'B');
+  const g = makeStub([source, firstEmpty, secondEmpty, enemy], players);
+  Object.assign(g, {
+    _estimateUnitBattleWinProbability: () => 0.5,
+    _elementHpBonus: () => 0,
+    _captureLandLoss: () => null,
+    _captureLandGain: () => null,
+    _paintTile: () => {},
+    _repaintTileToElement: () => {},
+    _hopUnitIcon: async () => {},
+    _presentLandLoss: async () => {},
+    _presentLandGain: async () => {},
+  });
+
+  const movingUnit = source.unit;
+  const firstPlan = g._planAutoInvaderStep(source, players[0]);
+  assert.deepEqual(
+    [firstPlan.kind, firstPlan.destination.id, firstPlan.enemy.id, firstPlan.distance],
+    ['advance', 1, 3, 3],
+  );
+  assert.equal(await g._advanceAutoInvaderToEmpty(players[0], source, firstPlan.destination, firstPlan.enemy), true);
+  assert.equal(firstEmpty.unit, movingUnit, 'コピーではなく同じ配置個体を移す');
+  assert.equal(firstEmpty.unit.currentHp, 17, '現在HPを回復させない');
+  assert.deepEqual(firstEmpty.unit.curses, [], '通常のモンスター移動と同じく呪いを解除');
+  assert.equal(source.unit, null);
+  assert.equal(source.owner, null);
+  assert.equal(players[0].currency, 777, '空き地への前進にGはかからない');
+
+  const secondPlan = g._planAutoInvaderStep(firstEmpty, players[0]);
+  assert.deepEqual([secondPlan.kind, secondPlan.destination.id, secondPlan.distance], ['advance', 2, 2]);
+  assert.equal(await g._advanceAutoInvaderToEmpty(players[0], firstEmpty, secondPlan.destination, secondPlan.enemy), true);
+
+  const thirdPlan = g._planAutoInvaderStep(secondEmpty, players[0]);
+  assert.deepEqual([thirdPlan.kind, thirdPlan.destination.id, thirdPlan.distance], ['invade', 3, 1]);
+});
+
+test('味方が経路を塞いでいる間は動かず、味方が消えると空き地から進軍を始める', () => {
+  const players = [{ id: 'A', name: 'ア' }, { id: 'B', name: '敵' }];
+  const source = makeTile(0, { owner: 'A', neighbors: [1] });
+  source.unit = unit(MONSTER_CATALOG.kugutsuNoKengou, 'A');
+  const empty = makeTile(1, { neighbors: [0, 2] });
+  const friend = makeTile(2, { owner: 'A', neighbors: [1, 3] });
+  friend.unit = unit(mon('味方', 30, 20), 'A');
+  const enemy = makeTile(3, { owner: 'B', neighbors: [2] });
+  enemy.unit = unit(mon('敵兵', 30, 20), 'B');
+  const g = makeStub([source, empty, friend, enemy], players);
+  g._estimateUnitBattleWinProbability = () => 0.5;
+  g._elementHpBonus = () => 0;
+
+  assert.equal(g._planAutoInvaderStep(source, players[0]), null, '味方を通り抜けない');
+  friend.owner = null;
+  friend.unit = null;
+  const reopened = g._planAutoInvaderStep(source, players[0]);
+  assert.deepEqual(
+    [reopened.kind, reopened.destination.id, reopened.enemy.id, reopened.distance],
+    ['advance', 1, 3, 3],
+  );
 });

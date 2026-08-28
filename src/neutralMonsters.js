@@ -211,6 +211,17 @@ export const NEUTRAL_MONSTER_CATALOG = {
     effect: { type: 'atkMultiplier', multiplier: 1.5 },
     effectDescription: '全属性の相手に対してATK1.5倍',
   }),
+  // くぐつの剣豪: 持ち主の手番開始時（サイコロより前）に、隣接する敵モンスターへ
+  // 自動で移動侵略する。隣接していなければ、空き地だけで到達できる最短の敵へ
+  // 毎手番1マス進む。配置モンスターや特殊マスは通り抜けない。移動先は選べず、
+  // 土地コマンドの「移動」でも動かせない（_runAutoInvaders / game.js）。
+  kugutsuNoKengou: neutralMonster('kugutsuNoKengou', 'くぐつの剣豪', Rarity.R, 50, 50, {
+    cost: 150,
+    traits: ['immovableByMoveCommand', 'noHpBoost'],
+    effect: { type: 'autoInvadeEachTurn' },
+    effectDescription: '手番開始時、隣接する敵モンスターの土地へ自動で侵略する。隣接していなければ、空き地だけで到達できる最短の敵へ毎手番1マス進む（配置モンスター・特殊マスは通れず、移動先も選べない。移動コマンドでは動かせない）。戦闘中、アイテムやスペルによるHP増加を受けない',
+    imageDataUrl: assetUrl('/images/card-art/kugutsuNoKengou.png'),
+  }),
   sentinel: neutralMonster('sentinel', 'センチネル', Rarity.R, 30, 30, {
     cost: 100,
     commandCost: 150,

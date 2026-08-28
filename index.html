@@ -344,6 +344,20 @@
           </aside>
         </div>
         <div class="pg-actions-row">
+          <button id="deck-copy-from" class="pg-button pg-button-secondary" type="button">他のデッキからコピー</button>
+          <button id="deck-clear-all" class="pg-button pg-button-secondary" type="button">全解除</button>
+        </div>
+        <div id="deck-copy-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="deck-copy-title">
+          <div class="shop-sell-confirm-box">
+            <h3 id="deck-copy-title" class="pg-subtitle">コピー元のデッキ</h3>
+            <p class="pg-label">選んだデッキの中身を、編集中のデッキへ丸ごと写します。</p>
+            <div id="deck-copy-list"></div>
+            <div class="shop-sell-confirm-actions">
+              <button id="deck-copy-cancel" class="pg-button pg-button-secondary">やめる</button>
+            </div>
+          </div>
+        </div>
+        <div class="pg-actions-row">
           <button id="deck-save" class="pg-button" disabled>保存</button>
           <button id="deck-back" class="pg-button pg-button-secondary">戻る</button>
         </div>

@@ -98,17 +98,25 @@ export function statTotals(unit, bonus = {}) {
   // def.atk/hpの代わりに固定値20/20を基準にする（アイテム・呪い・状況
   // ボーナスはその上にそのまま乗る＝弱体化はあくまで「素の数値」だけ）。
   const itemMultiplier = unit.def.effect?.type === 'doubleItemEffect' ? 2 : 1;
+  // noHpBoost(くぐつの剣豪): アイテム・スペル由来のHP"増加"だけを受け付けない。
+  // 減少（斬〇剣のhpBonus:-20、HPを削る呪い）はそのまま通す＝「HPを増やせない」
+  // のであって「HP補正を全部無視する」ではない。ダメージ無効化(ナンカのお守り)や
+  // ライフジャケットはHP加算ではないので影響を受けない。土地の同属性ボーナスと
+  // 応援はアイテム・スペルではないのでbonus.hpとして従来どおり乗る。
+  const blocksHpBoost = unit.def.traits?.includes('noHpBoost');
+  const noBoost = (value) => (blocksHpBoost ? Math.min(0, value) : value);
   const itemAtk = unit.items.reduce((sum, i) => sum + (i.atkBonus || 0), 0) * itemMultiplier;
-  const itemHp = unit.items.reduce((sum, i) => sum + (i.hpBonus || 0), 0) * itemMultiplier;
+  const itemHp = noBoost(unit.items.reduce((sum, i) => sum + (i.hpBonus || 0), 0) * itemMultiplier);
   const curseAtk = unit.curses.reduce((sum, c) => sum + (c.addedAtk || 0), 0);
-  const curseHp = unit.curses.reduce((sum, c) => sum + (c.addedHp || 0), 0);
+  const curseHp = noBoost(unit.curses.reduce((sum, c) => sum + (c.addedHp || 0), 0));
   const override = unit.def.effect?.type === 'statOverrideInBattle' ? unit.def.effect : null;
   const baseAtk = (override ? override.atk : unit.def.atk)
     + Number(unit.regenAtkBonus || 0)
     + Number(unit.lapGrowthAtkBonus || 0);
   // タフネスで空地へ召喚された個体のHP加算は、その盤面上の個体だけが持つ
   // 基礎HPとして扱う。カード定義やデッキへは書き戻さない。
-  const summonBaseHpBonus = Number(unit.summonBaseHpBonus || 0);
+  // タフネス・鋼体（どちらもスペル）で焼き込んだ基礎HP加算もnoHpBoostの対象。
+  const summonBaseHpBonus = noBoost(Number(unit.summonBaseHpBonus || 0));
   const baseHp = (override ? override.hp : unit.def.hp)
     + summonBaseHpBonus
     + Number(unit.lapGrowthHpBonus || 0);

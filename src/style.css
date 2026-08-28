@@ -2019,7 +2019,8 @@ html, body {
 .shop-sell-step:disabled { opacity: 0.35; }
 .shop-sell-selected { outline: 1px solid rgba(255, 216, 102, 0.75); }
 
-#shop-sell-confirm {
+#shop-sell-confirm,
+#deck-copy-modal {
   position: fixed;
   inset: 0;
   z-index: 10000;
@@ -2030,7 +2031,42 @@ html, body {
   background: rgba(4, 7, 16, 0.88);
 }
 
-#shop-sell-confirm.hidden { display: none; }
+#shop-sell-confirm.hidden,
+#deck-copy-modal.hidden { display: none; }
+
+/* コピー元の候補は1行1デッキ。枚数の内訳まで出して選び間違いを防ぐ。 */
+#deck-copy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+}
+
+#deck-copy-list button {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid rgba(117, 224, 226, 0.45);
+  border-radius: 12px;
+  background: #1f2540;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+#deck-copy-list button:hover { background: #273056; }
+
+#deck-copy-list .deck-copy-meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 0.82em;
+  opacity: 0.75;
+}
+
+#deck-copy-list .deck-copy-empty {
+  margin: 12px 0;
+  opacity: 0.8;
+}
 
 .shop-sell-confirm-box {
   width: min(520px, 92vw);
