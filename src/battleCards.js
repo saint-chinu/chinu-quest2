@@ -461,7 +461,11 @@ export const SPELL_CATALOG = {
   // 「モンスターの属性 ≠ 立っている土地の属性」に変えている。無属性の
   // モンスターは無属性の土地以外では常に該当する点に注意（自分の
   // モンスターも巻き込む）。
-  tochigamiNoIkari: spell('tochigamiNoIkari', '土地神の怒り', Rarity.R, 60, 'none', { type: 'damageAllUnitsOnMismatchedLand', amount: 20 }, '自分の属性と異なる属性の土地にいる全モンスターに20ダメージ（自分のモンスターも対象）'),
+  // ⚠️ ダメージは15から上げてはいけない。ゾンビがちょうどHP20なので、20だと
+  // 「パンデミックで全モンスターをゾンビ(無属性)に変える → 無属性マスの無い
+  // 盤面では全員が対象 → 20ダメージで盤面が丸ごと全滅」という即死コンボが
+  // 成立してしまう（2026-08、ユーザー指摘で20→15へ引き下げ）。
+  tochigamiNoIkari: spell('tochigamiNoIkari', '土地神の怒り', Rarity.R, 60, 'none', { type: 'damageAllUnitsOnMismatchedLand', amount: 15 }, '自分の属性と異なる属性の土地にいる全モンスターに15ダメージ（自分のモンスターも対象）'),
   poisonMist: spell(
     'poisonMist',
     '毒霧',

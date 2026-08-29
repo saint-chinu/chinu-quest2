@@ -1409,14 +1409,27 @@ test('土地神の怒りは属性の合わない土地のモンスターだけ�
   const g = makeStub(tiles, [{ id: 'A', name: '川田' }, { id: 'B', name: '敵' }]);
   g._spellDamageUnit = async (t, amount) => { t.unit.currentHp -= amount; };
   await g._applySpellEffect(
-    { name: '土地神の怒り', effect: { type: 'damageAllUnitsOnMismatchedLand', amount: 20 } },
-    { effect: { type: 'damageAllUnitsOnMismatchedLand', amount: 20 } },
+    { name: '土地神の怒り', effect: { type: 'damageAllUnitsOnMismatchedLand', amount: 15 } },
+    { effect: { type: 'damageAllUnitsOnMismatchedLand', amount: 15 } },
     {},
   );
   assert.equal(tiles[0].unit.currentHp, 50, '属性が一致していれば無傷');
-  assert.equal(tiles[1].unit.currentHp, 30, '不一致なら20ダメージ（自分のモンスターも対象）');
-  assert.equal(tiles[2].unit.currentHp, 30, '無属性は属性土地では不一致扱い');
+  assert.equal(tiles[1].unit.currentHp, 35, '不一致なら15ダメージ（自分のモンスターも対象）');
+  assert.equal(tiles[2].unit.currentHp, 35, '無属性は属性土地では不一致扱い');
   assert.equal(tiles[3].unit.currentHp, 50, '無属性の土地の無属性は一致');
+});
+
+test('土地神の怒りはパンデミック後のゾンビを全滅させない（コンボ防止の下限）', () => {
+  // パンデミックは盤面の全モンスターをゾンビ(無属性)へ変える。無属性マスの
+  // 無い盤面ではゾンビ全員が「異属性土地」判定になるため、土地神の怒りの
+  // ダメージがゾンビのHP以上だと盤面が丸ごと消える即死コンボになる。
+  // ダメージを上げる時はこのテストが落ちるので必ず気づける。
+  const zombieHp = MONSTER_CATALOG.zombie.hp;
+  const amount = SPELL_CATALOG.tochigamiNoIkari.effect.amount;
+  assert.ok(
+    amount < zombieHp,
+    `土地神の怒り(${amount})はゾンビのHP(${zombieHp})未満でなければならない（パンデミックとの全滅コンボ防止）`,
+  );
 });
 
 test('川田（⑮予定）の専用デッキはちょうど40枚', () => {
