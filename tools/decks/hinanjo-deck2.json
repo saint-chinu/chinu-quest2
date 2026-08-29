@@ -1,0 +1,33 @@
+{
+  "name": "ひなんじょ",
+  "elements": ["thunder"],
+  "_note": "ひなんじょのデッキ2（本人提供、2026-08）。合計40枚。ブリモンは実物のパーツ構成が不明なため、ユーザー指定により『上限級の強ビルド』を仮定している（ATK70/HP60・245G・先制+貫通、無属性）。これは canEquipPart で総当たりして見つけた『先制と貫通を両方載せたうえでステータス合計が最大になる合法構成』で、ATK70/HP70に両特性を足す構成はコスト上限250Gとパーツ9個制限により成立しない。属性パッチもパーツ枠に入らないため無属性のまま。",
+  "cards": [
+    { "name": "テンホウ", "count": 4 },
+    { "name": "エレキ輝", "count": 4 },
+    { "name": "避雷針侍", "count": 2 },
+    { "name": "サンダーバード", "count": 4 },
+    { "count": 1, "breed": {
+      "name": "ブリモン",
+      "equippedPartIds": [
+        "part-atk-up", "part-atk-up", "part-atk-up", "part-atk-up",
+        "part-double-up", "part-hp-focus", "part-hyper-up",
+        "part-first-strike", "part-pierce"
+      ]
+    } },
+    { "name": "くねくね", "count": 1 },
+    { "name": "Ninja", "count": 4 },
+    { "name": "めたんまん", "count": 1 },
+    { "name": "ペーの杖", "count": 1 },
+    { "name": "真剣白刃取り", "count": 2 },
+    { "name": "不死鳥の剣", "count": 1 },
+    { "name": "イカサマのサイコロ", "count": 4 },
+    { "name": "ナンカのお守り", "count": 4 },
+    { "name": "ホライズン", "count": 1 },
+    { "name": "千本桜", "count": 1 },
+    { "name": "財布チューチュー", "count": 1 },
+    { "name": "アイキャンフライ", "count": 2 },
+    { "name": "キャンセルカルチャー", "count": 1 },
+    { "name": "資本主義の権化", "count": 1 }
+  ]
+}
