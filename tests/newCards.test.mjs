@@ -108,6 +108,52 @@ test('呪い解除は増税通知(通行料30%減)も一緒に解除する', asy
   assert.equal(tile.tollReductionRatio, null);
 });
 
+test('ワープ直後にバックファイア(後退)を使うと、ワープ入口を経てワープ前の経路を遡る', async () => {
+  // _resolveWarpTileはplayer.tileIdをワープ先へ書き換えるが、tileHistory
+  // （バックファイアの後退用の着地履歴）へワープ先を積み忘れていた。その結果
+  // tileHistory[0]がワープ入口マスのまま取り残り、直後にバックファイアで
+  // 後退させると「ワープが無かったことになり」ワープ前の経路をそのまま
+  // 遡ってしまっていた（ユーザー報告のバグ）。
+  const tiles = [];
+  for (let i = 0; i <= 12; i += 1) tiles.push(makeTile(i));
+  const link = (a, b) => { tiles[a].neighbors.push(b); tiles[b].neighbors.push(a); };
+  link(0, 1); link(1, 2); link(2, 3); link(3, 4); link(4, 5); link(5, 6); link(6, 7);
+  link(8, 9); link(9, 10); link(10, 11); link(11, 12);
+  tiles[4].type = TileType.WARP;
+  tiles[4].warpTargetId = 8;
+  tiles[8].type = TileType.WARP;
+  tiles[8].warpTargetId = 4;
+
+  const g = Object.create(Game.prototype);
+  const player = {
+    id: 0, name: 'お肉', tileId: 3, previousTileId: 2, tileHistory: [3, 2, 1, 0], isCPU: true,
+  };
+  Object.assign(g, {
+    tiles,
+    players: [player],
+    onLog: () => {},
+    onWarpEffect: () => Promise.resolve(),
+    onMoveDestination: () => {},
+    onPieceMove: () => Promise.resolve(),
+    _notifyState: () => {},
+    _emitPieceStep: () => {},
+    _stepWithCamera: async () => {},
+  });
+
+  // 3から1歩進んでワープ入口(4)へ着地する動きを模す（_movePlayerが行う処理）。
+  player.previousTileId = player.tileId;
+  player.tileId = 4;
+  player.tileHistory.unshift(4);
+
+  await g._resolveWarpTile(player, tiles[4]);
+  assert.equal(player.tileId, 8, 'ワープ先(8)へ転移している');
+  assert.deepEqual(player.tileHistory, [8, 4, 3, 2, 1, 0], 'ワープ先も着地履歴に積まれる');
+
+  // バックファイアで1マス後退 → ワープ入口(4)へ戻る（ワープ前の3ではない）。
+  await g._movePlayerBackward(player, 1);
+  assert.equal(player.tileId, 4, 'ワープ先からの後退はまずワープ入口へ戻る');
+});
+
 test('分岐待ち中に破棄された旧盤面は着地処理や次ターンへ進まない', async () => {
   const g = Object.create(Game.prototype);
   let moveComplete = 0;

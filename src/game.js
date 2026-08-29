@@ -3810,6 +3810,14 @@ export class Game {
     });
     player.previousTileId = null;
     player.tileId = targetTile.id;
+    // バックファイア用の着地履歴にもワープ先を積む。ここを積み忘れると
+    // tileHistory[0]がワープ入口のまま取り残り、直後にバックファイアで
+    // 後退させた時にワープ先ではなくワープ前の経路をそのまま遡ってしまう
+    // （＝ワープが無かったことになる）。後退でこの入口まで遡った時は、
+    // 履歴を1つずつ辿るだけの既存ロジックがそのままワープ入口マスへ
+    // 戻すので、"再ワープ"の特別処理は不要でこれだけで足りる。
+    player.tileHistory.unshift(targetTile.id);
+    if (player.tileHistory.length > 20) player.tileHistory.length = 20;
     if (player.mesh) player.mesh.position.set(targetTile.position.x, PIECE_REST_Y, targetTile.position.z);
     const warpLabel = tile.warpKind === 'parallel' ? 'パラレルワールド' : tile.warpKind === 'wormhole' ? 'ワームホール' : 'ワープ';
     this.onLog(`${player.name}は${warpLabel}で転移した！`);

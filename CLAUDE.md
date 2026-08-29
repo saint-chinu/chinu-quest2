@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v228`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v229`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## 未実装: Firebase App Check
@@ -481,6 +481,17 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
     まとめて送るとゲスト側で駒がワープ入口へ戻ってしまうため分割が必要。
 - **NPC専用カードの所有者ロック**: `exclusiveOwnerName`（酢=朕）。Game構築時に
   デッキから除外されるので、他プレイヤーへ混入しない。
+- ⚠️ **`_resolveWarpTile`はワープ先を`tileHistory`へ積み忘れていた**（2026-08修正、
+  ユーザー報告）。通常の1歩移動は着地するたびに`player.tileHistory.unshift(nextId)`
+  するが、ワープ転移は`player.tileId`だけ書き換えて`tileHistory`を更新していなかった。
+  そのためワープ直後にバックファイア(reverseNextDice)で後退させると、
+  `tileHistory[0]`がワープ入口マスのまま取り残っており、ワープが無かった
+  ことになってワープ前の経路をそのまま遡ってしまっていた（＝次のサイコロで
+  ワープ前のマスから進むように見える）。`_resolveWarpTile`でもワープ先を
+  `tileHistory.unshift(targetTile.id)`するよう修正。後退でこの入口まで
+  遡った時は既存の1歩ずつ辿るロジックがそのままワープ入口マスへ戻すので、
+  "再ワープ"の特別処理は不要（回帰テスト: tests/newCards.test.mjs
+  「ワープ直後にバックファイア(後退)を使うと…」）。
 
 ## ストーリー会話画面（story-dialogue-screen）(2026-08 再デザイン)
 - intro/outro/敗北の全画面会話（①②の盤面上オーバーレイ`story-overlay-dialogue`とは別物）。
@@ -943,6 +954,13 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 ## 報酬M
 - 終了時総資産→M変換の計算基礎は`M_REWARD_BASE_RATE`(main.js, 現在**4%**)。
   相手が1人増えるごとに+3%、同盟戦のみ15%固定、最低50M。
+- ⚠️ **改造クライアント対策の資産上限（`computeExitRewardM`の`assetCap`）**:
+  `部屋の目標G × M_REWARD_ASSET_CAP_MULTIPLIER`（最低5000G相当）。以前は
+  倍率3だったため、⑬「豪華客船」再戦（目標22,000G・2vs2＝報酬率10%）のような
+  長期戦・限界チャレンジで総資産がこの上限に張り付き、獲得Mが実質6,600M
+  （22,000×3×10%）で頭打ちになっていた（2026-08、ユーザー報告）。倍率を
+  **5**に引き上げ済み（同条件で11,000M）。あくまで簡易対策なので、倍率を
+  上げすぎると改造クライアント対策としての意味が薄れる点に注意。
 
 ## ストーリー途中退室
 - ストーリー本編・再戦のみ途中再開対応（対人戦・通常CPU戦・チュートリアルは対象外）。

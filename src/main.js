@@ -9665,17 +9665,26 @@ pvpRoomStart.addEventListener('click', async () => {
  * `character`をそのままFirestoreへ書き込み、セキュリティルールもuid一致
  * しか見ていないため、理論上は改造クライアントで任意の値を書き込むことが
  * できてしまう。特にPvPではホストがpublishする相手の資産表示を信用する
- * 構造なので、ここに常識的な上限（部屋の目標Gの3倍、最低でも5000G相当）を
- * 掛けて被害を抑える簡易対策のみ行っている。根本対策にはサーバー側の検証
- * （Cloud Functions等）が別途必要。
+ * 構造なので、ここに常識的な上限（部屋の目標Gの`M_REWARD_ASSET_CAP_MULTIPLIER`倍、
+ * 最低でも5000G相当）を掛けて被害を抑える簡易対策のみ行っている。根本対策には
+ * サーバー側の検証（Cloud Functions等）が別途必要。
+ * ⚠️ この倍率は3→5に引き上げ済み（2026-08、ユーザー報告）。⑬「豪華客船」
+ * 再戦（目標22,000G・2vs2＝報酬率10%）のような長期戦・限界チャレンジ勢では
+ * 総資産が上限に張り付き、獲得Mが実質6,600Mで頭打ちになっていた
+ * （22,000×3×10%）。改造クライアント対策としての上限自体は残しつつ、
+ * 正規プレイの長期戦で頭打ちになりにくいよう倍率だけ引き上げた。
  */
+const M_REWARD_ASSET_CAP_MULTIPLIER = 5;
 function computeExitRewardM(endingAssetsShare, rewardRateOverride = null) {
   const playerCount = Number(game?.players?.length || pvpLastRoom?.playerCount || 2);
   const allianceMode = game
     ? Boolean(game.players.some((player) => player.allianceId != null))
     : pvpLastRoom?.allianceMode === true;
   const rewardRate = rewardRateOverride ?? (allianceMode ? 0.15 : M_REWARD_BASE_RATE + Math.max(0, playerCount - 2) * 0.03);
-  const assetCap = Math.max((game?.goalCurrency || pvpLastRoom?.goalCurrency || 5000) * 3, 5000);
+  const assetCap = Math.max(
+    (game?.goalCurrency || pvpLastRoom?.goalCurrency || 5000) * M_REWARD_ASSET_CAP_MULTIPLIER,
+    5000,
+  );
   const cappedAssets = Math.min(Math.max(endingAssetsShare, 0), assetCap);
   const earnedM = Math.max(Math.round(cappedAssets * rewardRate), M_CONVERSION_MIN);
   return { earnedM, rewardRate };
