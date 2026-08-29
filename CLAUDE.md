@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v234`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v235`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## 未実装: Firebase App Check
@@ -70,11 +70,13 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 ### 新アイテム「属性神の盾」4種（実装済み）
 - `suijinNoTate`（水神の盾）/`kajinNoTate`（火神の盾）/`raijinNoTate`
   （雷神の盾）/`shinrinjinNoTate`（森神の盾）——battleCards.jsのITEM_CATALOG。
-  いずれもR防具、110G、ATK+0/HP+15、`effect: {type:'wielderElementReflect',
-  wielderElement: <対応する属性>}`。
-- 装備するモンスターの属性が一致した時だけ、`equipItem`（battle.js）が
-  効果を実際の反射(`reflectDamage`、くねくねと同じ全反射)へ差し替える。
-  一致しない場合は素通りし、HP+15だけの防具として機能する。
+  いずれもR防具、**80G、ATK+10/HP+20、貫通**（2026-08、初期案の110G/
+  ATK+0/HP+15はコストが高すぎるというユーザー指摘で修正）、
+  `effect: {type:'wielderElementReflect', wielderElement: <対応する属性>}`。
+- ATK+10/HP+20・貫通は属性を問わず常に乗る。装備するモンスターの属性が
+  一致した時だけ、`equipItem`（battle.js）が効果を実際の反射
+  (`reflectDamage`、くねくねと同じ全反射)へ差し替える。一致しない場合は
+  反射だけが乗らない（ステータス・貫通は変わらず有効）。
 - ⚠️ **`reflectDamage`の判定をgetEffect経由に変更した**（battle.js）。
   以前は`defenderUnit.def.effect?.type==='reflectDamage'`とモンスター
   自身のdefしか見ておらず、アイテム由来の反射（この属性神の盾）を
@@ -83,8 +85,8 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - 画像は**未実装**（`imageDataUrl: null`、cardArt.jsの共通防具絵へ
   フォールバック）。4枚とも専用画像が必要——Codexが対応できるならここが
   「画像」の不足分。
-- 回帰テストは`npm run test:cards`（水属性一致で反射・不一致でHP+15のみ・
-  火/雷/森3種の一般化）。
+- 回帰テストは`npm run test:cards`（水属性一致で反射・不一致でもATK+10/
+  HP+20・貫通は乗ること・火/雷/森3種の一般化）。
 
 ### 川田の専用デッキ（実装済み、`CHARACTER_DECKS.kawada`）
 water中心・専用モンスター無し・「純粋な殴り合い」の40枚固定デッキ。

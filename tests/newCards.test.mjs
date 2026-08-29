@@ -1257,11 +1257,14 @@ test('水神の盾は水属性が装備すると被ダメージを反射する',
   assert.equal(defenderHit.damage, 0, '守備側は反射でノーダメージのはず');
 });
 
-test('水神の盾は属性が違うと反射せず、HP+15の防具になるだけ', () => {
+test('水神の盾は属性が違うと反射せず、ATK+10/HP+20・貫通だけの防具になる', () => {
   const attacker = unit(mon('攻', 50, 30, { element: 'neutral' }), 'A');
   const defender = unit(mon('守', 50, 10, { element: 'fire' }), 'D');
   battle.equipItem(defender, ITEM_CATALOG.suijinNoTate);
-  assert.equal(battle.statTotals(defender).maxHp, 65, 'HP+15だけは属性を問わず乗る（戦闘前に確認、戦闘後はアイテムが外れる）');
+  const stats = battle.statTotals(defender);
+  assert.equal(stats.maxHp, 70, 'HP+20は属性を問わず乗る（戦闘前に確認、戦闘後はアイテムが外れる）');
+  assert.equal(stats.atk, 20, 'ATK+10は属性を問わず乗る');
+  assert.ok(battle.hasTrait(defender, 'pierce'), '貫通は属性を問わず乗る');
   const r = battle.resolveBattle(attacker, defender, new battle.GoldLedger());
   assert.ok(!r.exchanges.some((e) => e.reflected), '属性が違えば反射しない');
 });

@@ -164,25 +164,30 @@ export const ITEM_CATALOG = {
   // 属性神の盾4種。上のATK特化武器と対になる防具で、一致した属性の
   // モンスターが装備すると受けるダメージを丸ごと反射する（くねくねと同じ
   // reflectDamage、battle.jsのequipItemが装備時に差し替える）。一致しない
-  // 場合はただのHP+15防具になる。
-  suijinNoTate: item('suijinNoTate', '水神の盾', Rarity.R, ItemType.ARMOR, 110, 0, 15, {
+  // 場合もATK+10/HP+20・貫通は属性を問わず乗る（2026-08、コストが高すぎる
+  // というユーザー指摘でコストを下げステータス・貫通を追加）。
+  suijinNoTate: item('suijinNoTate', '水神の盾', Rarity.R, ItemType.ARMOR, 80, 10, 20, {
+    traits: ['pierce'],
     effect: { type: 'wielderElementReflect', wielderElement: Element.WATER },
-    effectDescription: '水属性モンスターが装備すると、受けるダメージを反射する（それ以外の属性はHP+15のみ）',
+    effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。水属性モンスターが装備すると、受けるダメージを反射する',
     imageDataUrl: null,
   }),
-  kajinNoTate: item('kajinNoTate', '火神の盾', Rarity.R, ItemType.ARMOR, 110, 0, 15, {
+  kajinNoTate: item('kajinNoTate', '火神の盾', Rarity.R, ItemType.ARMOR, 80, 10, 20, {
+    traits: ['pierce'],
     effect: { type: 'wielderElementReflect', wielderElement: Element.FIRE },
-    effectDescription: '火属性モンスターが装備すると、受けるダメージを反射する（それ以外の属性はHP+15のみ）',
+    effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。火属性モンスターが装備すると、受けるダメージを反射する',
     imageDataUrl: null,
   }),
-  raijinNoTate: item('raijinNoTate', '雷神の盾', Rarity.R, ItemType.ARMOR, 110, 0, 15, {
+  raijinNoTate: item('raijinNoTate', '雷神の盾', Rarity.R, ItemType.ARMOR, 80, 10, 20, {
+    traits: ['pierce'],
     effect: { type: 'wielderElementReflect', wielderElement: Element.THUNDER },
-    effectDescription: '雷属性モンスターが装備すると、受けるダメージを反射する（それ以外の属性はHP+15のみ）',
+    effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。雷属性モンスターが装備すると、受けるダメージを反射する',
     imageDataUrl: null,
   }),
-  shinrinjinNoTate: item('shinrinjinNoTate', '森神の盾', Rarity.R, ItemType.ARMOR, 110, 0, 15, {
+  shinrinjinNoTate: item('shinrinjinNoTate', '森神の盾', Rarity.R, ItemType.ARMOR, 80, 10, 20, {
+    traits: ['pierce'],
     effect: { type: 'wielderElementReflect', wielderElement: Element.FOREST },
-    effectDescription: '森属性モンスターが装備すると、受けるダメージを反射する（それ以外の属性はHP+15のみ）',
+    effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。森属性モンスターが装備すると、受けるダメージを反射する',
     imageDataUrl: null,
   }),
 
@@ -1620,7 +1625,7 @@ export const CHARACTER_DECKS = {
       items: [
         // 水神の盾: 水属性が装備すると被ダメージを反射する新アイテム
         // （battleCards.js/battle.js参照）。ゆきおんな・水神等に乗せて壁にする。
-        { def: ITEM_CATALOG.suijinNoTate, count: 2 }, // R 110G 0/+15 水属性限定で反射
+        { def: ITEM_CATALOG.suijinNoTate, count: 2 }, // R 80G +10/+20 貫通、水属性限定で反射
         { def: ITEM_CATALOG.dimensionalSocket, count: 2 }, // S 60G 特殊能力を入れ替え
         { def: ITEM_CATALOG.twinHammer, count: 2 }, // S 65G +10/0 2回攻撃
         { def: ITEM_CATALOG.shinkenShirahadori, count: 1 }, // R 110G 相手のアイテムを奪う
