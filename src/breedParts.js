@@ -19,6 +19,16 @@ export const BREED_DEFAULT_IMAGE_URL = assetUrl('/images/card-art/burimon.png');
 export const BREED_CAPS = { atk: 70, hp: 70, cost: 250 };
 export const BREED_MAX_EQUIPPED_PARTS = 9;
 
+// デッキと同じく、パーツ構成を最大3パターンまで保存して切り替えられる
+// （character.breedMonsters配列 + breedMonsterIndexで選択中を管理）。
+export const BREED_MAX_PATTERNS = 3;
+
+/** 選択中のブリードパターン（無ければ先頭）。無効なindexにも耐える。 */
+export function activeBreedMonster(character) {
+  const list = character.breedMonsters || [];
+  return list[character.breedMonsterIndex] || list[0] || null;
+}
+
 export const CHANGEABLE_BREED_ELEMENTS = [Element.FIRE, Element.WATER, Element.THUNDER, Element.FOREST];
 
 export const TRAIT_LABEL = {
@@ -43,6 +53,10 @@ export const BREED_PARTS = [
   { id: 'part-atk-up', name: 'ATKアップ', rarity: Rarity.N, atkDelta: 10, costDelta: 10, price: 40 },
   { id: 'part-hp-up', name: 'HPアップ', rarity: Rarity.N, hpDelta: 10, costDelta: 10, price: 40 },
   { id: 'part-double-up', name: 'ダブルアップ', rarity: Rarity.R, atkDelta: 10, hpDelta: 10, costDelta: 25, price: 90 },
+  // ダブルアップ(+10/+10, costDelta25)の上位互換。単純な加算値の合計(30)より
+  // 高いコストにする既存の「両方を1個で上げるパーツ」の相場(ダブルアップは
+  // 単純合計20に対し25=1.25倍)に合わせ、30×1.25=37.5を切り上げて40。
+  { id: 'part-hyper-up', name: 'ハイパーアップ', rarity: Rarity.R, atkDelta: 15, hpDelta: 15, costDelta: 40, price: 120 },
   { id: 'part-atk-focus', name: '攻撃特化', rarity: Rarity.N, atkDelta: 20, hpDelta: -10, costDelta: 10, price: 40 },
   { id: 'part-hp-focus', name: '防御特化', rarity: Rarity.N, atkDelta: -10, hpDelta: 20, costDelta: 10, price: 40 },
   { id: 'part-first-strike', name: '先制付与', rarity: Rarity.S, costDelta: 30, trait: 'firstStrike', price: 60 },
@@ -157,17 +171,20 @@ export function breedPartBadges(part) {
 
 /**
  * The breed monster as a real, playable Rarity.EX monster card - live
- * stats/traits computed from whatever's currently equipped. `catalogId`
- * stays 'breedMonster' regardless of the player's chosen name, so deck
- * tracking survives renames (see main.js's cardKey).
+ * stats/traits computed from whatever's currently equipped **in the
+ * selected pattern** (character.breedMonsters[breedMonsterIndex] -
+ * activeBreedMonster参照). `catalogId`は選択中パターンの名前が何であれ
+ * 常に'breedMonster'固定 - 名前やパターン切り替えでもデッキ内の
+ * 所持数トラッキングが壊れない（main.jsのcardKey参照）。
  */
 export function buildBreedCardDef(character) {
-  const stats = computeBreedStats(character.breedMonster);
+  const breedMonster = activeBreedMonster(character);
+  const stats = computeBreedStats(breedMonster);
   return {
     id: 'breedMonster',
     catalogId: 'breedMonster',
     type: CardType.MONSTER,
-    name: character.breedMonster.name,
+    name: breedMonster.name,
     element: stats.element,
     rarity: Rarity.EX,
     atk: stats.atk,
@@ -175,7 +192,7 @@ export function buildBreedCardDef(character) {
     cost: stats.cost,
     traits: stats.traits,
     // アップロード画像がある場合のみそちらを優先する。
-    imageDataUrl: character.breedMonster.imageDataUrl || BREED_DEFAULT_IMAGE_URL,
-    imageFit: character.breedMonster.imageDataUrl ? 'cover' : 'contain',
+    imageDataUrl: breedMonster.imageDataUrl || BREED_DEFAULT_IMAGE_URL,
+    imageFit: breedMonster.imageDataUrl ? 'cover' : 'contain',
   };
 }

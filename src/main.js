@@ -14,12 +14,14 @@ import {
   BREED_BASE,
   BREED_DEFAULT_IMAGE_URL,
   BREED_MAX_EQUIPPED_PARTS,
+  BREED_MAX_PATTERNS,
   BREED_PARTS,
   CHANGEABLE_BREED_ELEMENTS,
   computeBreedStats,
   canEquipPart,
   breedPartBadges,
   buildBreedCardDef,
+  activeBreedMonster,
   BREED_PART_PACK,
   drawBreedPartPack,
   describeBreedPart,
@@ -4093,6 +4095,7 @@ const pvpMapConfirmText = document.getElementById('pvp-map-confirm-text');
 const pvpMapConfirmYes = document.getElementById('pvp-map-confirm-yes');
 const pvpMapConfirmNo = document.getElementById('pvp-map-confirm-no');
 const breedScreen = document.getElementById('breed-screen');
+const breedSlotTabs = document.getElementById('breed-slot-tabs');
 const breedName = document.getElementById('breed-name');
 const breedImage = document.getElementById('breed-image');
 const breedImageReset = document.getElementById('breed-image-reset');
@@ -4860,9 +4863,23 @@ async function showAdminDashboard(forceReload = false) {
 
 /** Existing characters saved before ブリードモンスター existed won't have these fields yet - fill them in with the default build (no owned parts) rather than crashing on undefined. */
 function ensureBreedFields(character) {
-  if (!character.breedMonster) character.breedMonster = { name: BREED_BASE.defaultName, equippedPartIds: [] };
-  if (!Array.isArray(character.breedMonster.equippedPartIds)) character.breedMonster.equippedPartIds = [];
-  character.breedMonster.equippedPartIds = character.breedMonster.equippedPartIds.slice(0, BREED_MAX_EQUIPPED_PARTS);
+  // 複数パターン対応前のセーブデータ移行: 単一のbreedMonsterを
+  // breedMonsters[0]として引き継ぐ（旧breedMonsterフィールド自体はもう読まない）。
+  if (!Array.isArray(character.breedMonsters)) {
+    character.breedMonsters = [character.breedMonster || { name: BREED_BASE.defaultName, equippedPartIds: [] }];
+    delete character.breedMonster;
+  }
+  if (character.breedMonsters.length === 0) {
+    character.breedMonsters.push({ name: BREED_BASE.defaultName, equippedPartIds: [] });
+  }
+  character.breedMonsters = character.breedMonsters.slice(0, BREED_MAX_PATTERNS);
+  for (const pattern of character.breedMonsters) {
+    if (!Array.isArray(pattern.equippedPartIds)) pattern.equippedPartIds = [];
+    pattern.equippedPartIds = pattern.equippedPartIds.slice(0, BREED_MAX_EQUIPPED_PARTS);
+  }
+  if (!(character.breedMonsterIndex >= 0 && character.breedMonsterIndex < character.breedMonsters.length)) {
+    character.breedMonsterIndex = 0;
+  }
   if (!character.ownedPartIds) character.ownedPartIds = [];
   if (character.storyProgress == null) character.storyProgress = 0;
   // 複数デッキ対応前のセーブデータ移行: 単一のdeckListを
@@ -4977,7 +4994,10 @@ charmakeName.addEventListener('input', updateCharmakeValidity);
 charmakeSubmit.addEventListener('click', () => {
   if (charmakeSubmit.disabled) return;
   const breedMonster = { name: BREED_BASE.defaultName, equippedPartIds: [] };
-  const breedCard = { ...buildBreedCardDef({ breedMonster }), id: `breedMonster-${Date.now()}` };
+  const breedCard = {
+    ...buildBreedCardDef({ breedMonsters: [breedMonster], breedMonsterIndex: 0 }),
+    id: `breedMonster-${Date.now()}`,
+  };
 
   // buildStarterDeckListは39枚（STARTER_DECKS側でNモンスター1種を1枚
   // 減らして確保済み）。ブリードモンスター(レアリティEX)を40枚目として足す。
@@ -4995,7 +5015,8 @@ charmakeSubmit.addEventListener('click', () => {
     decks: [{ id: `deck-${Date.now()}`, name: 'デッキ1', deckList }],
     ownedCards,
     m: STARTING_M,
-    breedMonster,
+    breedMonsters: [breedMonster],
+    breedMonsterIndex: 0,
     ownedPartIds: [],
     storyProgress: 0,
   };
@@ -6270,16 +6291,21 @@ function resizeDataUrl(dataUrl) {
  */
 const BREED_IMAGE_SHRINK_THRESHOLD = 200_000;
 async function shrinkOversizedBreedImage(character) {
-  const current = character?.breedMonster?.imageDataUrl;
-  if (!current || current.length <= BREED_IMAGE_SHRINK_THRESHOLD) return false;
-  try {
-    const shrunk = await resizeDataUrl(current);
-    if (!shrunk || shrunk.length >= current.length) return false;
-    character.breedMonster.imageDataUrl = shrunk;
-    return true;
-  } catch {
-    return false;
+  // 3パターンそれぞれが独自の画像を持ちうるので、全パターンを走査する。
+  let changed = false;
+  for (const pattern of character?.breedMonsters || []) {
+    const current = pattern?.imageDataUrl;
+    if (!current || current.length <= BREED_IMAGE_SHRINK_THRESHOLD) continue;
+    try {
+      const shrunk = await resizeDataUrl(current);
+      if (!shrunk || shrunk.length >= current.length) continue;
+      pattern.imageDataUrl = shrunk;
+      changed = true;
+    } catch {
+      // 失敗した画像だけ諦めて、残りのパターンは続行する。
+    }
   }
+  return changed;
 }
 
 function resizeImageFileToDataUrl(file) {
@@ -7775,20 +7801,54 @@ shopBackButton.addEventListener('click', showHubScreen);
 
 // ---- ブリード: rename + view computed stats + equip/unequip owned parts ----
 
+/** デッキのスロットタブと同じ仕組み。最大BREED_MAX_PATTERNS件、選択中パターンを切り替えるとそれ以降のbuildBreedCardDef（デッキ内の表示・戦闘）にも即反映される。 */
+function renderBreedSlotTabs() {
+  breedSlotTabs.replaceChildren();
+  currentCharacter.breedMonsters.forEach((pattern, index) => {
+    const tab = document.createElement('button');
+    tab.className = `deck-slot-tab${index === currentCharacter.breedMonsterIndex ? ' selected' : ''}`;
+    tab.textContent = pattern.name;
+    tab.addEventListener('click', () => {
+      currentCharacter.breedMonsterIndex = index;
+      saveCharacter(currentUserId, currentCharacter);
+      showBreedScreen();
+    });
+    breedSlotTabs.appendChild(tab);
+  });
+  if (currentCharacter.breedMonsters.length < BREED_MAX_PATTERNS) {
+    const addTab = document.createElement('button');
+    addTab.className = 'deck-slot-tab';
+    addTab.textContent = '＋ 新規作成';
+    addTab.addEventListener('click', () => {
+      currentCharacter.breedMonsters.push({
+        name: `${BREED_BASE.defaultName}${currentCharacter.breedMonsters.length + 1}`,
+        equippedPartIds: [],
+      });
+      currentCharacter.breedMonsterIndex = currentCharacter.breedMonsters.length - 1;
+      saveCharacter(currentUserId, currentCharacter);
+      showBreedScreen();
+    });
+    breedSlotTabs.appendChild(addTab);
+  }
+}
+
 function showBreedScreen() {
-  breedName.value = currentCharacter.breedMonster.name;
+  const breedMonster = activeBreedMonster(currentCharacter);
+  renderBreedSlotTabs();
+  breedName.value = breedMonster.name;
   breedImage.value = '';
-  breedImagePreview.src = currentCharacter.breedMonster.imageDataUrl || BREED_DEFAULT_IMAGE_URL;
+  breedImagePreview.src = breedMonster.imageDataUrl || BREED_DEFAULT_IMAGE_URL;
   breedImagePreview.classList.remove('hidden');
-  breedImageReset.disabled = !currentCharacter.breedMonster.imageDataUrl;
+  breedImageReset.disabled = !breedMonster.imageDataUrl;
   breedError.classList.add('hidden');
   renderBreedScreen();
   showScreen(breedScreen);
 }
 
 function renderBreedScreen() {
-  const stats = computeBreedStats(currentCharacter.breedMonster);
-  const equippedTotal = currentCharacter.breedMonster.equippedPartIds.length;
+  const breedMonster = activeBreedMonster(currentCharacter);
+  const stats = computeBreedStats(breedMonster);
+  const equippedTotal = breedMonster.equippedPartIds.length;
   breedStats.textContent = `属性: ${ELEMENT_LABEL[stats.element]} / ATK ${stats.atk} / HP ${stats.hp} / 召喚コスト ${stats.cost}G / パーツ ${equippedTotal}/${BREED_MAX_EQUIPPED_PARTS}個`;
 
   breedPartsList.replaceChildren();
@@ -7799,7 +7859,7 @@ function renderBreedScreen() {
   for (const [partId, ownedCount] of ownedPartCounts) {
     const def = BREED_PARTS.find((p) => p.id === partId);
     if (!def) continue;
-    const equippedCount = currentCharacter.breedMonster.equippedPartIds.filter((id) => id === def.id).length;
+    const equippedCount = breedMonster.equippedPartIds.filter((id) => id === def.id).length;
     const canAddCopy = equippedCount < ownedCount;
 
     const row = document.createElement('div');
@@ -7820,10 +7880,10 @@ function renderBreedScreen() {
     const nameEl = document.createElement('div');
     nameEl.className = 'deck-row-name';
     nameEl.textContent = `${def.name}（所持${ownedCount} / 装着${equippedCount}）`;
-    if (equippedCount > 0 && def.chooseElement && currentCharacter.breedMonster.elementPatchChoice) {
+    if (equippedCount > 0 && def.chooseElement && breedMonster.elementPatchChoice) {
       const meta = document.createElement('div');
       meta.className = 'deck-row-meta';
-      meta.textContent = `属性→${ELEMENT_LABEL[currentCharacter.breedMonster.elementPatchChoice]}に上書き中`;
+      meta.textContent = `属性→${ELEMENT_LABEL[breedMonster.elementPatchChoice]}に上書き中`;
       info.append(nameEl, meta);
     } else {
       const badges = document.createElement('div');
@@ -7838,12 +7898,12 @@ function renderBreedScreen() {
     }
 
     function equip() {
-      currentCharacter.breedMonster.equippedPartIds.push(def.id);
+      breedMonster.equippedPartIds.push(def.id);
       saveCharacter(currentUserId, currentCharacter);
       renderBreedScreen();
     }
 
-    const equipCheck = canAddCopy ? canEquipPart(currentCharacter.breedMonster, def) : { ok: false };
+    const equipCheck = canAddCopy ? canEquipPart(breedMonster, def) : { ok: false };
     const actions = document.createElement('div');
     actions.className = 'breed-element-choices';
 
@@ -7853,8 +7913,8 @@ function renderBreedScreen() {
       removeBtn.textContent = '1個外す';
       removeBtn.addEventListener('click', () => {
         breedError.classList.add('hidden');
-        const removeIndex = currentCharacter.breedMonster.equippedPartIds.lastIndexOf(def.id);
-        if (removeIndex >= 0) currentCharacter.breedMonster.equippedPartIds.splice(removeIndex, 1);
+        const removeIndex = breedMonster.equippedPartIds.lastIndexOf(def.id);
+        if (removeIndex >= 0) breedMonster.equippedPartIds.splice(removeIndex, 1);
         saveCharacter(currentUserId, currentCharacter);
         renderBreedScreen();
       });
@@ -7871,7 +7931,7 @@ function renderBreedScreen() {
         swatch.textContent = ELEMENT_LABEL[element];
         swatch.addEventListener('click', () => {
           breedError.classList.add('hidden');
-          currentCharacter.breedMonster.elementPatchChoice = element;
+          breedMonster.elementPatchChoice = element;
           equip();
         });
         choices.appendChild(swatch);
@@ -7885,7 +7945,7 @@ function renderBreedScreen() {
       equipBtn.title = equipCheck.ok ? '' : equipCheck.error;
       equipBtn.addEventListener('click', () => {
         breedError.classList.add('hidden');
-        const check = canEquipPart(currentCharacter.breedMonster, def);
+        const check = canEquipPart(breedMonster, def);
         if (!check.ok) {
           breedError.textContent = check.error;
           breedError.classList.remove('hidden');
@@ -7902,10 +7962,12 @@ function renderBreedScreen() {
 }
 
 breedName.addEventListener('change', () => {
+  const breedMonster = activeBreedMonster(currentCharacter);
   const trimmed = breedName.value.trim();
-  currentCharacter.breedMonster.name = trimmed || BREED_BASE.defaultName;
-  breedName.value = currentCharacter.breedMonster.name;
+  breedMonster.name = trimmed || BREED_BASE.defaultName;
+  breedName.value = breedMonster.name;
   saveCharacter(currentUserId, currentCharacter);
+  renderBreedSlotTabs();
 });
 
 // ブリードモンスターの絵は、カスタムカードと同じく768px/webpへ縮めてから
@@ -7932,7 +7994,7 @@ breedImage.addEventListener('change', async () => {
     return;
   }
   try {
-    currentCharacter.breedMonster.imageDataUrl = dataUrl;
+    activeBreedMonster(currentCharacter).imageDataUrl = dataUrl;
     saveCharacter(currentUserId, currentCharacter);
   } catch {
     breedError.textContent = '画像を保存できませんでした。画像サイズを小さくしてください';
@@ -7945,8 +8007,9 @@ breedImage.addEventListener('change', async () => {
 });
 
 breedImageReset.addEventListener('click', () => {
-  if (!currentCharacter.breedMonster.imageDataUrl) return;
-  delete currentCharacter.breedMonster.imageDataUrl;
+  const breedMonster = activeBreedMonster(currentCharacter);
+  if (!breedMonster.imageDataUrl) return;
+  delete breedMonster.imageDataUrl;
   breedImage.value = '';
   breedImagePreview.src = BREED_DEFAULT_IMAGE_URL;
   breedImageReset.disabled = true;

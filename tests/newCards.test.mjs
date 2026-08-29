@@ -15,6 +15,7 @@ const battle = await vite.ssrLoadModule('/src/battle.js');
 const { TileType, MAPS } = await vite.ssrLoadModule('/src/board.js');
 const { STORY_STAGES } = await vite.ssrLoadModule('/src/story.js');
 const { WIP_CARD_NAMES, reclaimReleasedWipHoldings, getCardCatalog } = await vite.ssrLoadModule('/src/cardCatalog.js');
+const breedParts = await vite.ssrLoadModule('/src/breedParts.js');
 test.after(() => vite.close());
 
 const mon = (name, hp, atk, extra = {}) => ({ id: name, name, element: 'fire', rarity: 'N', hp, atk, ...extra });
@@ -1180,4 +1181,46 @@ test('異次元ソケットの入れ替えは1戦闘限りで、ATK/HPの実数�
   assert.equal(battle.statTotals(d2).atk, 80, 'ATKの実数値は入れ替わらない');
   const r2 = battle.resolveBattle(a2, d2, new battle.GoldLedger());
   assert.deepEqual([r2.attackerSurvived, r2.defenderSurvived], [true, false], 'ソケット無しの通常戦闘に戻っている');
+});
+
+test('ハイパーアップはATK/HPともに+15、コスト+40のRパーツ', () => {
+  const part = breedParts.findBreedPart('part-hyper-up');
+  assert.ok(part, 'part-hyper-upがBREED_PARTSに登録されていない');
+  assert.equal(part.name, 'ハイパーアップ');
+  assert.equal(part.rarity, 'R');
+  assert.deepEqual([part.atkDelta, part.hpDelta, part.costDelta], [15, 15, 40]);
+
+  const breedMonster = { equippedPartIds: [] };
+  assert.deepEqual(breedParts.canEquipPart(breedMonster, part), { ok: true });
+  breedMonster.equippedPartIds.push(part.id);
+  const stats = breedParts.computeBreedStats(breedMonster);
+  assert.deepEqual(
+    [stats.atk, stats.hp, stats.cost],
+    [breedParts.BREED_BASE.atk + 15, breedParts.BREED_BASE.hp + 15, breedParts.BREED_BASE.cost + 40],
+  );
+});
+
+test('ブリードパターンは最大3件で、選択中のパターンだけがカード化される', () => {
+  // デッキと同じく、character.breedMonsters(配列)+breedMonsterIndex(選択中)
+  // で管理する。activeBreedMonsterは無効なindexにもフォールバックする。
+  const patternA = { name: 'パターンA', equippedPartIds: ['part-atk-up'] };
+  const patternB = { name: 'パターンB', equippedPartIds: ['part-hyper-up', 'part-hyper-up'] };
+  const character = { breedMonsters: [patternA, patternB], breedMonsterIndex: 1 };
+
+  assert.equal(breedParts.activeBreedMonster(character), patternB, '選択中(index=1)のパターンを返す');
+  const cardB = breedParts.buildBreedCardDef(character);
+  assert.equal(cardB.name, 'パターンB');
+  assert.equal(cardB.atk, breedParts.BREED_BASE.atk + 30);
+  assert.equal(cardB.hp, breedParts.BREED_BASE.hp + 30);
+  assert.equal(cardB.catalogId, 'breedMonster', 'パターンが違っても図鑑/デッキ追跡用のcatalogIdは固定');
+
+  character.breedMonsterIndex = 0;
+  assert.equal(breedParts.activeBreedMonster(character), patternA, '切り替えると即座に別パターンを返す');
+  assert.equal(breedParts.buildBreedCardDef(character).name, 'パターンA');
+
+  // 無効なindex（未設定・範囲外）は先頭パターンへフォールバックする。
+  character.breedMonsterIndex = 99;
+  assert.equal(breedParts.activeBreedMonster(character), patternA);
+  delete character.breedMonsterIndex;
+  assert.equal(breedParts.activeBreedMonster(character), patternA);
 });

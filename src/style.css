@@ -2313,7 +2313,8 @@ html, body {
   text-decoration: none;
 }
 
-#deck-slot-tabs {
+#deck-slot-tabs,
+#breed-slot-tabs {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;

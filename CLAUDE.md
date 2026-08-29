@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v230`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v231`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## 未実装: Firebase App Check
@@ -694,6 +694,36 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 - 回帰テストは`npm run test:cards`（カタログ内容・モンスター自身の特性
   (先制)の入れ替え・装備アイテムの効果(ナンカのお守りの無効化)の入れ替え・
   1戦闘限りの復元とATK/HP実数値が変わらないこと）。
+
+## ブリードパターン保存（最大3件）とハイパーアップ (2026-08)
+- **デッキ編集(decks配列/editingDeckIndex)と同じ発想**で、ブリードモンスターの
+  構成（名前・装着パーツ・属性パッチ選択・画像）を`character.breedMonsters`
+  （配列、最大`BREED_MAX_PATTERNS`=3件）＋`character.breedMonsterIndex`
+  （選択中インデックス）で管理する（旧来は`character.breedMonster`単数
+  オブジェクト1つだけだった）。
+- **選択中パターンがそのまま「生きた」ブリモン**: `buildBreedCardDef`
+  （breedParts.js）が`activeBreedMonster(character)`で選択中パターンを
+  解決し、そのステータス・名前・画像でカード定義を作る。デッキ内の
+  「ブリモン」枠は常にこれをライブ参照する既存の仕組み（`catalogId`固定）
+  がそのまま活きるので、main.js側の呼び出し規約は変わっていない。
+- **画面はデッキ編集のスロットタブと同じ`.deck-slot-tab`クラスを流用**
+  （`#breed-slot-tabs`、`renderBreedSlotTabs`）。パターン間で**所持パーツ
+  数は共有・消費されない**（decksが所持カード数をデッキ間で引き合わない
+  のと同じ仕様 - 1個しか持っていないパーツでも各パターンに独立に装着できる。
+  「所持」はアカウント全体の在庫、「装着」は各パターン内だけのカウント）。
+- ⚠️ **旧セーブデータの移行は`ensureBreedFields`（main.js）で1回だけ**：
+  `character.breedMonster`（単数）が残っていればそれを`breedMonsters[0]`
+  として引き継ぎ、旧フィールド自体は削除する。`shrinkOversizedBreedImage`
+  （ログイン時の画像縮小）も全パターンを走査するよう変更済み。
+- 新パーツ**「ハイパーアップ」**（R、ATK+15/HP+15、costDelta+40、
+  `part-hyper-up`、breedParts.js）: 既存の「ダブルアップ」（+10/+10で
+  costDelta25＝単純合計20の1.25倍）と同じ「両ステータス同時上昇の
+  コスト割増し」の相場に合わせ、単純合計30×1.25＝37.5を切り上げて40。
+- 実ブラウザ（Firebaseエミュレータ経由でログイン→キャラ作成→ショップで
+  パーツパック購入→ブリード画面でタブ作成・改名・装着・パターン間の
+  独立性）まで一通り動作確認済み。回帰テストは`npm run test:cards`
+  （ハイパーアップの数値・`activeBreedMonster`のフォールバック・
+  パターンごとのカード化）。
 
 ## チュートリアル (Codex追加)
 - ログイン前のタイトルからも遊べるデモ。`mapId: 'tutorial'`（3×3外周の8マス、
