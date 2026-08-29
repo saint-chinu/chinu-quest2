@@ -9,7 +9,7 @@ import { existsSync } from 'node:fs';
 import { createServer } from 'vite';
 
 const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' });
-const { ITEM_CATALOG, SPELL_CATALOG, MONSTER_CATALOG, buildCharacterCardList, isRewardOnlyCard } = await vite.ssrLoadModule('/src/battleCards.js');
+const { ITEM_CATALOG, SPELL_CATALOG, MONSTER_CATALOG, buildCharacterCardList, isRewardOnlyCard, buildCharacterDeckList } = await vite.ssrLoadModule('/src/battleCards.js');
 const { Game } = await vite.ssrLoadModule('/src/game.js');
 const battle = await vite.ssrLoadModule('/src/battle.js');
 const { TileType, MAPS } = await vite.ssrLoadModule('/src/board.js');
@@ -1243,4 +1243,51 @@ test('旧ブリード画像は選択中の1枚へ統合し、パターン別デ�
   assert.equal(character.breedImageDataUrl, 'data:image/webp;base64,image-b', '選択中パターンの画像を残す');
   assert.ok(character.breedMonsters.every((pattern) => !Object.hasOwn(pattern, 'imageDataUrl')));
   assert.equal(breedParts.migrateBreedImageToShared(character), false, '移行済みデータは再変更しない');
+});
+
+test('水神の盾は水属性が装備すると被ダメージを反射する', () => {
+  const attacker = unit(mon('攻', 50, 30, { element: 'neutral' }), 'A');
+  const defender = unit(mon('守', 50, 10, { element: 'water' }), 'D');
+  battle.equipItem(defender, ITEM_CATALOG.suijinNoTate);
+  const r = battle.resolveBattle(attacker, defender, new battle.GoldLedger());
+  const reflectedExchange = r.exchanges.find((e) => e.reflected);
+  assert.ok(reflectedExchange, '反射の演出が記録されているはず');
+  assert.equal(reflectedExchange.damage, 30, '反射ダメージは元の攻撃力と同じ');
+  const defenderHit = r.exchanges.find((e) => e.side === 'attacker' && !e.reflected);
+  assert.equal(defenderHit.damage, 0, '守備側は反射でノーダメージのはず');
+});
+
+test('水神の盾は属性が違うと反射せず、HP+15の防具になるだけ', () => {
+  const attacker = unit(mon('攻', 50, 30, { element: 'neutral' }), 'A');
+  const defender = unit(mon('守', 50, 10, { element: 'fire' }), 'D');
+  battle.equipItem(defender, ITEM_CATALOG.suijinNoTate);
+  assert.equal(battle.statTotals(defender).maxHp, 65, 'HP+15だけは属性を問わず乗る（戦闘前に確認、戦闘後はアイテムが外れる）');
+  const r = battle.resolveBattle(attacker, defender, new battle.GoldLedger());
+  assert.ok(!r.exchanges.some((e) => e.reflected), '属性が違えば反射しない');
+});
+
+test('火神の盾・雷神の盾・森神の盾も一致属性でだけ反射する（属性神の盾4種の一般化）', () => {
+  const cases = [
+    [ITEM_CATALOG.kajinNoTate, 'fire'],
+    [ITEM_CATALOG.raijinNoTate, 'thunder'],
+    [ITEM_CATALOG.shinrinjinNoTate, 'forest'],
+  ];
+  for (const [item, element] of cases) {
+    const attacker = unit(mon('攻', 50, 30, { element: 'neutral' }), 'A');
+    const matched = unit(mon('守', 50, 10, { element }), 'D');
+    battle.equipItem(matched, item);
+    const matchedResult = battle.resolveBattle(attacker, matched, new battle.GoldLedger());
+    assert.ok(matchedResult.exchanges.some((e) => e.reflected), `${item.name}: 一致属性は反射するはず`);
+
+    const attacker2 = unit(mon('攻', 50, 30, { element: 'neutral' }), 'A');
+    const mismatched = unit(mon('守', 50, 10, { element: 'water' }), 'D');
+    battle.equipItem(mismatched, item);
+    const mismatchedResult = battle.resolveBattle(attacker2, mismatched, new battle.GoldLedger());
+    assert.ok(!mismatchedResult.exchanges.some((e) => e.reflected), `${item.name}: 不一致属性は反射しないはず`);
+  }
+});
+
+test('川田（⑮予定）の専用デッキはちょうど40枚', () => {
+  const list = buildCharacterDeckList('kawada');
+  assert.equal(list.length, 40);
 });

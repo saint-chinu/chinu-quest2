@@ -93,6 +93,14 @@ export function equipItem(unit, itemDef) {
       && unit.def.element === equipped.effect.wielderElement) {
     equipped.atkBonus = (equipped.atkBonus || 0) + (equipped.effect.atkBonus || 0);
   }
+  // 属性神の盾(wielderElementReflect): 装備するモンスターの属性が一致した
+  // 時だけ、効果を実際の反射(reflectDamage、くねくねと同じ全反射)へ差し替える。
+  // 一致しない場合はeffectがそのまま残る（どの判定にも一致しないため、
+  // HP/ATKの素の数値だけの装備品として機能する）。
+  if (equipped.effect?.type === 'wielderElementReflect'
+      && unit.def.element === equipped.effect.wielderElement) {
+    equipped.effect = { type: 'reflectDamage' };
+  }
   unit.items.push(equipped);
   return equipped;
 }
@@ -407,7 +415,9 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus, gold) {
   // くねくね(reflectDamage): 攻撃をそのまま跳ね返す - 自身はノーダメージ、
   // 攻撃側がその分のダメージを受ける。攻撃自体が「届かなかった」扱いなので
   // 命中時オンヒット効果（毒付与など）は発動させない - damage:0を返す。
-  if (!pierces && defenderUnit.def.effect?.type === 'reflectDamage' && damage > 0) {
+  // getEffectで判定することで、属性神の盾（一致した属性が装備すると
+  // 同じreflectDamageへ差し替わる）もモンスター自身の効果と同様に扱える。
+  if (!pierces && getEffect(defenderUnit, 'reflectDamage') && damage > 0) {
     // 反射ダメージを受ける攻撃側がナンカのお守りを持っていれば無効化する。
     const negatedMsg = consumeDamageNegation(attackerUnit, log);
     if (negatedMsg) return { damage: 0, message: negatedMsg };

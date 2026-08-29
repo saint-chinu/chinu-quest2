@@ -55,7 +55,7 @@ const item = (id, name, rarity, itemType, cost, atkBonus, hpBonus, options = {})
 });
 
 /**
- * アイテム35種（N13/S12/R9/EX1）。「オサフネ」は刀鍛冶（無属性モンスター）の
+ * アイテム39種（N13/S12/R13/EX1）。「オサフネ」は刀鍛冶（無属性モンスター）の
  * 土地コマンドで入手する専用アイテムだが、ショップ等では他アイテムと同じ
  * ように扱う（購入自体は現状想定していないが、カタログには通常のS枠として
  * 登録しておく）。
@@ -160,6 +160,32 @@ export const ITEM_CATALOG = {
     effect: { type: 'wielderElementAtkBonus', wielderElement: Element.WATER, atkBonus: 30 },
     effectDescription: '水属性モンスターが使用するとATKがさらに30上昇',
   }),
+
+  // 属性神の盾4種。上のATK特化武器と対になる防具で、一致した属性の
+  // モンスターが装備すると受けるダメージを丸ごと反射する（くねくねと同じ
+  // reflectDamage、battle.jsのequipItemが装備時に差し替える）。一致しない
+  // 場合はただのHP+15防具になる。
+  suijinNoTate: item('suijinNoTate', '水神の盾', Rarity.R, ItemType.ARMOR, 110, 0, 15, {
+    effect: { type: 'wielderElementReflect', wielderElement: Element.WATER },
+    effectDescription: '水属性モンスターが装備すると、受けるダメージを反射する（それ以外の属性はHP+15のみ）',
+    imageDataUrl: null,
+  }),
+  kajinNoTate: item('kajinNoTate', '火神の盾', Rarity.R, ItemType.ARMOR, 110, 0, 15, {
+    effect: { type: 'wielderElementReflect', wielderElement: Element.FIRE },
+    effectDescription: '火属性モンスターが装備すると、受けるダメージを反射する（それ以外の属性はHP+15のみ）',
+    imageDataUrl: null,
+  }),
+  raijinNoTate: item('raijinNoTate', '雷神の盾', Rarity.R, ItemType.ARMOR, 110, 0, 15, {
+    effect: { type: 'wielderElementReflect', wielderElement: Element.THUNDER },
+    effectDescription: '雷属性モンスターが装備すると、受けるダメージを反射する（それ以外の属性はHP+15のみ）',
+    imageDataUrl: null,
+  }),
+  shinrinjinNoTate: item('shinrinjinNoTate', '森神の盾', Rarity.R, ItemType.ARMOR, 110, 0, 15, {
+    effect: { type: 'wielderElementReflect', wielderElement: Element.FOREST },
+    effectDescription: '森属性モンスターが装備すると、受けるダメージを反射する（それ以外の属性はHP+15のみ）',
+    imageDataUrl: null,
+  }),
+
   fushichoNoTate: item('fushichoNoTate', '不死鳥の盾', Rarity.R, ItemType.ARMOR, 90, 10, 20, {
     returnsToHandIfUsed: true,
     effectDescription: '戦闘終了後に手札へ戻る。HP+20、ATK+10',
@@ -1557,6 +1583,60 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.twitterLand, count: 1 }, { def: SPELL_CATALOG.senbonZakura, count: 2 },
         { def: SPELL_CATALOG.sideIncome, count: 1 }, { def: SPELL_CATALOG.neutralMagicCircle, count: 1 },
         { def: SPELL_CATALOG.necromancer, count: 1 }, { def: SPELL_CATALOG.encounterUnknown, count: 1 },
+      ],
+    },
+  },
+  /**
+   * ⑮（story.js未実装、CLAUDE.md「新ストーリー「川田」構想」参照）の川田。
+   * ビーバーだが本人はマーモットだと思い込んでいる王都のレジスタンス。
+   * 「純粋な殴り合い」というユーザー要望どおり、専用モンスターや妨害トリック
+   * を持たない水メインの真正面ビートダウン。ゆきおんなの全水属性ATK+30を
+   * 軸に、先制持ちで押し込みつつ連鎖系(水神/混沌の頭)で息切れを防ぎ、
+   * くぐつの剣豪の自動侵略で盤面を広げ続ける。
+   */
+  kawada: {
+    composition: {
+      monsters: [
+        // 周回成長型の壁。空き地専用召喚だが、据え置くほど先制→1/2無効化と
+        // 育つので後半の壁として機能する。
+        { def: MONSTER_CATALOG.islandWhale, count: 2 }, // S 40G 40/25 成長: 先制→1/2無効化
+        // ゆきおんな3体: 1体でも盤面にいれば全水属性モンスターがATK+30
+        // （重複なし）。本体も先制持ちなので単体でも押せる。
+        { def: MONSTER_CATALOG.yukiOnna, count: 3 }, // S 50G 15/35 先制/水全体ATK+30
+        // 安価な先制アタッカーで序盤から押し込む主力。
+        { def: MONSTER_CATALOG.hangyojin, count: 2 }, // N 50G 30/30 先制
+        { def: MONSTER_CATALOG.fireman, count: 1 }, // S 50G 30/20 先制・対火2倍
+        // ゆきおんなの+30が2回乗るので、素の30/20が実質60/20×2連撃になる。
+        { def: MONSTER_CATALOG.ryanmenSukuna, count: 2 }, // R 50G 30/20 2回攻撃
+        { def: MONSTER_CATALOG.kaikyouSekishoKurage, count: 1 }, // R 80G 30/30 連鎖1 強制停止
+        { def: MONSTER_CATALOG.manbo, count: 1 }, // N 40G 30/10 被ダメージ半減
+        { def: MONSTER_CATALOG.bigMermaid, count: 1 }, // R 120G 55/55 連鎖1
+        { def: MONSTER_CATALOG.suijin, count: 1 }, // R 150G 40/25 連鎖1 水連鎖×7
+        // 無属性だが水デッキでも普通に運用できるテック枠。
+        { def: MONSTER_CATALOG.kugutsuNoKengou, count: 3 }, // R 150G 50/50 自動侵略
+        { def: MONSTER_CATALOG.kontonNoAtama, count: 2 }, // R 150G 30/30 全連鎖×5
+        { def: MONSTER_CATALOG.kunekune, count: 1 }, // R 50G 10/0 反射
+      ],
+      items: [
+        // 水神の盾: 水属性が装備すると被ダメージを反射する新アイテム
+        // （battleCards.js/battle.js参照）。ゆきおんな・水神等に乗せて壁にする。
+        { def: ITEM_CATALOG.suijinNoTate, count: 2 }, // R 110G 0/+15 水属性限定で反射
+        { def: ITEM_CATALOG.dimensionalSocket, count: 2 }, // S 60G 特殊能力を入れ替え
+        { def: ITEM_CATALOG.twinHammer, count: 2 }, // S 65G +10/0 2回攻撃
+        { def: ITEM_CATALOG.shinkenShirahadori, count: 1 }, // R 110G 相手のアイテムを奪う
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 1 }, // S 45G ダメージ1回無効化
+        { def: ITEM_CATALOG.lifeJacket, count: 1 }, // S 35G 致死ダメージをHP1で耐える
+        { def: ITEM_CATALOG.diamondShield, count: 1 }, // S 55G -20/+60 後攻
+      ],
+      spells: [
+        { def: SPELL_CATALOG.iCanFly, count: 2 }, // N 30G 出目×2進む
+        { def: SPELL_CATALOG.backfire, count: 2 }, // S 50G 出目分後退させる
+        { def: SPELL_CATALOG.kotai, count: 2 }, // N 50G 基礎HP+15（壁の底上げ）
+        // 放水: 敵地・空き地を水属性へ塗り替え、水神/混沌の頭の連鎖ボーナスを
+        // 押し上げる。相手の連鎖破壊にも使える。
+        { def: SPELL_CATALOG.waterRelease, count: 1 }, // S 150G 対象の土地を水属性に
+        { def: SPELL_CATALOG.waterMagicCircle, count: 1 }, // S 60G デッキの水属性をランダム召喚
+        { def: SPELL_CATALOG.divination, count: 2 }, // N 40G 指定種類をデッキからランダムに引く
       ],
     },
   },
