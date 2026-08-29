@@ -216,7 +216,9 @@ export const NEUTRAL_MONSTER_CATALOG = {
   // 毎手番1マス進む。配置モンスターや特殊マスは通り抜けない。移動先は選べず、
   // 土地コマンドの「移動」でも動かせない（_runAutoInvaders / game.js）。
   kugutsuNoKengou: neutralMonster('kugutsuNoKengou', 'くぐつの剣豪', Rarity.R, 50, 50, {
-    cost: 150,
+    // 2026-08、⑮のバランス調整でユーザー指定により150G→120G
+    // （CLAUDE.md「⑮の勝率シミュレーション結果」参照）。
+    cost: 120,
     traits: ['immovableByMoveCommand', 'noHpBoost'],
     effect: { type: 'autoInvadeEachTurn' },
     effectDescription: '手番開始時、隣接する敵モンスターの土地へ自動で侵略する。隣接していなければ、空き地だけで到達できる最短の敵へ毎手番1マス進む（配置モンスター・特殊マスは通れず、移動先も選べない。移動コマンドでは動かせない）。戦闘中、アイテムやスペルによるHP増加を受けない',

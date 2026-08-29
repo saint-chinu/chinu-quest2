@@ -889,7 +889,7 @@ test('くぐつの剣豪は指定の性能を持ち、正式画像を参照す�
   assert.equal(card.name, 'くぐつの剣豪');
   assert.equal(card.rarity, 'R');
   assert.equal(card.element, 'neutral');
-  assert.deepEqual([card.hp, card.atk, card.cost], [50, 50, 150]);
+  assert.deepEqual([card.hp, card.atk, card.cost], [50, 50, 120]); // 2026-08 ユーザー指定で150G→120G
   assert.equal(card.effect.type, 'autoInvadeEachTurn');
   assert.ok(card.traits.includes('immovableByMoveCommand'));
   assert.ok(card.traits.includes('noHpBoost'));
@@ -1390,6 +1390,33 @@ test('川田は開幕に水のお札を15枚持つ（story.jsのstartingOfuda）
   assert.deepEqual(stage.opponents[0].startingOfuda, { water: 15 });
   // マップ側がお札対応でないと_applyStartingOfudaが何もしないので併せて確認。
   assert.ok(MAPS.find((m) => m.id === 'kawada').hasOfuda);
+});
+
+test('土地神の怒りは属性の合わない土地のモンスターだけを撃つ（自分のも巻き込む）', async () => {
+  const water = (id, tileElement, unitElement, owner) => {
+    const t = makeTile(id, { element: tileElement });
+    t.unit = unit(mon(`M${id}`, 50, 10, { element: unitElement }), owner);
+    return t;
+  };
+  // ①属性一致（水の土地に水） ②不一致（火の土地に水） ③無属性は
+  // 無属性以外の土地では常に不一致 ④無属性の土地に無属性なら一致。
+  const tiles = [
+    water(0, 'water', 'water', 'A'),
+    water(1, 'fire', 'water', 'A'),
+    water(2, 'fire', 'neutral', 'B'),
+    water(3, 'neutral', 'neutral', 'B'),
+  ];
+  const g = makeStub(tiles, [{ id: 'A', name: '川田' }, { id: 'B', name: '敵' }]);
+  g._spellDamageUnit = async (t, amount) => { t.unit.currentHp -= amount; };
+  await g._applySpellEffect(
+    { name: '土地神の怒り', effect: { type: 'damageAllUnitsOnMismatchedLand', amount: 20 } },
+    { effect: { type: 'damageAllUnitsOnMismatchedLand', amount: 20 } },
+    {},
+  );
+  assert.equal(tiles[0].unit.currentHp, 50, '属性が一致していれば無傷');
+  assert.equal(tiles[1].unit.currentHp, 30, '不一致なら20ダメージ（自分のモンスターも対象）');
+  assert.equal(tiles[2].unit.currentHp, 30, '無属性は属性土地では不一致扱い');
+  assert.equal(tiles[3].unit.currentHp, 50, '無属性の土地の無属性は一致');
 });
 
 test('川田（⑮予定）の専用デッキはちょうど40枚', () => {

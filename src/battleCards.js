@@ -456,6 +456,12 @@ export const SPELL_CATALOG = {
   senbonZakura: spell('senbonZakura', '千本桜', Rarity.R, 100, 'enemyMonster', { type: 'directDamage', amount: 30 }, '対象モンスターに30ダメージ'),
   fireball: spell('fireball', 'ファイヤーボール', Rarity.N, 40, 'enemyMonster', { type: 'directDamage', amount: 15 }, '相手モンスター1体に15ダメージ'),
   smallMeteor: spell('smallMeteor', '小隕石', Rarity.N, 50, 'none', { type: 'damageAllUnits', amount: 10 }, '場の全モンスターに10ダメージ（自分のモンスターも対象）'),
+  // 土地神の怒り: 自分の土地属性と噛み合っていないモンスターだけを罰する
+  // 全体スペル。小隕石(damageAllUnits)と同じ仕組みで、対象の絞り込みだけを
+  // 「モンスターの属性 ≠ 立っている土地の属性」に変えている。無属性の
+  // モンスターは無属性の土地以外では常に該当する点に注意（自分の
+  // モンスターも巻き込む）。
+  tochigamiNoIkari: spell('tochigamiNoIkari', '土地神の怒り', Rarity.R, 60, 'none', { type: 'damageAllUnitsOnMismatchedLand', amount: 20 }, '自分の属性と異なる属性の土地にいる全モンスターに20ダメージ（自分のモンスターも対象）'),
   poisonMist: spell(
     'poisonMist',
     '毒霧',
@@ -1626,13 +1632,10 @@ export const CHARACTER_DECKS = {
         // 水の土地1連鎖以上が召喚条件で、既に水神/混沌の頭で連鎖前提の
         // デッキなので運用しやすい。相手がRなら基礎ATKが+40%されるテック。
         { def: MONSTER_CATALOG.mizuburoShugyoso, count: 1 }, // S 80G 30/40 連鎖1 対R+40%ATK
-        // 30Gの安価枠。後攻なので殴り合いには弱いが、ゆきおんな込みで
-        // ATK80になる火力を序盤から出せる（コストカーブを下げる役割）。
-        { def: MONSTER_CATALOG.gyakuryuKajiki, count: 1 }, // N 30G 50/10 後攻
         { def: MONSTER_CATALOG.suijin, count: 1 }, // R 150G 40/25 連鎖1 水連鎖×7
         // 無属性だが水デッキでも普通に運用できるテック枠。
-        { def: MONSTER_CATALOG.kugutsuNoKengou, count: 2 }, // R 150G 50/50 自動侵略
-        { def: MONSTER_CATALOG.kontonNoAtama, count: 2 }, // R 150G 30/30 全連鎖×5
+        { def: MONSTER_CATALOG.kugutsuNoKengou, count: 3 }, // R 120G 50/50 自動侵略
+        { def: MONSTER_CATALOG.kontonNoAtama, count: 1 }, // R 150G 30/30 全連鎖×5
         { def: MONSTER_CATALOG.kunekune, count: 1 }, // R 50G 10/0 反射
       ],
       items: [
@@ -1663,6 +1666,10 @@ export const CHARACTER_DECKS = {
         // 使用判断はowner/同盟/勝率だけで決まる汎用ロジック(game.js
         // _cpuMaybeUsePsychokinesisSpell)なので、このデッキでも死に札にならない。
         { def: SPELL_CATALOG.psychokinesis, count: 1 }, // R 100G 配置モンスターを1マス強制移動
+        // 土地神の怒り: 相手の雷/無属性を土地属性の噛み合わない場所で叩く。
+        // 川田の水モンスターは自分の水土地にいる限り無傷なので一方的に効く
+        // （逆に無属性のくぐつの剣豪・混沌の頭・くねくねは自分も食らう）。
+        { def: SPELL_CATALOG.tochigamiNoIkari, count: 1 }, // R 60G 異属性土地の全モンスターに20ダメージ
       ],
     },
   },

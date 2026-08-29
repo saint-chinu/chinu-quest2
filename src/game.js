@@ -1492,6 +1492,12 @@ export class Game {
         await this._spellDamageAllUnits((t) => t.unit.def.element === effect.element, effect.amount);
         return false;
 
+      // 土地神の怒り: 立っている土地と属性が噛み合っていないモンスターだけを
+      // 撃つ。無属性モンスターは無属性の土地以外では必ず該当する。
+      case 'damageAllUnitsOnMismatchedLand':
+        await this._spellDamageAllUnits((t) => t.unit.def.element !== t.element, effect.amount);
+        return false;
+
       case 'poisonArea':
         this._spellPoisonArea(targetTile, effect.ratio);
         return false;
@@ -8337,6 +8343,7 @@ export class Game {
     await this._cpuMaybeUseFusagikondaCombo(this.currentPlayer);
     await this._cpuMaybeUseDisruptionSpell(this.currentPlayer);
     await this._cpuMaybeUseDamageSpell(this.currentPlayer);
+    await this._cpuMaybeUseMismatchedLandDamageSpell(this.currentPlayer);
     await this._cpuMaybeUsePoisonSpell(this.currentPlayer);
     await this._cpuMaybeUseCancelCultureSpell(this.currentPlayer);
     await this._cpuMaybeUseManaExtractionSpell(this.currentPlayer);
@@ -9324,6 +9331,48 @@ export class Game {
     if (!target) return;
 
     await this._cpuCastSpell(player, card, { targetTileId: target.id });
+  }
+
+  /**
+   * 土地神の怒り(damageAllUnitsOnMismatchedLand)のCPU使用判断。
+   *
+   * ⚠️ target:'none'の全体ダメージ系スペル（小隕石・洪水も同様）はCPUの
+   * 使用判断が実装されておらず、持たせても一度も詠唱されない死に札になる
+   * （CLAUDE.mdの「旧構成のphoenixCurse/psychokinesisはCPUが一切詠唱しない
+   * 死に札だった」と同じ問題）。ここで土地神の怒りだけ判断を用意する。
+   *
+   * このスペルは自分のモンスターも巻き込む（属性の合わない土地に立っていれば
+   * 敵味方を問わず被弾する。とくに無属性モンスターは無属性マスの無い盤面では
+   * 常に該当し、川田のくぐつの剣豪・混沌の頭・くねくねも自分で撃ってしまう）。
+   * そこで「撃ち得」の時だけ詠唱する:
+   *   ①相手を自分より多く倒せる（体数の交換で勝てる）
+   *   ②自分は1体も被弾せず、相手だけを削れる（ノーリスクの削り）
+   */
+  async _cpuMaybeUseMismatchedLandDamageSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL
+      && c.effect?.type === 'damageAllUnitsOnMismatchedLand');
+    if (!card || player.currency < (card.cost || 0)) return;
+
+    const amount = card.effect.amount || 0;
+    let enemyKills = 0;
+    let allyKills = 0;
+    let enemyHits = 0;
+    let allyHits = 0;
+    for (const tile of this.tiles) {
+      if (!tile.unit || tile.unit.def.element === tile.element) continue;
+      const dies = tile.unit.currentHp <= amount;
+      if (this._isFriendlyUnitTile(tile, player)) {
+        allyHits += 1;
+        if (dies) allyKills += 1;
+      } else {
+        enemyHits += 1;
+        if (dies) enemyKills += 1;
+      }
+    }
+    const worthIt = enemyKills > allyKills || (allyHits === 0 && enemyHits > 0);
+    if (!worthIt) return;
+    await this._cpuCastSpell(player, card, {});
   }
 
   /** 同盟戦の妨害スペル用: そのマスのモンスターが自分または同盟仲間の所有か。 */
