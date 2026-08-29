@@ -1592,12 +1592,14 @@ export const CHARACTER_DECKS = {
     },
   },
   /**
-   * ⑮（story.js未実装、CLAUDE.md「新ストーリー「川田」構想」参照）の川田。
+   * ⑮（story.js`kawada`、CLAUDE.md「新ストーリー『川田』」参照）の川田。
    * ビーバーだが本人はマーモットだと思い込んでいる王都のレジスタンス。
    * 「純粋な殴り合い」というユーザー要望どおり、専用モンスターや妨害トリック
    * を持たない水メインの真正面ビートダウン。ゆきおんなの全水属性ATK+30を
-   * 軸に、先制持ちで押し込みつつ連鎖系(水神/混沌の頭)で息切れを防ぎ、
-   * くぐつの剣豪の自動侵略で盤面を広げ続ける。
+   * 軸に、先制持ちで押し込みつつ連鎖系(水神/混沌の頭/水風呂修行僧)で
+   * 息切れを防ぎ、くぐつの剣豪の自動侵略で盤面を広げ続ける
+   * （2026-08、ユーザー指摘でファイヤーマン・まんぼーを高火力の
+   * 嵐を呼ぶ〇女・水風呂修行僧へ、ダイヤモンドの盾を不死鳥の剣へ差し替え）。
    */
   kawada: {
     composition: {
@@ -1610,11 +1612,15 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.yukiOnna, count: 3 }, // S 50G 15/35 先制/水全体ATK+30
         // 安価な先制アタッカーで序盤から押し込む主力。
         { def: MONSTER_CATALOG.hangyojin, count: 2 }, // N 50G 30/30 先制
-        { def: MONSTER_CATALOG.fireman, count: 1 }, // S 50G 30/20 先制・対火2倍
         // ゆきおんなの+30が2回乗るので、素の30/20が実質60/20×2連撃になる。
         { def: MONSTER_CATALOG.ryanmenSukuna, count: 2 }, // R 50G 30/20 2回攻撃
         { def: MONSTER_CATALOG.kaikyouSekishoKurage, count: 1 }, // R 80G 30/30 連鎖1 強制停止
-        { def: MONSTER_CATALOG.manbo, count: 1 }, // N 40G 30/10 被ダメージ半減
+        // 素のATK/HPが50/50と高水準な高火力アタッカー。攻撃時1/2の確率で
+        // 自身にも10ダメージが乗るが、ゆきおんな込みなら80/50で十分ペイする。
+        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 1 }, // R 100G 50/50 攻撃時1/2で自傷10
+        // 水の土地1連鎖以上が召喚条件で、既に水神/混沌の頭で連鎖前提の
+        // デッキなので運用しやすい。相手がRなら基礎ATKが+40%されるテック。
+        { def: MONSTER_CATALOG.mizuburoShugyoso, count: 1 }, // S 80G 30/40 連鎖1 対R+40%ATK
         { def: MONSTER_CATALOG.bigMermaid, count: 1 }, // R 120G 55/55 連鎖1
         { def: MONSTER_CATALOG.suijin, count: 1 }, // R 150G 40/25 連鎖1 水連鎖×7
         // 無属性だが水デッキでも普通に運用できるテック枠。
@@ -1631,7 +1637,9 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.shinkenShirahadori, count: 1 }, // R 110G 相手のアイテムを奪う
         { def: ITEM_CATALOG.nankaNoOmamori, count: 1 }, // S 45G ダメージ1回無効化
         { def: ITEM_CATALOG.lifeJacket, count: 1 }, // S 35G 致死ダメージをHP1で耐える
-        { def: ITEM_CATALOG.diamondShield, count: 1 }, // S 55G -20/+60 後攻
+        // 使って効果を発動した場合のみ手札に戻る＝実質ロスなしでATK+20/HP+10を
+        // 使い回せる武器。ダイヤモンドの盾（後攻付与）より純粋な殴り合いに合う。
+        { def: ITEM_CATALOG.fushichoNoKen, count: 1 }, // R 80G +20/+10 使用後手札に戻る
       ],
       spells: [
         { def: SPELL_CATALOG.iCanFly, count: 2 }, // N 30G 出目×2進む
