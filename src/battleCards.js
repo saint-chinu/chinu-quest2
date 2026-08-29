@@ -1649,7 +1649,10 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.fushichoNoKen, count: 1 }, // R 80G +20/+10 使用後手札に戻る
       ],
       spells: [
-        { def: SPELL_CATALOG.iCanFly, count: 2 }, // N 30G 出目×2進む
+        // ファイヤーボールの15ダメージは、川田の侵略を止めてくる避雷針侍(HP15)と
+        // くねくね(HP10)をどちらも1撃で落とせる。CPUの対象選択もこの2種を
+        // 最優先で狙う（game.js `_cpuPickDamageTarget`）。
+        { def: SPELL_CATALOG.fireball, count: 2 }, // N 40G 相手モンスター1体に15ダメージ
         { def: SPELL_CATALOG.backfire, count: 2 }, // S 50G 出目分後退させる
         // 放水: 敵地・空き地を水属性へ塗り替え、水神/混沌の頭の連鎖ボーナスを
         // 押し上げる。相手の連鎖破壊にも使える。

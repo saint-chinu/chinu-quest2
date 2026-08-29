@@ -104,6 +104,12 @@ const NEUTRAL_ELEMENT_CHANGE_DISCOUNT = 0.5;
 const OPTIMIZE_MIN_TILES = 4;
 const CHANGEABLE_ELEMENTS = [Element.FIRE, Element.WATER, Element.THUNDER, Element.FOREST, Element.NEUTRAL];
 const OFUDA_ELEMENTS = [Element.FIRE, Element.WATER, Element.FOREST, Element.THUNDER];
+// ダメージ系スペルでCPUが最優先で狙う「侵略を封じるモンスター」。
+// 避雷針侍は所有者の他の全土地の侵略勝率を0にし(_defenderProtectedBy
+// LightningRod)、くねくねは被ダメージを全反射するので、どちらも通常の戦闘
+// では処理できない。_cpuPickDamageTarget参照。
+const INVASION_BLOCKER_IDS = new Set(['raiheishinZamurai', 'kunekune']);
+
 // 150Gぶんの売買で相場が1G動く。小さくするほど「買い」が自己成就的に
 // 価格を押し上げ、先回り買いの旨味が増す（大きくすると土地レベル一辺倒になる）。
 const OFUDA_TRADE_UNIT_G = 150;
@@ -412,6 +418,9 @@ export class Game {
       isCPU: !!cfg.isCPU,
       // ステージ側からボス補正などで初期資金を上書きできる（既定500G）。
       currency: cfg.startingCurrency ?? 500,
+      // 開幕から持たせるお札 {属性: 枚数}（story.jsのopponent.startingOfuda）。
+      // 実際の購入はinit()が_buyOfudaで行うので、ここでは指定を持ち回るだけ。
+      startingOfuda: cfg.startingOfuda ?? null,
       tileId: startingTileId,
       homeGoalTileId: startingTileId,
       previousTileId: null,
@@ -556,6 +565,9 @@ export class Game {
       isCPU: !!cfg.isCPU,
       // ステージ側からボス補正などで初期資金を上書きできる（既定500G）。
       currency: cfg.startingCurrency ?? 500,
+      // 開幕から持たせるお札 {属性: 枚数}（story.jsのopponent.startingOfuda）。
+      // 実際の購入はinit()が_buyOfudaで行うので、ここでは指定を持ち回るだけ。
+      startingOfuda: cfg.startingOfuda ?? null,
       tileId: startId,
       homeGoalTileId: startId,
       previousTileId: null,
@@ -673,6 +685,7 @@ export class Game {
         const card = player.deck.draw();
         if (card) { player.hand.push(card); this._recordDraw(player, card); }
       }
+      this._applyStartingOfuda(player);
     }
     if (this.tutorialMode) this._setupTutorialScenario();
     const startPos = this.tiles[this.currentPlayer.tileId].position;
@@ -4396,6 +4409,25 @@ export class Game {
    * Gが無限に増える増殖バグになっていた。逐次約定なら売りも同じ坂を
    * 下りながら約定するので、往復益は消える。
    */
+  /**
+   * 開幕から持たせるお札（playerConfigs.startingOfuda、story.jsのopponent
+   * 経由。例: ⑮川田の水20枚）。通常の取引と同じ_buyOfudaを使うので、Gの
+   * 支払い・5枚ロットの逐次約定・相場の押し上げまで実際の購入と同じに扱う
+   * （お札の無いマップやGが足りない場合は買えた分だけで自然に止まる）。
+   */
+  _applyStartingOfuda(player) {
+    const wanted = player.startingOfuda;
+    if (!wanted || !this.hasOfuda) return;
+    for (const [element, count] of Object.entries(wanted)) {
+      const sheets = Math.max(0, Math.floor(count));
+      if (sheets <= 0) continue;
+      const result = this._buyOfuda(player, element, player.currency, { maxSheets: sheets });
+      if (result.bought > 0) {
+        this.onLog(`${player.name}は開幕から${ELEMENT_LABEL[element]}のお札を${result.bought}枚仕込んでいる (-${result.spent}G)`);
+      }
+    }
+  }
+
   _buyOfuda(player, element, budgetG, { maxSheets = OFUDA_MAX_BUY_PER_TRADE } = {}) {
     if (!this.hasOfuda || !OFUDA_ELEMENTS.includes(element)) return { bought: 0, spent: 0, before: null };
     const before = this._ofudaPrice(element);
@@ -9202,7 +9234,17 @@ export class Game {
     // プレイヤーのモンスターを狙う。いずれも同点は土地レベルが高い方。
     const killable = candidates.filter((t) => t.unit.currentHp <= amount);
     const pool = killable.length > 0 ? killable : candidates;
-    return [...pool].sort((a, b) => ownerAssets(b) - ownerAssets(a) || b.level - a.level)[0];
+    // 侵略そのものを封じてくる2種は、他の何より先に落とす。
+    // ・避雷針侍: 1体でも場にいる限り、その所有者の"他の全土地"の侵略勝率が
+    //   0と評価され（_defenderProtectedByLightningRod）、CPUが一切侵略でき
+    //   なくなる。放置すると盤面を取り返す手段が丸ごと消える。
+    // ・くねくね: 受けたダメージを丸ごと反射するので殴って処理できない。
+    // どちらも「戦闘では解けないロックをスペルで外す」ための優先度なので、
+    // 総資産・土地レベルより上に置く（ユーザー指定、2026-08）。
+    const blockerRank = (t) => (INVASION_BLOCKER_IDS.has(catalogIdOf(t.unit.def)) ? 1 : 0);
+    return [...pool].sort((a, b) => (
+      blockerRank(b) - blockerRank(a) || ownerAssets(b) - ownerAssets(a) || b.level - a.level
+    ))[0];
   }
 
   /**

@@ -5515,6 +5515,8 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
       // 同名キャラをステージごとに別の戦い方で出すために使う。
       aiProfile: opponent.aiProfile,
       startingCurrency: opponent.startingCurrency ?? stage.startingCurrency,
+      // 開幕から持たせるお札（story.jsのopponent.startingOfuda、例: 川田の水20枚）。
+      startingOfuda: opponent.startingOfuda,
       startGoalIndex: opponent.startGoalIndex,
     });
   }

@@ -1126,7 +1126,9 @@ export const STORY_STAGES = [
     // 除外中（board.js参照）。
     format: '1vs1',
     goalCurrency: 13000,
-    startingCurrency: 500,
+    // 2026-08、シミュレーションでのバランス調整（CLAUDE.md「⑮の勝率
+    // シミュレーション結果」参照）。両者700Gスタート。
+    startingCurrency: 700,
     intro: [
       { speaker: '???', text: '塞ぎ込んだ男から命からがら逃げ出した主人公は、気づけば見知らぬ裏路地に迷い込んでいた。' },
       { speaker: '主人公', text: 'ハァ…ハァ…なんとか撒いたか…？ここ、どこなんだ…' },
@@ -1154,6 +1156,10 @@ export const STORY_STAGES = [
         color: 0x4a6d8c,
         deckKey: 'kawada',
         theme: { elements: [Element.WATER] },
+        // 開幕に水のお札を20枚仕込んでいる（裏社会に精通したレジスタンス
+        // という設定にも合う）。game.jsのinit()が通常の取引と同じ_buyOfudaで
+        // 買うので、Gの支払い・相場の押し上げも実際の購入と同じに扱われる。
+        startingOfuda: { [Element.WATER]: 20 },
       },
     ],
   },

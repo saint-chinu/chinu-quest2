@@ -195,6 +195,8 @@ for (const stage of STORY_STAGES) {
           color: who.color ?? 0x888888,
           elements: who.theme?.elements ?? null,
           aiProfile: who.aiProfile ?? null,
+          // 開幕から持たせるお札（story.jsのopponent.startingOfuda、例: ⑮川田）。
+          startingOfuda: who.startingOfuda ?? null,
         });
       }
     }
@@ -271,6 +273,7 @@ function resolveDeck(spec, side) {
       elements: parseElements(FLAGS[`elements${side}`]) ?? parseElements((parsed.elements || []).join(',')) ?? inferElements(cards),
       color: side === 'A' ? 0x44aaff : 0xe4572e,
       aiProfile: null,
+      startingOfuda: parsed.startingOfuda ?? null,
     };
   }
   if (!CHARACTER_DECKS[spec]) {
@@ -287,6 +290,7 @@ function resolveDeck(spec, side) {
     elements: parseElements(FLAGS[`elements${side}`]) ?? persona?.elements ?? null,
     color: persona?.color ?? (side === 'A' ? 0x44aaff : 0xe4572e),
     aiProfile: persona?.aiProfile ?? null,
+    startingOfuda: persona?.startingOfuda ?? null,
   };
 }
 
@@ -377,6 +381,7 @@ async function runOne(gameSeed, index) {
       elements: deck.elements,
       aiProfile: deck.aiProfile,
       startingCurrency,
+      startingOfuda: deck.startingOfuda,
     }));
 
     const stub = (name) => async (...args) => {

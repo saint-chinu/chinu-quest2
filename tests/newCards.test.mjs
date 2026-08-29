@@ -1356,6 +1356,42 @@ test('CPUの侵略勝率見積もり: 水属性が水神の盾を持つと反射
   assert.equal(withItem, 1, '反射込みで見積もると必ず勝てるはず');
 });
 
+test('ダメージスペルのCPUは避雷針侍・くねくねを最優先で狙う', () => {
+  // どちらも「戦闘では処理できないロック」なので、総資産・土地レベルより
+  // 優先して落とす（game.js _cpuPickDamageTarget）。
+  const g = Object.create(Game.prototype);
+  const rich = { id: 'R', name: '金持ち' };
+  const poor = { id: 'P', name: '貧乏' };
+  Object.assign(g, { players: [rich, poor], tiles: [], onLog: () => {} });
+  // 総資産は「金持ち」が圧倒的に上＝優先度を入れなければ必ずそちらが選ばれる。
+  g._totalAssetsOf = (p) => (p.id === 'R' ? 99999 : 1);
+
+  const withUnit = (id, def, ownerId, level) => {
+    const t = makeTile(id, { level });
+    t.unit = unit(def, ownerId);
+    return t;
+  };
+  // 金持ちの高レベル土地にいる普通のモンスター vs 貧乏の低レベル土地の避雷針侍。
+  const fat = withUnit(0, mon('カモ', 10, 10), 'R', 5);
+  const rod = withUnit(1, MONSTER_CATALOG.raiheishinZamurai, 'P', 1);
+  assert.equal(g._cpuPickDamageTarget([fat, rod], 15).id, rod.id, '避雷針侍を優先するはず');
+
+  const kune = withUnit(2, MONSTER_CATALOG.kunekune, 'P', 1);
+  assert.equal(g._cpuPickDamageTarget([fat, kune], 15).id, kune.id, 'くねくねを優先するはず');
+
+  // ロックが居なければ従来どおり総資産1位を狙う（既存挙動を壊していない）。
+  const plain = withUnit(3, mon('雑魚', 10, 10), 'P', 1);
+  assert.equal(g._cpuPickDamageTarget([fat, plain], 15).id, fat.id, 'ロック不在なら総資産1位');
+});
+
+test('川田は開幕に水のお札を20枚持つ（story.jsのstartingOfuda）', () => {
+  const stage = STORY_STAGES.find((s) => s.key === 'kawada');
+  assert.equal(stage.startingCurrency, 700);
+  assert.deepEqual(stage.opponents[0].startingOfuda, { water: 20 });
+  // マップ側がお札対応でないと_applyStartingOfudaが何もしないので併せて確認。
+  assert.ok(MAPS.find((m) => m.id === 'kawada').hasOfuda);
+});
+
 test('川田（⑮予定）の専用デッキはちょうど40枚', () => {
   const list = buildCharacterDeckList('kawada');
   assert.equal(list.length, 40);
