@@ -1384,10 +1384,10 @@ test('ダメージスペルのCPUは避雷針侍・くねくねを最優先で�
   assert.equal(g._cpuPickDamageTarget([fat, plain], 15).id, fat.id, 'ロック不在なら総資産1位');
 });
 
-test('川田は開幕に水のお札を20枚持つ（story.jsのstartingOfuda）', () => {
+test('川田は開幕に水のお札を15枚持つ（story.jsのstartingOfuda）', () => {
   const stage = STORY_STAGES.find((s) => s.key === 'kawada');
   assert.equal(stage.startingCurrency, 700);
-  assert.deepEqual(stage.opponents[0].startingOfuda, { water: 20 });
+  assert.deepEqual(stage.opponents[0].startingOfuda, { water: 15 });
   // マップ側がお札対応でないと_applyStartingOfudaが何もしないので併せて確認。
   assert.ok(MAPS.find((m) => m.id === 'kawada').hasOfuda);
 });
