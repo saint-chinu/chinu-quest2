@@ -1290,6 +1290,72 @@ test('火神の盾・雷神の盾・森神の盾も一致属性でだけ反射�
   }
 });
 
+test('_itemPowerScore: 属性神の盾は一致属性の時だけ反射込みの高評価になる（不一致は素のATK/HP/貫通どまり）', () => {
+  const g = Object.create(Game.prototype);
+  Object.assign(g, { players: [] });
+  const waterUnit = { def: { element: 'water' } };
+  const fireUnit = { def: { element: 'fire' } };
+  const matchedScore = g._itemPowerScore(ITEM_CATALOG.suijinNoTate, waterUnit);
+  const mismatchedScore = g._itemPowerScore(ITEM_CATALOG.suijinNoTate, fireUnit);
+  assert.ok(matchedScore > mismatchedScore, '一致属性は反射効果分だけ高く評価されるはず');
+  // ATK+10/HP+20・貫通(+10)分は不一致でも残るので、無価値な0点にはならない。
+  assert.equal(mismatchedScore, 40);
+});
+
+test('CPUのアイテム選択: 属性神の盾は一致属性なら反射込みで確実に装備し、不一致では結果を変える時だけ装備する', () => {
+  // _chooseBattleItemByOutcomeは実際にresolveBattleでシミュレートして比べる
+  // ため、ここでは特別なif分岐を追加せず、既存の「結果で選ぶ」ロジックだけで
+  // ユーザー要望（水属性なら装備／不一致でも装備すれば守れるなら装備／
+  // 装備しても結果が変わらないなら装備しない）が成立することを確認する。
+  const g = Object.create(Game.prototype);
+  Object.assign(g, { tiles: [], players: [{ id: 'A' }, { id: 'B' }], onLog: () => {} });
+  const tile = makeTile(0);
+  const shieldCard = { ...ITEM_CATALOG.suijinNoTate, catalogId: 'suijinNoTate' };
+
+  // 一致属性(水): 反射込みで生存できるので必ず装備する。
+  const waterDef = mon('テスト水', 40, 10, { element: 'water' });
+  const strongAttackerDef = mon('テスト攻撃', 100, 100, { element: 'thunder' });
+  const chosenMatched = g._chooseBattleItemByOutcome(
+    [shieldCard], 'CPU', unit(waterDef, 'A'), unit(strongAttackerDef, 'B'), tile, true, 8,
+  );
+  assert.equal(chosenMatched?.catalogId, 'suijinNoTate', '水属性なら反射で生存できるので装備するはず');
+
+  // 不一致属性(火)かつ強すぎる相手: HP+20/ATK+10・貫通だけでは生存できず
+  // 結果が変わらないので、カードを温存して装備しないはず。
+  const fireDef = mon('テスト火', 40, 10, { element: 'fire' });
+  const chosenNoHelp = g._chooseBattleItemByOutcome(
+    [shieldCard], 'CPU', unit(fireDef, 'A'), unit(strongAttackerDef, 'B'), tile, true, 8,
+  );
+  assert.equal(chosenNoHelp, null, '不一致で装備しても結果が変わらないなら装備しないはず');
+
+  // 不一致属性(火)だが相手が弱め: HP+20の底上げだけで生存できるようになる
+  // ので、反射が無くても装備するはず。
+  const weakAttackerDef = mon('テスト弱攻撃', 100, 45, { element: 'thunder' });
+  const chosenStatsSave = g._chooseBattleItemByOutcome(
+    [shieldCard], 'CPU', unit(fireDef, 'A'), unit(weakAttackerDef, 'B'), tile, true, 8,
+  );
+  assert.equal(chosenStatsSave?.catalogId, 'suijinNoTate', '不一致でもHP+20だけで生存できるなら装備するはず');
+});
+
+test('CPUの侵略勝率見積もり: 水属性が水神の盾を持つと反射込みで計算され、負け筋が勝ち筋に変わる', () => {
+  const shieldCard = { ...ITEM_CATALOG.suijinNoTate, catalogId: 'suijinNoTate' };
+  const g = Object.create(Game.prototype);
+  const attackerPlayer = { id: 'A', currency: 500, hand: [shieldCard] };
+  Object.assign(g, { tiles: [], players: [attackerPlayer, { id: 'B', currency: 500, hand: [] }], onLog: () => {} });
+
+  // 素の数値だけなら攻撃側が反撃で必ず落ちる(HP20 vs 相手ATK40)不利な
+  // マッチアップ。反射込みなら、装備すれば攻撃側は無傷のまま相手だけが
+  // 反射ダメージで倒れる有利なマッチアップになる。
+  const waterAttackerDef = mon('テスト水攻撃', 20, 30, { element: 'water' });
+  const defenderDef = mon('テスト守備', 70, 40, { element: 'thunder' });
+  const defenderTile = makeTile(0, { owner: 'B', unit: unit(defenderDef, 'B') });
+
+  const withoutItem = g._estimateWinProbability(waterAttackerDef, 'A', [shieldCard], defenderTile, false, 30);
+  const withItem = g._estimateWinProbability(waterAttackerDef, 'A', [shieldCard], defenderTile, true, 30);
+  assert.equal(withoutItem, 0, '反射抜きでは反撃を受けて必ず負けるはず');
+  assert.equal(withItem, 1, '反射込みで見積もると必ず勝てるはず');
+});
+
 test('川田（⑮予定）の専用デッキはちょうど40枚', () => {
   const list = buildCharacterDeckList('kawada');
   assert.equal(list.length, 40);

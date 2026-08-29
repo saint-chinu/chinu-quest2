@@ -1599,7 +1599,9 @@ export const CHARACTER_DECKS = {
    * 軸に、先制持ちで押し込みつつ連鎖系(水神/混沌の頭/水風呂修行僧)で
    * 息切れを防ぎ、くぐつの剣豪の自動侵略で盤面を広げ続ける
    * （2026-08、ユーザー指摘でファイヤーマン・まんぼーを高火力の
-   * 嵐を呼ぶ〇女・水風呂修行僧へ、ダイヤモンドの盾を不死鳥の剣へ差し替え）。
+   * 嵐を呼ぶ〇女・水風呂修行僧へ、ダイヤモンドの盾を不死鳥の剣へ差し替え。
+   * さらに鋼体2・占術1を削り、リャンメンすくな・水神の盾を1ずつ増量、
+   * サイコキネシス1を追加）。
    */
   kawada: {
     composition: {
@@ -1613,7 +1615,7 @@ export const CHARACTER_DECKS = {
         // 安価な先制アタッカーで序盤から押し込む主力。
         { def: MONSTER_CATALOG.hangyojin, count: 2 }, // N 50G 30/30 先制
         // ゆきおんなの+30が2回乗るので、素の30/20が実質60/20×2連撃になる。
-        { def: MONSTER_CATALOG.ryanmenSukuna, count: 2 }, // R 50G 30/20 2回攻撃
+        { def: MONSTER_CATALOG.ryanmenSukuna, count: 3 }, // R 50G 30/20 2回攻撃
         { def: MONSTER_CATALOG.kaikyouSekishoKurage, count: 1 }, // R 80G 30/30 連鎖1 強制停止
         // 素のATK/HPが50/50と高水準な高火力アタッカー。攻撃時1/2の確率で
         // 自身にも10ダメージが乗るが、ゆきおんな込みなら80/50で十分ペイする。
@@ -1631,7 +1633,7 @@ export const CHARACTER_DECKS = {
       items: [
         // 水神の盾: 水属性が装備すると被ダメージを反射する新アイテム
         // （battleCards.js/battle.js参照）。ゆきおんな・水神等に乗せて壁にする。
-        { def: ITEM_CATALOG.suijinNoTate, count: 2 }, // R 80G +10/+20 貫通、水属性限定で反射
+        { def: ITEM_CATALOG.suijinNoTate, count: 3 }, // R 80G +10/+20 貫通、水属性限定で反射
         { def: ITEM_CATALOG.dimensionalSocket, count: 2 }, // S 60G 特殊能力を入れ替え
         { def: ITEM_CATALOG.twinHammer, count: 2 }, // S 65G +10/0 2回攻撃
         { def: ITEM_CATALOG.shinkenShirahadori, count: 1 }, // R 110G 相手のアイテムを奪う
@@ -1644,12 +1646,15 @@ export const CHARACTER_DECKS = {
       spells: [
         { def: SPELL_CATALOG.iCanFly, count: 2 }, // N 30G 出目×2進む
         { def: SPELL_CATALOG.backfire, count: 2 }, // S 50G 出目分後退させる
-        { def: SPELL_CATALOG.kotai, count: 2 }, // N 50G 基礎HP+15（壁の底上げ）
         // 放水: 敵地・空き地を水属性へ塗り替え、水神/混沌の頭の連鎖ボーナスを
         // 押し上げる。相手の連鎖破壊にも使える。
         { def: SPELL_CATALOG.waterRelease, count: 1 }, // S 150G 対象の土地を水属性に
         { def: SPELL_CATALOG.waterMagicCircle, count: 1 }, // S 60G デッキの水属性をランダム召喚
-        { def: SPELL_CATALOG.divination, count: 2 }, // N 40G 指定種類をデッキからランダムに引く
+        { def: SPELL_CATALOG.divination, count: 1 }, // N 40G 指定種類をデッキからランダムに引く
+        // 対象を1マス強制移動させる（移動先が相手土地なら強制戦闘）。CPUの
+        // 使用判断はowner/同盟/勝率だけで決まる汎用ロジック(game.js
+        // _cpuMaybeUsePsychokinesisSpell)なので、このデッキでも死に札にならない。
+        { def: SPELL_CATALOG.psychokinesis, count: 1 }, // R 100G 配置モンスターを1マス強制移動
       ],
     },
   },

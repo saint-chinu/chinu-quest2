@@ -6728,7 +6728,17 @@ export class Game {
       const owner = this.players.find((p) => p.id === unit?.ownerId);
       score += (owner?.lastDiceSteps || 0) * (item.effect.multiplier || 0);
     }
-    if (item.effect) score += 15;
+    // 属性神の盾(wielderElementReflect): 一致した属性でしか発動しない被ダメージ
+    // 反射（くねくねと同じ全反射）。一致時は非常に強力なので大きく加点し、
+    // 不一致時は下の「effectがあれば+15」も付けない（実際には何も起きない
+    // ただの防具として、ATK/HP/貫通の数値だけで正しく評価させる。実際の
+    // 装備可否は_chooseBattleItemByOutcomeの実戦闘シミュレーションで決まる
+    // ので、この関数は「preferred候補」選びの参考値に過ぎない）。
+    if (item.effect?.type === 'wielderElementReflect') {
+      if (unit?.def?.element === item.effect.wielderElement) score += 60;
+    } else if (item.effect) {
+      score += 15;
+    }
     if (item.traits?.includes('firstStrike')) score += 10;
     if (item.traits?.includes('pierce')) score += 10;
     if (item.traits?.includes('lastStrike')) score -= 5;
