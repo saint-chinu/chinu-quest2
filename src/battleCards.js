@@ -466,6 +466,12 @@ export const SPELL_CATALOG = {
   // 盤面では全員が対象 → 20ダメージで盤面が丸ごと全滅」という即死コンボが
   // 成立してしまう（2026-08、ユーザー指摘で20→15へ引き下げ）。
   tochigamiNoIkari: spell('tochigamiNoIkari', '土地神の怒り', Rarity.R, 60, 'none', { type: 'damageAllUnitsOnMismatchedLand', amount: 15 }, '自分の属性と異なる属性の土地にいる全モンスターに15ダメージ（自分のモンスターも対象）'),
+
+  // 社会不適合: 「土地に馴染めていない」モンスターを盤面から追い出す。
+  // 土地神の怒り(ダメージ)と同じ「属性が噛み合っていない」判定を、
+  // 除去ではなく手札バウンスに使う対の1枚。対象はランダム2体までで、
+  // 1体しかいなければ1体だけ、0体なら何も起きずコストだけ損する。
+  shakaiFutekigou: spell('shakaiFutekigou', '社会不適合', Rarity.R, 70, 'enemyPlayer', { type: 'returnMismatchedMonstersToHand', count: 2 }, '対象プレイヤーの配置モンスターのうち、立っている土地と属性が合わないものをランダムに2体まで手札に戻す（該当が1体なら1体、0体なら何も起きない）'),
   poisonMist: spell(
     'poisonMist',
     '毒霧',
@@ -1670,10 +1676,10 @@ export const CHARACTER_DECKS = {
         // 使用判断はowner/同盟/勝率だけで決まる汎用ロジック(game.js
         // _cpuMaybeUsePsychokinesisSpell)なので、このデッキでも死に札にならない。
         { def: SPELL_CATALOG.psychokinesis, count: 1 }, // R 100G 配置モンスターを1マス強制移動
-        // 土地神の怒り: 相手の雷/無属性を土地属性の噛み合わない場所で叩く。
-        // 川田の水モンスターは自分の水土地にいる限り無傷なので一方的に効く
-        // （逆に無属性のくぐつの剣豪・混沌の頭・くねくねは自分も食らう）。
-        { def: SPELL_CATALOG.tochigamiNoIkari, count: 1 }, // R 60G 異属性土地の全モンスターに20ダメージ
+        // 社会不適合: ひなんじょの雷/無属性はkawadaマップ(無属性マス無し)では
+        // ほぼ常に土地と属性が噛み合わないので刺さる。川田の水モンスターは
+        // 自分の水土地にいる限り対象外。土地神の怒りと違い自分は巻き込まない。
+        { def: SPELL_CATALOG.shakaiFutekigou, count: 1 }, // R 70G 属性違い2体を手札に戻す
       ],
     },
   },

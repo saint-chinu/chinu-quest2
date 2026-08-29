@@ -1432,6 +1432,83 @@ test('土地神の怒りはパンデミック後のゾンビを全滅させな�
   );
 });
 
+test('社会不適合は属性の合わないモンスターを最大2体だけ手札に戻す', async () => {
+  const meshStub = () => ({ mesh: { material: { color: { set: () => {} } } } });
+  const make = (id, tileElement, unitElement, owner) => {
+    const t = makeTile(id, { element: tileElement, owner, ...meshStub() });
+    t.unit = unit(mon(`M${id}`, 50, 10, { element: unitElement }), owner);
+    return t;
+  };
+  // 敵Bの不一致3体・一致1体、自分Aの不一致1体。戻るのはBの不一致から2体だけ。
+  const tiles = [
+    make(0, 'fire', 'thunder', 'B'),
+    make(1, 'water', 'thunder', 'B'),
+    make(2, 'forest', 'thunder', 'B'),
+    make(3, 'thunder', 'thunder', 'B'),
+    make(4, 'fire', 'water', 'A'),
+  ];
+  const enemy = { id: 'B', name: '敵', hand: [], deck: { discardPile: [], drawPile: [] } };
+  const g = makeStub(tiles, [{ id: 'A', name: '川田' }, enemy]);
+  g.onLandLoss = async () => {};
+  await g._spellReturnMismatchedMonstersToHand(enemy, 2);
+
+  assert.equal(enemy.hand.length, 2, '2体だけ戻る');
+  assert.equal(tiles.filter((t) => t.unit && t.owner === 'B').length, 2, '敵の残りは2体');
+  assert.ok(tiles[3].unit, '属性が一致しているモンスターは戻らない');
+  assert.ok(tiles[4].unit, '対象プレイヤー以外のモンスターは戻らない');
+  // 戻ったマスは空き地に戻る（所有者ごと解除される）。
+  const vacated = tiles.filter((t) => !t.unit);
+  for (const t of vacated) assert.equal(t.owner, null, '戻ったマスは空き地になる');
+});
+
+test('社会不適合は該当1体なら1体だけ、0体なら何も起きない', async () => {
+  const enemy = () => ({ id: 'B', name: '敵', hand: [], deck: { discardPile: [], drawPile: [] } });
+
+  const meshStub = () => ({ mesh: { material: { color: { set: () => {} } } } });
+  const one = makeTile(0, { element: 'fire', owner: 'B', ...meshStub() });
+  one.unit = unit(mon('単体', 50, 10, { element: 'water' }), 'B');
+  const e1 = enemy();
+  const g1 = makeStub([one], [{ id: 'A', name: '川田' }, e1]);
+  g1.onLandLoss = async () => {};
+  await g1._spellReturnMismatchedMonstersToHand(e1, 2);
+  assert.equal(e1.hand.length, 1, '該当が1体なら1体だけ戻る');
+
+  const matched = makeTile(0, { element: 'water', owner: 'B', ...meshStub() });
+  matched.unit = unit(mon('一致', 50, 10, { element: 'water' }), 'B');
+  const e0 = enemy();
+  const g0 = makeStub([matched], [{ id: 'A', name: '川田' }, e0]);
+  g0.onLandLoss = async () => {};
+  await g0._spellReturnMismatchedMonstersToHand(e0, 2);
+  assert.equal(e0.hand.length, 0, '該当0体なら何も戻らない');
+  assert.ok(matched.unit, '盤面もそのまま');
+  assert.ok(g0.logs.some((l) => l.includes('対象がいなかった')), '「対象がいなかった」と表示する');
+});
+
+test('社会不適合のCPUは相手の属性違いが2体以上の時だけ撃つ', async () => {
+  const build = (mismatchCount) => {
+    const tiles = [];
+    for (let i = 0; i < mismatchCount; i++) {
+      const t = makeTile(i, { element: 'fire', owner: 'B' });
+      t.unit = unit(mon(`敵${i}`, 50, 10, { element: 'thunder' }), 'B');
+      tiles.push(t);
+    }
+    const player = {
+      id: 'A', name: '川田', currency: 999, spellUsedThisTurn: false, allianceId: null,
+      hand: [spellCopy(SPELL_CATALOG.shakaiFutekigou)],
+    };
+    return { g: makeCpuStub(tiles, [player, { id: 'B', name: '敵', allianceId: null }]), player };
+  };
+
+  const two = build(2);
+  await two.g._cpuMaybeUseShakaiFutekigouSpell(two.player);
+  assert.equal(two.g.casts.length, 1, '2体以上なら撃つ');
+  assert.equal(two.g.casts[0].cast.targetPlayerId, 'B');
+
+  const one = build(1);
+  await one.g._cpuMaybeUseShakaiFutekigouSpell(one.player);
+  assert.equal(one.g.casts.length, 0, '1体しか居なければ撃たない');
+});
+
 test('川田（⑮予定）の専用デッキはちょうど40枚', () => {
   const list = buildCharacterDeckList('kawada');
   assert.equal(list.length, 40);

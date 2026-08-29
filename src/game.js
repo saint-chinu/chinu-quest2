@@ -1498,6 +1498,11 @@ export class Game {
         await this._spellDamageAllUnits((t) => t.unit.def.element !== t.element, effect.amount);
         return false;
 
+      // 社会不適合: 土地と属性が噛み合っていないモンスターをランダムに手札へ戻す。
+      case 'returnMismatchedMonstersToHand':
+        await this._spellReturnMismatchedMonstersToHand(targetPlayer, effect.count ?? 2);
+        return false;
+
       case 'poisonArea':
         this._spellPoisonArea(targetTile, effect.ratio);
         return false;
@@ -1982,6 +1987,59 @@ export class Game {
       this.onLog(`${owner.name}の${unit.def.name}は倒された`);
       await this._handleUnitDeath(unit, owner);
       await this._presentLandLoss(landLoss);
+    }
+  }
+
+  /**
+   * 社会不適合: 対象プレイヤーの配置モンスターのうち「立っている土地と属性が
+   * 合わない」ものをランダムに最大count体、手札へ戻す。
+   *
+   * ユーザー指定の仕様（2026-08）:
+   * - 対象はランダム。該当が1体しかいなければ1体だけ、0体なら
+   *   「対象がいなかった」と表示して終わり（コストは戻らない）。
+   * - 手札上限を超える時は「1枚戻す→捨てる→もう1枚戻す→捨てる」の順。
+   *   まとめて戻してから捨てさせると、戻ってきた2枚のうち好きな方を残せて
+   *   しまうため、1体ずつ_enforceHandLimitを挟んで確定させる。
+   *
+   * 召喚時にカードは捨札へ送られているので、不死鳥(_handleUnitDeath)と同じく
+   * _reclaimCardFromDeckで1枚回収してから手札へ積む（回収しないとデッキ内の
+   * 総枚数が増えてしまう）。
+   */
+  async _spellReturnMismatchedMonstersToHand(targetPlayer, count) {
+    if (!targetPlayer) return;
+    const eligible = this.tiles.filter((tile) => tile.unit
+      && tile.unit.ownerId === targetPlayer.id
+      && tile.unit.def.element !== tile.element);
+    if (eligible.length === 0) {
+      this.onLog('対象がいなかった');
+      return;
+    }
+    // ランダムに選ぶ（Fisher-Yatesで前からcount体ぶんだけ確定させる）。
+    for (let i = 0; i < Math.min(count, eligible.length); i++) {
+      const j = i + Math.floor(Math.random() * (eligible.length - i));
+      [eligible[i], eligible[j]] = [eligible[j], eligible[i]];
+    }
+    for (const tile of eligible.slice(0, count)) {
+      if (this._isCancelled || !tile.unit) continue;
+      const unit = tile.unit;
+      const catalogId = catalogIdOf(unit.def);
+      const landLoss = this._captureLandLoss(targetPlayer, tile);
+      tile.unit = null;
+      tile.owner = null;
+      tile.transparentCursed = false;
+      this._repaintTileToElement(tile);
+      this._syncUnitIcons();
+      this._reclaimCardFromDeck(targetPlayer, catalogId);
+      targetPlayer.hand.push({
+        ...unit.def,
+        id: `bounce-${targetPlayer.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        catalogId,
+      });
+      this.onLog(`${unit.def.name}は土地に馴染めず${targetPlayer.name}の手札に戻った`);
+      this._notifyState();
+      await this._presentLandLoss(landLoss);
+      // 1体ごとに手札上限を確定させる（戻す→捨てるの順、上記コメント参照）。
+      await this._enforceHandLimit(targetPlayer);
     }
   }
 
@@ -8344,6 +8402,7 @@ export class Game {
     await this._cpuMaybeUseDisruptionSpell(this.currentPlayer);
     await this._cpuMaybeUseDamageSpell(this.currentPlayer);
     await this._cpuMaybeUseMismatchedLandDamageSpell(this.currentPlayer);
+    await this._cpuMaybeUseShakaiFutekigouSpell(this.currentPlayer);
     await this._cpuMaybeUsePoisonSpell(this.currentPlayer);
     await this._cpuMaybeUseCancelCultureSpell(this.currentPlayer);
     await this._cpuMaybeUseManaExtractionSpell(this.currentPlayer);
@@ -9373,6 +9432,29 @@ export class Game {
     const worthIt = enemyKills > allyKills || (allyHits === 0 && enemyHits > 0);
     if (!worthIt) return;
     await this._cpuCastSpell(player, card, {});
+  }
+
+  /**
+   * 社会不適合(returnMismatchedMonstersToHand)のCPU使用判断。
+   * ユーザー指定（2026-08）どおり「相手の属性違いモンスターが2体以上
+   * 配置されていたら使う」。1体しか居ない時に撃つと70Gで1体しか戻せず
+   * 割に合わないため、最も多く該当する相手を選んで2体以上の時だけ撃つ。
+   */
+  async _cpuMaybeUseShakaiFutekigouSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL
+      && c.effect?.type === 'returnMismatchedMonstersToHand');
+    if (!card || player.currency < (card.cost || 0)) return;
+
+    const counts = new Map();
+    for (const tile of this.tiles) {
+      if (!tile.unit || tile.unit.def.element === tile.element) continue;
+      if (this._isFriendlyUnitTile(tile, player)) continue;
+      counts.set(tile.unit.ownerId, (counts.get(tile.unit.ownerId) || 0) + 1);
+    }
+    const best = [...counts.entries()].sort((a, b) => b[1] - a[1])[0];
+    if (!best || best[1] < 2) return;
+    await this._cpuCastSpell(player, card, { targetPlayerId: best[0] });
   }
 
   /** 同盟戦の妨害スペル用: そのマスのモンスターが自分または同盟仲間の所有か。 */
