@@ -1645,7 +1645,6 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.suijin, count: 1 }, // R 150G 40/25 連鎖1 水連鎖×7
         // 無属性だが水デッキでも普通に運用できるテック枠。
         { def: MONSTER_CATALOG.kugutsuNoKengou, count: 3 }, // R 120G 50/50 自動侵略
-        { def: MONSTER_CATALOG.kontonNoAtama, count: 1 }, // R 150G 30/30 全連鎖×5
         { def: MONSTER_CATALOG.kunekune, count: 1 }, // R 50G 10/0 反射
       ],
       items: [
@@ -1680,6 +1679,12 @@ export const CHARACTER_DECKS = {
         // ほぼ常に土地と属性が噛み合わないので刺さる。川田の水モンスターは
         // 自分の水土地にいる限り対象外。土地神の怒りと違い自分は巻き込まない。
         { def: SPELL_CATALOG.shakaiFutekigou, count: 1 }, // R 70G 属性違い2体を手札に戻す
+        // 資本主義の権化: 手札のモンスターを安い順に空き地へ連続召喚する。
+        // 召喚条件と生け贄を無視するので、水連鎖1が要る水神/関所クラゲ/
+        // 水風呂修行僧も条件未達のまま出せる。川田に欠けていた
+        // 「土地獲得エンジン」の代役（CLAUDE.md参照）。枠は実測で最低効率
+        // だった混沌の頭(150G 30/30 = 0.40 pts/G)を抜いて確保した。
+        { def: SPELL_CATALOG.capitalismIncarnate, count: 1 }, // EX 30G 手札のモンスターを連続召喚
       ],
     },
   },
