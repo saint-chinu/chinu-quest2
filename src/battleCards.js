@@ -1601,7 +1601,10 @@ export const CHARACTER_DECKS = {
    * （2026-08、ユーザー指摘でファイヤーマン・まんぼーを高火力の
    * 嵐を呼ぶ〇女・水風呂修行僧へ、ダイヤモンドの盾を不死鳥の剣へ差し替え。
    * さらに鋼体2・占術1を削り、リャンメンすくな・水神の盾を1ずつ増量、
-   * サイコキネシス1を追加）。
+   * サイコキネシス1を追加。加えてシミュレーションで判明した
+   * 「初期資金500Gに対して重すぎる」問題（CLAUDE.md「⑮の勝率シミュレーション
+   * 結果」参照）を受け、ビッグマーメイド120G→嵐を呼ぶ〇女100G、
+   * くぐつの剣豪150G×3のうち1枚→逆流カジキ30Gへ差し替えてカーブを下げた）。
    */
   kawada: {
     composition: {
@@ -1619,14 +1622,16 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.kaikyouSekishoKurage, count: 1 }, // R 80G 30/30 連鎖1 強制停止
         // 素のATK/HPが50/50と高水準な高火力アタッカー。攻撃時1/2の確率で
         // 自身にも10ダメージが乗るが、ゆきおんな込みなら80/50で十分ペイする。
-        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 1 }, // R 100G 50/50 攻撃時1/2で自傷10
+        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 2 }, // R 100G 50/50 攻撃時1/2で自傷10
         // 水の土地1連鎖以上が召喚条件で、既に水神/混沌の頭で連鎖前提の
         // デッキなので運用しやすい。相手がRなら基礎ATKが+40%されるテック。
         { def: MONSTER_CATALOG.mizuburoShugyoso, count: 1 }, // S 80G 30/40 連鎖1 対R+40%ATK
-        { def: MONSTER_CATALOG.bigMermaid, count: 1 }, // R 120G 55/55 連鎖1
+        // 30Gの安価枠。後攻なので殴り合いには弱いが、ゆきおんな込みで
+        // ATK80になる火力を序盤から出せる（コストカーブを下げる役割）。
+        { def: MONSTER_CATALOG.gyakuryuKajiki, count: 1 }, // N 30G 50/10 後攻
         { def: MONSTER_CATALOG.suijin, count: 1 }, // R 150G 40/25 連鎖1 水連鎖×7
         // 無属性だが水デッキでも普通に運用できるテック枠。
-        { def: MONSTER_CATALOG.kugutsuNoKengou, count: 3 }, // R 150G 50/50 自動侵略
+        { def: MONSTER_CATALOG.kugutsuNoKengou, count: 2 }, // R 150G 50/50 自動侵略
         { def: MONSTER_CATALOG.kontonNoAtama, count: 2 }, // R 150G 30/30 全連鎖×5
         { def: MONSTER_CATALOG.kunekune, count: 1 }, // R 50G 10/0 反射
       ],
