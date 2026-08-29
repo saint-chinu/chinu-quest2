@@ -1205,7 +1205,8 @@ test('ブリードパターンは最大3件で、選択中のパターンだけ�
   // で管理する。activeBreedMonsterは無効なindexにもフォールバックする。
   const patternA = { name: 'パターンA', equippedPartIds: ['part-atk-up'] };
   const patternB = { name: 'パターンB', equippedPartIds: ['part-hyper-up', 'part-hyper-up'] };
-  const character = { breedMonsters: [patternA, patternB], breedMonsterIndex: 1 };
+  const sharedImage = 'data:image/webp;base64,shared-breed-image';
+  const character = { breedMonsters: [patternA, patternB], breedMonsterIndex: 1, breedImageDataUrl: sharedImage };
 
   assert.equal(breedParts.activeBreedMonster(character), patternB, '選択中(index=1)のパターンを返す');
   const cardB = breedParts.buildBreedCardDef(character);
@@ -1213,14 +1214,33 @@ test('ブリードパターンは最大3件で、選択中のパターンだけ�
   assert.equal(cardB.atk, breedParts.BREED_BASE.atk + 30);
   assert.equal(cardB.hp, breedParts.BREED_BASE.hp + 30);
   assert.equal(cardB.catalogId, 'breedMonster', 'パターンが違っても図鑑/デッキ追跡用のcatalogIdは固定');
+  assert.equal(cardB.imageDataUrl, sharedImage, 'ブリード画像は全パターン共通の1枚を使う');
 
   character.breedMonsterIndex = 0;
   assert.equal(breedParts.activeBreedMonster(character), patternA, '切り替えると即座に別パターンを返す');
-  assert.equal(breedParts.buildBreedCardDef(character).name, 'パターンA');
+  const cardA = breedParts.buildBreedCardDef(character);
+  assert.equal(cardA.name, 'パターンA');
+  assert.equal(cardA.imageDataUrl, sharedImage, 'パターンを切り替えても画像は変わらない');
 
   // 無効なindex（未設定・範囲外）は先頭パターンへフォールバックする。
   character.breedMonsterIndex = 99;
   assert.equal(breedParts.activeBreedMonster(character), patternA);
   delete character.breedMonsterIndex;
   assert.equal(breedParts.activeBreedMonster(character), patternA);
+});
+
+test('旧ブリード画像は選択中の1枚へ統合し、パターン別データを残さない', () => {
+  const character = {
+    breedMonsters: [
+      { name: 'A', equippedPartIds: [], imageDataUrl: 'data:image/webp;base64,image-a' },
+      { name: 'B', equippedPartIds: [], imageDataUrl: 'data:image/webp;base64,image-b' },
+      { name: 'C', equippedPartIds: [] },
+    ],
+    breedMonsterIndex: 1,
+  };
+
+  assert.equal(breedParts.migrateBreedImageToShared(character), true);
+  assert.equal(character.breedImageDataUrl, 'data:image/webp;base64,image-b', '選択中パターンの画像を残す');
+  assert.ok(character.breedMonsters.every((pattern) => !Object.hasOwn(pattern, 'imageDataUrl')));
+  assert.equal(breedParts.migrateBreedImageToShared(character), false, '移行済みデータは再変更しない');
 });

@@ -697,13 +697,16 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 
 ## ブリードパターン保存（最大3件）とハイパーアップ (2026-08)
 - **デッキ編集(decks配列/editingDeckIndex)と同じ発想**で、ブリードモンスターの
-  構成（名前・装着パーツ・属性パッチ選択・画像）を`character.breedMonsters`
+  構成（名前・装着パーツ・属性パッチ選択）を`character.breedMonsters`
   （配列、最大`BREED_MAX_PATTERNS`=3件）＋`character.breedMonsterIndex`
   （選択中インデックス）で管理する（旧来は`character.breedMonster`単数
   オブジェクト1つだけだった）。
+- **画像は3パターン共通で1枚だけ**: `character.breedImageDataUrl`へ保存し、
+  `buildBreedCardDef`はどのパターンでもこの共通画像を使う。旧パターン別画像は
+  ログイン時に選択中の画像を優先して1枚へ統合し、余った画像データを削除する。
 - **選択中パターンがそのまま「生きた」ブリモン**: `buildBreedCardDef`
   （breedParts.js）が`activeBreedMonster(character)`で選択中パターンを
-  解決し、そのステータス・名前・画像でカード定義を作る。デッキ内の
+  解決し、そのステータス・名前と共通画像でカード定義を作る。デッキ内の
   「ブリモン」枠は常にこれをライブ参照する既存の仕組み（`catalogId`固定）
   がそのまま活きるので、main.js側の呼び出し規約は変わっていない。
 - **画面はデッキ編集のスロットタブと同じ`.deck-slot-tab`クラスを流用**
@@ -714,7 +717,7 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 - ⚠️ **旧セーブデータの移行は`ensureBreedFields`（main.js）で1回だけ**：
   `character.breedMonster`（単数）が残っていればそれを`breedMonsters[0]`
   として引き継ぎ、旧フィールド自体は削除する。`shrinkOversizedBreedImage`
-  （ログイン時の画像縮小）も全パターンを走査するよう変更済み。
+  が旧パターン別画像の共通画像1枚への移行とログイン時の画像縮小を担当する。
 - 新パーツ**「ハイパーアップ」**（R、ATK+15/HP+15、costDelta+40、
   `part-hyper-up`、breedParts.js）: 既存の「ダブルアップ」（+10/+10で
   costDelta25＝単純合計20の1.25倍）と同じ「両ステータス同時上昇の

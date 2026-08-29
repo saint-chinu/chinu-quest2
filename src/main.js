@@ -22,6 +22,7 @@ import {
   breedPartBadges,
   buildBreedCardDef,
   activeBreedMonster,
+  migrateBreedImageToShared,
   BREED_PART_PACK,
   drawBreedPartPack,
   describeBreedPart,
@@ -6284,25 +6285,25 @@ function resizeDataUrl(dataUrl) {
 }
 
 /**
- * リサイズ導入前にアップロードされたブリード画像を、ログイン時に一度だけ縮める。
+ * 旧パターン別画像を共通の1枚へ統合し、リサイズ導入前の画像を一度だけ縮める。
  * 大きいままだと対人戦の戦闘アイテム選択でペイロードが1MB上限を超え、相手に
  * 選択画面が出ないまま素手で戦うことになる（カード定義ごと中継されるため）。
  * 失敗しても黙って諦める——絵が少し重いだけで、ログインを妨げる理由にはならない。
  */
 const BREED_IMAGE_SHRINK_THRESHOLD = 200_000;
 async function shrinkOversizedBreedImage(character) {
-  // 3パターンそれぞれが独自の画像を持ちうるので、全パターンを走査する。
-  let changed = false;
-  for (const pattern of character?.breedMonsters || []) {
-    const current = pattern?.imageDataUrl;
-    if (!current || current.length <= BREED_IMAGE_SHRINK_THRESHOLD) continue;
+  let changed = migrateBreedImageToShared(character);
+
+  const current = character?.breedImageDataUrl;
+  if (current && current.length > BREED_IMAGE_SHRINK_THRESHOLD) {
     try {
       const shrunk = await resizeDataUrl(current);
-      if (!shrunk || shrunk.length >= current.length) continue;
-      pattern.imageDataUrl = shrunk;
-      changed = true;
+      if (shrunk && shrunk.length < current.length) {
+        character.breedImageDataUrl = shrunk;
+        changed = true;
+      }
     } catch {
-      // 失敗した画像だけ諦めて、残りのパターンは続行する。
+      // 絵が少し重いだけでログインを妨げない。次回ログイン時に再試行する。
     }
   }
   return changed;
@@ -7837,9 +7838,9 @@ function showBreedScreen() {
   renderBreedSlotTabs();
   breedName.value = breedMonster.name;
   breedImage.value = '';
-  breedImagePreview.src = breedMonster.imageDataUrl || BREED_DEFAULT_IMAGE_URL;
+  breedImagePreview.src = currentCharacter.breedImageDataUrl || BREED_DEFAULT_IMAGE_URL;
   breedImagePreview.classList.remove('hidden');
-  breedImageReset.disabled = !breedMonster.imageDataUrl;
+  breedImageReset.disabled = !currentCharacter.breedImageDataUrl;
   breedError.classList.add('hidden');
   renderBreedScreen();
   showScreen(breedScreen);
@@ -7970,8 +7971,8 @@ breedName.addEventListener('change', () => {
   renderBreedSlotTabs();
 });
 
-// ブリードモンスターの絵は、カスタムカードと同じく768px/webpへ縮めてから
-// 保存する。以前は撮った画像をそのままdataURLにしていたため、
+// ブリードモンスターの絵は全3パターン共通の1枚だけを、カスタムカードと
+// 同じく768px/webpへ縮めてから保存する。以前は撮った画像をそのままdataURLにしていたため、
 //  ・セーブ(players/{uid})がFirestoreの1MB上限に当たって保存に失敗する
 //  ・対人戦の戦闘アイテム選択（カード定義ごと中継される）でペイロードが
 //    1MBを超え、相手に選択画面が出ないまま素手で戦うことになる
@@ -7994,7 +7995,7 @@ breedImage.addEventListener('change', async () => {
     return;
   }
   try {
-    activeBreedMonster(currentCharacter).imageDataUrl = dataUrl;
+    currentCharacter.breedImageDataUrl = dataUrl;
     saveCharacter(currentUserId, currentCharacter);
   } catch {
     breedError.textContent = '画像を保存できませんでした。画像サイズを小さくしてください';
@@ -8007,9 +8008,8 @@ breedImage.addEventListener('change', async () => {
 });
 
 breedImageReset.addEventListener('click', () => {
-  const breedMonster = activeBreedMonster(currentCharacter);
-  if (!breedMonster.imageDataUrl) return;
-  delete breedMonster.imageDataUrl;
+  if (!currentCharacter.breedImageDataUrl) return;
+  delete currentCharacter.breedImageDataUrl;
   breedImage.value = '';
   breedImagePreview.src = BREED_DEFAULT_IMAGE_URL;
   breedImageReset.disabled = true;

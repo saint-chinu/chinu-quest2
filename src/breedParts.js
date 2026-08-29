@@ -21,12 +21,36 @@ export const BREED_MAX_EQUIPPED_PARTS = 9;
 
 // デッキと同じく、パーツ構成を最大3パターンまで保存して切り替えられる
 // （character.breedMonsters配列 + breedMonsterIndexで選択中を管理）。
+// カード画像だけは3パターン共通で、character.breedImageDataUrlに1枚だけ保存する。
 export const BREED_MAX_PATTERNS = 3;
 
 /** 選択中のブリードパターン（無ければ先頭）。無効なindexにも耐える。 */
 export function activeBreedMonster(character) {
   const list = character.breedMonsters || [];
   return list[character.breedMonsterIndex] || list[0] || null;
+}
+
+/**
+ * 3パターン別に画像を持っていた旧セーブを、character直下の共通画像1枚へ統合する。
+ * 選択中パターンの画像を優先し、無ければ先頭から最初の画像を採用する。
+ */
+export function migrateBreedImageToShared(character) {
+  const patterns = character?.breedMonsters || [];
+  let changed = false;
+  if (!character.breedImageDataUrl) {
+    const selected = patterns[character.breedMonsterIndex] || patterns[0];
+    const legacyImage = selected?.imageDataUrl || patterns.find((pattern) => pattern?.imageDataUrl)?.imageDataUrl;
+    if (legacyImage) {
+      character.breedImageDataUrl = legacyImage;
+      changed = true;
+    }
+  }
+  for (const pattern of patterns) {
+    if (!pattern || !Object.prototype.hasOwnProperty.call(pattern, 'imageDataUrl')) continue;
+    delete pattern.imageDataUrl;
+    changed = true;
+  }
+  return changed;
 }
 
 export const CHANGEABLE_BREED_ELEMENTS = [Element.FIRE, Element.WATER, Element.THUNDER, Element.FOREST];
@@ -180,6 +204,9 @@ export function breedPartBadges(part) {
 export function buildBreedCardDef(character) {
   const breedMonster = activeBreedMonster(character);
   const stats = computeBreedStats(breedMonster);
+  // breedMonster.imageDataUrlは3パターン化直後の旧セーブを読み込むためだけの
+  // 後方互換フォールバック。ログイン時にbreedImageDataUrlへ統合される。
+  const uploadedImage = character.breedImageDataUrl || breedMonster.imageDataUrl || '';
   return {
     id: 'breedMonster',
     catalogId: 'breedMonster',
@@ -191,8 +218,8 @@ export function buildBreedCardDef(character) {
     hp: stats.hp,
     cost: stats.cost,
     traits: stats.traits,
-    // アップロード画像がある場合のみそちらを優先する。
-    imageDataUrl: breedMonster.imageDataUrl || BREED_DEFAULT_IMAGE_URL,
-    imageFit: breedMonster.imageDataUrl ? 'cover' : 'contain',
+    // アップロード画像がある場合のみそちらを優先する。画像は全パターン共通。
+    imageDataUrl: uploadedImage || BREED_DEFAULT_IMAGE_URL,
+    imageFit: uploadedImage ? 'cover' : 'contain',
   };
 }
