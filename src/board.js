@@ -297,6 +297,24 @@ const ROYAL_GUARD_ROWS = [
   'GMMNFMF..',
 ];
 
+// ⑮川田（ユーザー指定: 「シンプルで、同属性マス3×2で6マスの通路が4本の
+// 真四角」）。8×8の外周だけの単純なループ（HITODE_FIRST_ROWSと同じ
+// 「内側は全部'.'（マス無し）」の手法）。四隅がG(スタート)とC(CP)×3。
+// 4辺それぞれが「3+3の同属性ペア」の6マス通路で、火→水→雷→森→火と
+// 一周する属性の輪になっている（G/CをまたいでもFFF+FFFのように同じ
+// 属性同士が繋がるので、実質どの属性も6マスの連続した帯になる）。
+// 属性は火水雷森が各6マスで完全に均等。
+const KAWADA_ROWS = [
+  'GFFFWWWC',
+  'F......W',
+  'F......W',
+  'F......W',
+  'M......T',
+  'M......T',
+  'M......T',
+  'CMMMTTTC',
+];
+
 /**
  * ⑬の島判定。上段は3列に分かれた周回島（gridXの帯で見分ける）、
  * gridZ 8以降がゴール島。ワープの飛び先候補（ゴール島⇔CP島の往復だけ。
@@ -360,6 +378,11 @@ export const MAPS = [
   { id: 'kessan', name: '⑬ 豪華客船（仮公開）', wip: true, rows: KESSAN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, ofuda: { startPrice: 3, initialCount: 14 }, background: assetUrl('/images/stage/stage13-luxury-liner.png'), spacing: 2.8 },
   // ストーリー専用として実装。対戦モードへは調整完了後にwipを外して公開する。
   { id: 'royal-guard', name: '⑭ 王都の番人？？（仮公開）', wip: true, rows: ROYAL_GUARD_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage14-royal-alley.jpg'), spacing: 2.8 },
+  // ストーリー専用として実装。story.js側はもうwip:trueでロックしていない
+  // （このマップが揃ったので⑬⑭と同じ「（仮公開）」扱いでプレイ可能）。
+  // 対戦モードへは調整完了後にこちらのwipを外して公開する。背景画像は未実装
+  // （/images/stage/stage15-kawada-alley.png、Codexが対応できる不足分）。
+  { id: 'kawada', name: '⑮ 是々非々のマーモット（自称）（仮公開）', wip: true, rows: KAWADA_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage15-kawada-alley.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {

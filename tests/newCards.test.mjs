@@ -1295,17 +1295,25 @@ test('川田（⑮予定）の専用デッキはちょうど40枚', () => {
   assert.equal(list.length, 40);
 });
 
-test('ステージ15(川田)は専用マップが無い間、必ずwipでロックされている', () => {
+test('ステージ15(川田)は専用マップ・会話・デッキへ正しく接続されている', () => {
   // main.jsのstartStoryBattleはmapId省略時stage.keyをそのままmapIdに使う。
   // board.jsにid:'kawada'のマップが無いと、getMap()がMAPS[0]（①ヒトデの
-  // 縄張り）へ静かにフォールバックし、盤面・背景が食い違う事故になる。
-  // マップを追加したら、このテストごとwip解除を確認すること。
+  // 縄張り）へ静かにフォールバックし、盤面・背景が食い違う事故になる
+  // ―― ここでmapが実在することを直接確認する。
   const stage = STORY_STAGES.find((entry) => entry.key === 'kawada');
-  assert.ok(stage, 'kawadaステージが見つからない');
+  const map = MAPS.find((entry) => entry.id === 'kawada');
+  assert.ok(stage && map, 'ステージ・マップが両方見つからない');
   assert.equal(stage.opponents[0].deckKey, 'kawada');
   assert.equal(stage.opponents[0].name, '川田');
-  const hasMap = MAPS.some((map) => map.id === 'kawada');
-  if (!hasMap) {
-    assert.equal(stage.wip, true, '専用マップが無い間はwip:trueでロックしておく');
+  assert.equal(stage.wip, undefined, '専用マップが揃ったのでストーリーはロックしない');
+  assert.ok(map.hasOfuda, 'お札ありのマップのはず');
+  // ユーザー指定: 「同属性マス3×2で6マスの通路」が4本の真四角(8×8)。
+  assert.equal(map.rows.length, 8);
+  assert.ok(map.rows.every((row) => row.length === 8), '真四角＝全行8マス');
+  const joined = map.rows.join('');
+  for (const symbol of ['F', 'W', 'T', 'M']) {
+    assert.equal(joined.split(symbol).length - 1, 6, `${symbol}属性は6マス（3×2の通路×2辺）`);
   }
+  assert.equal(joined.split('G').length - 1, 1, 'スタートは1か所');
+  assert.equal(joined.split('C').length - 1, 3, 'CPは3か所');
 });

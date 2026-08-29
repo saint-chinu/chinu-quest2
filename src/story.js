@@ -1118,13 +1118,12 @@ export const STORY_STAGES = [
   },
   {
     key: 'kawada',
-    title: '⑮ 是々非々のマーモット（自称）',
-    // ⚠️ board.jsにid:'kawada'の専用マップがまだ無い。全ステージは
-    // mapId省略時stage.keyをそのまま使う(main.js startStoryBattle参照)ため、
-    // このままではgetMap()がMAPS[0]（①ヒトデの縄張り）へ静かにフォール
-    // バックし、盤面・背景が食い違う。マップ追加までは必ずwip:trueで
-    // ロックしておくこと（CLAUDE.md「新ストーリー『川田』構想」参照）。
-    wip: true,
+    title: '⑮ 是々非々のマーモット（自称）（仮公開）',
+    // board.jsにid:'kawada'の専用マップを追加済み（8×8の外周ループ、
+    // 火水雷森が各6マスの真四角、お札あり）。背景画像はまだ無い
+    // （CLAUDE.md「新ストーリー『川田』」参照）のでタイトルに「仮公開」を
+    // 付けている。マップ自体はwip:trueでPvPの対戦モードマップ選択からは
+    // 除外中（board.js参照）。
     format: '1vs1',
     goalCurrency: 13000,
     startingCurrency: 500,
