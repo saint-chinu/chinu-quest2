@@ -1291,3 +1291,18 @@ test('川田（⑮予定）の専用デッキはちょうど40枚', () => {
   const list = buildCharacterDeckList('kawada');
   assert.equal(list.length, 40);
 });
+
+test('ステージ15(川田)は専用マップが無い間、必ずwipでロックされている', () => {
+  // main.jsのstartStoryBattleはmapId省略時stage.keyをそのままmapIdに使う。
+  // board.jsにid:'kawada'のマップが無いと、getMap()がMAPS[0]（①ヒトデの
+  // 縄張り）へ静かにフォールバックし、盤面・背景が食い違う事故になる。
+  // マップを追加したら、このテストごとwip解除を確認すること。
+  const stage = STORY_STAGES.find((entry) => entry.key === 'kawada');
+  assert.ok(stage, 'kawadaステージが見つからない');
+  assert.equal(stage.opponents[0].deckKey, 'kawada');
+  assert.equal(stage.opponents[0].name, '川田');
+  const hasMap = MAPS.some((map) => map.id === 'kawada');
+  if (!hasMap) {
+    assert.equal(stage.wip, true, '専用マップが無い間はwip:trueでロックしておく');
+  }
+});
