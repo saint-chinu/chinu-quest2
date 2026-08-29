@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v229`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v230`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## 未実装: Firebase App Check
@@ -654,6 +654,46 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 - 回帰テストは`npm run test:cards`（性能・noHpBoostの3方向・進路の優先順位・
   隣接敵なし時に動かないこと・移動コマンド拒否・鋼体連投でHPが削れないこと・
   候補3件以上でのepsilon非推移性・CPU鋼体の無限撃ち防止）。
+
+## 新アイテム「異次元ソケット」(2026-08)
+- **無属性防具S、ATK/HP+0、60G**（`dimensionalSocket`, battleCards.js）。
+  効果は`{type: 'swapSpecialAbilities'}`。「戦闘中、自分と相手の特殊能力
+  （先制・後攻・貫通・無効化・反射・強盗等・連鎖ボーナス加算等）を入れ替える。
+  装備アイテムの効果も対象。ATK/HPの実数値そのものは入れ替わらない」。
+- **実装は`applyDimensionalSocketSwap`（battle.js）**。入れ替え対象は
+  ①モンスター自身のtraits/effect（def由来） ②装備アイテムのtraits/effect
+  の2チャンネルを、attacker/defenderの間でそれぞれ独立に交換する
+  （両方が同時に別の効果を持てるので、1つのフィールドへ統合すると
+  片方が消えてしまう＝チャンネルを分けて交換するのがポイント）。ATK/HPの
+  実数値（素のhp/atk、アイテムのatkBonus/hpBonus）は一切触らない。
+  - ⚠️ **`unit.def`は共有されるカード定義そのもの**なので直接書き換えず、
+    `{...元のdef, traits:, effect:}`で作った新しいオブジェクトへ`unit.def`
+    自体を一時的に差し替える（元のdef自体は不変のまま）。装備アイテムは
+    `equipItem`が装備するたびに複製したインスタンスなので、こちらは直接
+    `traits`/`effect`を書き換えて問題ない。
+  - **ソケット自身の入れ替え効果は相手へ渡さない**（渡す側の寄与は常に
+    空扱い）。渡してしまうと相手の防具スロットが「入れ替え」効果を
+    持つことになり、意味を持たない再帰になる。
+  - ⚠️ **適用と復元のタイミングがずれている**。適用は`applyPreAttackItemEffects`
+    の先頭（アイテム破壊/強奪の判定自体も入れ替え後の能力を基準にしたい
+    ため）。`applyPreAttackItemEffects`は演出側が`resolveBattle`より前に
+    単独で呼び、結果をWeakMapで受け渡す既存の仕組み（真剣白刃取り等の
+    確率効果を二重に引き直さないため）があるので、そのWeakMapと同じ
+    パターン（`specialAbilitySwapRestoreCache`、attacker基準のキー）で
+    restore関数を受け渡す。復元は`resolveBattle`の**両方の出口**
+    （ロシアンルーレットの早期return、通常の最終return直前）で必ず呼ぶ。
+    戦闘後トリガー（自己回復・再生・戦闘後の反動等、いずれも`def.effect`
+    参照）は入れ替え後の状態のまま発動させ、`restoreOnBoardHp`（持ち越し
+    ダメージ計算）より前に復元する。
+  - ロシアンルーレット・真剣白刃取り等、既存の確率/奪取効果も入れ替え後の
+    状態を基準に判定される（例: 相手のロシアンルーレットを奪えば自分側で
+    発動する）。
+- 専用画像は未実装のため`imageDataUrl: null`（開示請求と同じ扱い。
+  cardArt.jsの共通防具絵へフォールバックする。画像実在テストは
+  `imageDataUrl == null`のカードをスキップするので404にはならない）。
+- 回帰テストは`npm run test:cards`（カタログ内容・モンスター自身の特性
+  (先制)の入れ替え・装備アイテムの効果(ナンカのお守りの無効化)の入れ替え・
+  1戦闘限りの復元とATK/HP実数値が変わらないこと）。
 
 ## チュートリアル (Codex追加)
 - ログイン前のタイトルからも遊べるデモ。`mapId: 'tutorial'`（3×3外周の8マス、

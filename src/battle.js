@@ -2,6 +2,61 @@ import { WEAK_AGAINST } from './battleCards.js';
 
 // 演出側と解決側で同じ戦闘前効果を共有する。特に確率効果を引き直さない。
 const preAttackEffectCache = new WeakMap();
+// 異次元ソケットで入れ替えた特殊能力を、戦闘終了時に必ず元へ戻すための
+// restore関数の受け渡し（preAttackEffectCacheと同じ理由・同じ仕組み）。
+const specialAbilitySwapRestoreCache = new WeakMap();
+
+function isDimensionalSocket(equippedItem) {
+  return equippedItem?.effect?.type === 'swapSpecialAbilities';
+}
+
+/**
+ * 異次元ソケット: 戦闘中だけ、attacker/defenderの「特殊能力」（モンスター
+ * 自身のtraits/effect、装備アイテムのtraits/effect）を丸ごと入れ替える。
+ * ATK/HPの実数値（素のhp/atk、アイテムのatkBonus/hpBonus）は対象外
+ * ―― defもitemも共有される可能性があるオブジェクトなので、直接
+ * 書き換えず一時的な差し替えにとどめ、戻すための関数を返す（対象が
+ * 無ければnull）。
+ *
+ * ソケット自身の「入れ替え」効果そのものは相手へは渡さない（渡す側の
+ * 寄与は常に空扱い＝ソケット装備側は元々自分の防具スロットを明け渡して
+ * いるだけなので、相手のモンスター自身の特殊能力はそのまま受け取るが、
+ * 相手の装備品の効果までは複製しない）。
+ */
+function applyDimensionalSocketSwap(attacker, defender) {
+  if (!attacker.items.some(isDimensionalSocket) && !defender.items.some(isDimensionalSocket)) return null;
+
+  const itemContribution = (unit) => {
+    const equipped = unit.items[0];
+    return equipped && !isDimensionalSocket(equipped)
+      ? { traits: equipped.traits, effect: equipped.effect }
+      : { traits: undefined, effect: undefined };
+  };
+  const attackerContribution = itemContribution(attacker);
+  const defenderContribution = itemContribution(defender);
+
+  const attackerOrigDef = attacker.def;
+  const defenderOrigDef = defender.def;
+  attacker.def = { ...attackerOrigDef, traits: defenderOrigDef.traits, effect: defenderOrigDef.effect };
+  defender.def = { ...defenderOrigDef, traits: attackerOrigDef.traits, effect: attackerOrigDef.effect };
+  const restoreFns = [() => { attacker.def = attackerOrigDef; defender.def = defenderOrigDef; }];
+
+  const attackerItem = attacker.items[0];
+  if (attackerItem) {
+    const orig = { traits: attackerItem.traits, effect: attackerItem.effect };
+    attackerItem.traits = defenderContribution.traits;
+    attackerItem.effect = defenderContribution.effect;
+    restoreFns.push(() => { attackerItem.traits = orig.traits; attackerItem.effect = orig.effect; });
+  }
+  const defenderItem = defender.items[0];
+  if (defenderItem) {
+    const orig = { traits: defenderItem.traits, effect: defenderItem.effect };
+    defenderItem.traits = attackerContribution.traits;
+    defenderItem.effect = attackerContribution.effect;
+    restoreFns.push(() => { defenderItem.traits = orig.traits; defenderItem.effect = orig.effect; });
+  }
+  return () => restoreFns.forEach((fn) => fn());
+}
 
 /** A monster once it's on the board: base stats plus equipped items/curses. */
 export function createFieldUnit(monsterDef, ownerId) {
@@ -623,6 +678,12 @@ export function applyPreAttackItemEffects(attacker, defender) {
   const cached = preAttackEffectCache.get(attacker);
   if (cached?.defender === defender) return cached.result;
 
+  // 異次元ソケット: このアイテム破壊/強奪の判定自体も「入れ替え後」の
+  // 特殊能力を基準にしたいので、resolveBattle本体より前のここで一度だけ
+  // 適用する。resolveBattleが自分の出口で必ず戻す。
+  const restoreDimensionalSocketSwap = applyDimensionalSocketSwap(attacker, defender);
+  if (restoreDimensionalSocketSwap) specialAbilitySwapRestoreCache.set(attacker, restoreDimensionalSocketSwap);
+
   const log = [];
   const itemSteals = [];
   const itemDestructions = [];
@@ -684,6 +745,10 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     || (cached?.defender === defender ? cached.result : applyPreAttackItemEffects(attacker, defender));
   preAttackEffectCache.delete(attacker);
   const { log, itemSteals, itemDestructions } = resolvedPreAttackEffects;
+  // 異次元ソケット: applyPreAttackItemEffects側で入れ替え済みなら、この
+  // 戦闘のどの出口を通っても必ず元へ戻す（restoreSpecialAbilitySwap()）。
+  const restoreSpecialAbilitySwap = specialAbilitySwapRestoreCache.get(attacker);
+  specialAbilitySwapRestoreCache.delete(attacker);
 
   // ロシアンルーレット: どちらかが装備していたら通常の殴り合いを一切行わず、
   // 攻撃側→守備側の順にサイコロを振り、出目の大きい方が勝つ。ATK/HP・土地
@@ -735,6 +800,7 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     defender.items = [];
     if (attacker.currentHp <= 0) attacker.curses = [];
     if (defender.currentHp <= 0) defender.curses = [];
+    restoreSpecialAbilitySwap?.();
     return {
       log,
       dmgToAttacker: defenderWins ? attackerHpBefore : 0,
@@ -1036,6 +1102,11 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     log.push(message);
     pushAftermath(unit, damage, message, '戦闘後の反動！');
   }
+
+  // 異次元ソケット: 戦闘後トリガー（自己回復・再生・反動等）まではここまでの
+  // 入れ替え後の能力を適用し、この後の持ち越しHP計算（baseMaxHpのdef.effect
+  // 参照）より前に必ず元へ戻す。
+  restoreSpecialAbilitySwap?.();
 
   const finalAttackerSurvived = attacker.currentHp > 0;
   const finalDefenderSurvived = defender.currentHp > 0;

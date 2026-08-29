@@ -1100,3 +1100,84 @@ test('味方が経路を塞いでいる間は動かず、味方が消えると�
     ['advance', 1, 3, 3],
   );
 });
+
+test('異次元ソケットは指定の性能を持ち、画像未実装のためnullを参照する', () => {
+  const card = ITEM_CATALOG.dimensionalSocket;
+  assert.equal(card.name, '異次元ソケット');
+  assert.equal(card.rarity, 'S');
+  assert.equal(card.cost, 60);
+  assert.deepEqual([card.atkBonus, card.hpBonus], [0, 0]);
+  assert.equal(card.effect.type, 'swapSpecialAbilities');
+  assert.equal(card.imageDataUrl, null, '専用画像が無い間はnull（cardArt.jsの共通絵にフォールバック）');
+});
+
+test('異次元ソケットはモンスター自身の特性(先制)を入れ替える', () => {
+  // 素の状態なら「両者無特性は攻撃側が先制」なので、先制無しの攻撃側が
+  // 通常どおり先に殴って倒す。守備側にだけ先制を持たせると立場が逆転し、
+  // 守備側が先に殴って攻撃側を倒す。
+  {
+    const a = unit(mon('攻', 50, 50), 'A');
+    const d = unit(mon('守', 10, 50, { traits: ['firstStrike'] }), 'D');
+    const r = battle.resolveBattle(a, d, new battle.GoldLedger());
+    assert.deepEqual([r.attackerSurvived, r.defenderSurvived], [false, true], '素のままなら守備側の先制が勝つ');
+  }
+  // 攻撃側が異次元ソケットを装備すると、先制(守備側の特性)が入れ替わって
+  // 攻撃側へ移り、逆に攻撃側が先に殴って倒す側になる。
+  {
+    const a = unit(mon('攻', 50, 50), 'A');
+    const d = unit(mon('守', 10, 50, { traits: ['firstStrike'] }), 'D');
+    battle.equipItem(a, ITEM_CATALOG.dimensionalSocket);
+    const r = battle.resolveBattle(a, d, new battle.GoldLedger());
+    assert.deepEqual([r.attackerSurvived, r.defenderSurvived], [true, false], '入れ替え後は攻撃側の先制が勝つ');
+  }
+});
+
+test('異次元ソケットは装備アイテムの効果(ナンカのお守りの無効化)も入れ替える', () => {
+  // 守備側がナンカのお守りを持つ限り、攻撃側の一撃(本来致死)は1回無効化
+  // されて生き残る。
+  {
+    const a = unit(mon('攻', 100, 50), 'A');
+    const d = unit(mon('守', 10, 0), 'D');
+    battle.equipItem(d, ITEM_CATALOG.nankaNoOmamori);
+    const r = battle.resolveBattle(a, d, new battle.GoldLedger());
+    assert.equal(r.defenderSurvived, true, '無効化前提なら生き残る');
+  }
+  // 攻撃側が異次元ソケットを装備すると、守備側のナンカのお守りの効果
+  // (無効化)が攻撃側の防具スロットへ移り、守備側は無効化を失って死ぬ。
+  {
+    const a = unit(mon('攻', 100, 50), 'A');
+    const d = unit(mon('守', 10, 0), 'D');
+    battle.equipItem(d, ITEM_CATALOG.nankaNoOmamori);
+    battle.equipItem(a, ITEM_CATALOG.dimensionalSocket);
+    const r = battle.resolveBattle(a, d, new battle.GoldLedger());
+    assert.equal(r.defenderSurvived, false, '無効化を奪われたので致死ダメージが通る');
+  }
+});
+
+test('異次元ソケットの入れ替えは1戦闘限りで、ATK/HPの実数値には影響しない', () => {
+  // 双方とも先制した側の一撃で即死する火力に設定し、「誰が先に殴ったか」
+  // だけで勝敗が完全に決まるようにする。
+  const aDef = mon('攻', 50, 100, { traits: ['firstStrike'] });
+  const dDef = mon('守', 50, 80);
+  const a = unit(aDef, 'A');
+  const d = unit(dDef, 'D');
+  battle.equipItem(a, ITEM_CATALOG.dimensionalSocket);
+  const r1 = battle.resolveBattle(a, d, new battle.GoldLedger());
+  // 攻撃側自身の先制が守備側へ渡ってしまうので、この戦闘だけは守備側が
+  // 先に殴って勝つ（通常なら攻撃側の先制で逆の結果になるところ）。
+  assert.deepEqual([r1.attackerSurvived, r1.defenderSurvived], [false, true], '先制が守備側へ渡り立場が逆転する');
+
+  // 戦闘後、defが元の共有カード定義オブジェクトへ戻っていること
+  // （戻し忘れると次の戦闘以降も先制が入れ替わったままになる）。
+  assert.equal(a.def, aDef);
+  assert.equal(d.def, dDef);
+
+  // 次の戦闘（アイテムは戦闘後に消費済みでソケット無し）は同じカード定義でも
+  // 通常どおり攻撃側の先制が勝つ＝入れ替えが後まで残っていない証拠。
+  const a2 = unit(aDef, 'A');
+  const d2 = unit(dDef, 'D');
+  assert.equal(battle.statTotals(a2).atk, 100, 'ATKの実数値は入れ替わらない');
+  assert.equal(battle.statTotals(d2).atk, 80, 'ATKの実数値は入れ替わらない');
+  const r2 = battle.resolveBattle(a2, d2, new battle.GoldLedger());
+  assert.deepEqual([r2.attackerSurvived, r2.defenderSurvived], [true, false], 'ソケット無しの通常戦闘に戻っている');
+});

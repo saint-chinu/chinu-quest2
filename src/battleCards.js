@@ -55,7 +55,7 @@ const item = (id, name, rarity, itemType, cost, atkBonus, hpBonus, options = {})
 });
 
 /**
- * アイテム30種（N13/S9/R7/EX1）。「オサフネ」は刀鍛冶（無属性モンスター）の
+ * アイテム35種（N13/S12/R9/EX1）。「オサフネ」は刀鍛冶（無属性モンスター）の
  * 土地コマンドで入手する専用アイテムだが、ショップ等では他アイテムと同じ
  * ように扱う（購入自体は現状想定していないが、カタログには通常のS枠として
  * 登録しておく）。
@@ -133,6 +133,16 @@ export const ITEM_CATALOG = {
     traits: ['lastStrike'],
     effectDescription: '後攻。HP+60、ATK-20',
   }),
+  // ATK/HPの実数値（素のステータス・アイテムのatkBonus/hpBonus）はそのまま、
+  // 特殊能力だけを丸ごと交換する。詳細な実装はbattle.jsの
+  // applyDimensionalSocketSwap参照。
+  dimensionalSocket: {
+    ...item('dimensionalSocket', '異次元ソケット', Rarity.S, ItemType.ARMOR, 60, 0, 0, {
+      effect: { type: 'swapSpecialAbilities' },
+      effectDescription: '戦闘中、自分と相手の特殊能力を入れ替える（先制・後攻・貫通・無効化・反射・強盗等・連鎖ボーナス加算等。装備アイテムの効果も対象）。ATK/HPの実数値そのものは入れ替わらない',
+    }),
+    imageDataUrl: null,
+  },
 
   kaenHoushakiki: item('kaenHoushakiki', '火炎放射器', Rarity.R, ItemType.WEAPON, 80, 20, 0, {
     effect: { type: 'wielderElementAtkBonus', wielderElement: Element.FIRE, atkBonus: 30 },
