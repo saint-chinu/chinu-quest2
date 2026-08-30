@@ -8,8 +8,33 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v246`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v247`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
+
+## チュートリアルの不自然さ修正（2026-08、ユーザー報告）
+報告: 「スペルカードが手札にたまっていく一方」「CPUの方が先に5000G突破した
+うえゴール地点にも着いたのに、プレイヤーが5000G貯めてゴールして終わり」。
+
+- **スペル過多**: プレイヤーのチュートリアルデッキ42枚中12枚(29%)がスペル
+  だったが、台本(`TUTORIAL_FLOW_STEPS`)が使い方を教えるのは**占術と
+  アイキャンフライの2種だけ**。癒し・副業収入・ファイヤーボールは一度も
+  案内されないまま手札を圧迫していた。スペルを6枚(14%)へ減らし、残す3種は
+  初期手札(`tutorialOpeningCardIds`の占術・イカサマ=1)か誘導ステップ
+  (`tutorialDrawQueues`で必ず引かせるアイキャンフライ)で必ず触るものだけに
+  した。抜いた枠はその場で使えるモンスター・アイテムへ回している。
+  ⚠️ **ここにスペルを足す時は台本で使い方を教えるかどうかを確認すること。**
+- **CPUの目標達成が握り潰されていた**: `_checkGoalAchievement`(game.js)に
+  `if (this.tutorialMode && player.isCPU) return false;` があり、CPUが目標を
+  超えてゴールに立っても何も起きなかった。レッスン途中の中断を防ぐ意図
+  だったが、見た目には完全に壊れて見える。**誘導ステップを全部終えた後だけ
+  CPUの勝利を解禁**する形に変更（`game.tutorialGuidedComplete`、main.jsの
+  `syncTutorialGuidedComplete`が立てる）。CPU勝利時は
+  「敗北しましたが、チュートリアルは完了扱いです」で閉じ、報酬は勝敗を
+  問わず渡す（既存の`onStoryBattleEnd`がそのまま使える）。
+- 併せて、CPUのチュートリアルデッキから**副業収入2枚を撤去**した。台本で
+  一切使わないうえ、CPUだけが黙々と資産を伸ばして目標へ先着する原因だった。
+- 回帰テスト: `npm run test:cards`「チュートリアル: 誘導中はCPUの目標達成を
+  握り潰し、終えたら決着させる」。
 
 ## 未実装: Firebase App Check
 - Web版のFirebase App Check（reCAPTCHA Enterprise）は未設定。現在はSecurity Rulesと

@@ -346,6 +346,9 @@ export class Game {
       return [element, onBoard > 0 ? onBoard : (this.ofudaSettings?.initialCount || 0)];
     }));
     this.tutorialMode = !!tutorialMode;
+    // 誘導ステップを全部終えたか。trueになるとCPUも目標総資産で勝てる
+    // （_checkGoalAchievement参照）。main.jsがsyncTutorialGuidedCompleteで立てる。
+    this.tutorialGuidedComplete = false;
     this.tutorialOpeningCardIds = tutorialOpeningCardIds;
     this.tutorialCpuOpeningCardIds = tutorialCpuOpeningCardIds;
     this.tutorialDiceQueues = tutorialDiceQueues || { human: [1, 1, 2, 1, 3, 2], cpu: [2, 1, 2, 1, 2, 1] };
@@ -2957,11 +2960,14 @@ export class Game {
 
   async _checkGoalAchievement(player) {
     if (this.storyEnded || this.goalCurrency == null || this._totalAssetsOf(player) < this.goalCurrency) return false;
-    // チュートリアルは練習の場: CPUが先に目標へ届いても決着させない
-    // （通常AIは土地を強気に強化するため、放っておくと2周程度で2000Gに
-    // 達してレッスン途中のプレイヤーを置き去りに終了してしまう）。
-    // プレイヤー自身の達成だけがレッスン①の文章どおり勝利になる。
-    if (this.tutorialMode && player.isCPU) return false;
+    // チュートリアルの誘導ステップ中は、CPUが先に目標へ届いても決着させない
+    // （通常AIは土地を強気に強化するため、放っておくとレッスン途中の
+    // プレイヤーを置き去りに終了してしまう）。ただし基本を全部体験し終えた
+    // 後(tutorialGuidedComplete)は普通の対戦として扱う - 握り潰したままだと
+    // CPUが目標を超えてゴールに立っても何も起きず「CPUの方が先に達成したのに
+    // 終わらない」という不自然な画になるため（2026-08のユーザー報告）。
+    // フラグはmain.jsのsyncTutorialGuidedCompleteが立てる。
+    if (this.tutorialMode && player.isCPU && !this.tutorialGuidedComplete) return false;
     this.storyEnded = true;
     this.awaitingRoll = false;
     this.isBusy = true;

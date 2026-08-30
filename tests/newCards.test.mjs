@@ -1509,6 +1509,42 @@ test('社会不適合のCPUは相手の属性違いが2体以上の時だけ撃�
   assert.equal(one.g.casts.length, 0, '1体しか居なければ撃たない');
 });
 
+test('チュートリアル: 誘導中はCPUの目標達成を握り潰し、終えたら決着させる', async () => {
+  // 握り潰したままだと「CPUが先に目標を超えてゴールに立っても何も起きない」
+  // という不自然な状態になる（2026-08のユーザー報告）。誘導ステップを終えた
+  // 後は普通の対戦として決着させる。
+  const cpu = { id: 'C', name: 'CPU', isCPU: true, allianceId: null, defeated: false };
+  const human = { id: 'H', name: '人', isCPU: false, allianceId: null, defeated: false };
+  const make = (guidedComplete) => {
+    const g = Object.create(Game.prototype);
+    const ends = [];
+    Object.assign(g, {
+      players: [human, cpu], tiles: [{ position: null }], goalCurrency: 5000,
+      storyEnded: false, storyMode: true, tutorialMode: true,
+      tutorialGuidedComplete: guidedComplete,
+      onLog: () => {}, _notifyState: () => {},
+      onGoalAchieved: async () => {},
+      onStoryBattleEnd: async (r) => { ends.push(r); },
+      _totalAssetsOf: () => 9999,
+    });
+    return { g, ends };
+  };
+
+  const during = make(false);
+  assert.equal(await during.g._checkGoalAchievement(cpu), false, '誘導中はCPUで決着しない');
+  assert.equal(during.ends.length, 0);
+  assert.equal(during.g.storyEnded, false);
+
+  const after = make(true);
+  assert.equal(await after.g._checkGoalAchievement(cpu), true, '誘導を終えたらCPUでも決着する');
+  assert.equal(after.ends[0].won, false, 'CPU勝利なので人間側の敗北として渡す');
+
+  // 人間の達成は誘導中でも常に決着する（既存挙動を壊していない）。
+  const player = make(false);
+  assert.equal(await player.g._checkGoalAchievement(human), true);
+  assert.equal(player.ends[0].won, true);
+});
+
 test('川田（⑮予定）の専用デッキはちょうど40枚', () => {
   const list = buildCharacterDeckList('kawada');
   assert.equal(list.length, 40);

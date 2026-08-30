@@ -4236,7 +4236,8 @@ function buildTutorialCpuDeck() {
     ...tutorialCopies(ITEM_CATALOG.knife, 3),
     ...tutorialCopies(ITEM_CATALOG.potLid, 3),
     ...tutorialCopies(SPELL_CATALOG.heal, 2),
-    ...tutorialCopies(SPELL_CATALOG.sideIncome, 2),
+    // 副業収入は台本で一切使わないうえ、CPUだけが黙々と資産を伸ばして
+    // 目標総資産へ先着してしまう原因になっていたので外した（2026-08）。
   ];
 }
 
@@ -4248,21 +4249,31 @@ function tutorialCopies(def, count) {
   return Array.from({ length: count }, () => ({ ...def, catalogId: def.id }));
 }
 
+/**
+ * チュートリアルのプレイヤーデッキ（42枚）。
+ *
+ * ⚠️ スペルは6枚まで。台本(TUTORIAL_FLOW_STEPS)が実際に使い方を教えるのは
+ * 占術とアイキャンフライの2種だけなので、スペルを厚く積むと「使い方の
+ * 分からないスペルが手札に溜まる一方」になる（2026-08のユーザー報告）。
+ * 以前は12枚(全体の29%)積んでいて、癒し・副業収入・ファイヤーボールは
+ * 一度も案内されないまま手札を圧迫していた。
+ * 残す3種はどれも台本か初期手札で必ず触るもの:
+ *   占術・イカサマ=1 → tutorialOpeningCardIds の初期手札
+ *   アイキャンフライ → tutorialDrawQueues で必ず引かせる誘導ステップ用
+ * 抜いたぶんは、その場で必ず使えるモンスターとアイテムへ回している。
+ */
 function buildTutorialPlayerDeck() {
   return [
     ...tutorialCopies(MONSTER_CATALOG.salarymander, 5),
-    ...tutorialCopies(MONSTER_CATALOG.fireStarter, 5),
+    ...tutorialCopies(MONSTER_CATALOG.fireStarter, 7),
     ...tutorialCopies(MONSTER_CATALOG.flameLizard, 5),
     ...tutorialCopies(MONSTER_CATALOG.kunekune, 1),
     ...tutorialCopies(MONSTER_CATALOG.sekizou, 4),
-    ...tutorialCopies(ITEM_CATALOG.knife, 5),
-    ...tutorialCopies(ITEM_CATALOG.potLid, 5),
+    ...tutorialCopies(ITEM_CATALOG.knife, 7),
+    ...tutorialCopies(ITEM_CATALOG.potLid, 7),
     ...tutorialCopies(SPELL_CATALOG.divination, 2),
     ...tutorialCopies(SPELL_CATALOG.diceOne, 2),
-    ...tutorialCopies(SPELL_CATALOG.fireball, 2),
     ...tutorialCopies(SPELL_CATALOG.iCanFly, 2),
-    ...tutorialCopies(SPELL_CATALOG.heal, 2),
-    ...tutorialCopies(SPELL_CATALOG.sideIncome, 2),
   ];
 }
 
@@ -4342,6 +4353,24 @@ function advanceTutorialStep(type, payload) {
   if (step.card && catalogIdOf(payload.card || {}) !== step.card) return;
   activeTutorialSession.stepIndex += 1;
   renderTutorialStepBubble();
+  syncTutorialGuidedComplete();
+}
+
+/**
+ * 誘導ステップを全部終えたら、CPUも目標総資産で勝てるようにする。
+ *
+ * それまでCPUの達成は_checkGoalAchievement(game.js)が握り潰している。
+ * レッスンの途中でCPUに決着されると練習が中断されてしまうためだが、
+ * 握り潰したままだとCPUが目標を超えてゴールに立っても何も起きず、
+ * 「CPUの方が先に達成したのに終わらない」という不自然な画になる
+ * （2026-08のユーザー報告）。基本を全部体験し終えた後は普通の対戦として
+ * 扱い、CPUが勝ったら「敗北しましたが、チュートリアルは完了扱いです」で
+ * 閉じる（報酬は勝敗を問わず渡している - startTutorialのonStoryBattleEnd）。
+ */
+function syncTutorialGuidedComplete() {
+  if (!activeTutorialSession || !game?.tutorialMode) return;
+  const remaining = TUTORIAL_FLOW_STEPS[activeTutorialSession.stepIndex];
+  if (!remaining || remaining.event === null) game.tutorialGuidedComplete = true;
 }
 
 function recordTutorialEvent(type, payload = {}) {
@@ -4417,8 +4446,9 @@ async function startTutorialDemo() {
     // 「総資産が目標以上の状態でゴールすると勝利です」という文章どおり、
     // 達成したらチュートリアル完了として閉じる。
     storyMode: true,
-    // 敗北経路は破産決着のみ（CPUの目標達成はtutorialModeでは決着しない -
-    // game.jsの_checkGoalAchievement参照）。どちらでも完了扱いで報酬を渡す。
+    // 敗北経路は破産決着と、誘導ステップを終えた後のCPUの目標達成
+    // （それまではgame.jsの_checkGoalAchievementが握り潰す -
+    // syncTutorialGuidedComplete参照）。どちらでも完了扱いで報酬を渡す。
     onStoryBattleEnd: async ({ won }) => {
       showToast(
         won
