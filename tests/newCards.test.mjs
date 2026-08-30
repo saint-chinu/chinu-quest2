@@ -1650,6 +1650,45 @@ test('異次元ソケット同士は打ち消し合って何も入れ替わら�
   assert.ok(!battle.hasTrait(defender, 'firstStrike'), '相手の先制を受け取らない');
 });
 
+test('属性神の盾は持ち主が替わっても属性一致の時だけ反射する', () => {
+  // 装備時にreflectDamageへ差し替える実装なので、真剣白刃取りで奪われたり
+  // 異次元ソケットで効果を移されると、属性の合わないモンスターまで絶対反射を
+  // 得てしまっていた。差し替え後もwielderElementを残して再判定する。
+  const thunder = (name, atk) => mon(name, 60, atk, { element: 'thunder' });
+  const build = (thiefDef, thiefItem) => {
+    const d = unit(thunder('雷モンスター', 10), 'D');
+    battle.equipItem(d, ITEM_CATALOG.raijinNoTate);
+    const a = unit(thiefDef, 'A');
+    battle.equipItem(a, thiefItem);
+    return battle.resolveBattle(a, d, new battle.GoldLedger());
+  };
+
+  // 無属性が奪う → 属性が合わないので反射しない。
+  const stolenByNeutral = build(mon('無属性の泥棒', 60, 30, { element: 'neutral' }), ITEM_CATALOG.shinkenShirahadori);
+  assert.ok(!stolenByNeutral.exchanges.some((e) => e.reflected), '属性が合わない泥棒は反射を得ない');
+
+  // 雷属性が奪う → 属性が合うので奪った側が反射する。
+  const stolenByThunder = build(thunder('雷の泥棒', 30), ITEM_CATALOG.shinkenShirahadori);
+  const byThief = stolenByThunder.exchanges.find((e) => e.reflected);
+  assert.ok(byThief, '属性が合う泥棒は反射を得る');
+  assert.equal(byThief.side, 'attacker', '反射するのは盾を奪った攻撃側');
+
+  // 異次元ソケットで効果を移された無属性も反射しない。
+  const viaSocket = build(mon('無属性', 60, 30, { element: 'neutral' }), ITEM_CATALOG.dimensionalSocket);
+  assert.ok(!viaSocket.exchanges.some((e) => e.reflected), 'ソケットで移されても属性が合わなければ反射しない');
+});
+
+test('属性神の盾はアイテム破壊で失われれば反射しない（仕様どおり）', () => {
+  // 「雷モンスターに雷神の盾を着けたのに反射しなかった」の再現条件のひとつ。
+  // 海賊S等のdestroyItemBeforeAttackは戦闘開始前に装備ごと消すので、
+  // 盾の効果も一緒に消える（バグではない）。
+  const d = unit(mon('雷', 60, 10, { element: 'thunder' }), 'D');
+  battle.equipItem(d, ITEM_CATALOG.raijinNoTate);
+  const pirate = { ...mon('海賊', 60, 30, { element: 'water' }), effect: { type: 'destroyItemBeforeAttack' } };
+  const r = battle.resolveBattle(unit(pirate, 'A'), d, new battle.GoldLedger());
+  assert.ok(!r.exchanges.some((e) => e.reflected), 'アイテムを破壊されたら反射は起きない');
+});
+
 test('川田（⑮予定）の専用デッキはちょうど40枚', () => {
   const list = buildCharacterDeckList('kawada');
   assert.equal(list.length, 40);

@@ -109,7 +109,16 @@ export function equipItem(unit, itemDef) {
     // unpierceable: 属性神の盾の反射は貫通では抜けない「絶対反射」
     // （ユーザー指定、2026-08）。くねくね自身のreflectDamageは従来どおり
     // 貫通で抜けるので、盾由来のものだけをこのフラグで区別する。
-    equipped.effect = { type: 'reflectDamage', unpierceable: true };
+    //
+    // wielderElementを残すのは、この装備が戦闘中に持ち主を替えても
+    // 「属性が一致した者だけが反射する」条件を保つため。真剣白刃取りで
+    // 奪われた／異次元ソケットで効果を移された時に、属性の合わない
+    // モンスターまで絶対反射を得てしまうのを防ぐ（dealDamageで再判定する）。
+    equipped.effect = {
+      type: 'reflectDamage',
+      unpierceable: true,
+      wielderElement: equipped.effect.wielderElement,
+    };
   }
   unit.items.push(equipped);
   return equipped;
@@ -428,8 +437,13 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus, gold) {
   // getEffectで判定することで、属性神の盾（一致した属性が装備すると
   // 同じreflectDamageへ差し替わる）もモンスター自身の効果と同様に扱える。
   // unpierceable付き（属性神の盾）は貫通でも止められない「絶対反射」。
+  // wielderElement付き（同じく属性神の盾）は、今それを持っているモンスターの
+  // 属性が一致している時だけ発動する - 戦闘中に持ち主が替わっても
+  // （真剣白刃取りの強奪・異次元ソケットの効果移動）条件が保たれる。
   const reflect = getEffect(defenderUnit, 'reflectDamage');
-  if (reflect && (!pierces || reflect.unpierceable) && damage > 0) {
+  const reflectWielderOk = !reflect?.wielderElement
+    || defenderUnit.def.element === reflect.wielderElement;
+  if (reflect && reflectWielderOk && (!pierces || reflect.unpierceable) && damage > 0) {
     // 反射ダメージを受ける攻撃側がナンカのお守りを持っていれば無効化する。
     const negatedMsg = consumeDamageNegation(attackerUnit, log);
     if (negatedMsg) return { damage: 0, message: negatedMsg };
