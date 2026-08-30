@@ -1769,6 +1769,30 @@ test('CPUは盾が噛み合う相手へ侵略する時だけ属性神の盾を�
     '自分が不一致属性なら温存ロジックの対象外');
 });
 
+test('ストーリーの話者は全員（川田を除き）立ち絵を引ける', async () => {
+  // 立ち絵はNPC_PORTRAIT_URLを名前で引くだけなので、表記ゆれがあると
+  // そのステージだけ静かに立ち絵が出なくなる。実際⑦は「段ボール男」表記で
+  // （⑤⑥は「ダンボール男」）立ち絵が欠けていた（2026-08に発見・修正）。
+  const { npcPortraitUrl } = await vite.ssrLoadModule('/src/npcArt.js');
+  assert.equal(npcPortraitUrl('段ボール男'), npcPortraitUrl('ダンボール男'),
+    '「段ボール男」表記でも同じ立ち絵を引けること');
+
+  const speakers = new Set();
+  for (const stage of STORY_STAGES) {
+    for (const variant of [stage, stage.replay, stage.secretReplay].filter(Boolean)) {
+      for (const key of ['intro', 'outro']) {
+        for (const line of (variant[key] ?? stage[key] ?? [])) speakers.add(line.speaker);
+      }
+    }
+  }
+  speakers.delete('???');
+  speakers.delete('主人公'); // 主人公はプレイヤー自身のアイコンを使う
+  // 川田(⑮)は立ち絵が未作成。用意できたらこの除外を消すこと。
+  speakers.delete('川田');
+  const missing = [...speakers].filter((name) => !npcPortraitUrl(name));
+  assert.deepEqual(missing, [], `立ち絵を引けない話者: ${missing.join(', ')}`);
+});
+
 test('川田（⑮予定）の専用デッキはちょうど40枚', () => {
   const list = buildCharacterDeckList('kawada');
   assert.equal(list.length, 40);

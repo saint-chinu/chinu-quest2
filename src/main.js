@@ -28,7 +28,7 @@ import {
   describeBreedPart,
 } from './breedParts.js';
 import { STORY_STAGES, isStageUnlocked, isStageCleared, isStageWip } from './story.js';
-import { NPC_PORTRAIT_URL, loadNpcTokenImage } from './npcArt.js';
+import { npcPortraitUrl, loadNpcTokenImage } from './npcArt.js';
 import { defaultCardArtUrl } from './cardArt.js';
 import { firebaseReady, db, auth } from './firebase.js';
 import { collection, doc as fsDoc, getDoc as fsGetDoc, getDocs as fsGetDocs, getCountFromServer as fsGetCount, addDoc as fsAddDoc, serverTimestamp as fsServerTimestamp, query as fsQuery, orderBy as fsOrderBy } from 'firebase/firestore';
@@ -5328,7 +5328,7 @@ storyBackButton.addEventListener('click', showHubScreen);
  * ストーリー会話画面（intro/outro）。ステージ背景を全面に敷き、左＝主人公・
  * 右＝話しているNPCの立ち絵を大きく立たせ、下部の会話ボックスに台詞を出す
  * （2026-08、note.comのプロモ画像に合わせた見た目）。話者が「主人公」なら
- * 左をアクティブ化、NPC_PORTRAIT_URLに載っている名前なら右へその立ち絵を
+ * 左をアクティブ化、npcPortraitUrl()で引ける名前なら右へその立ち絵を
  * 出してアクティブ化（既に表示中の相手が話し続ける限り差し替えない）。
  * 「???」等どちらにも該当しない話者（ナレーション）は両方とも非アクティブに
  * 沈めるだけで、直前に表示していた立ち絵はそのまま残す。
@@ -5393,7 +5393,7 @@ function playDialogueLines(lines, { background, stageBadgeText } = {}) {
         storyDialoguePortraitLeft.classList.add('active');
         storyDialoguePortraitRight.classList.remove('active');
       } else {
-        const portraitUrl = NPC_PORTRAIT_URL[line.speaker];
+        const portraitUrl = npcPortraitUrl(line.speaker);
         if (portraitUrl) {
           storyDialogueImgRight.src = portraitUrl;
           storyDialoguePortraitRight.classList.remove('hidden');
@@ -5698,14 +5698,14 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
       const speakerPortraitUrls = Object.fromEntries(
         Object.keys(stage.overlaySpeakerSides || {}).map((speaker) => [
           speaker,
-          speaker === '主人公' ? iconDataUrl : NPC_PORTRAIT_URL[speaker],
+          speaker === '主人公' ? iconDataUrl : npcPortraitUrl(speaker),
         ]),
       );
       await playOverlayDialogueLines(event.lines || [], {
         leftName: '闇・ホフク',
-        leftPortraitUrl: NPC_PORTRAIT_URL['闇・ホフク'],
+        leftPortraitUrl: npcPortraitUrl('闇・ホフク'),
         rightName: 'サーティー',
-        rightPortraitUrl: NPC_PORTRAIT_URL['サーティー'],
+        rightPortraitUrl: npcPortraitUrl('サーティー'),
         speakerSides: stage.overlaySpeakerSides,
         speakerPortraitUrls,
         heroPortraitUrl: iconDataUrl,
@@ -5724,16 +5724,16 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
     const speakerPortraitUrls = stage.overlaySpeakerSides
       ? Object.fromEntries(Object.keys(stage.overlaySpeakerSides).map((speaker) => [
           speaker,
-          speaker === '主人公' ? iconDataUrl : NPC_PORTRAIT_URL[speaker],
+          speaker === '主人公' ? iconDataUrl : npcPortraitUrl(speaker),
         ]))
       : null;
     await playOverlayDialogueLines(stage.intro, {
       leftName: stage.overlayNpc,
-      leftPortraitUrl: NPC_PORTRAIT_URL[stage.overlayNpc],
+      leftPortraitUrl: npcPortraitUrl(stage.overlayNpc),
       rightName: currentCharacter.name,
       rightPortraitUrl: iconDataUrl,
       rightNpcOnSpeaker: stage.overlayRightNpcOnSpeaker,
-      rightNpcPortraitUrl: NPC_PORTRAIT_URL[stage.overlayRightNpcOnSpeaker],
+      rightNpcPortraitUrl: npcPortraitUrl(stage.overlayRightNpcOnSpeaker),
       speakerSides: stage.overlaySpeakerSides,
       speakerPortraitUrls,
       heroPortraitUrl: iconDataUrl,
@@ -5817,16 +5817,16 @@ async function playStoryOutroOverlay(stage, outroLines) {
   const speakerPortraitUrls = stage.overlaySpeakerSides
     ? Object.fromEntries(Object.keys(stage.overlaySpeakerSides).map((speaker) => [
         speaker,
-        speaker === '主人公' ? heroPortraitUrl : NPC_PORTRAIT_URL[speaker],
+        speaker === '主人公' ? heroPortraitUrl : npcPortraitUrl(speaker),
       ]))
     : null;
   await playOverlayDialogueLines(outroLines, {
     leftName: stage.overlayNpc,
-    leftPortraitUrl: NPC_PORTRAIT_URL[stage.overlayNpc],
+    leftPortraitUrl: npcPortraitUrl(stage.overlayNpc),
     rightName: currentCharacter.name,
     rightPortraitUrl: heroPortraitUrl,
     rightNpcOnSpeaker: stage.overlayRightNpcOnSpeaker,
-    rightNpcPortraitUrl: NPC_PORTRAIT_URL[stage.overlayRightNpcOnSpeaker],
+    rightNpcPortraitUrl: npcPortraitUrl(stage.overlayRightNpcOnSpeaker),
     speakerSides: stage.overlaySpeakerSides,
     speakerPortraitUrls,
     heroPortraitUrl,

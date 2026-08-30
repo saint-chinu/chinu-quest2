@@ -29,6 +29,24 @@ export const NPC_PORTRAIT_URL = {
 
 // 盤面駒用は256×256の正方形に統一済み（GameScene.createPieceFromImageが
 // 前提とする1.6×1.6の正方形スプライトにそのまま合う）。
+/**
+ * 表示名を立ち絵・盤面駒のキーへ正規化する。
+ * ⑦では同じキャラが「段ボール男」表記で登場する（⑤⑥は「ダンボール男」）ので、
+ * どちらでも同じ素材を引けるようにここへ寄せる。盤面駒(loadNpcTokenImage)は
+ * 以前から同じ正規化をしていたが、立ち絵側は素通しだったため⑦だけ立ち絵が
+ * 出ていなかった（2026-08のストーリー通し確認で発覚）。
+ */
+export function canonicalNpcName(name) {
+  const raw = String(name || '');
+  if (raw.includes('段ボール男')) return 'ダンボール男';
+  return raw;
+}
+
+/** 表記ゆれを吸収して立ち絵URLを引く。NPC_PORTRAIT_URLを直接添字しないこと。 */
+export function npcPortraitUrl(name) {
+  return NPC_PORTRAIT_URL[canonicalNpcName(name)];
+}
+
 export const NPC_TOKEN_URL = {
   朕: assetUrl('/images/npc-portraits/chin-su.png'),
   '「彼」': assetUrl('/images/npc-tokens/kare.png'),
@@ -56,7 +74,7 @@ const tokenImageCache = new Map();
 export function loadNpcTokenImage(name) {
   // 復活・支配状態など表示名に補足が付いた段ボール男も、同じ盤面駒を使う。
   // 既存ステージ⑤だけでなく乱入する⑥・同盟戦の⑦でも丸い代替駒へ落ちない。
-  const canonicalName = String(name || '').includes('段ボール男') ? 'ダンボール男' : name;
+  const canonicalName = canonicalNpcName(name);
   const url = NPC_TOKEN_URL[canonicalName];
   if (!url) return Promise.resolve(null);
   if (tokenImageCache.has(url)) return tokenImageCache.get(url);
