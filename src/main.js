@@ -4182,7 +4182,7 @@ const TUTORIAL_LESSONS = [
   },
   {
     title: 'サイコロ・移動・CP',
-    text: '画面のサイコロをタップすると、出た目の数だけ進みます。序盤は下の吹き出しの誘導に合わせて出目が決まっています（誘導が終わると通常のランダムに戻ります）。未通過CPを通ると100Gを獲得し、全CP通過後はゴールで周回ボーナスを得られます。',
+    text: '画面のサイコロをタップすると、出た目の数だけ進みます。チュートリアルでは下の吹き出しの誘導に合わせて出目が決まっており、運で結果が変わることはありません。未通過CPを通ると100Gを獲得し、全CP通過後はゴールで周回ボーナスを得られます。',
   },
   {
     title: 'モンスター召喚',
@@ -4210,7 +4210,7 @@ const TUTORIAL_LESSONS = [
   },
   {
     title: 'チュートリアル完了',
-    text: '説明は以上です。盤面では何度でも操作を試せます。「完了」を押すか、目標総資産を達成した状態でゴールするとチュートリアル終了です。ログイン中の初回完了時だけ、占術1枚と100Mを受け取れます。ログイン前のデモでは報酬や進行状況は保存されません。',
+    text: '説明は以上です。吹き出しの誘導を最後（移動侵略）まで進めると、そこでチュートリアルは自動的に終了します。途中でやめたい時は「完了」を押してください。ログイン中の初回完了時だけ、占術1枚と100Mを受け取れます。ログイン前のデモでは報酬や進行状況は保存されません。',
   },
 ];
 
@@ -4307,11 +4307,15 @@ const TUTORIAL_FLOW_STEPS = [
   { event: 'roll', text: 'サイコロをタップして振ってみよう！' },
   { event: 'summon', requireCard: 'fireStarter', text: '空き地に止まった！「召喚／侵略」から「火付け役」を召喚してみよう' },
   { event: 'battleEnd', defenderIsHuman: true, requireItem: 'potLid', text: '敵が攻めてきた！アイテム選択で「なべのふた」を選んで防御しよう。防ぎ切れば通行料ももらえる' },
+  { event: 'levelUp', text: '土地を守り切った！ 続けて同じメニューの「土地Lvアップ」で、この土地を強化してみよう（払ったGは土地の価値に変わる）' },
   { event: 'summon', requireCard: 'kunekune', text: '次の空き地では「くねくね」を召喚してみよう（HPは低いが攻撃を反射する）' },
   { event: 'spell', card: 'divination', requireCard: 'divination', text: '自分のターンが来たら、サイコロを振る前に手札の「占術」を使ってみよう（スペルは1ターン1回）' },
   { event: 'spell', card: 'iCanFly', requireCard: 'iCanFly', targetSelf: true, text: '「アイキャンフライ」を引いた！自分に使うと次のサイコロが2倍。ぐるっと1周しよう' },
   { event: 'move', text: 'くねくねのマスに戻ってきた！「土地」→くねくねの土地→「移動」で、隣の樹海の怨霊へ移動侵略しよう。反射で倒せるぞ' },
-  { event: null, text: '基本は全部体験できた！ここからは自由に試して、上のガイドの「完了」で終了しよう' },
+  // 台本を撃ち終わったら、そのままチュートリアルを閉じる。以前はここから
+  // 「自由に試す」通常対戦（＝ランダムな出目とCPUのAI任せ）へ移行していたが、
+  // 練習の場に運の要素は要らないというユーザー指定（2026-08）で撤去した。
+  { event: null, text: '基本は全部体験できた！ チュートリアルを終了します' },
 ];
 
 /**
@@ -4349,7 +4353,7 @@ function advanceTutorialStep(type, payload) {
   if (!step || step.event !== type) return;
   const human = game?.players?.find((player) => !player.isCPU);
   if (step.defenderIsHuman && (!human || payload.defenderId !== human.id)) return;
-  if ((type === 'summon' || type === 'move') && human && payload.playerId !== human.id) return;
+  if (['summon', 'move', 'levelUp'].includes(type) && human && payload.playerId !== human.id) return;
   if (step.card && catalogIdOf(payload.card || {}) !== step.card) return;
   activeTutorialSession.stepIndex += 1;
   renderTutorialStepBubble();
@@ -4370,7 +4374,12 @@ function advanceTutorialStep(type, payload) {
 function syncTutorialGuidedComplete() {
   if (!activeTutorialSession || !game?.tutorialMode) return;
   const remaining = TUTORIAL_FLOW_STEPS[activeTutorialSession.stepIndex];
-  if (!remaining || remaining.event === null) game.tutorialGuidedComplete = true;
+  if (remaining && remaining.event !== null) return;
+  // 台本を最後まで撃ったので終了。目標総資産(5000G)に届くまで通常対戦を
+  // 続けさせると、そこから先は出目もCPUの打ち回しもランダムになり、
+  // 「CPUが先に目標を達成したのに終わらない」等の不自然な画になっていた。
+  showToast('チュートリアル完了！ 基本操作はすべて体験できました', 3000);
+  void finishTutorial(true);
 }
 
 function recordTutorialEvent(type, payload = {}) {
@@ -4461,19 +4470,41 @@ async function startTutorialDemo() {
     tutorialMode: true,
     tutorialOpeningCardIds: ['divination', 'diceOne', 'fireStarter', 'knife', 'potLid', 'kunekune'],
     tutorialCpuOpeningCardIds: ['salarymander', 'jukaiNoOnryou'],
-    // 誘導台本（TUTORIAL_FLOW_STEPS参照）どおりの盤面が出来るよう、序盤の
-    // サイコロを両者固定にする。盤面は 0→1→2(CP)→4→7→6→5→3→0 の時計回り。
-    //   自1: 1歩→マス1で火付け役召喚 / 敵1: 1歩→マス1へ侵略（なべのふた防衛）
-    //   自2: 3歩→CP経由でマス7にくねくね / 敵2: 2歩→CP経由でマス4に樹海の怨霊
-    //   自3: 2歩→マス5（手前で占術を試す） / 敵3: 2歩→通過
-    //   自4: 引いたアイキャンフライで3×2=6歩→1周してくねくねのマス7へ着地
-    //        →土地コマンド「移動」でマス4の怨霊に移動侵略→反射で撃破
-    // 台本を使い切った後は通常のランダム抽選に戻る。
-    tutorialDiceQueues: { human: [1, 3, 2, 3], cpu: [1, 2, 2] },
-    tutorialDrawQueues: { human: [null, 'kunekune', null, 'iCanFly'], cpu: [] },
+    // ⚠️ チュートリアルは最後まで完全な台本で進む（運の要素を排除する、という
+    // ユーザー指定 2026-08）。出目・引くカード・CPUの行動を全手番ぶん固定し、
+    // 台本を撃ち終わった時点でチュートリアルを終了する
+    // （syncTutorialGuidedComplete）。以前は台本が4手番で尽きた後に通常の
+    // ランダム対戦へ移行しており、そこで「使い方を教えていないスペルが手札に
+    // 溜まる」「CPUが先に目標総資産へ到達したのに終わらない」が起きていた。
+    //
+    // 盤面は 0→1→2(CP)→4→7→6→5→3→0 の時計回り8マス（実測で確認済み。
+    // 属性は 1=火 3=雷 4=森 5=無 6=水 7=火、2がCP）。
+    //   自1: 1歩→マス1(火)へ着地、火付け役を召喚
+    //   敵1: 1歩→マス1へ侵略（プレイヤーはなべのふたで防衛）
+    //   自2: 1歩→マス2(CP)にちょうど停止。CP停止中は全所有地に土地コマンドが
+    //        使えるので、ここでマス1を土地Lvアップさせる
+    //   敵2: 2歩→マス4(森)へ着地、樹海の怨霊を召喚
+    //   自3: 2歩→マス4を通過してマス7(火)へ着地、くねくねを召喚
+    //   敵3: 2歩→マス6へ着地（台本のpassで何もしない）
+    //   自4: 占術を使ってから2歩→マス5へ着地
+    //   敵4: 2歩→マス3へ着地（pass）
+    //   自5: アイキャンフライを自分に使い3×2=6歩→1周してマス7へ着地
+    //        →土地コマンド「移動」でマス4の怨霊へ移動侵略→反射で撃破して終了
+    // ⚠️ 出目を変える時は、tests/newCards.test.mjsの
+    //    「チュートリアルの台本どおりに進むと想定のマスへ着地する」が
+    //    リング順を辿って着地マスを検証するので、必ず一緒に更新すること。
+    tutorialDiceQueues: { human: [1, 1, 2, 2, 3], cpu: [1, 2, 2, 2] },
+    // くねくね・占術は初期手札(tutorialOpeningCardIds)にあるので引かせる必要は
+    // ない。アイキャンフライだけは自5でちょうど手札へ来るように指定する
+    // （早く配ると自4で使われて出目が想定とずれる）。
+    tutorialDrawQueues: { human: [null, null, null, null, 'iCanFly'], cpu: [] },
+    // 台本の無い手番でCPUが通常AIに落ちると打ち回しがランダムになるので、
+    // 敵3・敵4は明示的にpass（何もしない）で埋める。
     tutorialCpuScript: [
       { type: 'invade', card: 'salarymander' },
       { type: 'summon', card: 'jukaiNoOnryou' },
+      { type: 'pass' },
+      { type: 'pass' },
     ],
     onTutorialEvent: recordTutorialEvent,
     playerConfigs: [

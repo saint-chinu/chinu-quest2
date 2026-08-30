@@ -12,7 +12,7 @@ const vite = await createServer({ server: { middlewareMode: true }, appType: 'cu
 const { ITEM_CATALOG, SPELL_CATALOG, MONSTER_CATALOG, buildCharacterCardList, isRewardOnlyCard, buildCharacterDeckList } = await vite.ssrLoadModule('/src/battleCards.js');
 const { Game } = await vite.ssrLoadModule('/src/game.js');
 const battle = await vite.ssrLoadModule('/src/battle.js');
-const { TileType, MAPS } = await vite.ssrLoadModule('/src/board.js');
+const { TileType, MAPS, createBoard } = await vite.ssrLoadModule('/src/board.js');
 const { STORY_STAGES } = await vite.ssrLoadModule('/src/story.js');
 const { WIP_CARD_NAMES, reclaimReleasedWipHoldings, getCardCatalog } = await vite.ssrLoadModule('/src/cardCatalog.js');
 const breedParts = await vite.ssrLoadModule('/src/breedParts.js');
@@ -1507,6 +1507,49 @@ test('社会不適合のCPUは相手の属性違いが2体以上の時だけ撃�
   const one = build(1);
   await one.g._cpuMaybeUseShakaiFutekigouSpell(one.player);
   assert.equal(one.g.casts.length, 0, '1体しか居なければ撃たない');
+});
+
+test('チュートリアルの台本どおりに進むと想定のマスへ着地する', async () => {
+  // チュートリアルは完全な台本で進む（運の要素を排除、2026-08のユーザー指定）。
+  // main.jsのtutorialDiceQueuesを変えると振り付けが崩れるので、リング順を
+  // 実際に辿って着地マスを検証する。盤面・出目のどちらを変えてもここで気づける。
+  const tiles = createBoard('tutorial');
+  assert.equal(tiles.length, 8, 'チュートリアル盤面は8マス');
+
+  // スタート(0)から一方向に辿ったリング順。
+  const ring = [0];
+  let cur = 0;
+  let prev = null;
+  for (let i = 0; i < tiles.length - 1; i++) {
+    const next = tiles[cur].neighbors.find((n) => n !== prev);
+    ring.push(next);
+    prev = cur;
+    cur = next;
+  }
+  assert.deepEqual(ring, [0, 1, 2, 4, 7, 6, 5, 3], 'リング順が変わっている');
+
+  const advance = (from, steps) => ring[(ring.indexOf(from) + steps) % ring.length];
+
+  // main.js の tutorialDiceQueues と同じ値。自5だけアイキャンフライで2倍。
+  const humanDice = [1, 1, 2, 2, 3];
+  const cpuDice = [1, 2, 2, 2];
+
+  let human = 0;
+  const humanLandings = humanDice.map((d, i) => {
+    human = advance(human, i === 4 ? d * 2 : d);
+    return human;
+  });
+  let cpu = 0;
+  const cpuLandings = cpuDice.map((d) => { cpu = advance(cpu, d); return cpu; });
+
+  assert.deepEqual(humanLandings, [1, 2, 7, 5, 7], '自1→マス1, 自2→CP(2), 自3→マス7, 自4→マス5, 自5→マス7');
+  assert.deepEqual(cpuLandings, [1, 4, 6, 3], '敵1→マス1(侵略), 敵2→マス4, 敵3→マス6, 敵4→マス3');
+
+  // 台本が成立するためのマスの性質。
+  assert.equal(tiles[1].element, 'fire', 'マス1は火（火付け役と同属性）');
+  assert.equal(tiles[2].type, TileType.EVENT, 'マス2はCP＝停止すると全所有地に土地コマンドが使える');
+  assert.equal(tiles[4].element, 'forest', 'マス4は森（樹海の怨霊と同属性）');
+  assert.ok(tiles[7].neighbors.includes(4), '自5の移動侵略のため、マス7とマス4は隣接している必要がある');
 });
 
 test('チュートリアル: 誘導中はCPUの目標達成を握り潰し、終えたら決着させる', async () => {

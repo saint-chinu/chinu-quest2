@@ -5637,6 +5637,17 @@ export class Game {
   async _runTutorialCpuScript(player, tile) {
     const step = this.tutorialCpuScript[0];
     if (!step) return false;
+
+    // 'pass': この手番は土地コマンドを何もしない。チュートリアルを完全台本化
+    // （ランダム要素を排除）するため、台本の無い手番で通常AIへ落ちて勝手に
+    // 動かれるのを防ぐ。カード指定が要らないので、カードの在庫チェックより
+    // 手前で処理する。
+    if (step.type === 'pass') {
+      this.tutorialCpuScript.shift();
+      await delay(CPU_DECISION_MS);
+      return true;
+    }
+
     const card = player.hand.find((c) => catalogIdOf(c) === step.card);
     if (!card || player.currency < (card.cost || 0)) return false;
 
