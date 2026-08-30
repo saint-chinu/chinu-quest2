@@ -6969,7 +6969,9 @@ export class Game {
       // 従来ロジックが選ぶ本命に加え、残りも候補に入れる（本命が無駄でも、
       // 別のアイテムなら結果を変えられることがある）。
       const preferred = this._bestBattleItemFromHand(gear, unit, { preferStandardItems: playerName === 'Q' });
-      const candidates = [null, ...(preferred ? [preferred] : []), ...gear.filter((c) => c !== preferred)];
+      const usable = gear.filter((card) => !this._shieldWouldBeWasted(card, unit, opponentUnit, isDefender));
+      const preferredUsable = usable.includes(preferred) ? preferred : null;
+      const candidates = [null, ...(preferredUsable ? [preferredUsable] : []), ...usable.filter((c) => c !== preferredUsable)];
       const assumedOpponentItem = this._assumedOpponentItem(hand, opponentUnit);
       // 「相手が無装備の世界」と「相手が武装している世界」を別々に回して
       // 確率で重み付けする。試行の中で乱数的に武装させると、奪取・破壊系の
@@ -7003,6 +7005,33 @@ export class Game {
     } finally {
       this.onLog = savedLog;
     }
+  }
+
+  /**
+   * 属性神の盾を「使っても無駄になる」場面か。無駄なら候補から外して温存する
+   * （ユーザー指定、2026-08）。
+   *
+   * 盾の反射は貫通でも抜けない絶対反射なので、**相手が同じ条件で盾を使えると
+   * 攻撃側は自分の攻撃力ぶんを反射で食らうだけになり、土地は絶対に奪えない**
+   * （実測: 相手が盾持ちなら、こちらが盾を使っても使わなくても土地奪取率0%）。
+   * その状況で80Gの盾を切るのはカードとGの丸損なので装備しない。
+   *
+   * 判定は「侵略側で、相手モンスターの属性がその盾の対応属性と一致している」
+   * だけを見る。相手の手札は覗けない（装備は互いに伏せて同時に選ぶ）ので、
+   * 属性が噛み合っている相手は「盾を持たれうる」とみなして避ける。
+   *
+   * 防衛側では従来どおり普通に使う。守る側にとっては反射がそのまま強く、
+   * 相手が盾を使わない場合でも土地を守れるため（ユーザー指定の例外）。
+   */
+  _shieldWouldBeWasted(itemCard, unit, opponentUnit, isDefender) {
+    if (isDefender) return false;
+    const wielderElement = itemCard?.effect?.type === 'wielderElementReflect'
+      ? itemCard.effect.wielderElement
+      : null;
+    if (!wielderElement) return false;
+    // 自分がその盾で反射できない属性なら、そもそも反射目当ての装備ではない。
+    if (unit?.def?.element !== wielderElement) return false;
+    return opponentUnit?.def?.element === wielderElement;
   }
 
   /**

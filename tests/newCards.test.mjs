@@ -1737,6 +1737,38 @@ test('合体ロボ・ガシャーンはEXカードとしてカタログに載る
   assert.equal(g.wip, undefined);
 });
 
+test('CPUは盾が噛み合う相手へ侵略する時だけ属性神の盾を温存する', () => {
+  // 盾の反射は絶対反射なので、相手も同条件で盾を使えると攻撃側は自分の
+  // 攻撃力ぶんを反射で食らうだけで土地を絶対に奪えない（実測で奪取率0%）。
+  // その場面で80Gの盾を切るのは丸損なので装備しない（ユーザー指定2026-08）。
+  // 防衛側では従来どおり使う。
+  const g = Object.create(Game.prototype);
+  Object.assign(g, { tiles: [], players: [{ id: 'A' }, { id: 'B' }], onLog: () => {} });
+  const tile = makeTile(0, { element: 'water', owner: 'B' });
+  const hand = [
+    { ...ITEM_CATALOG.suijinNoTate, id: 's1', catalogId: 'suijinNoTate' },
+    { ...ITEM_CATALOG.twinHammer, id: 't1', catalogId: 'twinHammer' },
+  ];
+  const water = () => mon('水', 50, 50, { element: 'water' });
+  const fire = () => mon('火', 50, 50, { element: 'fire' });
+  const pick = (self, opponent, isDefender) => g._chooseBattleItemByOutcome(
+    hand, '川田', unit(self, 'A'), unit(opponent, 'B'), tile, isDefender, 20, 999,
+  );
+
+  // 侵略側 × 相手も水 → 盾は無駄なので選ばない。
+  assert.notEqual(pick(water(), water(), false)?.catalogId, 'suijinNoTate',
+    '噛み合う相手への侵略で盾を切っている');
+  // 侵略側でも相手の属性が違えば反射されないので普通に使う。
+  assert.equal(pick(water(), fire(), false)?.catalogId, 'suijinNoTate',
+    '相手が異属性なら盾は有効なので使うべき');
+  // 防衛側は相手が同属性でも使う（守る側には反射がそのまま効く）。
+  assert.equal(pick(water(), water(), true)?.catalogId, 'suijinNoTate',
+    '防衛では従来どおり盾を使うべき');
+  // 自分が不一致属性＝そもそも反射目当てではないので温存対象にしない。
+  assert.equal(pick(fire(), water(), false)?.catalogId, 'suijinNoTate',
+    '自分が不一致属性なら温存ロジックの対象外');
+});
+
 test('川田（⑮予定）の専用デッキはちょうど40枚', () => {
   const list = buildCharacterDeckList('kawada');
   assert.equal(list.length, 40);
