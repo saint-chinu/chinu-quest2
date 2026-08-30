@@ -162,32 +162,36 @@ export const ITEM_CATALOG = {
   }),
 
   // 属性神の盾4種。上のATK特化武器と対になる防具で、一致した属性の
-  // モンスターが装備すると受けるダメージを丸ごと反射する（くねくねと同じ
-  // reflectDamage、battle.jsのequipItemが装備時に差し替える）。一致しない
+  // モンスターが装備すると受けるダメージを丸ごと反射する
+  // （battle.jsのequipItemが装備時にreflectDamageへ差し替える）。一致しない
   // 場合もATK+10/HP+20・貫通は属性を問わず乗る（2026-08、コストが高すぎる
   // というユーザー指摘でコストを下げステータス・貫通を追加）。
+  // ⚠️ この反射は**相手の貫通では無効化されない「絶対反射」**（ユーザー指定、
+  // 2026-08）。equipItemがunpierceable:trueを立て、battle.jsのdealDamageが
+  // 貫通を無視して反射する。くねくね自身の反射は従来どおり貫通で抜けるので、
+  // 両者を混同しないこと。
   suijinNoTate: item('suijinNoTate', '水神の盾', Rarity.R, ItemType.ARMOR, 80, 10, 20, {
     traits: ['pierce'],
     effect: { type: 'wielderElementReflect', wielderElement: Element.WATER },
-    effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。水属性モンスターが装備すると、受けるダメージを反射する',
+    effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。水属性モンスターが装備すると、受けるダメージを反射する（この反射は相手の貫通では無効化されない）',
     imageDataUrl: null,
   }),
   kajinNoTate: item('kajinNoTate', '火神の盾', Rarity.R, ItemType.ARMOR, 80, 10, 20, {
     traits: ['pierce'],
     effect: { type: 'wielderElementReflect', wielderElement: Element.FIRE },
-    effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。火属性モンスターが装備すると、受けるダメージを反射する',
+    effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。火属性モンスターが装備すると、受けるダメージを反射する（この反射は相手の貫通では無効化されない）',
     imageDataUrl: null,
   }),
   raijinNoTate: item('raijinNoTate', '雷神の盾', Rarity.R, ItemType.ARMOR, 80, 10, 20, {
     traits: ['pierce'],
     effect: { type: 'wielderElementReflect', wielderElement: Element.THUNDER },
-    effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。雷属性モンスターが装備すると、受けるダメージを反射する',
+    effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。雷属性モンスターが装備すると、受けるダメージを反射する（この反射は相手の貫通では無効化されない）',
     imageDataUrl: null,
   }),
   shinrinjinNoTate: item('shinrinjinNoTate', '森神の盾', Rarity.R, ItemType.ARMOR, 80, 10, 20, {
     traits: ['pierce'],
     effect: { type: 'wielderElementReflect', wielderElement: Element.FOREST },
-    effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。森属性モンスターが装備すると、受けるダメージを反射する',
+    effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。森属性モンスターが装備すると、受けるダメージを反射する（この反射は相手の貫通では無効化されない）',
     imageDataUrl: null,
   }),
 

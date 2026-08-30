@@ -1616,6 +1616,40 @@ test('チュートリアル: 誘導中はCPUの目標達成を握り潰し、終
   assert.equal(player.ends[0].won, true);
 });
 
+test('属性神の盾の反射は貫通で無効化されない（絶対反射）', () => {
+  // ユーザー指定(2026-08): 神の盾シリーズは「絶対反射」＝貫通無効。
+  const attacker = unit(mon('攻', 50, 30, { element: 'neutral', traits: ['pierce'] }), 'A');
+  const defender = unit(mon('守', 50, 10, { element: 'water' }), 'D');
+  battle.equipItem(defender, ITEM_CATALOG.suijinNoTate);
+  assert.ok(battle.hasTrait(attacker, 'pierce'), '前提: 攻撃側は貫通持ち');
+  const r = battle.resolveBattle(attacker, defender, new battle.GoldLedger());
+  assert.ok(r.exchanges.some((e) => e.reflected), '貫通でも盾の反射は止まらない');
+});
+
+test('くねくね自身の反射は従来どおり貫通で抜ける（盾とは別扱い）', () => {
+  // 盾だけをunpierceableにしたので、モンスター固有の反射は変えていない。
+  const attacker = unit(mon('攻', 50, 30, { element: 'neutral', traits: ['pierce'] }), 'A');
+  const kune = unit(MONSTER_CATALOG.kunekune, 'D');
+  const r = battle.resolveBattle(attacker, kune, new battle.GoldLedger());
+  assert.ok(!r.exchanges.some((e) => e.reflected), 'くねくねの反射は貫通で抜ける');
+});
+
+test('異次元ソケット同士は打ち消し合って何も入れ替わらない', () => {
+  // ユーザー指定(2026-08):「異次元ソケットと異次元ソケットは元に戻るだけ」。
+  // 以前は双方のdefのtraits/effectだけが1回交換されてしまっていた。
+  const attackerDef = mon('攻', 50, 30, { element: 'fire', traits: ['firstStrike'] });
+  const defenderDef = mon('守', 50, 30, { element: 'water', traits: ['pierce'] });
+  const attacker = unit(attackerDef, 'A');
+  const defender = unit(defenderDef, 'D');
+  battle.equipItem(attacker, ITEM_CATALOG.dimensionalSocket);
+  battle.equipItem(defender, ITEM_CATALOG.dimensionalSocket);
+  battle.applyPreAttackItemEffects(attacker, defender);
+  assert.ok(battle.hasTrait(attacker, 'firstStrike'), '攻撃側は自分の先制を保つ');
+  assert.ok(!battle.hasTrait(attacker, 'pierce'), '相手の貫通を受け取らない');
+  assert.ok(battle.hasTrait(defender, 'pierce'), '守備側は自分の貫通を保つ');
+  assert.ok(!battle.hasTrait(defender, 'firstStrike'), '相手の先制を受け取らない');
+});
+
 test('川田（⑮予定）の専用デッキはちょうど40枚', () => {
   const list = buildCharacterDeckList('kawada');
   assert.equal(list.length, 40);

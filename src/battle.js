@@ -24,7 +24,14 @@ function isDimensionalSocket(equippedItem) {
  * 相手の装備品の効果までは複製しない）。
  */
 function applyDimensionalSocketSwap(attacker, defender) {
-  if (!attacker.items.some(isDimensionalSocket) && !defender.items.some(isDimensionalSocket)) return null;
+  const attackerHasSocket = attacker.items.some(isDimensionalSocket);
+  const defenderHasSocket = defender.items.some(isDimensionalSocket);
+  if (!attackerHasSocket && !defenderHasSocket) return null;
+  // 異次元ソケット同士: 入れ替えが2回起きて元に戻るだけなので、何もしない
+  // （ユーザー指定、2026-08）。以前はここを素通りして「1回だけ入れ替わる」
+  // 状態になっていた - itemContributionがソケット自身を除外するため、
+  // 双方のdefのtraits/effectだけが交換されてしまっていた。
+  if (attackerHasSocket && defenderHasSocket) return null;
 
   const itemContribution = (unit) => {
     const equipped = unit.items[0];
@@ -99,7 +106,10 @@ export function equipItem(unit, itemDef) {
   // HP/ATKの素の数値だけの装備品として機能する）。
   if (equipped.effect?.type === 'wielderElementReflect'
       && unit.def.element === equipped.effect.wielderElement) {
-    equipped.effect = { type: 'reflectDamage' };
+    // unpierceable: 属性神の盾の反射は貫通では抜けない「絶対反射」
+    // （ユーザー指定、2026-08）。くねくね自身のreflectDamageは従来どおり
+    // 貫通で抜けるので、盾由来のものだけをこのフラグで区別する。
+    equipped.effect = { type: 'reflectDamage', unpierceable: true };
   }
   unit.items.push(equipped);
   return equipped;
@@ -417,7 +427,9 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus, gold) {
   // 命中時オンヒット効果（毒付与など）は発動させない - damage:0を返す。
   // getEffectで判定することで、属性神の盾（一致した属性が装備すると
   // 同じreflectDamageへ差し替わる）もモンスター自身の効果と同様に扱える。
-  if (!pierces && getEffect(defenderUnit, 'reflectDamage') && damage > 0) {
+  // unpierceable付き（属性神の盾）は貫通でも止められない「絶対反射」。
+  const reflect = getEffect(defenderUnit, 'reflectDamage');
+  if (reflect && (!pierces || reflect.unpierceable) && damage > 0) {
     // 反射ダメージを受ける攻撃側がナンカのお守りを持っていれば無効化する。
     const negatedMsg = consumeDamageNegation(attackerUnit, log);
     if (negatedMsg) return { damage: 0, message: negatedMsg };
