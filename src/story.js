@@ -908,7 +908,7 @@ export const STORY_STAGES = [
   },
   {
     key: 'kessan',
-    title: '⑬ 豪華客船（仮公開）',
+    title: '⑬ 豪華客船',
     format: '2vs2',
     // 同盟合算の目標。長丁場ほど敵側の複利（通行料網・お札の含み益・
     // 周回収入）が効く、という設計なのでやや高めにしてある。
@@ -1052,7 +1052,7 @@ export const STORY_STAGES = [
   },
   {
     key: 'royal-guard',
-    title: '⑭ 王都の番人？？（仮公開）',
+    title: '⑭ 王都の番人？？',
     format: '1vs1',
     goalCurrency: 15000,
     startingCurrency: 500,

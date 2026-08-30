@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v256`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v257`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## チュートリアルの不自然さ修正（2026-08、ユーザー報告）
@@ -706,12 +706,25 @@ Rスペル60G `damageAllUnitsOnMismatchedLand` target='none'。
   会話・デッキへ正しく接続されている」（マップ実在・8×8・属性が各6マス・
   G1個C3個・`hasOfuda`・`stage.wip===undefined`を検証）。
 
-### 残っている不足分（Codexが拾える範囲）
+### ⑬⑭は本実装扱いへ（2026-08、ユーザー指定）
+「川田より前の仮実装ステージは本実装扱いで。タイトルも仮消しといて」に対応。
+- ⑬`kessan`・⑭`royal-guard`のタイトルから**「（仮公開）」を削除**
+  （story.jsのtitleとboard.jsのMAPS名の両方）。
+- 併せて両マップの**`wip: true`も解除**したので、**対戦モードのマップ選択に
+  出るようになった**（`PVP_MAPS`は`!map.wip`で絞っているだけ）。
+- ⑮`kawada`は対象外（「川田より前」の指定なので）。引き続き「（仮公開）」＋
+  マップ`wip: true`のまま。
+
+### 残っている不足分（実ファイルで確認済み、2026-08）
+- **BGM**。`audio.js`の`MAP_TRACK`に`kawada`のキーが無く、汎用の`board`テーマへ
+  フォールバックしている。⑬⑭は専用曲あり（stage13newbgm.mp3 / stage14bgm.mp3）。
 - **背景画像**（`/images/stage/stage15-kawada-alley.png`、まだファイル無し。
+  `public/images/stage/`にはstage13・stage14までしか存在しない。
   舞台は「王都に入ってすぐの裏路地〜レジスタンスのアジト」）。
+- **川田の立ち絵・NPCトークン**（`npcArt.js`の`NPC_PORTRAIT_URL`／トークンに
+  「川田」の登録が無い。他NPCと同じく`/images/npc-portraits/`と
+  `/images/npc-tokens/`へ画像を置いて登録する）。
 - **属性神の盾4種の専用画像**（`imageDataUrl: null`、上記参照）。
-- **川田自身の立ち絵・NPCアイコン**（npcArt.jsのNPC_PORTRAIT_URL等、
-  他の会話NPCと同様の形式）。
 - **AIプロファイル**（story.jsのopponents[].aiProfile）は未設計。
 - チヌ・ウサギン・ムールの1vs3強制敗北バトル(⑯)と海底労働施設(⑰)は、川田の
   ステージより後の別タスクとして着手する（このメモの下の節参照、まだ

@@ -280,7 +280,7 @@ test('ステージ14は専用マップ・会話・塞ぎ込んだ男へ正しく
   const stage = STORY_STAGES.find((entry) => entry.key === 'royal-guard');
   const map = MAPS.find((entry) => entry.id === 'royal-guard');
   assert.ok(stage && map);
-  assert.equal(stage.title, '⑭ 王都の番人？？（仮公開）');
+  assert.equal(stage.title, '⑭ 王都の番人？？'); // 2026-08、ユーザー指定で本実装扱いにし「（仮公開）」を外した
   assert.equal(stage.opponents[0].deckKey, 'fusagikonda');
   assert.equal(stage.opponents[0].name, '塞ぎ込んだ男');
   assert.equal(map.rows.join('').split('C').length - 1, 1, 'CPは1か所');

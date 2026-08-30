@@ -26,7 +26,7 @@ const TRACK_SRC = {
   mahjongDuo: assetUrl('/audio/stage11bgm.mp3'), // ⑪ふたりは○○
   ofudaField: assetUrl('/audio/stage12bgm.mp3'), // ⑫海上金融街のフィクサー
   kessan: assetUrl('/audio/stage13newbgm.mp3'), // ⑬船上のロンド（初戦・再戦共通）
-  royalGuard: assetUrl('/audio/stage14bgm.mp3'), // ⑭王都の番人？？（仮公開）
+  royalGuard: assetUrl('/audio/stage14bgm.mp3'), // ⑭王都の番人？？
 };
 
 // mapId(board.jsのMAPS)→専用トラック。無いキーはplayMapTheme側でboardに

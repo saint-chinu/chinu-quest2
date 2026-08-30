@@ -367,17 +367,16 @@ export const MAPS = [
   { id: 'hitodemaso', name: '⑩ 成れの果て', rows: HITODEMASO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage10-trench-temple.png'), spacing: 2.8 },
   { id: 'mahjong-duo', name: '⑪ ふたりは○○', rows: MAHJONG_DUO_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage11-mahjong.png'), spacing: 2.8 },
   { id: 'ofuda-field', name: '⑫ 海上金融街', rows: OFUDA_FIELD_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage12-financial-city.png'), spacing: 2.8 },
-  // wip: ストーリーは仮公開したが、対戦モードのマップ選択にはまだ出さない
-  // （PVP_MAPSで除外）。story.js側のwipとは別物で、こちらはPvPの可否だけを決める。
+  // 2026-08、ユーザー指定で⑬⑭を本実装扱いにした（タイトルの「（仮公開）」を
+  // 外し、マップのwipも解除して対戦モードのマップ選択に出す）。
   // ofuda: 全マスが無属性で始まる盤面なので、そのままだと「その属性の土地が
   // 0枚＝相場が立たない」で開幕から誰もお札を買えない。startPriceで最初から
   // 3G/枚（相場の下限そのもの）の市場を開き、initialCountには「1属性あたり何マスまで伸びうるか」の
   // 目安（土地56マス÷4属性＝14）を入れて価格の伸び方を⑫と同じ形に揃える
   // （実際の枚数0のままだと分母1になり、1マス塗っただけで12G、10マスで
   // 上限120Gに張り付いてしまう）。
-  { id: 'kessan', name: '⑬ 豪華客船（仮公開）', wip: true, rows: KESSAN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, ofuda: { startPrice: 3, initialCount: 14 }, background: assetUrl('/images/stage/stage13-luxury-liner.png'), spacing: 2.8 },
-  // ストーリー専用として実装。対戦モードへは調整完了後にwipを外して公開する。
-  { id: 'royal-guard', name: '⑭ 王都の番人？？（仮公開）', wip: true, rows: ROYAL_GUARD_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage14-royal-alley.jpg'), spacing: 2.8 },
+  { id: 'kessan', name: '⑬ 豪華客船', rows: KESSAN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, ofuda: { startPrice: 3, initialCount: 14 }, background: assetUrl('/images/stage/stage13-luxury-liner.png'), spacing: 2.8 },
+  { id: 'royal-guard', name: '⑭ 王都の番人？？', rows: ROYAL_GUARD_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage14-royal-alley.jpg'), spacing: 2.8 },
   // ストーリー専用として実装。story.js側はもうwip:trueでロックしていない
   // （このマップが揃ったので⑬⑭と同じ「（仮公開）」扱いでプレイ可能）。
   // 対戦モードへは調整完了後にこちらのwipを外して公開する。背景画像は未実装
