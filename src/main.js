@@ -3780,6 +3780,11 @@ function showLandInfoCamera() {
   const camSnap = beginCameraWork();
   cameraWorkOverlay.classList.remove('hidden');
   landInfoButton.classList.add('active');
+  // ⚠️ 閉じる時に必ず元へ戻す（finish参照）。logElを更新するのはホストの
+  // Game.onLogだけで、対人戦のゲストはGameインスタンスを持たない＝ログが
+  // 一切流れないため、戻さないとこの案内文が画面に出っぱなしになる
+  // （2026-08のユーザー報告「対人戦で土地情報確認が常に表示されている」）。
+  const logBeforeLandInfo = logEl.textContent;
   logEl.textContent = '確認したい土地をタップしてください';
 
   const pan = (direction) => () => scene.panByDirection(direction);
@@ -3885,6 +3890,10 @@ function showLandInfoCamera() {
     cameraWorkOverlay.classList.add('hidden');
     tileInfoModal.classList.add('hidden');
     landInfoButton.classList.remove('active');
+    // 案内文を元へ戻す（上のlogBeforeLandInfoのコメント参照）。
+    if (logEl.textContent === '確認したい土地をタップしてください') {
+      logEl.textContent = logBeforeLandInfo;
+    }
     canvas.removeEventListener('click', onCanvasClick);
     camArrowUp.removeEventListener('click', onUp);
     camArrowDown.removeEventListener('click', onDown);
