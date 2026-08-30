@@ -1711,6 +1711,32 @@ test('酢の朕専用制限は撤廃済み（所持数がデッキ編集のゲ�
   assert.equal(MONSTER_CATALOG.thirtyBreedMonster.exclusiveOwnerName, 'サーティー');
 });
 
+test('合体ロボ・ガシャーンはEXカードとしてカタログに載る（合体経路は不変）', () => {
+  // ユーザー指定(2026-08)でカード化。それまでは盤面専用の実体で
+  // MONSTER_CATALOGに無く、⑯のEX全配布で配れなかった。
+  const g = MONSTER_CATALOG['gashaan-field'];
+  assert.ok(g, 'MONSTER_CATALOGに登録されていない');
+  // game.jsが MONSTER_CATALOG[catalogId] で引く箇所があるのでキーと一致が必須。
+  assert.equal(g.catalogId, 'gashaan-field', 'カタログのキーとcatalogIdが食い違っている');
+  assert.equal(g.rarity, 'EX');
+  assert.deepEqual([g.atk, g.hp], [70, 70]);
+  assert.ok(g.traits.includes('pierce'));
+  assert.equal(g.ability.type, 'warpToAnyEmptyLand');
+
+  // ⚠️ コスト0のままカタログへ出すと70/70貫通が無料で召喚できてしまう。
+  // 合体経路はこのcostを参照しない（ギア側のコストを払い戻して直接置く）ので、
+  // 手札から普通に召喚する時のための値付けとして必ず正の値を持たせる。
+  assert.ok(g.cost > 0, '召喚コストが0のままだと無料で出せてしまう');
+  assert.ok(g.cost >= MONSTER_CATALOG.su.cost, '酢(60/60)より強いので酢以上のコストにする');
+
+  // 図鑑/デッキ編集のカタログに1件だけ載る（重複登録していない）。
+  const listed = getCardCatalog(null).filter((c) => c.name === '合体ロボ・ガシャーン');
+  assert.equal(listed.length, 1, 'カタログに重複または未登録');
+  // EXなのでパック排出の対象外なのは従来どおり（main.jsのunobtainable判定）。
+  assert.equal(g.npcExclusive, undefined);
+  assert.equal(g.wip, undefined);
+});
+
 test('川田（⑮予定）の専用デッキはちょうど40枚', () => {
   const list = buildCharacterDeckList('kawada');
   assert.equal(list.length, 40);

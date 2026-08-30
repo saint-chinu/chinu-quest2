@@ -1813,8 +1813,9 @@ export class Game {
     const drawnHas = (id) => (drawn instanceof Set ? drawn.has(id) : false);
     // ギア（fusionSummon）と合体ロボ・ガシャーンは「未知との遭遇」の対象外。
     // ギアを引き当てて召喚すると他2種と合体して「ガシャーン」になってしまい、
-    // デッキに積んでいないガシャーン（＝合体専用でデッキには存在しない）が
-    // 実質召喚できてしまうため、遭遇候補から除外する。
+    // 本来は350G払って召喚するガシャーンが実質タダで出せてしまうため、
+    // 遭遇候補から除外する（2026-08にガシャーンもEXカード化したが、
+    // この除外は「ギア経由の抜け道を塞ぐ」目的なので残す）。
     const encounterable = (id) => {
       if (id === 'gashaan-field') return false;
       return MONSTER_CATALOG[id]?.effect?.type !== 'fusionSummon';

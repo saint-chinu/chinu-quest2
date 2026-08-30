@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v252`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v253`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## チュートリアルの不自然さ修正（2026-08、ユーザー報告）
@@ -239,14 +239,23 @@ board.jsの記号は F=火 W=水 T=雷 M=森 N=無 G=スタート C=CP（確認�
 6. **暗転して終了する演出**と、魚群の王チヌのキャラ定義・立ち絵。
 
 ### ⚠️ EX全配布で判明した問題（着手前に要判断）
-現在のEXカードは**9種**:
+現在のEXカードは**10種**（ガシャーンをカード化したので9→10）:
 `su`(酢)/`peeStaff`(ペーの杖)/`disclosureRequest`(開示請求)/`toughness`(タフネス)/
 `kokushiMusou`(国士無双！！)/`forcedAscension`(強制成仏)/
-`capitalismIncarnate`(資本主義の権化)/`ashToDust`(灰塵)/`encounterUnknown`(未知との遭遇)。
-- ⚠️ **「ロボ」＝合体ロボ・ガシャーンは`Rarity.EX`だが、カードとして存在しない**。
-  `GASHAAN_FIELD_MONSTER`（neutralMonsters.js）という盤面専用の実体で、
-  MONSTER_CATALOGに載っておらずコスト0・3種のギアを合体させて初めて出る。
-  そのまま「1枚配る」ことはできないので、**配布対象に含めるなら別途カード化が要る**。
+`capitalismIncarnate`(資本主義の権化)/`ashToDust`(灰塵)/`encounterUnknown`(未知との遭遇)/
+`gashaan-field`(合体ロボ・ガシャーン)。
+- ✅ **合体ロボ・ガシャーンもEXカード化済み**（2026-08、ユーザー指定）。
+  `NEUTRAL_MONSTER_CATALOG`へ`'gashaan-field'`キーで登録し、
+  **召喚コスト0→350G**にした。⚠️ **コスト0のままカタログへ出すと70/70貫通が
+  無料で召喚できてしまう**ため必須の値付け（酢がEX300G 60/60なので、
+  70/70貫通＋任意の空き地へ移動はそれ以上と判断）。
+  合体で出す経路（`_maybeFuseGashaan`／侵略時の合体）は**このcostを一切
+  参照せず**、ギア側の召喚コストを払い戻してdefを直接盤面へ置くので、
+  合体の挙動は従来どおり変わらない。
+  カタログのキーは`catalogId`と一致させること（game.jsが
+  `MONSTER_CATALOG[catalogId]`で引く箇所があるため）。
+  「未知との遭遇」からの除外は**残している**（ギア経由でタダ出しされる
+  抜け道を塞ぐ目的なので、カード化後も必要）。
 - ✅ **酢の朕専用制限は撤廃済み**（2026-08、ユーザー指定「配布しなければ
   制限と同じだから、制限撤廃で」）。`npcExclusive`/`exclusiveOwnerName`を
   外したので、配ればそのままデッキに入れられる。実際のゲートは

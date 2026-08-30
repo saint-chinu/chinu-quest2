@@ -57,6 +57,18 @@ export const Q_TRAIN_FIELD_MONSTER = neutralMonster('qTrain', '鉄壁環状・Q�
  * 扱い）。元データはギアA・Bが70/70、ギアCだけ80/70と表記が食い違って
  * いたため、2箇所で一致している70/70を採用した（ユーザーへ要確認）。
  */
+/**
+ * 合体ロボ・ガシャーン。3種のギアを揃えると合体して出撃する盤面上の実体で、
+ * 同時に**EXカードとしてもデッキに入れられる**（2026-08、ユーザー指定で
+ * カード化。それ以前はカタログに載らない合体専用の実体だった）。
+ *
+ * ⚠️ costは「手札から普通に召喚する時」だけに効く。合体で出す経路
+ * （game.jsの_maybeFuseGashaan / 侵略時の合体）は**このcostを一切参照せず**、
+ * 合体させたギア側の召喚コストを払い戻してからこのdefを直接盤面へ置くので、
+ * ここを変えても合体の挙動は変わらない。
+ * 350Gは酢(EX 300G 60/60 貫通+2マス移動)より一回り強い
+ * 70/70 貫通＋任意の空き地へ移動、を踏まえた値付け。
+ */
 export const GASHAAN_FIELD_MONSTER = {
   id: 'gashaan-field',
   catalogId: 'gashaan-field',
@@ -66,7 +78,7 @@ export const GASHAAN_FIELD_MONSTER = {
   rarity: Rarity.EX,
   hp: 70,
   atk: 70,
-  cost: 0,
+  cost: 350,
   traits: ['pierce'],
   ability: { type: 'warpToAnyEmptyLand' },
   effectDescription: '貫通。土地コマンド: 任意の空き地へ移動する',
@@ -75,6 +87,10 @@ export const GASHAAN_FIELD_MONSTER = {
 
 /** 無属性モンスター一覧。画像未指定時はcardArt.jsの無属性共通画像を使う。 */
 export const NEUTRAL_MONSTER_CATALOG = {
+  // カタログのキーはcatalogIdと一致させる必要がある
+  // （game.jsが MONSTER_CATALOG[catalogId] で引く箇所があるため）。
+  'gashaan-field': GASHAAN_FIELD_MONSTER,
+
   // ■周回成長型の壁（5属性それぞれに1種ずつある新カード型）
   //
   //  ・置き方の制限: 移動コマンドで動かせず(immovableByMoveCommand)、敵地への
