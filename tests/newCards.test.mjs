@@ -5,7 +5,7 @@
 //   npm run test:cards
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'vite';
 
 const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' });
@@ -14,6 +14,7 @@ const { Game } = await vite.ssrLoadModule('/src/game.js');
 const battle = await vite.ssrLoadModule('/src/battle.js');
 const { TileType, MAPS, createBoard } = await vite.ssrLoadModule('/src/board.js');
 const { STORY_STAGES } = await vite.ssrLoadModule('/src/story.js');
+const { NPC_PORTRAIT_URL, NPC_TOKEN_URL } = await vite.ssrLoadModule('/src/npcArt.js');
 const { WIP_CARD_NAMES, reclaimReleasedWipHoldings, getCardCatalog } = await vite.ssrLoadModule('/src/cardCatalog.js');
 const breedParts = await vite.ssrLoadModule('/src/breedParts.js');
 test.after(() => vite.close());
@@ -203,7 +204,8 @@ test('新カードはカタログに載り、参照している画像が実在�
     ...['hinokoSlime', 'mizutamariNamazu', 'morikakeRisu', 'taidenMimizu',
       'honooNoMadoushi', 'yukiOnna', 'accelerPopper', 'nitron', 'nazoNoKyotou', 'dennouNoKaii']
       .map((id) => [id, MONSTER_CATALOG[id]]),
-    ...['kotai', 'pandemic', 'horizon', 'delayTactics', 'ashToDust', 'landlessOne'].map((id) => [id, SPELL_CATALOG[id]]),
+    ...['kotai', 'pandemic', 'horizon', 'delayTactics', 'ashToDust', 'landlessOne',
+      'tochigamiNoIkari', 'shakaiFutekigou'].map((id) => [id, SPELL_CATALOG[id]]),
   ];
   for (const [id, card] of cards) {
     assert.ok(card, `${id} がカタログにない`);
@@ -215,6 +217,11 @@ test('新カードはカタログに載り、参照している画像が実在�
   assert.equal(ITEM_CATALOG.diamondShield.atkBonus, -20);
   assert.equal(ITEM_CATALOG.diamondShield.hpBonus, 60);
   assert.ok(ITEM_CATALOG.diamondShield.traits.includes('lastStrike'));
+  assert.equal(SPELL_CATALOG.tochigamiNoIkari.imageDataUrl, null, '専用絵が無い土地神の怒りは共通スペル絵へフォールバックする');
+  assert.equal(SPELL_CATALOG.shakaiFutekigou.imageDataUrl, null, '専用絵が無い社会不適合は共通スペル絵へフォールバックする');
+  for (const id of ['suijinNoTate', 'kajinNoTate', 'raijinNoTate', 'shinrinjinNoTate']) {
+    assert.equal(ITEM_CATALOG[id].imageDataUrl, null, `${id}は専用絵が無い間、共通アイテム絵へフォールバックする`);
+  }
 });
 
 test('甲鉄要塞は公開済みで、成長型の未公開は無属性だけ', () => {
@@ -709,11 +716,40 @@ test('パンデミックは配置モンスターだけを置き換え、土地�
   await g._applySpellEffect(g.players[0], SPELL_CATALOG.pandemic, {});
   assert.equal(tiles[0].unit.def.name, 'ゾンビ');
   assert.equal(tiles[0].unit.def.hp, 20);
+  assert.equal(tiles[0].unit.def.generatedOutsideDeck, true, '置換後ゾンビを40枚デッキへ混ぜない');
   assert.equal(tiles[0].unit.ownerId, 'A', 'モンスターの持ち主は変わらない');
   assert.equal(tiles[0].owner, 'A');
   assert.equal(tiles[1].owner, 'B');
   assert.equal(tiles[1].unit, alreadyZombie, '既にゾンビなら作り直さない');
   assert.equal(tiles[2].unit, null, '空き地には湧かない');
+});
+
+test('パンデミック後のゾンビを手札へ戻しても元カードと二重にデッキへ入らない', async () => {
+  const original = { ...MONSTER_CATALOG.kunekune, id: 'original-kune', catalogId: 'kunekune' };
+  const tile = makeTile(0, {
+    owner: 'A',
+    element: 'fire',
+    mesh: { material: { color: { set: () => {} } } },
+  });
+  tile.unit = unit(original, 'A');
+  const owner = {
+    id: 'A', name: 'ア', currency: 0, hand: [],
+    deck: { discardPile: [original], drawPile: [] },
+  };
+  const g = makeStub([tile], [owner]);
+  g.onLandLoss = async () => {};
+
+  await g._applySpellEffect(owner, SPELL_CATALOG.pandemic, {});
+  assert.equal(tile.unit.def.catalogId, 'zombie');
+  await g._spellReturnMismatchedMonstersToHand(owner, 1);
+  assert.equal(owner.hand.length, 1);
+  assert.equal(owner.hand[0].catalogId, 'zombie');
+  assert.equal(owner.hand[0].generatedOutsideDeck, true);
+  assert.deepEqual(owner.deck.discardPile.map((card) => card.catalogId), ['kunekune'],
+    '元カードは捨札に残し、生成ゾンビで正規札を回収しない');
+  g._discardUsedCard(owner, owner.hand[0]);
+  assert.deepEqual(owner.deck.discardPile.map((card) => card.catalogId), ['kunekune'],
+    '生成ゾンビを再使用しても41枚目として混ぜない');
 });
 
 test('パンデミックの演出ペイロードには専用効果種別が含まれる', () => {
@@ -1183,6 +1219,86 @@ test('異次元ソケットの入れ替えは1戦闘限りで、ATK/HPの実数�
   assert.deepEqual([r2.attackerSurvived, r2.defenderSurvived], [true, false], 'ソケット無しの通常戦闘に戻っている');
 });
 
+test('異次元ソケットは連鎖・狂戦士等の戦闘中ボーナス計算より先に能力を交換する', () => {
+  // 旧順序では、攻撃側のATK2倍と守備側のHP+50を先に計算してから能力だけを
+  // 交換していた。ここでは正しく交換できれば、攻撃側はHP+50、守備側は
+  // ATK2倍を得るため、守備側の一時HP+50が消えて最初の30ダメージで倒れる。
+  const attackerDef = mon('狂戦士役', 30, 30, {
+    effect: { type: 'atkMultiplier', multiplier: 2 },
+  });
+  const defenderDef = mon('巨頭役', 25, 10, {
+    effect: {
+      type: 'statsPerElementChain', element: 'water', atkPerChain: 0, hpPerChain: 50,
+    },
+  });
+  const g = makeStub([], [{ id: 'A' }, { id: 'D' }]);
+  g._battleBonus = () => ({ atk: 0, hp: 0 });
+  g._chainCount = () => 1;
+  const r = g._simulateBattleOnce(
+    unit(attackerDef, 'A'),
+    unit(defenderDef, 'D'),
+    makeTile(0),
+    ITEM_CATALOG.dimensionalSocket,
+    null,
+  );
+  assert.deepEqual(r, { attackerSurvived: true, defenderSurvived: false });
+});
+
+test('異次元ソケットの一時交換は戦闘演出が中断されても復元できる', () => {
+  const attackerDef = mon('攻', 40, 20, { traits: ['firstStrike'] });
+  const defenderDef = mon('守', 40, 20, { traits: ['pierce'] });
+  const attacker = unit(attackerDef, 'A');
+  const defender = unit(defenderDef, 'D');
+  battle.equipItem(attacker, ITEM_CATALOG.dimensionalSocket);
+  battle.applyPreAttackItemEffects(attacker, defender);
+  assert.ok(battle.hasTrait(attacker, 'pierce'), '戦闘中は交換される');
+  battle.abortPreAttackItemEffects(attacker, defender);
+  assert.equal(attacker.def, attackerDef);
+  assert.equal(defender.def, defenderDef);
+  assert.ok(battle.hasTrait(attacker, 'firstStrike'), '中断後は元の能力へ戻る');
+  assert.ok(!battle.hasTrait(attacker, 'pierce'));
+  battle.abortPreAttackItemEffects(attacker, defender); // 二重終了でも壊れない
+});
+
+test('異次元ソケットは周回覚醒特性と装備固有のATK0効果も交換し、終了時に復元する', () => {
+  const attacker = unit(mon('攻', 50, 40), 'A');
+  const defender = unit(mon('守', 50, 30), 'D');
+  attacker.awakenedTraits = ['firstStrike'];
+  battle.equipItem(attacker, ITEM_CATALOG.dimensionalSocket);
+  battle.equipItem(defender, ITEM_CATALOG.danboorNoYoroi);
+
+  battle.applyPreAttackItemEffects(attacker, defender);
+  assert.equal(battle.hasTrait(attacker, 'firstStrike'), false, '覚醒先制は相手へ渡る');
+  assert.equal(battle.hasTrait(defender, 'firstStrike'), true, '相手が覚醒先制を受け取る');
+  assert.equal(battle.statTotals(attacker).atk, 0, 'ダンボールの鎧のATK0効果を受け取る');
+  assert.equal(battle.statTotals(defender).atk, 30, '元の装備者からATK0効果が外れる');
+
+  battle.abortPreAttackItemEffects(attacker, defender);
+  assert.deepEqual(attacker.awakenedTraits, ['firstStrike']);
+  assert.equal(defender.awakenedTraits, undefined);
+  assert.equal(battle.statTotals(attacker).atk, 40, '終了後はATK0効果が残らない');
+  assert.equal(battle.statTotals(defender).atk, 0, '元の装備者へATK0効果が戻る');
+});
+
+test('異次元ソケットはイカサマのサイコロ等の動的な装備効果も交換する', () => {
+  const attacker = unit(mon('攻', 50, 20), 'A');
+  const defender = unit(mon('守', 50, 20), 'D');
+  battle.equipItem(attacker, ITEM_CATALOG.dimensionalSocket);
+  battle.equipItem(defender, ITEM_CATALOG.ikasamaNoSaikoro);
+  const g = makeStub([], [
+    { id: 'A', lastDiceSteps: 6 },
+    { id: 'D', lastDiceSteps: 2 },
+  ]);
+  battle.applyPreAttackItemEffects(attacker, defender);
+  const attackerBonus = { atk: 0, hp: 0 };
+  const defenderBonus = { atk: 0, hp: 0 };
+  g._applyEquippedItemBonus(attacker, attackerBonus);
+  g._applyEquippedItemBonus(defender, defenderBonus);
+  assert.equal(attackerBonus.atk, 30, '奪った効果は現在の所有者の出目6を参照する');
+  assert.equal(defenderBonus.atk, 0, '元の装備者からサイコロ効果が外れる');
+  battle.abortPreAttackItemEffects(attacker, defender);
+});
+
 test('ハイパーアップはATK/HPともに+15、コスト+40のRパーツ', () => {
   const part = breedParts.findBreedPart('part-hyper-up');
   assert.ok(part, 'part-hyper-upがBREED_PARTSに登録されていない');
@@ -1484,6 +1600,117 @@ test('社会不適合は該当1体なら1体だけ、0体なら何も起きな�
   assert.ok(g0.logs.some((l) => l.includes('対象がいなかった')), '「対象がいなかった」と表示する');
 });
 
+test('社会不適合は変身前カードを戻し、盤面外生成カードをデッキへ混ぜない', async () => {
+  const meshStub = () => ({ mesh: { material: { color: { set: () => {} } } } });
+
+  // めたんまんは盤面上で別モンスターへ変身していても、召喚元のめたんまんを
+  // 捨札から回収して手札へ戻す。変身先を戻すと元デッキに無いカードが増える。
+  const originalMeta = { ...MONSTER_CATALOG.metaOn, id: 'meta-original', catalogId: 'metaOn' };
+  const transformed = { ...MONSTER_CATALOG.molotovMan, id: 'meta-transformed', catalogId: 'molotovMan' };
+  const metaTile = makeTile(0, { element: 'water', owner: 'B', ...meshStub() });
+  metaTile.unit = unit(transformed, 'B');
+  metaTile.unit.originalDef = originalMeta;
+  const metaOwner = {
+    id: 'B', name: '敵', hand: [],
+    deck: { discardPile: [originalMeta], drawPile: [] },
+  };
+  const metaGame = makeStub([metaTile], [{ id: 'A', name: '川田' }, metaOwner]);
+  metaGame.onLandLoss = async () => {};
+  await metaGame._spellReturnMismatchedMonstersToHand(metaOwner, 1);
+  assert.equal(metaOwner.hand.length, 1);
+  assert.equal(metaOwner.hand[0].catalogId, 'metaOn', '変身先ではなく元のめたんまんへ戻る');
+  assert.equal(metaOwner.deck.discardPile.length, 0, '召喚時に捨てた元カードを回収する');
+
+  // 開示請求等で盤面外生成されたカードは、同名の正規カードが捨札にあっても
+  // それを誤回収せず、一時カードの印を保ったまま手札へ戻す。
+  const generated = {
+    ...MONSTER_CATALOG.kunekune,
+    id: 'outside-kune',
+    catalogId: 'kunekune',
+    generatedOutsideDeck: true,
+  };
+  const regular = { ...MONSTER_CATALOG.kunekune, id: 'regular-kune', catalogId: 'kunekune' };
+  const generatedTile = makeTile(0, { element: 'fire', owner: 'B', ...meshStub() });
+  generatedTile.unit = unit(generated, 'B');
+  const generatedOwner = {
+    id: 'B', name: '敵', hand: [],
+    deck: { discardPile: [regular], drawPile: [] },
+  };
+  const generatedGame = makeStub([generatedTile], [{ id: 'A', name: '川田' }, generatedOwner]);
+  generatedGame.onLandLoss = async () => {};
+  await generatedGame._spellReturnMismatchedMonstersToHand(generatedOwner, 1);
+  assert.equal(generatedOwner.hand[0].generatedOutsideDeck, true, '盤面外生成フラグを保持する');
+  assert.equal(generatedOwner.deck.discardPile.length, 1, '同名の正規カードを誤回収しない');
+  generatedGame._discardUsedCard(generatedOwner, generatedOwner.hand[0]);
+  assert.equal(generatedOwner.deck.discardPile.length, 1, '再使用後も40枚デッキへ混ざらない');
+});
+
+test('ギア合体で生まれたガシャーンは盤面外生成として社会不適合後もデッキへ混ざらない', async () => {
+  const meshStub = () => ({ mesh: { material: { color: { set: () => {} } } } });
+  const player = {
+    id: 'B', name: '敵', currency: 0, hand: [],
+    deck: {
+      discardPile: ['kodaiNoGearA', 'kodaiNoGearB', 'kodaiNoGearC'].map((id) => ({
+        ...MONSTER_CATALOG[id], id: `discard-${id}`, catalogId: id,
+      })),
+      drawPile: [],
+    },
+  };
+  const gearA = makeTile(0, { element: 'fire', owner: 'B', ...meshStub() });
+  const gearB = makeTile(1, { element: 'neutral', owner: 'B', ...meshStub() });
+  const gearC = makeTile(2, { element: 'neutral', owner: 'B', ...meshStub() });
+  gearA.unit = unit(MONSTER_CATALOG.kodaiNoGearA, 'B');
+  gearB.unit = unit(MONSTER_CATALOG.kodaiNoGearB, 'B');
+  gearC.unit = unit(MONSTER_CATALOG.kodaiNoGearC, 'B');
+  const g = makeStub([gearA, gearB, gearC], [{ id: 'A', name: '川田' }, player]);
+  g.onLandLoss = async () => {};
+
+  g._maybeFuseGear(gearA, player, MONSTER_CATALOG.kodaiNoGearA);
+  assert.equal(gearA.unit.def.catalogId, 'gashaan-field');
+  assert.equal(gearA.unit.def.generatedOutsideDeck, true, '合体先は盤面外生成カードになる');
+
+  await g._spellReturnMismatchedMonstersToHand(player, 1);
+  assert.equal(player.hand[0].catalogId, 'gashaan-field');
+  assert.equal(player.hand[0].generatedOutsideDeck, true);
+  assert.equal(player.deck.discardPile.length, 3, '元のギア3枚だけがデッキに残る');
+  g._discardUsedCard(player, player.hand[0]);
+  assert.equal(player.deck.discardPile.length, 3, '戻ったガシャーンを使っても41枚目にならない');
+});
+
+test('チュートリアル最後の移動侵略は戦闘完了後にmoveイベントを通知する', async () => {
+  const order = [];
+  const player = { id: 'H', name: 'プレイヤー', allianceId: null };
+  const enemy = { id: 'C', name: '敵CPU', allianceId: null };
+  const source = makeTile(0, { owner: 'H', gridX: 0, gridZ: 0, neighbors: [1] });
+  const target = makeTile(1, { owner: 'C', gridX: 1, gridZ: 0, neighbors: [0] });
+  source.unit = unit(MONSTER_CATALOG.kunekune, 'H');
+  source.unitMesh = {};
+  target.unit = unit(MONSTER_CATALOG.jukaiNoOnryou, 'C');
+
+  const g = makeStub([source, target], [player, enemy]);
+  Object.assign(g, {
+    onPickMoveDirection: async () => target.id,
+    onConfirmMove: async () => true,
+    getTileSummary: () => ({}),
+    _captureLandLoss: () => null,
+    _captureLandGain: () => null,
+    _runBattleScene: async () => {
+      order.push('battle-complete');
+      return { attackerSurvived: true, defenderSurvived: true };
+    },
+    _maybeRedirectDeathToLightningRod: async () => {},
+    _hopUnitIcon: async () => { order.push('move-animation'); },
+    onTutorialEvent: (type) => { order.push(`${type}-event`); },
+  });
+
+  assert.equal(await g._humanMoveFlow(player, source), true);
+  assert.ok(order.indexOf('battle-complete') >= 0, '移動侵略の戦闘が実行される');
+  assert.ok(
+    order.indexOf('move-event') > order.lastIndexOf('move-animation'),
+    `完了通知は戦闘・移動演出の後でなければならない: ${order.join(' -> ')}`,
+  );
+});
+
 test('社会不適合のCPUは相手の属性違いが2体以上の時だけ撃つ', async () => {
   const build = (mismatchCount) => {
     const tiles = [];
@@ -1651,9 +1878,8 @@ test('異次元ソケット同士は打ち消し合って何も入れ替わら�
 });
 
 test('属性神の盾は持ち主が替わっても属性一致の時だけ反射する', () => {
-  // 装備時にreflectDamageへ差し替える実装なので、真剣白刃取りで奪われたり
-  // 異次元ソケットで効果を移されると、属性の合わないモンスターまで絶対反射を
-  // 得てしまっていた。差し替え後もwielderElementを残して再判定する。
+  // 装備時の属性で効果を固定せず、真剣白刃取りや異次元ソケットで持ち主が
+  // 替わった後も、現在の装備者とwielderElementを突き合わせて再判定する。
   const thunder = (name, atk) => mon(name, 60, atk, { element: 'thunder' });
   const build = (thiefDef, thiefItem) => {
     const d = unit(thunder('雷モンスター', 10), 'D');
@@ -1676,6 +1902,19 @@ test('属性神の盾は持ち主が替わっても属性一致の時だけ反�
   // 異次元ソケットで効果を移された無属性も反射しない。
   const viaSocket = build(mon('無属性', 60, 30, { element: 'neutral' }), ITEM_CATALOG.dimensionalSocket);
   assert.ok(!viaSocket.exchanges.some((e) => e.reflected), 'ソケットで移されても属性が合わなければ反射しない');
+});
+
+test('属性不一致で装備した神の盾も、一致属性の相手に奪われれば絶対反射が発動する', () => {
+  // 装備時点でだけ属性判定すると、火モンスターが装備した水神の盾は効果が
+  // 無いまま固定され、水モンスターが白刃取りで奪っても反射できなかった。
+  const defender = unit(mon('火の盾持ち', 60, 10, { element: 'fire' }), 'D');
+  battle.equipItem(defender, ITEM_CATALOG.suijinNoTate);
+  const attacker = unit(mon('水の泥棒', 60, 30, { element: 'water' }), 'A');
+  battle.equipItem(attacker, ITEM_CATALOG.shinkenShirahadori);
+  const r = battle.resolveBattle(attacker, defender, new battle.GoldLedger());
+  const reflected = r.exchanges.find((e) => e.reflected);
+  assert.ok(reflected, '現在の装備者が水属性なので奪った水神の盾が反射する');
+  assert.equal(reflected.side, 'attacker');
 });
 
 test('属性神の盾はアイテム破壊で失われれば反射しない（仕様どおり）', () => {
@@ -1821,8 +2060,21 @@ test('ステージ15(川田)は専用マップ・会話・デッキへ正しく�
   assert.ok(stage && map, 'ステージ・マップが両方見つからない');
   assert.equal(stage.opponents[0].deckKey, 'kawada');
   assert.equal(stage.opponents[0].name, '川田');
+  assert.doesNotMatch(stage.title, /仮公開/, '背景と立ち絵が揃ったので仮公開表記を残さない');
   assert.equal(stage.wip, undefined, '専用マップが揃ったのでストーリーはロックしない');
   assert.ok(map.hasOfuda, 'お札ありのマップのはず');
+  assert.match(map.background, /\/images\/stage\/stage15-kawada-alley\.png$/);
+  assert.match(NPC_PORTRAIT_URL['川田'], /\/images\/npc-portraits\/kawada\.png$/);
+  assert.match(NPC_TOKEN_URL['川田'], /\/images\/npc-tokens\/kawada\.png$/);
+  const portraitFile = new URL('../public/images/npc-portraits/kawada.png', import.meta.url);
+  const tokenFile = new URL('../public/images/npc-tokens/kawada.png', import.meta.url);
+  const backgroundFile = new URL('../public/images/stage/stage15-kawada-alley.png', import.meta.url);
+  for (const file of [portraitFile, tokenFile, backgroundFile]) {
+    assert.ok(existsSync(file), `川田用画像が存在しない: ${file.pathname}`);
+  }
+  // PNGのIHDR color type=6はRGBA。市松模様を焼き込んだ不透明画像へ戻る事故を防ぐ。
+  assert.equal(readFileSync(portraitFile)[25], 6, '川田の立ち絵は実アルファ透過PNGであること');
+  assert.equal(readFileSync(tokenFile)[25], 6, '川田の盤面駒は実アルファ透過PNGであること');
   // ユーザー指定: 「同属性マス3×2で6マスの通路」が4本の真四角(8×8)。
   assert.equal(map.rows.length, 8);
   assert.ok(map.rows.every((row) => row.length === 8), '真四角＝全行8マス');

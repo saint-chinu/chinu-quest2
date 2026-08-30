@@ -12,7 +12,8 @@ function isDimensionalSocket(equippedItem) {
 
 /**
  * 異次元ソケット: 戦闘中だけ、attacker/defenderの「特殊能力」（モンスター
- * 自身のtraits/effect、装備アイテムのtraits/effect）を丸ごと入れ替える。
+ * 自身のtraits/effect・周回覚醒traits、装備アイテムのtraits/effectと
+ * forceZeroAtk）を丸ごと入れ替える。
  * ATK/HPの実数値（素のhp/atk、アイテムのatkBonus/hpBonus）は対象外
  * ―― defもitemも共有される可能性があるオブジェクトなので、直接
  * 書き換えず一時的な差し替えにとどめ、戻すための関数を返す（対象が
@@ -21,7 +22,7 @@ function isDimensionalSocket(equippedItem) {
  * ソケット自身の「入れ替え」効果そのものは相手へは渡さない（渡す側の
  * 寄与は常に空扱い＝ソケット装備側は元々自分の防具スロットを明け渡して
  * いるだけなので、相手のモンスター自身の特殊能力はそのまま受け取るが、
- * 相手の装備品の効果までは複製しない）。
+ * 相手の装備品の効果は複製ではなく、戦闘中だけ双方の装備スロット間で交換する）。
  */
 function applyDimensionalSocketSwap(attacker, defender) {
   const attackerHasSocket = attacker.items.some(isDimensionalSocket);
@@ -36,33 +37,63 @@ function applyDimensionalSocketSwap(attacker, defender) {
   const itemContribution = (unit) => {
     const equipped = unit.items[0];
     return equipped && !isDimensionalSocket(equipped)
-      ? { traits: equipped.traits, effect: equipped.effect }
-      : { traits: undefined, effect: undefined };
+      ? { traits: equipped.traits, effect: equipped.effect, forceZeroAtk: equipped.forceZeroAtk }
+      : { traits: undefined, effect: undefined, forceZeroAtk: undefined };
   };
   const attackerContribution = itemContribution(attacker);
   const defenderContribution = itemContribution(defender);
 
   const attackerOrigDef = attacker.def;
   const defenderOrigDef = defender.def;
+  const attackerOrigAwakenedTraits = attacker.awakenedTraits;
+  const defenderOrigAwakenedTraits = defender.awakenedTraits;
   attacker.def = { ...attackerOrigDef, traits: defenderOrigDef.traits, effect: defenderOrigDef.effect };
   defender.def = { ...defenderOrigDef, traits: attackerOrigDef.traits, effect: attackerOrigDef.effect };
-  const restoreFns = [() => { attacker.def = attackerOrigDef; defender.def = defenderOrigDef; }];
+  attacker.awakenedTraits = defenderOrigAwakenedTraits ? [...defenderOrigAwakenedTraits] : [];
+  defender.awakenedTraits = attackerOrigAwakenedTraits ? [...attackerOrigAwakenedTraits] : [];
+  const restoreFns = [() => {
+    attacker.def = attackerOrigDef;
+    defender.def = defenderOrigDef;
+    if (attackerOrigAwakenedTraits === undefined) delete attacker.awakenedTraits;
+    else attacker.awakenedTraits = attackerOrigAwakenedTraits;
+    if (defenderOrigAwakenedTraits === undefined) delete defender.awakenedTraits;
+    else defender.awakenedTraits = defenderOrigAwakenedTraits;
+  }];
 
   const attackerItem = attacker.items[0];
   if (attackerItem) {
-    const orig = { traits: attackerItem.traits, effect: attackerItem.effect };
+    const orig = { traits: attackerItem.traits, effect: attackerItem.effect, forceZeroAtk: attackerItem.forceZeroAtk };
     attackerItem.traits = defenderContribution.traits;
     attackerItem.effect = defenderContribution.effect;
-    restoreFns.push(() => { attackerItem.traits = orig.traits; attackerItem.effect = orig.effect; });
+    if (defenderContribution.forceZeroAtk) attackerItem.forceZeroAtk = true;
+    else delete attackerItem.forceZeroAtk;
+    restoreFns.push(() => {
+      attackerItem.traits = orig.traits;
+      attackerItem.effect = orig.effect;
+      if (orig.forceZeroAtk) attackerItem.forceZeroAtk = true;
+      else delete attackerItem.forceZeroAtk;
+    });
   }
   const defenderItem = defender.items[0];
   if (defenderItem) {
-    const orig = { traits: defenderItem.traits, effect: defenderItem.effect };
+    const orig = { traits: defenderItem.traits, effect: defenderItem.effect, forceZeroAtk: defenderItem.forceZeroAtk };
     defenderItem.traits = attackerContribution.traits;
     defenderItem.effect = attackerContribution.effect;
-    restoreFns.push(() => { defenderItem.traits = orig.traits; defenderItem.effect = orig.effect; });
+    if (attackerContribution.forceZeroAtk) defenderItem.forceZeroAtk = true;
+    else delete defenderItem.forceZeroAtk;
+    restoreFns.push(() => {
+      defenderItem.traits = orig.traits;
+      defenderItem.effect = orig.effect;
+      if (orig.forceZeroAtk) defenderItem.forceZeroAtk = true;
+      else delete defenderItem.forceZeroAtk;
+    });
   }
-  return () => restoreFns.forEach((fn) => fn());
+  let restored = false;
+  return () => {
+    if (restored) return;
+    restored = true;
+    restoreFns.forEach((fn) => fn());
+  };
 }
 
 /** A monster once it's on the board: base stats plus equipped items/curses. */
@@ -100,26 +131,9 @@ export function equipItem(unit, itemDef) {
       && unit.def.element === equipped.effect.wielderElement) {
     equipped.atkBonus = (equipped.atkBonus || 0) + (equipped.effect.atkBonus || 0);
   }
-  // 属性神の盾(wielderElementReflect): 装備するモンスターの属性が一致した
-  // 時だけ、効果を実際の反射(reflectDamage、くねくねと同じ全反射)へ差し替える。
-  // 一致しない場合はeffectがそのまま残る（どの判定にも一致しないため、
-  // HP/ATKの素の数値だけの装備品として機能する）。
-  if (equipped.effect?.type === 'wielderElementReflect'
-      && unit.def.element === equipped.effect.wielderElement) {
-    // unpierceable: 属性神の盾の反射は貫通では抜けない「絶対反射」
-    // （ユーザー指定、2026-08）。くねくね自身のreflectDamageは従来どおり
-    // 貫通で抜けるので、盾由来のものだけをこのフラグで区別する。
-    //
-    // wielderElementを残すのは、この装備が戦闘中に持ち主を替えても
-    // 「属性が一致した者だけが反射する」条件を保つため。真剣白刃取りで
-    // 奪われた／異次元ソケットで効果を移された時に、属性の合わない
-    // モンスターまで絶対反射を得てしまうのを防ぐ（dealDamageで再判定する）。
-    equipped.effect = {
-      type: 'reflectDamage',
-      unpierceable: true,
-      wielderElement: equipped.effect.wielderElement,
-    };
-  }
+  // 属性神の盾(wielderElementReflect)は、装備した瞬間には反射へ変換しない。
+  // 真剣白刃取りや異次元ソケットで戦闘中に効果の持ち主が替わるため、実際に
+  // ダメージを受けるたび、その時点の装備者属性で発動可否を判定する。
   unit.items.push(equipped);
   return equipped;
 }
@@ -434,13 +448,25 @@ function dealDamage(attackerUnit, defenderUnit, log, attackerBonus, gold) {
   // くねくね(reflectDamage): 攻撃をそのまま跳ね返す - 自身はノーダメージ、
   // 攻撃側がその分のダメージを受ける。攻撃自体が「届かなかった」扱いなので
   // 命中時オンヒット効果（毒付与など）は発動させない - damage:0を返す。
-  // getEffectで判定することで、属性神の盾（一致した属性が装備すると
-  // 同じreflectDamageへ差し替わる）もモンスター自身の効果と同様に扱える。
+  // getEffectで判定することで、属性神の盾もモンスター自身の反射と同じ
+  // ダメージ処理へ流しつつ、現在の装備者属性だけを追加条件にできる。
   // unpierceable付き（属性神の盾）は貫通でも止められない「絶対反射」。
   // wielderElement付き（同じく属性神の盾）は、今それを持っているモンスターの
   // 属性が一致している時だけ発動する - 戦闘中に持ち主が替わっても
   // （真剣白刃取りの強奪・異次元ソケットの効果移動）条件が保たれる。
-  const reflect = getEffect(defenderUnit, 'reflectDamage');
+  const ordinaryReflect = getEffect(defenderUnit, 'reflectDamage');
+  const elementalShieldReflect = getEffect(defenderUnit, 'wielderElementReflect');
+  const shieldMatchesCurrentWielder = elementalShieldReflect
+    && defenderUnit.def.element === elementalShieldReflect.wielderElement;
+  // 一致する属性神の盾を優先する。固有反射を持つモンスターが盾も装備した場合、
+  // ordinaryReflectを先に選ぶと貫通に抜かれ、盾の「絶対反射」が消えてしまう。
+  const reflect = (shieldMatchesCurrentWielder
+    ? {
+        ...elementalShieldReflect,
+        // 属性神の盾だけは貫通でも抜けない絶対反射。
+        unpierceable: true,
+      }
+    : ordinaryReflect);
   const reflectWielderOk = !reflect?.wielderElement
     || defenderUnit.def.element === reflect.wielderElement;
   if (reflect && reflectWielderOk && (!pierces || reflect.unpierceable) && damage > 0) {
@@ -773,6 +799,20 @@ export function applyPreAttackItemEffects(attacker, defender) {
   return result;
 }
 
+/**
+ * 戦闘演出の途中終了・例外用。applyPreAttackItemEffectsで異次元ソケットの
+ * 一時交換を済ませた後、resolveBattleへ到達しなかった場合も元の能力へ戻す。
+ * resolveBattle後に呼んでも何もしないので、呼び出し側はfinallyで安全に使える。
+ */
+export function abortPreAttackItemEffects(attacker, defender = null) {
+  const cached = preAttackEffectCache.get(attacker);
+  if (defender && cached?.defender && cached.defender !== defender) return;
+  preAttackEffectCache.delete(attacker);
+  const restore = specialAbilitySwapRestoreCache.get(attacker);
+  specialAbilitySwapRestoreCache.delete(attacker);
+  restore?.();
+}
+
 export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defenderBonus = {}, preAttackEffects = null) {
   // 盤面演出側が先に攻撃前効果を再生した場合は、その判定結果をそのまま使う。
   // とくに落雷予報士の50%判定をresolveBattle内で引き直さないための受け渡し。
@@ -785,6 +825,8 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   // 戦闘のどの出口を通っても必ず元へ戻す（restoreSpecialAbilitySwap()）。
   const restoreSpecialAbilitySwap = specialAbilitySwapRestoreCache.get(attacker);
   specialAbilitySwapRestoreCache.delete(attacker);
+
+  try {
 
   // ロシアンルーレット: どちらかが装備していたら通常の殴り合いを一切行わず、
   // 攻撃側→守備側の順にサイコロを振り、出目の大きい方が勝つ。ATK/HP・土地
@@ -1158,4 +1200,10 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
   if (finalDefenderSurvived) defender.currentHp = restoreOnBoardHp(defender);
 
   return { log, dmgToAttacker, dmgToDefender, attackerSurvived: finalAttackerSurvived, defenderSurvived: finalDefenderSurvived, exchanges, itemSteals, itemDestructions, robberEffects, stealEffects, moneyGuardEffects };
+  } catch (error) {
+    // 通常終了/ルーレット終了では上の各経路が先に復元する。ここは予期せぬ
+    // 例外時の最後の砦で、復元関数は冪等なので二重に呼ばれても安全。
+    restoreSpecialAbilitySwap?.();
+    throw error;
+  }
 }

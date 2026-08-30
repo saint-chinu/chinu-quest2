@@ -23,6 +23,7 @@ export const NPC_PORTRAIT_URL = {
   サーティー: assetUrl('/images/npc-portraits/thirty.png'),
   クエ: assetUrl('/images/npc-portraits/que.png?v=2'),
   '塞ぎ込んだ男': assetUrl('/images/npc-portraits/fusagikonda-otoko.png'),
+  川田: assetUrl('/images/npc-portraits/kawada.png'),
   'ウサギン': assetUrl('/images/npc-portraits/usagin.webp'),
   'ヒトデ': assetUrl('/images/npc-portraits/hitode.webp'),
 };
@@ -64,6 +65,7 @@ export const NPC_TOKEN_URL = {
   サーティー: assetUrl('/images/npc-tokens/thirty.png'),
   クエ: assetUrl('/images/npc-tokens/que.png?v=2'),
   '塞ぎ込んだ男': assetUrl('/images/npc-tokens/fusagikonda-otoko.png'),
+  川田: assetUrl('/images/npc-tokens/kawada.png'),
   'ウサギン': assetUrl('/images/npc-tokens/usagin.webp'),
   'ヒトデ': assetUrl('/images/npc-tokens/hitode.webp'),
 };

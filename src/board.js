@@ -378,10 +378,9 @@ export const MAPS = [
   { id: 'kessan', name: '⑬ 豪華客船', rows: KESSAN_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, ofuda: { startPrice: 3, initialCount: 14 }, background: assetUrl('/images/stage/stage13-luxury-liner.png'), spacing: 2.8 },
   { id: 'royal-guard', name: '⑭ 王都の番人？？', rows: ROYAL_GUARD_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage14-royal-alley.jpg'), spacing: 2.8 },
   // ストーリー専用として実装。story.js側はもうwip:trueでロックしていない
-  // （このマップが揃ったので⑬⑭と同じ「（仮公開）」扱いでプレイ可能）。
-  // 対戦モードへは調整完了後にこちらのwipを外して公開する。背景画像は未実装
-  // （/images/stage/stage15-kawada-alley.png、Codexが対応できる不足分）。
-  { id: 'kawada', name: '⑮ 是々非々のマーモット（自称）（仮公開）', wip: true, rows: KAWADA_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage15-kawada-alley.png'), spacing: 2.8 },
+  // ストーリー用の背景・立ち絵・盤面駒まで実装済み。対戦モードへは
+  // バランス調整完了後にこちらのwipを外して公開する。
+  { id: 'kawada', name: '⑮ 是々非々のマーモット（自称）', wip: true, rows: KAWADA_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage15-kawada-alley.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {
