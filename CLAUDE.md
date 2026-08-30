@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v255`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v256`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## チュートリアルの不自然さ修正（2026-08、ユーザー報告）
@@ -80,6 +80,26 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
   開く前の内容を控えて`finish()`で復元するよう修正済み。
 - ⚠️ この経路はDOM依存でnodeのテストから触れない（tests/はmain.jsを読み込まない）。
   logElを触る変更は実機の対人戦で確認すること。
+
+### 盤面開始時のUIリセット（2026-08、対人戦の持ち越しバグ修正）
+報告: 「4人対戦で3人目がずっと土地情報モードのままだった」「2人目に前回の
+手札が残っていて、消えるまで時間がかかった」。ユーザー指定
+**「対人戦をやる時は、必ずリセットかけてまっさらにしてくれ」**。
+- `resetBoardUiForNewMatch()`を追加し、`startBattle`（ストーリー/CPU/ホスト）と
+  `startPvpGuestBattle`（対人戦ゲスト）の**両方**の冒頭で呼ぶようにした。
+- ⚠️ **土地情報モード(`showLandInfoCamera`)は`cancelAllActivePrompts`の対象外**。
+  `activePromptCancellers`へ登録していない独立モードなので、
+  **明示的に`closeLandInfoCamera()`を呼ばないと次の盤面へ持ち越される**。
+  `cameraWorkOverlay`をhiddenにするだけでは全く不十分で、canvasのクリック
+  ハンドラ・カメラ矢印のリスナ・`landInfoButton`のactive・`beginCameraWork`で
+  退避したカメラ状態がすべて生き残る（＝3人目の症状の正体）。
+- ⚠️ **手札パネルは対人戦のゲストだと自分の手札スナップショットが届くまで
+  再描画されない**ので、開始時に`handPanel.replaceChildren()`しておかないと
+  前の対戦の手札が見えたままになる（＝2人目の症状の正体）。
+- `endCameraWork`は`scene`を無防備に参照していたが、盤面切り替え中にも
+  呼ばれるようになったのでオプショナル呼び出しへ変更した。
+- ⚠️ ここもDOM依存でnodeのテストから触れない。実機の対人戦で
+  「連続で2戦して持ち越しが無いか」を確認すること。
 
 ## 未実装: Firebase App Check
 - Web版のFirebase App Check（reCAPTCHA Enterprise）は未設定。現在はSecurity Rulesと

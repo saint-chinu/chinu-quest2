@@ -338,8 +338,10 @@ function beginCameraWork() {
   return snap;
 }
 function endCameraWork(snap) {
-  scene.disableTouchPan();
-  scene.restoreCamera(snap);
+  // 盤面の切り替え時にも呼ばれる（resetBoardUiForNewMatch → closeLandInfoCamera）。
+  // その時点でsceneが差し替え中／未生成でも落ちないようにしておく。
+  scene?.disableTouchPan?.();
+  scene?.restoreCamera?.(snap);
 }
 
 function promptDirectionArrows(options, { noBack = false, confirmOnSecondTap = false } = {}) {
@@ -3310,6 +3312,30 @@ function animate() {
  * バトル - when omitted this is the plain 2人対戦 path (humanPlayer + 固定
  * CPU, Gameコンストラクタ側のフォールバックが組む)。
  */
+/**
+ * 盤面を開始する前に、前の盤面のUI状態を必ず捨てる（ユーザー指定、2026-08
+ * 「対人戦をやる時は、必ずリセットかけてまっさらにしてくれ」）。
+ *
+ * ⚠️ 土地情報モード(showLandInfoCamera)は`cancelAllActivePrompts`の対象外
+ * （activePromptCancellersへ登録していない独立モード）なので、明示的に
+ * closeLandInfoCamera()を呼ばないと**次の盤面へ持ち越される**。
+ * オーバーレイをhiddenにするだけでは不十分で、canvasのクリックハンドラ・
+ * カメラ矢印のリスナ・landInfoButtonのactive・beginCameraWorkで退避した
+ * カメラ状態がすべて生き残る（報告: 4人対戦で3人目がずっと土地情報モードの
+ * ままだった）。
+ *
+ * 手札パネルも、対人戦のゲストは自分の手札スナップショットが届くまで
+ * 再描画されないため、消しておかないと**前の対戦の手札が残って見える**
+ * （報告: 2人目に前回の手札が残り、消えるまで時間がかかった）。
+ */
+function resetBoardUiForNewMatch() {
+  closeLandInfoCamera?.();
+  tileInfoModal.classList.add('hidden');
+  landInfoButton.classList.remove('active');
+  handPanel.replaceChildren();
+  handPanel.classList.remove('spell-hidden');
+}
+
 function startBattle(character, storyOptions = {}) {
   // 盤面開始処理が連続した時（ストーリー選択の再入・会話終了との競合等）、
   // 以前のGameが分岐やモーダルのPromise待ちで残っていると、後からその続きが
@@ -3326,6 +3352,7 @@ function startBattle(character, storyOptions = {}) {
   boardMovementActive = false;
   branchChoiceActive = false;
   landCommandModal.classList.add('hidden');
+  resetBoardUiForNewMatch();
   cameraWorkOverlay.classList.add('hidden');
   cameraWorkOverlay.classList.remove('no-back');
 
@@ -9554,6 +9581,7 @@ async function startPvpGuestBattle() {
   boardMovementActive = false;
   branchChoiceActive = false;
   landCommandModal.classList.add('hidden');
+  resetBoardUiForNewMatch();
   cameraWorkOverlay.classList.add('hidden');
   cameraWorkOverlay.classList.remove('no-back');
   battleSceneModal.classList.add('hidden');
