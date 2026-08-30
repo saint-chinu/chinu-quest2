@@ -1530,26 +1530,54 @@ test('チュートリアルの台本どおりに進むと想定のマスへ着�
 
   const advance = (from, steps) => ring[(ring.indexOf(from) + steps) % ring.length];
 
-  // main.js の tutorialDiceQueues と同じ値。自5だけアイキャンフライで2倍。
-  const humanDice = [1, 1, 2, 2, 3];
-  const cpuDice = [1, 2, 2, 2];
+  // main.js の tutorialDiceQueues と同じ値。自6だけアイキャンフライで2倍。
+  const humanDice = [1, 1, 2, 2, 2, 2];
+  const cpuDice = [1, 2, 2, 2, 2];
 
   let human = 0;
   const humanLandings = humanDice.map((d, i) => {
-    human = advance(human, i === 4 ? d * 2 : d);
+    human = advance(human, i === humanDice.length - 1 ? d * 2 : d);
     return human;
   });
   let cpu = 0;
   const cpuLandings = cpuDice.map((d) => { cpu = advance(cpu, d); return cpu; });
 
-  assert.deepEqual(humanLandings, [1, 2, 7, 5, 7], '自1→マス1, 自2→CP(2), 自3→マス7, 自4→マス5, 自5→マス7');
-  assert.deepEqual(cpuLandings, [1, 4, 6, 3], '敵1→マス1(侵略), 敵2→マス4, 敵3→マス6, 敵4→マス3');
+  assert.deepEqual(humanLandings, [1, 2, 7, 5, 0, 7],
+    '自1→マス1, 自2→CP(2), 自3→マス7, 自4→マス5, 自5→スタート(0), 自6→マス7');
+  assert.deepEqual(cpuLandings, [1, 4, 6, 3, 1],
+    '敵1→マス1(侵略), 敵2→マス4, 敵3→マス6, 敵4→マス3, 敵5→マス1(通行料)');
 
   // 台本が成立するためのマスの性質。
   assert.equal(tiles[1].element, 'fire', 'マス1は火（火付け役と同属性）');
   assert.equal(tiles[2].type, TileType.EVENT, 'マス2はCP＝停止すると全所有地に土地コマンドが使える');
+  assert.equal(tiles[0].type, TileType.START, '自5はスタートに停止して全所有地へアクセスする');
   assert.equal(tiles[4].element, 'forest', 'マス4は森（樹海の怨霊と同属性）');
-  assert.ok(tiles[7].neighbors.includes(4), '自5の移動侵略のため、マス7とマス4は隣接している必要がある');
+  assert.ok(tiles[7].neighbors.includes(4), '自6の移動侵略のため、マス7とマス4は隣接している必要がある');
+
+  // 火炎瓶男(射程3)の特殊効果がマス4の怨霊へ届くこと。マス3からだと距離4で
+  // 届かないので、召喚先をマス5から動かすとここで落ちる。
+  const distance = (fromId, toId) => {
+    const seen = new Set([fromId]);
+    let frontier = [fromId];
+    let d = 0;
+    while (frontier.length) {
+      d += 1;
+      const next = [];
+      for (const id of frontier) {
+        for (const n of tiles[id].neighbors) {
+          if (seen.has(n)) continue;
+          if (n === toId) return d;
+          seen.add(n);
+          next.push(n);
+        }
+      }
+      frontier = next;
+    }
+    return Infinity;
+  };
+  assert.ok(distance(5, 4) <= MONSTER_CATALOG.molotovMan.ability.range,
+    '火炎瓶男はマス5からマス4の怨霊へ届く必要がある');
+  assert.equal(MONSTER_CATALOG.molotovMan.ability.type, 'damage');
 });
 
 test('チュートリアル: 誘導中はCPUの目標達成を握り潰し、終えたら決着させる', async () => {

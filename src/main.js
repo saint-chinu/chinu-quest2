@@ -4219,6 +4219,7 @@ const TUTORIAL_CHECK_LABELS = {
   spell: 'スペル',
   summon: '召喚',
   levelUp: '土地Lv',
+  ability: '特殊効果',
   toll: '通行料',
   battle: '戦闘',
   defense: '防衛',
@@ -4265,6 +4266,11 @@ function tutorialCopies(def, count) {
 function buildTutorialPlayerDeck() {
   return [
     ...tutorialCopies(MONSTER_CATALOG.salarymander, 5),
+    // 火炎瓶男: 土地コマンドの「特殊効果」を教えるための1枚（火属性・
+    // 50Gで3マス以内の敵モンスターの基礎HPへ10ダメージ）。台本では
+    // マス3に召喚し、次の手番でスタートに止まって全所有地へアクセスし、
+    // マス4の樹海の怨霊を撃つ。
+    ...tutorialCopies(MONSTER_CATALOG.molotovMan, 3),
     ...tutorialCopies(MONSTER_CATALOG.fireStarter, 7),
     ...tutorialCopies(MONSTER_CATALOG.flameLizard, 5),
     ...tutorialCopies(MONSTER_CATALOG.kunekune, 1),
@@ -4310,7 +4316,9 @@ const TUTORIAL_FLOW_STEPS = [
   { event: 'levelUp', text: '土地を守り切った！ 続けて同じメニューの「土地Lvアップ」で、この土地を強化してみよう（払ったGは土地の価値に変わる）' },
   { event: 'summon', requireCard: 'kunekune', text: '次の空き地では「くねくね」を召喚してみよう（HPは低いが攻撃を反射する）' },
   { event: 'spell', card: 'divination', requireCard: 'divination', text: '自分のターンが来たら、サイコロを振る前に手札の「占術」を使ってみよう（スペルは1ターン1回）' },
-  { event: 'spell', card: 'iCanFly', requireCard: 'iCanFly', targetSelf: true, text: '「アイキャンフライ」を引いた！自分に使うと次のサイコロが2倍。ぐるっと1周しよう' },
+  { event: 'summon', requireCard: 'molotovMan', text: '空き地に止まった！「火炎瓶男」を召喚しよう（土地コマンドで使える特殊効果を持っている）' },
+  { event: 'ability', text: 'スタートに止まると自分の全部の土地に土地コマンドが使える！「土地」→火炎瓶男の土地→「特殊効果」で、離れた樹海の怨霊を削ってみよう' },
+  { event: 'spell', card: 'iCanFly', requireCard: 'iCanFly', targetSelf: true, text: '「アイキャンフライ」を引いた！自分に使うと次のサイコロが2倍。マス7のくねくねまで進もう' },
   { event: 'move', text: 'くねくねのマスに戻ってきた！「土地」→くねくねの土地→「移動」で、隣の樹海の怨霊へ移動侵略しよう。反射で倒せるぞ' },
   // 台本を撃ち終わったら、そのままチュートリアルを閉じる。以前はここから
   // 「自由に試す」通常対戦（＝ランダムな出目とCPUのAI任せ）へ移行していたが、
@@ -4353,7 +4361,7 @@ function advanceTutorialStep(type, payload) {
   if (!step || step.event !== type) return;
   const human = game?.players?.find((player) => !player.isCPU);
   if (step.defenderIsHuman && (!human || payload.defenderId !== human.id)) return;
-  if (['summon', 'move', 'levelUp'].includes(type) && human && payload.playerId !== human.id) return;
+  if (['summon', 'move', 'levelUp', 'ability'].includes(type) && human && payload.playerId !== human.id) return;
   if (step.card && catalogIdOf(payload.card || {}) !== step.card) return;
   activeTutorialSession.stepIndex += 1;
   renderTutorialStepBubble();
@@ -4486,23 +4494,33 @@ async function startTutorialDemo() {
     //   敵2: 2歩→マス4(森)へ着地、樹海の怨霊を召喚
     //   自3: 2歩→マス4を通過してマス7(火)へ着地、くねくねを召喚
     //   敵3: 2歩→マス6へ着地（台本のpassで何もしない）
-    //   自4: 占術を使ってから2歩→マス5へ着地
+    //   自4: 占術を使ってから2歩→マス5へ着地、火炎瓶男を召喚
+    //        ⚠️ マス5なのは火炎瓶男の射程3に収めるため。マス4(怨霊)までの
+    //        距離はマス5からなら3だが、マス3からだと4になって届かない
+    //        （_tileDistanceはneighborsのBFS）。
     //   敵4: 2歩→マス3へ着地（pass）
-    //   自5: アイキャンフライを自分に使い3×2=6歩→1周してマス7へ着地
+    //   自5: 2歩→マス0(スタート)にちょうど停止。ここも全所有地へ土地コマンドが
+    //        使えるので、マス5の火炎瓶男の「特殊効果」でマス4の怨霊を削る
+    //   敵5: 2歩→マス1(プレイヤーの土地)へ着地。passなので侵略せず通行料を払う
+    //   自6: アイキャンフライを自分に使い2×2=4歩→マス7へ着地
     //        →土地コマンド「移動」でマス4の怨霊へ移動侵略→反射で撃破して終了
     // ⚠️ 出目を変える時は、tests/newCards.test.mjsの
     //    「チュートリアルの台本どおりに進むと想定のマスへ着地する」が
     //    リング順を辿って着地マスを検証するので、必ず一緒に更新すること。
-    tutorialDiceQueues: { human: [1, 1, 2, 2, 3], cpu: [1, 2, 2, 2] },
+    tutorialDiceQueues: { human: [1, 1, 2, 2, 2, 2], cpu: [1, 2, 2, 2, 2] },
     // くねくね・占術は初期手札(tutorialOpeningCardIds)にあるので引かせる必要は
-    // ない。アイキャンフライだけは自5でちょうど手札へ来るように指定する
-    // （早く配ると自4で使われて出目が想定とずれる）。
-    tutorialDrawQueues: { human: [null, null, null, null, 'iCanFly'], cpu: [] },
+    // ない。火炎瓶男とアイキャンフライだけは、使わせたい手番でちょうど手札へ
+    // 来るように指定する（早く配ると別の手番で使われて出目が想定とずれる）。
+    tutorialDrawQueues: {
+      human: [null, null, null, 'molotovMan', null, 'iCanFly'],
+      cpu: [],
+    },
     // 台本の無い手番でCPUが通常AIに落ちると打ち回しがランダムになるので、
-    // 敵3・敵4は明示的にpass（何もしない）で埋める。
+    // 敵3以降は明示的にpass（何もしない）で埋める。
     tutorialCpuScript: [
       { type: 'invade', card: 'salarymander' },
       { type: 'summon', card: 'jukaiNoOnryou' },
+      { type: 'pass' },
       { type: 'pass' },
       { type: 'pass' },
     ],

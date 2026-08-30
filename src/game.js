@@ -5279,6 +5279,16 @@ export class Game {
    * 実行したら移動・売却と同様に自動でターン終了する。
    */
   async _humanAbilityFlow(player, tile) {
+    // 実際の処理は_humanAbilityFlowInner。成功パスが能力ごとに10か所以上
+    // あるので、チュートリアルへの通知はここで1回だけまとめて出す
+    // （ワープ系は発動でunitが別マスへ移るため、種別は実行前に控えておく）。
+    const abilityType = tile.unit?.def?.ability?.type;
+    const used = await this._humanAbilityFlowInner(player, tile);
+    if (used) this.onTutorialEvent('ability', { playerId: player.id, tileId: tile.id, abilityType });
+    return used;
+  }
+
+  async _humanAbilityFlowInner(player, tile) {
     const unitDef = tile.unit?.def;
     const ability = unitDef?.ability;
     if (!ability) return false;
