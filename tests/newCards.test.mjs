@@ -1793,6 +1793,19 @@ test('ストーリーの話者は全員（川田を除き）立ち絵を引け�
   assert.deepEqual(missing, [], `立ち絵を引けない話者: ${missing.join(', ')}`);
 });
 
+test('主人公の一人称は全ステージで「俺」に統一されている', () => {
+  // ⑮だけ「ワイ」＋関西弁になっていたのをユーザー指定で「俺」へ統一した
+  // （2026-08）。以後どのステージを足す時もこの口調に揃えること。
+  const lines = STORY_STAGES
+    .flatMap((stage) => [stage, stage.replay, stage.secretReplay].filter(Boolean))
+    .flatMap((variant) => ['intro', 'outro'].flatMap((key) => variant[key] ?? []))
+    .filter((line) => line.speaker === '主人公');
+  const wai = lines.filter((line) => /ワイ/.test(line.text)).map((line) => line.text);
+  assert.deepEqual(wai, [], `主人公が「ワイ」と言っている: ${wai.join(' / ')}`);
+  // 「俺」が使われていること自体も確認（一人称が消えた事故に気づけるように）。
+  assert.ok(lines.some((line) => /俺/.test(line.text)), '主人公の一人称「俺」が1つも無い');
+});
+
 test('川田（⑮予定）の専用デッキはちょうど40枚', () => {
   const list = buildCharacterDeckList('kawada');
   assert.equal(list.length, 40);
