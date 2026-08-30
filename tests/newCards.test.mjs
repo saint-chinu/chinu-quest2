@@ -1689,6 +1689,28 @@ test('属性神の盾はアイテム破壊で失われれば反射しない（�
   assert.ok(!r.exchanges.some((e) => e.reflected), 'アイテムを破壊されたら反射は起きない');
 });
 
+test('酢の朕専用制限は撤廃済み（所持数がデッキ編集のゲート）', () => {
+  // ユーザー指定(2026-08):「配布しなければ制限と同じだから、制限撤廃で」。
+  // npcExclusive+exclusiveOwnerNameが残っていると、配ってもgame.jsの
+  // デッキ構築フィルタが黙って除外して枚数の減ったデッキになる。
+  const su = MONSTER_CATALOG.su;
+  assert.equal(su.npcExclusive, undefined, '酢にnpcExclusiveが残っている');
+  assert.equal(su.exclusiveOwnerName, undefined, '酢にexclusiveOwnerNameが残っている');
+  assert.equal(su.rarity, 'EX', 'EXなのでパック排出の対象外なのは従来どおり');
+
+  // game.jsのpermittedDeckListと同じ条件。誰のデッキでも落ちない。
+  const permitted = (name, list) => list.filter((c) => (
+    !c.npcExclusive || !c.exclusiveOwnerName || c.exclusiveOwnerName === name
+  ));
+  const deck = [{ ...su, catalogId: 'su' }];
+  assert.equal(permitted('川田', deck).length, 1, '朕以外のデッキでも除外されない');
+  assert.equal(permitted('朕', deck).length, 1, '朕のデッキではもちろん通る');
+
+  // サーティーのブリモンの専用制限まで巻き添えにしていないこと。
+  assert.equal(MONSTER_CATALOG.thirtyBreedMonster.npcExclusive, true);
+  assert.equal(MONSTER_CATALOG.thirtyBreedMonster.exclusiveOwnerName, 'サーティー');
+});
+
 test('川田（⑮予定）の専用デッキはちょうど40枚', () => {
   const list = buildCharacterDeckList('kawada');
   assert.equal(list.length, 40);

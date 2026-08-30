@@ -5935,8 +5935,9 @@ async function handleStoryBattleEnd(index, result = {}) {
   if (stage.key === 'kare') {
     markCatalogSeen(SPELL_CATALOG.disclosureRequest);
   }
-  // 朕（ステージ⑧）を撃破したら、朕専用モンスター「酢」を図鑑に登録する
-  // （npcExclusiveなのでownedCardsは増やさず、デッキには入れられないまま）。
+  // 朕（ステージ⑧）を撃破したら、モンスター「酢」を図鑑に登録する
+  // （ownedCardsは増やさないので、所持数0のままデッキには入れられない。
+  //  酢のnpcExclusiveは2026-08に撤廃済み - waterMonsters.js参照）。
   if (stage.key === 'chin-harbor') {
     markCatalogSeen(MONSTER_CATALOG.su);
   }

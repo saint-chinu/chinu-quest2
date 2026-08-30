@@ -51,10 +51,13 @@ export const WATER_MONSTER_CATALOG = {
     effectDescription: '空き地への通常召喚専用で、移動・侵略には使えない（自分の土地との入れ替えは可能）。持ち主の周回で成長する（1周目 HP+5/ATK+10 → 2周目 HP+10/ATK+5・先制 → 3周目 HP+10・攻撃を1/2の確率で完全無効化。この無効化は貫通でも突破できない）',
     imageDataUrl: assetUrl('/images/card-art/islandWhale.png'),
   }),
+  // 2026-08、ユーザー指定でnpcExclusive/exclusiveOwnerName('朕')を撤廃した。
+  // 「配布しなければ制限と同じ」という判断。所持数(ownedCountOf)がデッキ
+  // 編集のゲートになっているので、実際に配らない限りプレイヤーは使えない。
+  // 撤廃によりgetCardCatalog(cardCatalog.js)へ載るようになるが、EXなので
+  // パック排出の対象外(main.jsのunobtainable判定)なのは従来どおり。
   su: waterMonster('su', '酢', Rarity.EX, 60, 60, {
     cost: 300,
-    npcExclusive: true,
-    exclusiveOwnerName: '朕',
     traits: ['pierce', 'twoStepMove'],
     effectDescription: '貫通。土地コマンドの移動で最大2マス移動でき、特殊マス1つを飛び越えられる（特殊マスには着地不可）',
     imageDataUrl: assetUrl('/images/card-art/su.png'),
