@@ -760,21 +760,12 @@ Rスペル60G `damageAllUnitsOnMismatchedLand` target='none'。
 - ⑮`kawada`は対象外（「川田より前」の指定なので）。引き続き「（仮公開）」＋
   マップ`wip: true`のまま。
 
-### 残っている不足分（実ファイルで確認済み、2026-08）
-- **BGM**。`audio.js`の`MAP_TRACK`に`kawada`のキーが無く、汎用の`board`テーマへ
-  フォールバックしている。⑬⑭は専用曲あり（stage13newbgm.mp3 / stage14bgm.mp3）。
-- **背景画像**（`/images/stage/stage15-kawada-alley.png`、まだファイル無し。
-  `public/images/stage/`にはstage13・stage14までしか存在しない。
-  舞台は「王都に入ってすぐの裏路地〜レジスタンスのアジト」）。
-- **川田の立ち絵・NPCトークン**（`npcArt.js`の`NPC_PORTRAIT_URL`／トークンに
-  「川田」の登録が無い。他NPCと同じく`/images/npc-portraits/`と
-  `/images/npc-tokens/`へ画像を置いて登録する）。
 ### 素材状況と残っている不足分
 - **背景画像**（`/images/stage/stage15-kawada-alley.png`）と**川田自身の
-  立ち絵・NPCアイコン**（npcArt.js）は実装済み。
-- 上記の川田用素材は実ファイルとして追加済み。属性神の盾4種の専用画像は
-  `imageDataUrl: null`で共通アイテム画像へフォールバックする。
-- **属性神の盾4種の専用画像**（`imageDataUrl: null`、上記参照）。
+  立ち絵・NPCアイコン**（npcArt.js）は実装済み。いずれも実ファイルを追加し、
+  ステージ15の背景・会話・盤面表示から参照する。
+- **属性神の盾4種の専用画像**は未作成。カード定義は`imageDataUrl: null`で
+  共通アイテム絵へフォールバックする。
 - **AIプロファイル**（story.jsのopponents[].aiProfile）は未設計。
 - チヌ・ウサギン・ムールの1vs3強制敗北バトル(⑯)と海底労働施設(⑰)は、川田の
   ステージより後の別タスクとして着手する（このメモの下の節参照、まだ
@@ -1156,10 +1147,9 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
 `python3 tools/gen_card_art.py`を回す（seed固定なので同じ絵が出る）。
 - 作り方の前提はスクリプト冒頭のdocstring参照（2:3・主題は上寄り・
   renderCardElが上から暗いグラデを重ねるので主題は明るめに）。
-- 専用絵を持たせない運用にする場合、**`item()`/`spell()`のoptions経由で
-  `imageDataUrl: null`を渡しても効かない**（`options.imageDataUrl ??
-  assetUrl(...)`のnullish合体でURL側に落ち、存在しない.jpgを指してしまう）。
-  その時は`{ ...item(...), imageDataUrl: null }`のスプレッド上書きで書くこと。
+- 専用絵を持たせない運用にする場合は、`item()`/`spell()`のoptionsへ
+  `imageDataUrl: null`を明示する。ヘルパーはプロパティの有無を確認してnullを
+  保持するため、存在しない.jpgへフォールバックしない。
 - 回帰テストは`npm run test:cards`（`tests/newCards.test.mjs`）。
   **imageDataUrlが指すファイルがpublic/に実在するかまで検証している**。
 
