@@ -774,11 +774,69 @@ Rスペル60G `damageAllUnitsOnMismatchedLand` target='none'。
 - **属性神の盾4種の専用画像**は未作成。カード定義は`imageDataUrl: null`で
   共通アイテム絵へフォールバックする。
 - **BGM**は未設定。`src/audio.js`の`MAP_TRACK`に`kawada`キーが無く、ステージ15は
-  共通曲(`board`)へフォールバックしている。曲を用意したら`MAP_TRACK`へ追加する。
+  共通曲(`board`)へフォールバックしている。生成用プロンプトは次節に記録済み。
 - **AIプロファイル**（story.jsのopponents[].aiProfile）は未設計。
 - チヌ・ウサギン・ムールの1vs3強制敗北バトル(⑯)と海底労働施設(⑰)は、川田の
   ステージより後の別タスクとして着手する（このメモの下の節参照、まだ
   何もコード化していない）。
+
+### ⑮のBGM生成プロンプト（未生成・レジスタンス路線）
+
+川田は「熱狂型のレジスタンス」ではなく**是々非々の冷静型**で、舞台も路地裏の
+狭いアジト。よって決起の大合唱ではなく**抑制された地下のグルーヴ**に振る。
+
+メインプロンプト（Suno/Udio想定・英語）:
+
+```
+Underground resistance hideout theme for a strategy board game. Mid-tempo
+minor-key spy-thriller groove, 104 BPM, D dorian, seamless loop.
+
+Backbone: a driving muted electric bass ostinato, relentless but never loud.
+Dry palm-muted electric guitar chops on the offbeats. Brushed snare, shaker
+and rim clicks instead of a big kit. Sparse low brass stabs punctuating the
+turnarounds. Over the top, a lone cold vibraphone / Rhodes motif with plate
+reverb, repeating like a signal being passed in the dark.
+
+Atmosphere: damp, dusty back-alley basement. Small room, close mics, light
+tape saturation, a faint water-drip ambience under the mix. Calculating and
+watchful rather than heroic — tension coiled and held back, never released
+into a climax. Fully instrumental.
+```
+
+ネガティブプロンプト:
+
+```
+no vocals, no choir, no epic orchestral swell, no triumphant climax,
+no EDM drop, no heavy distortion, no cheerful major key, no fade-out ending
+```
+
+設計意図（作り直すときに崩してはいけない点）:
+- **抑制されたベース主導**。「抵抗＝叫び」ではなく「抵抗＝地下で回り続ける歯車」。
+  川田の是々非々な人物像に合わせる。
+- **クライマックスを作らない**。盤面BGMは数十分ループするので、山があると
+  聴き疲れる。戦闘に入ると共通曲`newbattle.mp3`へ切り替わるため、盤面曲を
+  熱くしすぎない方が対比が効く。
+- **水滴のアンビエンス**は川田の水属性デッキと路地裏の湿気の示唆。
+- **ドリアン旋法**。ナチュラルマイナーより暗くなりすぎず「まだ折れていない」感。
+- **生っぽい小編成**。⑭王都の番人の荘厳さとの対比で、裏路地の格を音量ではなく
+  編成で示す。
+
+振り分け違いの代案:
+- **A案（水属性寄せ・アジトの陰）**: ギターのチョップをダブ風のディレイskankに
+  差し替え、リバーブを深く、8小節ごとにサブベースのスウェル、水滴と配管の共鳴を
+  強めに。96 BPM。より冷たく水没した感じ。
+- **B案（決起寄せ・「見定めてやる！！」の側）**: 2周目からフロアタム／太鼓の
+  ダウンビートと2・4拍のハンドクラップを足し、低音ブラスのスタブがベースリフに
+  応答する形に。110 BPM。ただし山は作らない——突撃ではなく人が集まってくる感じ。
+
+曲ができたら`src/audio.js`に2行足すだけで繋がる:
+
+```js
+// TRACK_SRC へ
+kawada: assetUrl('/audio/stage15bgm.mp3'), // ⑮是々非々のマーモット（自称）
+// MAP_TRACK へ
+kawada: 'kawada',
+```
 
 ## ⑬のバランス調整ループ（ひなんじょ・29ch の実戦ログ）
 
