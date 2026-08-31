@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v259`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v260`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## チュートリアルの不自然さ修正（2026-08、ユーザー報告）
@@ -773,6 +773,8 @@ Rスペル60G `damageAllUnitsOnMismatchedLand` target='none'。
   ステージ15の背景・会話・盤面表示から参照する。
 - **属性神の盾4種の専用画像**は未作成。カード定義は`imageDataUrl: null`で
   共通アイテム絵へフォールバックする。
+- **BGM**は未設定。`src/audio.js`の`MAP_TRACK`に`kawada`キーが無く、ステージ15は
+  共通曲(`board`)へフォールバックしている。曲を用意したら`MAP_TRACK`へ追加する。
 - **AIプロファイル**（story.jsのopponents[].aiProfile）は未設計。
 - チヌ・ウサギン・ムールの1vs3強制敗北バトル(⑯)と海底労働施設(⑰)は、川田の
   ステージより後の別タスクとして着手する（このメモの下の節参照、まだ
