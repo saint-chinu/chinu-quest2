@@ -1500,12 +1500,20 @@ test('ダメージスペルのCPUは避雷針侍・くねくねを最優先で�
   assert.equal(g._cpuPickDamageTarget([fat, plain], 15).id, fat.id, 'ロック不在なら総資産1位');
 });
 
-test('川田は開幕に水のお札を15枚持つ（story.jsのstartingOfuda）', () => {
+test('お札を開幕から仕込むCPUは居ない（全ステージ、盤面で自然に買わせる）', () => {
   const stage = STORY_STAGES.find((s) => s.key === 'kawada');
   assert.equal(stage.startingCurrency, 700);
-  assert.deepEqual(stage.opponents[0].startingOfuda, { water: 15 });
-  // マップ側がお札対応でないと_applyStartingOfudaが何もしないので併せて確認。
+  // ⑮はお札対応マップ。川田は他のCPUと同じくゴール／CPの取引所で
+  // _cpuMaybeTradeOfudaを通して買う（開幕の作り置きはしない）。
   assert.ok(MAPS.find((m) => m.id === 'kawada').hasOfuda);
+  // かつて⑮川田だけ opponent.startingOfuda で開幕に15枚持たせていたが、
+  // 「開幕から仕込むのは不自然、自然に買え」という指定で仕組みごと撤去した。
+  // 誰かが再び足さないよう、全ステージ・全ロールを見張る。
+  for (const s of STORY_STAGES) {
+    for (const who of [...(s.opponents ?? []), s.ally, s.extraAlly].filter(Boolean)) {
+      assert.equal(who.startingOfuda, undefined, `${s.key}の${who.name}に開幕お札が復活している`);
+    }
+  }
 });
 
 test('土地神の怒りは属性の合わない土地のモンスターだけを撃つ（自分のも巻き込む）', async () => {

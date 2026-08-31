@@ -1155,10 +1155,6 @@ export const STORY_STAGES = [
         color: 0x4a6d8c,
         deckKey: 'kawada',
         theme: { elements: [Element.WATER] },
-        // 開幕に水のお札を20枚仕込んでいる（裏社会に精通したレジスタンス
-        // という設定にも合う）。game.jsのinit()が通常の取引と同じ_buyOfudaで
-        // 買うので、Gの支払い・相場の押し上げも実際の購入と同じに扱われる。
-        startingOfuda: { [Element.WATER]: 15 },
       },
     ],
   },

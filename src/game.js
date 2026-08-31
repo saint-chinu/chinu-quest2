@@ -421,9 +421,6 @@ export class Game {
       isCPU: !!cfg.isCPU,
       // ステージ側からボス補正などで初期資金を上書きできる（既定500G）。
       currency: cfg.startingCurrency ?? 500,
-      // 開幕から持たせるお札 {属性: 枚数}（story.jsのopponent.startingOfuda）。
-      // 実際の購入はinit()が_buyOfudaで行うので、ここでは指定を持ち回るだけ。
-      startingOfuda: cfg.startingOfuda ?? null,
       tileId: startingTileId,
       homeGoalTileId: startingTileId,
       previousTileId: null,
@@ -568,9 +565,6 @@ export class Game {
       isCPU: !!cfg.isCPU,
       // ステージ側からボス補正などで初期資金を上書きできる（既定500G）。
       currency: cfg.startingCurrency ?? 500,
-      // 開幕から持たせるお札 {属性: 枚数}（story.jsのopponent.startingOfuda）。
-      // 実際の購入はinit()が_buyOfudaで行うので、ここでは指定を持ち回るだけ。
-      startingOfuda: cfg.startingOfuda ?? null,
       tileId: startId,
       homeGoalTileId: startId,
       previousTileId: null,
@@ -688,7 +682,6 @@ export class Game {
         const card = player.deck.draw();
         if (card) { player.hand.push(card); this._recordDraw(player, card); }
       }
-      this._applyStartingOfuda(player);
     }
     if (this.tutorialMode) this._setupTutorialScenario();
     const startPos = this.tiles[this.currentPlayer.tileId].position;
@@ -4491,25 +4484,6 @@ export class Game {
    * Gが無限に増える増殖バグになっていた。逐次約定なら売りも同じ坂を
    * 下りながら約定するので、往復益は消える。
    */
-  /**
-   * 開幕から持たせるお札（playerConfigs.startingOfuda、story.jsのopponent
-   * 経由。例: ⑮川田の水20枚）。通常の取引と同じ_buyOfudaを使うので、Gの
-   * 支払い・5枚ロットの逐次約定・相場の押し上げまで実際の購入と同じに扱う
-   * （お札の無いマップやGが足りない場合は買えた分だけで自然に止まる）。
-   */
-  _applyStartingOfuda(player) {
-    const wanted = player.startingOfuda;
-    if (!wanted || !this.hasOfuda) return;
-    for (const [element, count] of Object.entries(wanted)) {
-      const sheets = Math.max(0, Math.floor(count));
-      if (sheets <= 0) continue;
-      const result = this._buyOfuda(player, element, player.currency, { maxSheets: sheets });
-      if (result.bought > 0) {
-        this.onLog(`${player.name}は開幕から${ELEMENT_LABEL[element]}のお札を${result.bought}枚仕込んでいる (-${result.spent}G)`);
-      }
-    }
-  }
-
   _buyOfuda(player, element, budgetG, { maxSheets = OFUDA_MAX_BUY_PER_TRADE } = {}) {
     if (!this.hasOfuda || !OFUDA_ELEMENTS.includes(element)) return { bought: 0, spent: 0, before: null };
     const before = this._ofudaPrice(element);
