@@ -6937,12 +6937,29 @@ function isCatalogSeen(key) {
  * 敵の使用を見る以外に図鑑を埋める手段が無い）。
  * 既に所持しているカードは所持数で登録済み扱いになるので何もしない。
  */
-function handleCardSeen(def) {
+function handleCardSeen(def, meta = null) {
   if (!def || !currentCharacter) return;
+  // byPlayerId付きの呼び出しは「操作している本人がやった時だけ図鑑に載せる」意味。
+  // 合体ロボ・ガシャーンがこれで、**自分でギアを3種そろえて合体させ、盤面に
+  // 出したのを見た時だけ**登録する（ユーザー指定）。敵が合体させたのを見ても
+  // 埋まらない＝ダンボール男や「彼」に見せてもらう抜け道を塞ぐ。
+  if (meta?.byPlayerId != null && !isLocalHumanPlayer(meta.byPlayerId)) return;
   const unobtainable = def.npcExclusive || def.rewardOnly || def.rarity === Rarity.EX;
   if (!unobtainable) return;
   if (ownedCountOf(cardKey(def)) > 0) return;
   markCatalogSeen(def);
+}
+
+/**
+ * そのplayerIdが「この端末を操作している人間」か。
+ * 対人戦ではホストのGameが全員ぶんの盤面を回すので、自分の駒だけをtrueにする
+ * （他の参加者の合体でホストの図鑑が埋まってしまうのを防ぐ）。
+ * ⚠️ 参加者側はGameを持たない＝この経路自体が走らないので、対人戦で自分が
+ * 合体させても図鑑には載らない。図鑑を埋める想定の経路はストーリー／CPU戦。
+ */
+function isLocalHumanPlayer(playerId) {
+  if (pvpMatch) return playerId === pvpMatch.localPlayerId;
+  return !!game?.players?.some((player) => player.id === playerId && !player.isCPU);
 }
 
 

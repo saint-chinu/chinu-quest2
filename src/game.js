@@ -7738,6 +7738,8 @@ export class Game {
         // 混ぜると41枚目以降として増殖するため、盤面外生成として扱う。
         generatedOutsideDeck: true,
       };
+      // 侵略と同時の合体も「自分で合体させた」に含める（_maybeFuseGearと同じ扱い）。
+      this.onCardSeen?.(card, { byPlayerId: player.id });
       this.onLog(`${player.name}のギアが侵略と同時に合体し「${card.name}」が出撃！ (召喚コスト払い戻し)`);
       this._notifyState();
     }
@@ -7989,6 +7991,9 @@ export class Game {
       generatedOutsideDeck: true,
     };
     tile.unit = createFieldUnit(fusedDef, player.id);
+    // ガシャーンの図鑑登録は「自分で合体させて盤面に出した時だけ」（ユーザー指定）。
+    // byPlayerIdを渡した呼び出しは、main.js側が操作者本人かどうかを見て弾く。
+    this.onCardSeen?.(fusedDef, { byPlayerId: player.id });
     this.onLog(`${player.name}のギアが合体し「${fusedDef.name}」が誕生した！ (召喚コスト${card.cost}Gを払い戻し)`);
     this._notifyState();
   }

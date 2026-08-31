@@ -1339,6 +1339,22 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
     ⑭の`塞ぎ込んだ男`デッキは`ashToDust`を毎試合ほぼ確実に使う設計
     （`_cpuMaybeUseFusagikondaCombo`のコンボ核）なので、汎用検出だけで
     実質困らない想定。
+- **合体ロボ・ガシャーンの図鑑登録は「自分で合体させた時だけ」**（2026-09-01、
+  ユーザー指定）。EXなのでパック排出も配布も無く、`_maybeFuseGear`／侵略と同時の
+  合体のどちらも`onCardSeen`を呼んでいなかったため、**正規プレイでは永久に
+  図鑑が埋まらなかった**。両方の合体経路から
+  `onCardSeen(def, { byPlayerId: player.id })`を呼ぶようにし、main.jsの
+  `handleCardSeen`は**byPlayerId付きの呼び出しだけ「操作者本人か」を
+  `isLocalHumanPlayer`で確認して弾く**（＝ダンボール男や「彼」が合体させたのを
+  見ても埋まらない）。他のカードの`onCardSeen`は今まで通りmetaなしで、
+  「見たら載る」のまま。
+  - ⚠️ **対人戦では埋まらない**。参加者側はGameを持たない（ホストのGameだけが
+    回る）ので、この経路自体が走らない。ホスト側では`pvpMatch.localPlayerId`と
+    比較するので、他の参加者の合体でホストの図鑑が埋まることもない。
+    図鑑を埋める想定の経路はストーリー／CPU戦。
+  - 回帰テスト: tests/newCards.test.mjs「ギアの合体はonCardSeenへ
+    『誰が合体させたか』を渡す」「ギアが揃っていなければ合体もonCardSeenも
+    起きない」。
 - **キャンセルカルチャー** Nスペル: 敵の手札のスペル/アイテム1枚を捨てさせる。
 - **魔力抽出(extractManaFromHandCard)** S100G: 自分含む手札のある1人を選び、その手札を
   見て1枚捨てさせ、**捨てられた本人が+200G**。target=`anyPlayerHandCard`。詠唱中の

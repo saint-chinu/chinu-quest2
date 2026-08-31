@@ -2239,3 +2239,54 @@ test('⑯の割り込み会話は敵1人が4000Gに届いた時だけ、1回だ�
   await g._maybeTriggerStoryAssistEvent();
   assert.equal(shown, 1, '1回きり');
 });
+
+// ---- 合体ロボ・ガシャーンの図鑑登録（自分で合体させた時だけ） ----
+
+test('ギアの合体はonCardSeenへ「誰が合体させたか」を渡す', () => {
+  const gearA = MONSTER_CATALOG.kodaiNoGearA;
+  const tiles = [
+    makeTile(0, { element: 'neutral' }),
+    makeTile(1, { element: 'neutral' }),
+    makeTile(2, { element: 'neutral' }),
+  ];
+  const player = { id: 3, name: 'テスト', color: 1, currency: 0, isCPU: false };
+  const g = makeStub(tiles, [player]);
+  const seen = [];
+  Object.assign(g, {
+    onCardSeen: (def, meta) => seen.push({ name: def.name, meta }),
+    _paintTile: () => {},
+    _repaintTileToElement: () => {},
+  });
+  // 残り2種のギアが自分の土地に配置済み。
+  tiles[1].unit = unit(MONSTER_CATALOG.kodaiNoGearB, player.id);
+  tiles[1].owner = player.id;
+  tiles[2].unit = unit(MONSTER_CATALOG.kodaiNoGearC, player.id);
+  tiles[2].owner = player.id;
+
+  g._maybeFuseGear(tiles[0], player, { ...gearA, catalogId: 'kodaiNoGearA' });
+
+  assert.equal(tiles[0].unit.def.name, '合体ロボ・ガシャーン', '合体していない');
+  assert.equal(tiles[1].unit, null, '素材のギアは消える');
+  assert.equal(tiles[2].unit, null, '素材のギアは消える');
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].name, '合体ロボ・ガシャーン');
+  // byPlayerIdが無いと、main.js側で「敵が合体させたのを見ただけ」と区別できない。
+  assert.equal(seen[0].meta?.byPlayerId, player.id);
+});
+
+test('ギアが揃っていなければ合体もonCardSeenも起きない', () => {
+  const gearA = MONSTER_CATALOG.kodaiNoGearA;
+  const tiles = [makeTile(0, { element: 'neutral' }), makeTile(1, { element: 'neutral' })];
+  const player = { id: 0, name: 'テスト', color: 1, currency: 0, isCPU: false };
+  const g = makeStub(tiles, [player]);
+  const seen = [];
+  Object.assign(g, { onCardSeen: (def) => seen.push(def.name), _paintTile: () => {}, _repaintTileToElement: () => {} });
+  tiles[1].unit = unit(MONSTER_CATALOG.kodaiNoGearB, player.id); // Cが無い
+  tiles[1].owner = player.id;
+
+  g._maybeFuseGear(tiles[0], player, { ...gearA, catalogId: 'kodaiNoGearA' });
+
+  assert.equal(tiles[0].unit, null);
+  assert.equal(tiles[1].unit.def.name, '古代のギアB', '素材は消さない');
+  assert.deepEqual(seen, []);
+});
