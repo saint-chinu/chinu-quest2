@@ -1500,21 +1500,14 @@ test('ダメージスペルのCPUは避雷針侍・くねくねを最優先で�
   assert.equal(g._cpuPickDamageTarget([fat, plain], 15).id, fat.id, 'ロック不在なら総資産1位');
 });
 
-test('川田のデッキに他キャラ固有のEXカードを混ぜない（演出の筋）', () => {
+test('川田のデッキに資本主義の権化を1枚含める（ユーザー指定）', () => {
   const kawada = buildCharacterCardList('kawada');
   assert.equal(kawada.length, 40);
-  // 資本主義の権化は⑫でクエを破産させた時だけ手に入るクエ専用のEX。
-  // 裏路地のレジスタンスが金融街のフィクサーの切り札を撃つのは演出として
-  // 筋が通らないので撤去した（2026-08、ユーザー指摘）。勝率は代替の
-  // アイランドホエール4枚目と実質同値（CLAUDE.md参照）。
+  // 川田デッキにはユーザー指定で資本主義の権化を1枚採用する。
   assert.equal(
-    kawada.filter((c) => c.name === '資本主義の権化').length, 0,
-    '資本主義の権化（クエ専用EX）が川田のデッキに復活している',
+    kawada.filter((c) => c.name === '資本主義の権化').length, 1,
+    '川田デッキに資本主義の権化が1枚ない',
   );
-  // 一般化: 川田のデッキにEXカードを入れない。EXはどれも特定キャラの
-  // 撃破報酬なので、混ぜると必ず「関係ないキャラの札」になる。
-  const exCards = kawada.filter((c) => c.rarity === 'EX').map((c) => c.name);
-  assert.deepEqual(exCards, [], `川田のデッキにEXカードが入っている: ${exCards.join(', ')}`);
 });
 
 test('お札を開幕から仕込むCPUは居ない（全ステージ、盤面で自然に買わせる）', () => {
