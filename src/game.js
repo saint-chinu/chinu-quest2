@@ -2,7 +2,7 @@ import { TileType, mapRequiresAllCheckpoints, mapCheckpointBonus, mapUsesAlterna
 import { PIECE_REST_Y, UNIT_ICON_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity } from './cards.js';
 import { buildStarterCardList, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf, isRewardOnlyCard } from './battleCards.js';
-import { createFieldUnit, resolveBattle, applyPreAttackItemEffects, equipItem, applyCurse, applyPoison, GoldLedger, hasTrait, strikeOrderScore, statTotals } from './battle.js';
+import { createFieldUnit, resolveBattle, applyPreAttackItemEffects, abortPreAttackItemEffects, equipItem, applyCurse, applyPoison, GoldLedger, hasTrait, strikeOrderScore, statTotals } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay, getWaitCutRate } from './utils.js';
 import { DENCHU_FIELD_MONSTER } from './thunderMonsters.js';
@@ -1645,6 +1645,9 @@ export class Game {
               ...zombieDef,
               id: `pandemic-${ownerId}-${tile.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
               catalogId: zombieDef.id,
+              // 元カードは召喚時点で既に捨札にある。変身後ゾンビを正規カード扱い
+              // すると、社会不適合・入れ替えでゾンビが41枚目として混入する。
+              generatedOutsideDeck: true,
             },
             ownerId,
           );
@@ -2007,7 +2010,10 @@ export class Game {
    *
    * 召喚時にカードは捨札へ送られているので、不死鳥(_handleUnitDeath)と同じく
    * _reclaimCardFromDeckで1枚回収してから手札へ積む（回収しないとデッキ内の
-   * 総枚数が増えてしまう）。
+   * 総枚数が増えてしまう）。ただし、盤面外生成カードは元から捨札に無いため
+   * 回収せずgeneratedOutsideDeckを保持する。めたんまんの変身後はoriginalDef
+   * （元のめたんまん）を戻し、ギア合体で生まれたガシャーンは盤面外生成カード
+   * として戻すことで、変身先・合体先が40枚デッキへ混入するのを防ぐ。
    */
   async _spellReturnMismatchedMonstersToHand(targetPlayer, count) {
     if (!targetPlayer) return;
@@ -2026,20 +2032,25 @@ export class Game {
     for (const tile of eligible.slice(0, count)) {
       if (this._isCancelled || !tile.unit) continue;
       const unit = tile.unit;
-      const catalogId = catalogIdOf(unit.def);
+      // 入れ替えと同じ規約: めたんまん等、盤面上で姿が変わった個体は
+      // 現在の見た目ではなく召喚元カードへ戻す。
+      const returnedDef = unit.originalDef || unit.def;
+      const catalogId = catalogIdOf(returnedDef);
       const landLoss = this._captureLandLoss(targetPlayer, tile);
       tile.unit = null;
       tile.owner = null;
       tile.transparentCursed = false;
       this._repaintTileToElement(tile);
       this._syncUnitIcons();
-      this._reclaimCardFromDeck(targetPlayer, catalogId);
+      // 盤面外生成カード（盗取・蘇生・ギア合体等）は召喚時に捨札へ入って
+      // いない。ここで同名の正規カードを回収すると、別の1枚を消してしまう。
+      if (!returnedDef.generatedOutsideDeck) this._reclaimCardFromDeck(targetPlayer, catalogId);
       targetPlayer.hand.push({
-        ...unit.def,
+        ...returnedDef,
         id: `bounce-${targetPlayer.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
         catalogId,
       });
-      this.onLog(`${unit.def.name}は土地に馴染めず${targetPlayer.name}の手札に戻った`);
+      this.onLog(`${returnedDef.name}は土地に馴染めず${targetPlayer.name}の手札に戻った`);
       this._notifyState();
       await this._presentLandLoss(landLoss);
       // 1体ごとに手札上限を確定させる（戻す→捨てるの順、上記コメント参照）。
@@ -4629,7 +4640,11 @@ export class Game {
     if (actionType === 'summon' || actionType === 'swap') {
       if (actionType === 'swap' && tile.unit) {
         const returnedDef = tile.unit.originalDef || tile.unit.def;
-        this._reclaimCardFromDeck(player, catalogIdOf(returnedDef));
+        // 開示請求・パンデミック等の盤面外生成カードは元から捨札に無い。
+        // 同名の正規札を誤回収せず、一時カードの印を保ったまま戻す。
+        if (!returnedDef.generatedOutsideDeck) {
+          this._reclaimCardFromDeck(player, catalogIdOf(returnedDef));
+        }
         player.hand.push({
           ...returnedDef,
           id: `swap-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -4869,7 +4884,15 @@ export class Game {
 
     const confirmed = await this.onConfirmMove(this.getTileSummary(targetTile), player.id);
     if (!confirmed) return false;
-    this.onTutorialEvent('move', { playerId: player.id, fromTileId: tile.id, toTileId: targetTile.id, invasion: targetTile.owner != null });
+    // チュートリアルの最終課題は移動侵略。ここで完了通知を出すとmain.jsが
+    // 直ちにfinishTutorialしてGameをcancelするため、戦闘へ入る前に盤面が
+    // 閉じてしまう。移動・戦闘・結果演出をすべて終えた後に通知する。
+    const tutorialMoveEvent = {
+      playerId: player.id,
+      fromTileId: tile.id,
+      toTileId: targetTile.id,
+      invasion: targetTile.owner != null,
+    };
 
     const attackerUnit = tile.unit;
     const attackerName = attackerUnit.def.name;
@@ -4945,6 +4968,7 @@ export class Game {
       }
     }
     this._notifyState();
+    this.onTutorialEvent('move', tutorialMoveEvent);
     return true;
   }
 
@@ -6651,25 +6675,25 @@ export class Game {
   }
 
   /** Bundles both situational bonuses into the {atk,hp} shape resolveBattle expects, logging whichever actually apply. */
-  _battleBonus(unit, positionTile, battleTile) {
+  _battleBonus(unit, positionTile, battleTile, { log = true } = {}) {
     let hp = this._elementHpBonus(unit, positionTile);
     let atk = this._cheerAtkBonus(unit, battleTile);
-    if (hp > 0) this.onLog(`${unit.def.name}は${ELEMENT_LABEL[positionTile.element]}の土地でHP+${hp}`);
-    if (atk > 0) this.onLog(`${unit.def.name}は応援を受けてATK+10`);
+    if (log && hp > 0) this.onLog(`${unit.def.name}は${ELEMENT_LABEL[positionTile.element]}の土地でHP+${hp}`);
+    if (log && atk > 0) this.onLog(`${unit.def.name}は応援を受けてATK+10`);
     // 電柱（電柱を植える男の土地コマンド産）: 所有者を問わず、盤上のどこかに
     // 1体でもいれば全ての雷属性モンスターがHP+10（味方限定ではなく全体
     // 効果 - 仕様上「配置されていると」に所有者の限定が無いため）。
     if (unit.def.element === Element.THUNDER && this._hasFieldMonsterOnBoard('denchu-field')) {
       hp += 10;
-      this.onLog(`${unit.def.name}は電柱の恩恵でHP+10`);
+      if (log) this.onLog(`${unit.def.name}は電柱の恩恵でHP+10`);
     }
     if (unit.def.element === Element.NEUTRAL && this._hasFieldTraitOnBoard('neutralHpAura')) {
       hp += 10;
-      this.onLog(`${unit.def.name}は古代のギアCの応援でHP+10`);
+      if (log) this.onLog(`${unit.def.name}は古代のギアCの応援でHP+10`);
     }
     if (unit.def.element === Element.WATER && this._hasFieldTraitOnBoard('waterAtkAura30')) {
       atk += 30;
-      this.onLog(`${unit.def.name}はゆきおんなの加護でATK+30`);
+      if (log) this.onLog(`${unit.def.name}はゆきおんなの加護でATK+30`);
     }
     // 巨珍兵の3周目覚醒「繁栄」。巨珍兵自身を含む、設置者本人または
     // 同盟仲間の森属性モンスターへ戦闘中ATK/HP+20。敵の巨珍兵からは受けない。
@@ -6677,7 +6701,7 @@ export class Game {
     if (prosperity > 0) {
       atk += prosperity;
       hp += prosperity;
-      this.onLog(`${unit.def.name}は繁栄の恩恵でATK/HP+20`);
+      if (log) this.onLog(`${unit.def.name}は繁栄の恩恵でATK/HP+20`);
     }
     return { atk, hp };
   }
@@ -6714,9 +6738,9 @@ export class Game {
    * （盤面の状況依存）とは別枠で計算するが、同じ{atk,hp}へそのまま加算
    * する（呼び出し元のbonusオブジェクトをその場で書き換える）。
    */
-  _applyEffectBonus(unit, opponentUnit, bonus) {
+  _applyEffectBonus(unit, opponentUnit, bonus, { log = true } = {}) {
     const effect = unit.def.effect;
-    if (effect) this._applyEffectBonusFor(unit, opponentUnit, bonus, effect);
+    if (effect) this._applyEffectBonusFor(unit, opponentUnit, bonus, effect, { log });
   }
 
   /**
@@ -6737,41 +6761,41 @@ export class Game {
     if (atk > 0) this.onLog(`${unit.def.name}は「${diceItem.name}」でATK+${atk}（前回の出目${roll}）`);
   }
 
-  _applyEffectBonusFor(unit, opponentUnit, bonus, effect) {
+  _applyEffectBonusFor(unit, opponentUnit, bonus, effect, { log = true } = {}) {
     if (effect.type === 'statsPerElementChain') {
       const count = this._chainCount(unit.ownerId, effect.element);
       const atk = count * effect.atkPerChain;
       const hp = count * effect.hpPerChain;
       bonus.atk += atk;
       bonus.hp += hp;
-      if (atk > 0 || hp > 0) this.onLog(`${unit.def.name}は${ELEMENT_LABEL[effect.element]}${count}連鎖でATK+${atk}/HP+${hp}`);
+      if (log && (atk > 0 || hp > 0)) this.onLog(`${unit.def.name}は${ELEMENT_LABEL[effect.element]}${count}連鎖でATK+${atk}/HP+${hp}`);
     } else if (effect.type === 'atkBonusAgainstRarity' && opponentUnit.def.rarity === effect.targetRarity) {
       const atk = Math.round(unit.def.atk * effect.ratio);
       bonus.atk += atk;
-      this.onLog(`${unit.def.name}は相手のレアリティ(${effect.targetRarity})によりATK+${atk}`);
+      if (log) this.onLog(`${unit.def.name}は相手のレアリティ(${effect.targetRarity})によりATK+${atk}`);
     } else if (effect.type === 'synergyWithNamedAlly' && this._hasAllyOnBoard(unit.ownerId, effect.allyCatalogId)) {
       const atk = effect.atkBonus || 0;
       const hp = effect.hpBonus || 0;
       bonus.atk += atk;
       bonus.hp += hp;
-      if (atk > 0 || hp > 0) this.onLog(`${unit.def.name}はシナジーでATK+${atk}/HP+${hp}`);
+      if (log && (atk > 0 || hp > 0)) this.onLog(`${unit.def.name}はシナジーでATK+${atk}/HP+${hp}`);
     } else if (effect.type === 'atkDoubleIfRicher') {
       const owner = this.players.find((p) => p.id === unit.ownerId);
       const opponentOwner = this.players.find((p) => p.id === opponentUnit.ownerId);
       if (owner && opponentOwner && owner.currency > opponentOwner.currency) {
         const atk = unit.def.atk;
         bonus.atk += atk;
-        this.onLog(`${unit.def.name}は所持Gで上回りATKが2倍になった`);
+        if (log) this.onLog(`${unit.def.name}は所持Gで上回りATKが2倍になった`);
       }
     } else if (effect.type === 'atkMultiplier') {
       bonus.atkMultiplier = (bonus.atkMultiplier || 1) * effect.multiplier;
-      this.onLog(`${unit.def.name}の最終ATK${effect.multiplier}倍が発動`);
+      if (log) this.onLog(`${unit.def.name}の最終ATK${effect.multiplier}倍が発動`);
     } else if (effect.type === 'battleStatBonus') {
       const atk = effect.atk || 0;
       const hp = effect.hp || 0;
       bonus.atk += atk;
       bonus.hp += hp;
-      if (atk > 0 || hp > 0) this.onLog(`${unit.def.name}は戦闘中ATK+${atk}/HP+${hp}`);
+      if (log && (atk > 0 || hp > 0)) this.onLog(`${unit.def.name}は戦闘中ATK+${atk}/HP+${hp}`);
     } else if (effect.type === 'statsPerTotalChain') {
       const totalChain = [Element.FIRE, Element.WATER, Element.THUNDER, Element.FOREST].reduce(
         (sum, el) => sum + this._chainCount(unit.ownerId, el),
@@ -6781,7 +6805,7 @@ export class Game {
       const hp = totalChain * effect.hpPerChain;
       bonus.atk += atk;
       bonus.hp += hp;
-      if (atk > 0 || hp > 0) this.onLog(`${unit.def.name}は総連鎖${totalChain}でATK+${atk}/HP+${hp}`);
+      if (log && (atk > 0 || hp > 0)) this.onLog(`${unit.def.name}は総連鎖${totalChain}でATK+${atk}/HP+${hp}`);
     }
   }
 
@@ -6907,6 +6931,9 @@ export class Game {
       if (fusionDef) unit.def = fusionDef;
       else equipItem(unit, { ...item });
     }
+    // 攻撃開始前効果を先に確定する。異次元ソケットはここで特殊能力を交換する
+    // ため、連鎖補正・狂戦士倍率等の状況ボーナスは必ずこの後に計算する。
+    const preAttackEffects = applyPreAttackItemEffects(a, d);
     // 攻撃側は土地を離れて戦うので土地HPが乗らない（tile=null）。
     const attackerBonus = this._battleBonus(a, null, tile);
     const defenderBonus = this._battleBonus(d, tile, tile);
@@ -6918,7 +6945,7 @@ export class Game {
       defenderBonus,
       this._hasPierce(a) ? this._elementHpBonus(d, tile) : 0,
     );
-    const result = resolveBattle(a, d, new GoldLedger(), attackerBonus, battleDefenderBonus);
+    const result = resolveBattle(a, d, new GoldLedger(), attackerBonus, battleDefenderBonus, preAttackEffects);
     return { attackerSurvived: result.attackerSurvived, defenderSurvived: result.defenderSurvived };
   }
 
@@ -6969,6 +6996,8 @@ export class Game {
       // 従来ロジックが選ぶ本命に加え、残りも候補に入れる（本命が無駄でも、
       // 別のアイテムなら結果を変えられることがある）。
       const preferred = this._bestBattleItemFromHand(gear, unit, { preferStandardItems: playerName === 'Q' });
+      // 属性神の盾はユーザー指定の「同属性の相手へ侵略する時は温存」を先に適用し、
+      // 残ったアイテムを実戦闘シミュレーションで比較する。
       const usable = gear.filter((card) => !this._shieldWouldBeWasted(card, unit, opponentUnit, isDefender));
       const preferredUsable = usable.includes(preferred) ? preferred : null;
       const candidates = [null, ...(preferredUsable ? [preferredUsable] : []), ...usable.filter((c) => c !== preferredUsable)];
@@ -7011,17 +7040,9 @@ export class Game {
    * 属性神の盾を「使っても無駄になる」場面か。無駄なら候補から外して温存する
    * （ユーザー指定、2026-08）。
    *
-   * 盾の反射は貫通でも抜けない絶対反射なので、**相手が同じ条件で盾を使えると
-   * 攻撃側は自分の攻撃力ぶんを反射で食らうだけになり、土地は絶対に奪えない**
-   * （実測: 相手が盾持ちなら、こちらが盾を使っても使わなくても土地奪取率0%）。
-   * その状況で80Gの盾を切るのはカードとGの丸損なので装備しない。
-   *
-   * 判定は「侵略側で、相手モンスターの属性がその盾の対応属性と一致している」
-   * だけを見る。相手の手札は覗けない（装備は互いに伏せて同時に選ぶ）ので、
-   * 属性が噛み合っている相手は「盾を持たれうる」とみなして避ける。
-   *
-   * 防衛側では従来どおり普通に使う。守る側にとっては反射がそのまま強く、
-   * 相手が盾を使わない場合でも土地を守れるため（ユーザー指定の例外）。
+   * 侵略側で、相手モンスターの属性がその盾の対応属性と一致している時は、
+   * 相手も同じ盾を持ち得るものとして80Gとカードを温存する。防衛側は反射で
+   * 土地を守れるため通常どおり候補に残す。
    */
   _shieldWouldBeWasted(itemCard, unit, opponentUnit, isDefender) {
     if (isDefender) return false;
@@ -7029,7 +7050,7 @@ export class Game {
       ? itemCard.effect.wielderElement
       : null;
     if (!wielderElement) return false;
-    // 自分がその盾で反射できない属性なら、そもそも反射目当ての装備ではない。
+    // 自分がその盾で反射できない属性なら、反射目当ての装備ではない。
     if (unit?.def?.element !== wielderElement) return false;
     return opponentUnit?.def?.element === wielderElement;
   }
@@ -7115,6 +7136,7 @@ export class Game {
             else equipItem(attackerUnit, item);
           }
         }
+        const preAttackEffects = applyPreAttackItemEffects(attackerUnit, defenderUnit);
         const attackerBonus = this._battleBonus(attackerUnit, null, defenderTile);
         const defenderBonus = this._battleBonus(defenderUnit, defenderTile, defenderTile);
         this._applyEffectBonus(attackerUnit, defenderUnit, attackerBonus);
@@ -7126,7 +7148,7 @@ export class Game {
           this._hasPierce(attackerUnit) ? this._elementHpBonus(defenderUnit, defenderTile) : 0,
         );
 
-        const result = resolveBattle(attackerUnit, defenderUnit, new GoldLedger(), attackerBonus, battleDefenderBonus);
+        const result = resolveBattle(attackerUnit, defenderUnit, new GoldLedger(), attackerBonus, battleDefenderBonus, preAttackEffects);
         if (result.attackerSurvived && !result.defenderSurvived) wins++;
       }
       return wins / trials;
@@ -7185,6 +7207,7 @@ export class Game {
           if (fusionDef) atk.def = fusionDef;
           else equipItem(atk, plannedItem);
         }
+        const preAttackEffects = applyPreAttackItemEffects(atk, def);
         const attackerBonus = this._battleBonus(atk, null, defenderTile);
         const defenderBonus = this._battleBonus(def, defenderTile, defenderTile);
         this._applyEffectBonus(atk, def, attackerBonus);
@@ -7195,7 +7218,7 @@ export class Game {
           defenderBonus,
           this._hasPierce(atk) ? this._elementHpBonus(def, defenderTile) : 0,
         );
-        const result = resolveBattle(atk, def, new GoldLedger(), attackerBonus, battleDefenderBonus);
+        const result = resolveBattle(atk, def, new GoldLedger(), attackerBonus, battleDefenderBonus, preAttackEffects);
         if (result.attackerSurvived && !result.defenderSurvived) wins++;
       }
       return wins / trials;
@@ -7276,10 +7299,12 @@ export class Game {
     }
     let attackerBase = this._baseStats(attackerUnit);
     let defenderBase = this._baseStats(defenderUnit);
-    const attackerBonus = this._battleBonus(attackerUnit, attackerPositionTile, battleTile);
-    const defenderBonus = this._battleBonus(defenderUnit, battleTile, battleTile);
-    this._applyEffectBonus(attackerUnit, defenderUnit, attackerBonus);
-    this._applyEffectBonus(defenderUnit, attackerUnit, defenderBonus);
+    // アイテム選択前の初期表示用。異次元ソケットで能力が交換される可能性が
+    // あるためログはまだ出さず、攻撃前効果の確定後に実戦闘用を再計算する。
+    let attackerBonus = this._battleBonus(attackerUnit, attackerPositionTile, battleTile, { log: false });
+    let defenderBonus = this._battleBonus(defenderUnit, battleTile, battleTile, { log: false });
+    this._applyEffectBonus(attackerUnit, defenderUnit, attackerBonus, { log: false });
+    this._applyEffectBonus(defenderUnit, attackerUnit, defenderBonus, { log: false });
 
     const attackerMatchup = this._elementMatchup(attackerUnit.def.element, defenderUnit.def.element);
     const defenderMatchup = this._elementMatchup(defenderUnit.def.element, attackerUnit.def.element);
@@ -7373,7 +7398,17 @@ export class Game {
     // （ATK+20等の補正演出）より前に確定・演出する。順序を守らないと、奪われる／
     // 壊される側の補正演出が先に出てしまい、見た目上は何も起きていないように
     // 見える（実数値の計算自体は元から正しい順序だった）。
+    try {
     const preAttackEffects = applyPreAttackItemEffects(attackerUnit, defenderUnit);
+    // 異次元ソケットを含む攻撃開始前効果が確定した後の能力で、連鎖補正・
+    // 狂戦士倍率などを一度だけ計算する。ATK/HPの素値は交換対象外。
+    attackerBonus = this._battleBonus(attackerUnit, attackerPositionTile, battleTile);
+    defenderBonus = this._battleBonus(defenderUnit, battleTile, battleTile);
+    this._applyEffectBonus(attackerUnit, defenderUnit, attackerBonus);
+    this._applyEffectBonus(defenderUnit, attackerUnit, defenderBonus);
+    // statOverrideInBattle等も入れ替わり得るので、装備公開の基礎表示を同期する。
+    attackerBase = this._baseStats(attackerUnit);
+    defenderBase = this._baseStats(defenderUnit);
     preAttackEffects.log.forEach((line) => this.onLog(line));
     for (const destruction of preAttackEffects.itemDestructions) {
       await this.onBattleItemDestroy(destruction);
@@ -7511,7 +7546,7 @@ export class Game {
     // 攻撃前効果はpreAttackEffectsで既に判定・演出済み。resolveBattleは
     // battle.jsのキャッシュから同じ判定結果を受け取るため、ここで確率を
     // 引き直したり、破壊・強奪を二重に適用したりしない。
-    const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, battleDefenderBonus);
+    const result = resolveBattle(attackerUnit, defenderUnit, this._goldAdapter(), attackerBonus, battleDefenderBonus, preAttackEffects);
     result.log.forEach((line) => this.onLog(line));
 
     // ロシアンルーレットの戦闘は出目だけで決まり、先制/後攻・貫通・ATK倍率は
@@ -7620,6 +7655,10 @@ export class Game {
     if (defenderUnit.def?.sacrificeWithoutItem) delete defenderUnit.def.sacrificeWithoutItem;
 
     return result;
+    } finally {
+      // 退出・演出例外でresolveBattleへ届かなくても、ソケットの一時交換を残さない。
+      abortPreAttackItemEffects(attackerUnit, defenderUnit);
+    }
   }
 
   /**
@@ -7697,7 +7736,13 @@ export class Game {
         this._repaintTileToElement(t);
       }
       player.currency += card.cost; // 合体特典: 召喚コスト払い戻し
-      card = { ...GASHAAN_FIELD_MONSTER, id: `gashaan-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+      card = {
+        ...GASHAAN_FIELD_MONSTER,
+        id: `gashaan-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+        // 3枚のギアは既に各自の捨札へ入っている。この合体先まで正規デッキへ
+        // 混ぜると41枚目以降として増殖するため、盤面外生成として扱う。
+        generatedOutsideDeck: true,
+      };
       this.onLog(`${player.name}のギアが侵略と同時に合体し「${card.name}」が出撃！ (召喚コスト払い戻し)`);
       this._notifyState();
     }
@@ -7941,7 +7986,13 @@ export class Game {
       this._repaintTileToElement(t);
     }
     player.currency += card.cost;
-    const fusedDef = { ...GASHAAN_FIELD_MONSTER, id: `gashaan-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}` };
+    const fusedDef = {
+      ...GASHAAN_FIELD_MONSTER,
+      id: `gashaan-${player.id}-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+      // 元の3枚のギアは捨札に残る。合体先はこの盤面でだけ生まれたカードなので、
+      // 社会不適合等で手札へ戻っても40枚デッキには混ぜない。
+      generatedOutsideDeck: true,
+    };
     tile.unit = createFieldUnit(fusedDef, player.id);
     this.onLog(`${player.name}のギアが合体し「${fusedDef.name}」が誕生した！ (召喚コスト${card.cost}Gを払い戻し)`);
     this._notifyState();

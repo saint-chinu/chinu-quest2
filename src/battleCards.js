@@ -51,7 +51,11 @@ const item = (id, name, rarity, itemType, cost, atkBonus, hpBonus, options = {})
   ...(options.atkBonusRange ? { atkBonusRange: options.atkBonusRange } : {}),
   ...(options.forceZeroAtk ? { forceZeroAtk: true } : {}),
   ...(options.returnsToHandIfUsed ? { returnsToHandIfUsed: true } : {}),
-  imageDataUrl: options.imageDataUrl ?? assetUrl(`/images/card-art/${id}.jpg`),
+  // 明示したnullは「専用絵なし・共通アイテム絵へフォールバック」の指定。
+  // nullish coalescingだとnullまで存在しないJPGへ置換されるため、キーの有無で判定する。
+  imageDataUrl: Object.prototype.hasOwnProperty.call(options, 'imageDataUrl')
+    ? options.imageDataUrl
+    : assetUrl(`/images/card-art/${id}.jpg`),
 });
 
 /**
@@ -139,7 +143,7 @@ export const ITEM_CATALOG = {
   dimensionalSocket: {
     ...item('dimensionalSocket', '異次元ソケット', Rarity.S, ItemType.ARMOR, 60, 0, 0, {
       effect: { type: 'swapSpecialAbilities' },
-      effectDescription: '戦闘中、自分と相手の特殊能力を入れ替える（先制・後攻・貫通・無効化・反射・強盗等・連鎖ボーナス加算等。装備アイテムの効果も対象）。ATK/HPの実数値そのものは入れ替わらない',
+      effectDescription: '戦闘中、自分と相手の特殊能力を入れ替える（先制・後攻・貫通・無効化・反射・強盗・周回覚醒・連鎖ボーナス加算等。装備アイテムの効果も対象）。ATK/HPの実数値そのものは入れ替わらない',
     }),
     imageDataUrl: null,
   },
@@ -163,11 +167,11 @@ export const ITEM_CATALOG = {
 
   // 属性神の盾4種。上のATK特化武器と対になる防具で、一致した属性の
   // モンスターが装備すると受けるダメージを丸ごと反射する
-  // （battle.jsのequipItemが装備時にreflectDamageへ差し替える）。一致しない
+  // （battle.jsのdealDamageが被弾時点の装備者属性を毎回判定する）。一致しない
   // 場合もATK+10/HP+20・貫通は属性を問わず乗る（2026-08、コストが高すぎる
   // というユーザー指摘でコストを下げステータス・貫通を追加）。
   // ⚠️ この反射は**相手の貫通では無効化されない「絶対反射」**（ユーザー指定、
-  // 2026-08）。equipItemがunpierceable:trueを立て、battle.jsのdealDamageが
+  // 2026-08）。battle.jsのdealDamageが盾効果だけをunpierceableとして扱い、
   // 貫通を無視して反射する。くねくね自身の反射は従来どおり貫通で抜けるので、
   // 両者を混同しないこと。
   suijinNoTate: item('suijinNoTate', '水神の盾', Rarity.R, ItemType.ARMOR, 80, 10, 20, {
@@ -469,13 +473,21 @@ export const SPELL_CATALOG = {
   // 「パンデミックで全モンスターをゾンビ(無属性)に変える → 無属性マスの無い
   // 盤面では全員が対象 → 20ダメージで盤面が丸ごと全滅」という即死コンボが
   // 成立してしまう（2026-08、ユーザー指摘で20→15へ引き下げ）。
-  tochigamiNoIkari: spell('tochigamiNoIkari', '土地神の怒り', Rarity.R, 60, 'none', { type: 'damageAllUnitsOnMismatchedLand', amount: 15 }, '自分の属性と異なる属性の土地にいる全モンスターに15ダメージ（自分のモンスターも対象）'),
+  tochigamiNoIkari: {
+    ...spell('tochigamiNoIkari', '土地神の怒り', Rarity.R, 60, 'none', { type: 'damageAllUnitsOnMismatchedLand', amount: 15 }, '自分の属性と異なる属性の土地にいる全モンスターに15ダメージ（自分のモンスターも対象）'),
+    // 専用画像がまだ無い間は、存在しないJPGを読みに行かず共通スペル絵を使う。
+    imageDataUrl: null,
+  },
 
   // 社会不適合: 「土地に馴染めていない」モンスターを盤面から追い出す。
   // 土地神の怒り(ダメージ)と同じ「属性が噛み合っていない」判定を、
   // 除去ではなく手札バウンスに使う対の1枚。対象はランダム2体までで、
   // 1体しかいなければ1体だけ、0体なら何も起きずコストだけ損する。
-  shakaiFutekigou: spell('shakaiFutekigou', '社会不適合', Rarity.R, 70, 'enemyPlayer', { type: 'returnMismatchedMonstersToHand', count: 2 }, '対象プレイヤーの配置モンスターのうち、立っている土地と属性が合わないものをランダムに2体まで手札に戻す（該当が1体なら1体、0体なら何も起きない）'),
+  shakaiFutekigou: {
+    ...spell('shakaiFutekigou', '社会不適合', Rarity.R, 70, 'enemyPlayer', { type: 'returnMismatchedMonstersToHand', count: 2 }, '対象プレイヤーの配置モンスターのうち、立っている土地と属性が合わないものをランダムに2体まで手札に戻す（該当が1体なら1体、0体なら何も起きない）'),
+    // 専用画像がまだ無い間は、存在しないJPGを読みに行かず共通スペル絵を使う。
+    imageDataUrl: null,
+  },
   poisonMist: spell(
     'poisonMist',
     '毒霧',
