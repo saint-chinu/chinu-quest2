@@ -21,6 +21,7 @@ const { NPC_PORTRAIT_URL, NPC_TOKEN_URL } = await vite.ssrLoadModule('/src/npcAr
 const hadWindow = 'window' in globalThis;
 if (!hadWindow) globalThis.window = { addEventListener() {} };
 const { TRACK_SRC, MAP_TRACK, SELECTABLE_BGM } = await vite.ssrLoadModule('/src/audio.js');
+const { computePlayerSlots } = await vite.ssrLoadModule('/src/playerPanels.js');
 if (!hadWindow) delete globalThis.window;
 const { WIP_CARD_NAMES, reclaimReleasedWipHoldings, getCardCatalog } = await vite.ssrLoadModule('/src/cardCatalog.js');
 const breedParts = await vite.ssrLoadModule('/src/breedParts.js');
@@ -2289,4 +2290,51 @@ test('ギアが揃っていなければ合体もonCardSeenも起きない', () =
   assert.equal(tiles[0].unit, null);
   assert.equal(tiles[1].unit.def.name, '古代のギアB', '素材は消さない');
   assert.deepEqual(seen, []);
+});
+
+// ---- 盤面四隅のプレイヤーパネル（誰をどの隅に出すか） ----
+
+test('⑯の1vs3（敵3人が同盟）でも4人全員がパネルに出る', () => {
+  // 2026-09-01のユーザー報告「邪神ヒトデマソの手持ちG・総資産が出ていない」。
+  // 陣営ごとに[左0,右0,左1,右1]と並べるだけだと、3人目の敵がどの枠にも
+  // 入らず表示が丸ごと消えていた。
+  const players = [
+    { id: 0, name: '主人公', allianceId: null },
+    { id: 1, name: 'ウサギン', allianceId: 'chinu' },
+    { id: 2, name: 'ムール', allianceId: 'chinu' },
+    { id: 3, name: '邪神ヒトデマソ', allianceId: 'chinu' },
+  ];
+  const slots = computePlayerSlots(players);
+  assert.equal(slots.filter(Boolean).length, 4, '4隅すべて埋まる');
+  for (const player of players) {
+    assert.ok(slots.includes(player), `${player.name}がどの枠にも入っていない`);
+  }
+  assert.equal(slots[0], players[0], '主人公は左上のまま');
+});
+
+test('2vs2は従来どおり左列＝自陣営・右列＝敵陣営に並ぶ', () => {
+  const players = [
+    { id: 0, name: '主人公', allianceId: 'red' },
+    { id: 1, name: '朕', allianceId: 'red' },
+    { id: 2, name: '「彼」', allianceId: 'white' },
+    { id: 3, name: '段ボール男', allianceId: 'white' },
+  ];
+  const slots = computePlayerSlots(players);
+  assert.deepEqual(slots.map((p) => p.name), ['主人公', '「彼」', '朕', '段ボール男']);
+});
+
+test('同盟なし（FFA）は手番順のまま4隅へ', () => {
+  const players = [0, 1, 2, 3].map((id) => ({ id, name: `P${id}`, allianceId: null }));
+  assert.deepEqual(computePlayerSlots(players).map((p) => p.name), ['P0', 'P1', 'P2', 'P3']);
+});
+
+test('1vs1は2枠だけ埋まり、残りは空のまま', () => {
+  const slots = computePlayerSlots([
+    { id: 0, name: '主人公', allianceId: null },
+    { id: 1, name: '川田', allianceId: null },
+  ]);
+  assert.equal(slots[0].name, '主人公');
+  assert.equal(slots[1].name, '川田');
+  assert.equal(slots[2], undefined);
+  assert.equal(slots[3], undefined);
 });

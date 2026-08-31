@@ -61,6 +61,7 @@ import {
   updatePvpPresence,
 } from './pvpFriends.js';
 import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted, playSfx, allowMusicPlayback, blockMusicPlayback, setBgmOverride, SELECTABLE_BGM, bgmTitleOf } from './audio.js';
+import { computePlayerSlots } from './playerPanels.js';
 import { getSpeedMultiplier, setSpeedMultiplier, getWaitCutRate, setWaitCutRate, tween, easeInOutQuad } from './utils.js';
 import { pvpQueueAnimationScale } from './pvpQueue.js';
 
@@ -1274,35 +1275,6 @@ function cardColor(card) {
 
 function hexColor(colorInt) {
   return `#${colorInt.toString(16).padStart(6, '0')}`;
-}
-
-/**
- * Maps players to the 4 HUD corner slots [TL, TR, BL, BR].
- * No alliances: turn order fills TL, TR, then wraps to BL (under TL) and
- * BR (under TR). With alliances: the team containing the first-turn player
- * takes the left column (leader TL, teammates stacked under at BL), the
- * next team takes the right column the same way - turn order within a
- * team doesn't matter for placement.
- */
-function computePlayerSlots(players) {
-  const hasAlliances = players.some((p) => p.allianceId != null);
-  if (!hasAlliances) {
-    return [players[0], players[1], players[2], players[3]];
-  }
-
-  const teams = [];
-  const teamIndexByKey = new Map();
-  for (const p of players) {
-    const key = p.allianceId ?? `solo-${p.id}`;
-    if (!teamIndexByKey.has(key)) {
-      teamIndexByKey.set(key, teams.length);
-      teams.push([]);
-    }
-    teams[teamIndexByKey.get(key)].push(p);
-  }
-
-  const [left = [], right = []] = teams;
-  return [left[0], right[0], left[1], right[1]];
 }
 
 /** プレイヤー名の下に出すチェックポイント通過状況の番号列（暗い数字→そのチェックポイントを通過すると点灯）。checkpointNumbersが空/未指定（チェックポイントの無いマップ・データが来る前の初期フレーム等）なら何も出さない。 */
