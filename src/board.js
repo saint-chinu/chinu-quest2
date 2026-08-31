@@ -315,6 +315,19 @@ const KAWADA_ROWS = [
   'CMMMTTTC',
 ];
 
+// ⑯魚群の王チヌ（ユーザー指定）。**1行20マスの一直線**。
+// `G火火水水森森雷雷無無森森水水雷雷火火C`。
+// ⚠️ **ループしていない**（両端が行き止まり）が、それで正しい。`_movePlayer`は
+// `forward`（来た道を除いた隣接）が空になると`neighbors`へフォールバックして
+// 折り返すので、G↔Cの往復盤面になる（＝片道1回で「半周」）。CPが終端の1マス
+// だけなので、requireAllCheckpointsと合わせて「一度は最奥まで行かないと
+// ゴールできない」が自然に成立する。
+// 属性は火水森雷が各4マス＋無属性2マスで、どの属性のデッキでも同じだけ
+// 土地がある（敵3体が森/水/無で分かれているため）。
+const CHINU_ROWS = [
+  'GFFWWMMTTNNMMWWTTFFC',
+];
+
 /**
  * ⑬の島判定。上段は3列に分かれた周回島（gridXの帯で見分ける）、
  * gridZ 8以降がゴール島。ワープの飛び先候補（ゴール島⇔CP島の往復だけ。
@@ -381,6 +394,9 @@ export const MAPS = [
   // ストーリー用の背景・立ち絵・盤面駒まで実装済み。対戦モードへは
   // バランス調整完了後にこちらのwipを外して公開する。
   { id: 'kawada', name: '⑮ 是々非々のマーモット（自称）', wip: true, rows: KAWADA_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage15-kawada-alley.png'), spacing: 2.8 },
+  // ⑯はストーリー専用。1行20マスの細長い盤面なので対戦モードへ出す前提が
+  // 無く、wipは外さない想定。背景は専用の「王の間」（海中の玉座の間）。
+  { id: 'chinu', name: '⑯ 魚群の王チヌ', wip: true, rows: CHINU_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/king-room.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {

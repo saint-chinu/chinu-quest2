@@ -24,6 +24,9 @@ export const NPC_PORTRAIT_URL = {
   クエ: assetUrl('/images/npc-portraits/que.png?v=2'),
   '塞ぎ込んだ男': assetUrl('/images/npc-portraits/fusagikonda-otoko.png'),
   川田: assetUrl('/images/npc-portraits/kawada.png'),
+  // ⑯の魚群の王チヌ。盤面には出ない（高みの見物）ので立ち絵だけで、
+  // NPC_TOKEN_URL側は不要。
+  '魚群の王': assetUrl('/images/npc-portraits/chinu-king.png'),
   'ウサギン': assetUrl('/images/npc-portraits/usagin.webp'),
   'ヒトデ': assetUrl('/images/npc-portraits/hitode.webp'),
 };

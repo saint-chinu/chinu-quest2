@@ -48,6 +48,7 @@ import {
   publishPrivateHand,
   finishPvpRoom,
   beginPvpMatch,
+  setPvpRoomBgmTrack,
 } from './pvp.js';
 import {
   dismissPvpInvite,
@@ -59,7 +60,7 @@ import {
   sendPvpInvite,
   updatePvpPresence,
 } from './pvpFriends.js';
-import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted, playSfx, allowMusicPlayback, blockMusicPlayback } from './audio.js';
+import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted, playSfx, allowMusicPlayback, blockMusicPlayback, setBgmOverride, SELECTABLE_BGM, bgmTitleOf } from './audio.js';
 import { getSpeedMultiplier, setSpeedMultiplier, getWaitCutRate, setWaitCutRate, tween, easeInOutQuad } from './utils.js';
 import { pvpQueueAnimationScale } from './pvpQueue.js';
 
@@ -2142,6 +2143,61 @@ async function promptGoalAchieved({ position, playerName }) {
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
 }
 
+/**
+ * ⑯の開始バナー。盤面は見えているが最初の手番はまだ始まっていない状態で、
+ * 2行（タイトル／煽り）を大きく出す。クリックで即閉じられる。
+ */
+function showEventBattleBanner(lines) {
+  playSfx('ominous');
+  const banner = document.createElement('div');
+  banner.className = 'fx-event-battle';
+  const [headingText, detailText] = Array.isArray(lines) ? lines : [String(lines || ''), ''];
+  const heading = document.createElement('strong');
+  heading.textContent = headingText || '';
+  const detail = document.createElement('span');
+  detail.textContent = detailText || '';
+  banner.append(heading, detail);
+  fxLayer.appendChild(banner);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      banner.remove();
+      document.removeEventListener('pointerdown', finish, true);
+      resolve();
+    };
+    const timer = setTimeout(finish, 3200);
+    // 直前の操作（デッキ選択の確定・横持ち確認の「完了」）から続けて指が
+    // 触れていた場合に即閉じしないよう、最初の500msだけ入力を無視する。
+    setTimeout(() => {
+      if (!settled) document.addEventListener('pointerdown', finish, true);
+    }, 500);
+  });
+}
+
+/**
+ * 画面全体を黒へ落とす転換演出（⑯の敗北エンド用）。返り値の`fadeOut()`で
+ * 明けるまでが1セット。**pointer-events: noneにしてある**ので、途中で例外が
+ * 出て取り残されても操作を塞がない（最悪でも黒い膜が残るだけ）。
+ */
+async function playBlackoutTransition(holdMs = 900) {
+  const overlay = document.createElement('div');
+  overlay.className = 'story-blackout';
+  document.body.appendChild(overlay);
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  overlay.classList.add('show');
+  await new Promise((resolve) => setTimeout(resolve, 1000 + holdMs));
+  return {
+    async fadeOut() {
+      overlay.classList.remove('show');
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      overlay.remove();
+    },
+  };
+}
+
 function finishSpellPresentation() {
   spellEffectModal.classList.add('hidden');
   setSpellPresentationActive(false);
@@ -3526,6 +3582,7 @@ function startBattle(character, storyOptions = {}) {
     tutorialOpeningCardIds: storyOptions.tutorialOpeningCardIds ?? [],
     tutorialDiceQueues: storyOptions.tutorialDiceQueues ?? null,
     storyAssistEvent: storyOptions.storyAssistEvent ?? null,
+    heroGoesLast: storyOptions.heroGoesLast ?? false,
     playerConfigs: storyOptions.playerConfigs,
     humanPlayer: storyOptions.playerConfigs
       ? undefined
@@ -3543,6 +3600,9 @@ function startBattle(character, storyOptions = {}) {
 
   if (!storyOptions.deferInit) startedGame.init(storyOptions.resumeState || null);
   allowMusicPlayback();
+  // 対人戦だけホストが選んだ曲で上書きする。ストーリー／CPU戦はbgmTrackを
+  // 渡さない＝必ずnullで呼ばれ、前の対戦の選曲を持ち越さない。
+  setBgmOverride(storyOptions.bgmTrack ?? null);
   playMapTheme(currentMapId);
   requestAnimationFrame(animate);
   return startedGame;
@@ -4129,6 +4189,7 @@ const pvpMapSelectBack = document.getElementById('pvp-map-select-back');
 const pvpMapConfirmModal = document.getElementById('pvp-map-confirm-modal');
 const pvpMapConfirmThumb = document.getElementById('pvp-map-confirm-thumb');
 const pvpMapConfirmText = document.getElementById('pvp-map-confirm-text');
+const pvpBgmSelect = document.getElementById('pvp-bgm-select');
 const pvpMapConfirmYes = document.getElementById('pvp-map-confirm-yes');
 const pvpMapConfirmNo = document.getElementById('pvp-map-confirm-no');
 const breedScreen = document.getElementById('breed-screen');
@@ -5677,6 +5738,15 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
       };
     }
   }
+  // ⑯のように「味方は来ないが盤面を止めて会話だけ挟む」割り込みイベント。
+  // 味方参戦（midBattleAssist）とは別フィールドで、allyConfigを持たない。
+  if (!isReplay && !storyAssistEvent && stage.midBattleEvent) {
+    storyAssistEvent = {
+      enemyAssetsAtLeast: stage.midBattleEvent.enemyAssetsAtLeast,
+      allyConfig: null,
+      lines: stage.midBattleEvent.lines || [],
+    };
+  }
 
   await confirmLandscapeReady();
 
@@ -5699,11 +5769,16 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
           speaker === '主人公' ? iconDataUrl : npcPortraitUrl(speaker),
         ]),
       );
+      // 左右の立ち絵はステージごとに違う（⑪＝闇・ホフク／サーティー、
+      // ⑯＝魚群の王／主人公）。指定が無ければ従来の⑪の並びのまま。
+      const overlay = stage.midBattleEvent?.overlay;
+      const leftName = overlay?.leftName ?? '闇・ホフク';
+      const rightName = overlay?.rightName ?? 'サーティー';
       await playOverlayDialogueLines(event.lines || [], {
-        leftName: '闇・ホフク',
-        leftPortraitUrl: npcPortraitUrl('闇・ホフク'),
-        rightName: 'サーティー',
-        rightPortraitUrl: npcPortraitUrl('サーティー'),
+        leftName,
+        leftPortraitUrl: leftName === '主人公' ? iconDataUrl : npcPortraitUrl(leftName),
+        rightName,
+        rightPortraitUrl: rightName === '主人公' ? iconDataUrl : npcPortraitUrl(rightName),
         speakerSides: stage.overlaySpeakerSides,
         speakerPortraitUrls,
         heroPortraitUrl: iconDataUrl,
@@ -5711,9 +5786,23 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
       });
     },
     storyAssistEvent,
-    deferInit: !resumeState && !isReplay && !!(stage.overlayNpc || stage.boardDialogue),
+    heroGoesLast: !!stage.heroGoesLast,
+    // 会話オーバーレイ（①②⑪）と開始バナー（⑯）はどちらも「盤面は見せるが
+    // 最初の手番はまだ始めない」演出なので、初手のドロー/CPU行動を止める。
+    deferInit: !resumeState && !isReplay && !!(stage.overlayNpc || stage.boardDialogue || stage.eventBattleBanner),
     resumeState,
   });
+
+  // ⑯: 盤面表示直後に「イベントバトル！！／何があっても諦めるな！」の
+  // 大バナーを出してから最初の手番を始める。
+  if (!resumeState && !isReplay && stage.eventBattleBanner) {
+    await showEventBattleBanner(stage.eventBattleBanner);
+    // 会話演出と同じ理由のガード: バナー表示中に別の盤面へ移っていたら、
+    // グローバルgameは既に別物なので二重initしない。
+    if (game !== startedGame || startedGame._isCancelled) return;
+    startedGame.init();
+    return;
+  }
 
   // overlayNpc持ちのステージ（①②）だけ: 盤面が表示された直後、その上に
   // 会話をオーバーレイする（盤面は隠さない）。サイコロ等の操作はオーバー
@@ -5938,6 +6027,25 @@ async function handleStoryBattleEnd(index, result = {}) {
   latestStoryCheckpoint = null;
 
   if (!won) {
+    // ⑯: 負けても「クリア扱い」にするステージ（チヌに地下へ落とされる＝
+    // ⑰への導入そのものが敗北エンド）。専用の敗北会話→暗転→進行度更新。
+    // 勝った時（隠しルート）は下の通常フローでstage.outroが出る。
+    if (stage.clearOnDefeat) {
+      showScreen(storyDialogueScreen);
+      await playDialogueLines(stage.defeatOutro || [], {
+        background: getMapBackground(stage.key),
+        stageBadgeText: `STORY${stage.title}`,
+      });
+      const blackout = await playBlackoutTransition();
+      if (index + 1 > (currentCharacter.storyProgress || 0)) {
+        currentCharacter.storyProgress = index + 1;
+      }
+      saveCharacter(currentUserId, currentCharacter);
+      showStoryScreen();
+      await blackout.fadeOut();
+      showToast(`ストーリー報酬として${mReward.earnedM}M獲得しました`, 2400);
+      return;
+    }
     showScreen(storyDialogueScreen);
     await playDialogueLines(
       [{ speaker: '???', text: '力及ばず、敗れてしまった……もう一度挑もう。' }],
@@ -8578,7 +8686,8 @@ function enterPvpRoomScreen(session) {
       }
       return;
     }
-    pvpRoomSettings.textContent = `ステージ: ${MAPS.find((map) => map.id === room.mapId)?.name || room.mapId} / 目標G: ${Number(room.goalCurrency || 5000).toLocaleString('ja-JP')}G`;
+    const bgmLabel = bgmTitleOf(room.bgmTrack) || 'ステージ標準';
+    pvpRoomSettings.textContent = `ステージ: ${MAPS.find((map) => map.id === room.mapId)?.name || room.mapId} / 目標G: ${Number(room.goalCurrency || 5000).toLocaleString('ja-JP')}G / BGM: ${bgmLabel}`;
     if (room.allianceMode) {
       const names = normalizePvpParticipants(room).map((p) => p.name).filter(Boolean);
       if (room.randomAlliance) {
@@ -8627,9 +8736,26 @@ function showPvpMapSelectScreen() {
   showScreen(pvpMapSelectScreen);
 }
 
+// BGMプルダウンの中身。曲はaudio.jsのSELECTABLE_BGMが唯一の定義元で、
+// 先頭に「マップ標準（＝そのステージ本来の曲）」を置く。
+function fillPvpBgmSelect() {
+  if (pvpBgmSelect.options.length) return; // 初回のみ
+  const auto = document.createElement('option');
+  auto.value = '';
+  auto.textContent = 'ステージ標準';
+  pvpBgmSelect.appendChild(auto);
+  for (const entry of SELECTABLE_BGM) {
+    const option = document.createElement('option');
+    option.value = entry.track;
+    option.textContent = entry.title;
+    pvpBgmSelect.appendChild(option);
+  }
+}
+
 function showPvpMapConfirm(map) {
   pvpMapConfirmThumb.replaceChildren(createMapThumbnailCanvas(map.id, 16));
   pvpMapConfirmText.textContent = `「${map.name}」で遊びますか？`;
+  fillPvpBgmSelect();
   pvpMapConfirmModal.classList.remove('hidden');
 
   function cleanup() {
@@ -8648,7 +8774,11 @@ function showPvpMapConfirm(map) {
       const cpuNames = pvpCpuSelects.map((select) => select.value).filter(Boolean).slice(0, playerCount - 1);
       const characterIcon = await resolveCharacterIcon(currentCharacter);
       const iconDataUrl = compactCharacterIconDataUrl(characterIcon);
+      const bgmTrack = pvpBgmSelect.value || '';
       const session = await createPvpRoom({ name: currentCharacter.name, color: currentCharacter.color, iconDataUrl, mapId: map.id, goalCurrency, playerCount, allianceMode, randomAlliance, cpuNames });
+      // 選曲は部屋作成の直後に追記する（理由はpvp.jsのsetPvpRoomBgmTrack参照）。
+      // 失敗しても対戦は成立するので、ステージ標準の曲へ落として続行する。
+      if (bgmTrack) await setPvpRoomBgmTrack(session.roomCode, bgmTrack).catch((error) => console.warn('BGMの選択を保存できませんでした', error));
       enterPvpRoomScreen(session);
     } catch (error) {
       console.error('PvP room creation failed:', error);
@@ -9634,6 +9764,8 @@ async function startPvpGuestBattle() {
   }
   requestAnimationFrame(animate);
   allowMusicPlayback();
+  // ゲストはstartBattleを通らないので、ホストの選曲をここで自分で反映する。
+  setBgmOverride(pvpLastRoom?.bgmTrack || null);
   playMapTheme(currentMapId);
 
   // 旧リスナーはここで破棄し、最初のpublicStateを盤面に反映した後に
@@ -9821,6 +9953,7 @@ pvpRoomStart.addEventListener('click', async () => {
   startBattle(currentCharacter, {
     mapId: pvpLastRoom.mapId,
     goalCurrency: pvpLastRoom.goalCurrency || 5000,
+    bgmTrack: pvpLastRoom.bgmTrack || null,
     playerConfigs,
     // 対人戦も目標総資産到達＋ゴール、または生存陣営確定で決着させる。
     storyMode: true,

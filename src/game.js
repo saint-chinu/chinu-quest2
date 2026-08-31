@@ -239,6 +239,7 @@ export class Game {
     tutorialCpuScript = [],
     onTutorialEvent = null,
     storyAssistEvent = null,
+    heroGoesLast = false,
   }) {
     this.tiles = tiles;
     this.mapId = mapId;
@@ -326,6 +327,9 @@ export class Game {
     this.onCardSeen = onCardSeen;
     this.storyAssistEvent = storyAssistEvent;
     this.storyAssistTriggered = false;
+    // ⑯: 先攻をランダム抽選せず、人間を必ず最後の手番にする（story.jsの
+    // heroGoesLast）。実際の適用はplayers構築後（currentPlayerIndexの初期化）。
+    this.heroGoesLast = heroGoesLast;
     // ストーリー途中保存用。操作可能な安全地点だけをmain.jsへ渡す。
     this.onResumeCheckpoint = onResumeCheckpoint;
     // 対人戦(PvP)ホスト側のみ使う: _notifyStateのたびに盤面全体のスナップ
@@ -501,9 +505,15 @@ export class Game {
     });
     // 盤面開始時に一度だけ先攻を抽選し、以後はこの順番を固定する。
     // プレイヤーIDや同盟順は変えず、ホスト／ゲストの同期も壊さない。
+    // heroGoesLast: 人間の「次」から始める＝1巡目で人間が最後になる。
+    // プレイヤーIDや配列順そのものは変えないので、対人戦の同期・同盟の
+    // 並びには影響しない（ランダム抽選をやめるだけ）。
+    const humanIndex = this.players.findIndex((player) => !player.isCPU);
     this.currentPlayerIndex = this.tutorialMode
-      ? Math.max(0, this.players.findIndex((player) => !player.isCPU))
-      : Math.floor(Math.random() * this.players.length);
+      ? Math.max(0, humanIndex)
+      : this.heroGoesLast && humanIndex >= 0
+        ? (humanIndex + 1) % this.players.length
+        : Math.floor(Math.random() * this.players.length);
     this._assignGoalStarts(resolvedConfigs);
     this.isBusy = false;
     this.tilesSincePan = 0;
@@ -628,22 +638,33 @@ export class Game {
     return player;
   }
 
+  /**
+   * 盤面途中の割り込みイベント。発火条件は2種類あり、ステージ側がどちらかを指定する:
+   * - `ratio`（⑪のmidBattleAssist）: 敵の総資産が主人公の`ratio`倍以上に開いた時。
+   * - `enemyAssetsAtLeast`（⑯のmidBattleEvent）: 敵の**誰か1人**の総資産が
+   *   その絶対値に届いた時。⑯は目標5,000Gに対して4,000Gで発火する。
+   * `allyConfig`が無いイベントは会話だけで終わる（味方は参戦しない）。
+   */
   async _maybeTriggerStoryAssistEvent() {
     const event = this.storyAssistEvent;
     if (!event || this.storyAssistTriggered || this.storyEnded || this._isCancelled) return;
     const human = this.players.find((player) => !player.isCPU && !player.defeated);
     if (!human) return;
-    const enemy = this.players.find((player) => (
+    const enemies = this.players.filter((player) => (
       !player.defeated && player.id !== human.id
       && !(player.allianceId != null && player.allianceId === human.allianceId)
     ));
-    if (!enemy) return;
-    const heroAssets = Math.max(1, this._totalAssetsOf(human));
-    const enemyAssets = this._totalAssetsOf(enemy);
-    if (enemyAssets < heroAssets * (event.ratio || 2.5)) return;
+    if (!enemies.length) return;
+    if (event.enemyAssetsAtLeast != null) {
+      if (!enemies.some((enemy) => this._totalAssetsOf(enemy) >= event.enemyAssetsAtLeast)) return;
+    } else {
+      const heroAssets = Math.max(1, this._totalAssetsOf(human));
+      if (this._totalAssetsOf(enemies[0]) < heroAssets * (event.ratio || 2.5)) return;
+    }
     this.storyAssistTriggered = true;
     await this.onStoryAssistEvent(event);
     if (this._isCancelled || this.storyEnded) return;
+    if (!event.allyConfig) return;
     const added = this._addStoryAssistPlayer(event.allyConfig);
     this.onLog(`${added.name}が紅組に参戦した！`);
   }

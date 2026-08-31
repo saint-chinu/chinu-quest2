@@ -1217,6 +1217,88 @@ export const CHARACTER_DECKS = {
       ],
     },
   },
+  /**
+   * ⑯「魚群の王チヌ」の下僕3体（ウサギン／ムール／邪神ヒトデマソ）の専用デッキ。
+   * ①〜⑮で使う`usagin`/`muuru`/`hitodemaso`とは別キーなので、既存ステージの
+   * 難度には一切影響しない。
+   *
+   * 設計方針（2026-08 ユーザー指定）: ⑯は**強制敗北にしない**（勝った時の隠し
+   * イベントがあるため）。1vs3という人数差そのものが壁なので、勝てなくする
+   * 仕掛けは足さず、**デッキの地力だけで「ほぼ勝てない」を作る**。
+   * - 3人とも`fireball`4／`senbonZakura`3で主人公のモンスターを焼き続ける。
+   * - 3人とも`backfire`2／`diceOne`2を持ち、既存の妨害AI
+   *   （`_cpuMaybeUseReverseDiceSpell`等）でゴールを遠ざける。交代で撃つ等の
+   *   専用スクリプトは持たせない＝プレイヤー側の工夫で崩せる余地を残す。
+   * - 自分たちは`iCanFly`／`homingInstinct`で周回を稼ぐ。
+   * - モンスターは各属性の上澄み。`chainRequired`持ちは1人4〜5枚までに抑える
+   *   （⑯の想定盤面は属性ごとに4マスしかなく、連鎖待ちで手札が詰まるため）。
+   *   `rainbowChameleon`は属性を問わずHPボーナスが乗るので3人とも採用。
+   */
+  chinuUsagin: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.yamagami, count: 2 }, { def: MONSTER_CATALOG.moriNoYousei, count: 2 },
+        { def: MONSTER_CATALOG.mountGorilla, count: 2 }, { def: MONSTER_CATALOG.jukaiNoOnryou, count: 3 },
+        { def: MONSTER_CATALOG.nazoNoKyotou, count: 2 }, { def: MONSTER_CATALOG.matagiNoKoshirou, count: 2 },
+        { def: MONSTER_CATALOG.saboriTender, count: 2 }, { def: MONSTER_CATALOG.kyochinhei, count: 1 },
+        { def: MONSTER_CATALOG.rainbowChameleon, count: 3 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.gomuGoNoPistol, count: 2 }, { def: ITEM_CATALOG.zangokuKen, count: 1 },
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 1 }, { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.fireball, count: 4 }, { def: SPELL_CATALOG.senbonZakura, count: 3 },
+        { def: SPELL_CATALOG.backfire, count: 2 }, { def: SPELL_CATALOG.diceOne, count: 2 },
+        { def: SPELL_CATALOG.iCanFly, count: 2 }, { def: SPELL_CATALOG.homingInstinct, count: 1 },
+        { def: SPELL_CATALOG.forestMagicCircle, count: 1 }, { def: SPELL_CATALOG.realEstateAppraiser, count: 1 },
+      ],
+    },
+  },
+  chinuMuuru: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.bigMermaid, count: 2 }, { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 3 },
+        { def: MONSTER_CATALOG.suijin, count: 1 }, { def: MONSTER_CATALOG.uminoieTencho, count: 1 },
+        { def: MONSTER_CATALOG.kaikyouSekishoKurage, count: 1 }, { def: MONSTER_CATALOG.tsurara, count: 2 },
+        { def: MONSTER_CATALOG.aoriika, count: 2 }, { def: MONSTER_CATALOG.ryanmenSukuna, count: 2 },
+        { def: MONSTER_CATALOG.shinkaiCleaner, count: 1 }, { def: MONSTER_CATALOG.yukiOnna, count: 1 },
+        { def: MONSTER_CATALOG.rainbowChameleon, count: 3 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.iceSlugger, count: 2 }, { def: ITEM_CATALOG.zangokuKen, count: 1 },
+        { def: ITEM_CATALOG.lifeJacket, count: 1 }, { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.fireball, count: 4 }, { def: SPELL_CATALOG.senbonZakura, count: 3 },
+        { def: SPELL_CATALOG.backfire, count: 2 }, { def: SPELL_CATALOG.diceOne, count: 2 },
+        { def: SPELL_CATALOG.iCanFly, count: 1 }, { def: SPELL_CATALOG.homingInstinct, count: 2 },
+        { def: SPELL_CATALOG.waterMagicCircle, count: 1 }, { def: SPELL_CATALOG.realEstateAppraiser, count: 1 },
+      ],
+    },
+  },
+  chinuHitodemaso: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.kontonNoAtama, count: 3 }, { def: MONSTER_CATALOG.kyousenshi, count: 3 },
+        { def: MONSTER_CATALOG.ninja, count: 3 }, { def: MONSTER_CATALOG.netBenkei, count: 2 },
+        { def: MONSTER_CATALOG.mysteriousInvader, count: 2 }, { def: MONSTER_CATALOG.kugutsuNoKengou, count: 2 },
+        { def: MONSTER_CATALOG.sentinel, count: 1 }, { def: MONSTER_CATALOG.kunekune, count: 1 },
+        { def: MONSTER_CATALOG.rainbowChameleon, count: 2 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 2 }, { def: ITEM_CATALOG.twinHammer, count: 1 },
+        { def: ITEM_CATALOG.zangokuKen, count: 1 }, { def: ITEM_CATALOG.lifeJacket, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.fireball, count: 4 }, { def: SPELL_CATALOG.senbonZakura, count: 3 },
+        { def: SPELL_CATALOG.backfire, count: 2 }, { def: SPELL_CATALOG.diceOne, count: 2 },
+        { def: SPELL_CATALOG.iCanFly, count: 1 }, { def: SPELL_CATALOG.homingInstinct, count: 1 },
+        { def: SPELL_CATALOG.forcedAscension, count: 1 }, { def: SPELL_CATALOG.psychokinesis, count: 1 },
+        { def: SPELL_CATALOG.neutralMagicCircle, count: 1 },
+      ],
+    },
+  },
   hofuku: {
     composition: {
       monsters: [

@@ -15,6 +15,13 @@ const battle = await vite.ssrLoadModule('/src/battle.js');
 const { TileType, MAPS, createBoard } = await vite.ssrLoadModule('/src/board.js');
 const { STORY_STAGES } = await vite.ssrLoadModule('/src/story.js');
 const { NPC_PORTRAIT_URL, NPC_TOKEN_URL } = await vite.ssrLoadModule('/src/npcArt.js');
+// audio.jsはトップレベルでwindow.addEventListenerを呼ぶ（自動再生アンロック用）
+// のでNode上ではそのままでは読めない。読み込む間だけ最小のwindowを差し込み、
+// 直後に必ず消す（他モジュールのtypeof window判定を汚さないため）。
+const hadWindow = 'window' in globalThis;
+if (!hadWindow) globalThis.window = { addEventListener() {} };
+const { TRACK_SRC, MAP_TRACK, SELECTABLE_BGM } = await vite.ssrLoadModule('/src/audio.js');
+if (!hadWindow) delete globalThis.window;
 const { WIP_CARD_NAMES, reclaimReleasedWipHoldings, getCardCatalog } = await vite.ssrLoadModule('/src/cardCatalog.js');
 const breedParts = await vite.ssrLoadModule('/src/breedParts.js');
 test.after(() => vite.close());
@@ -2100,4 +2107,135 @@ test('ステージ15(川田)は専用マップ・会話・デッキへ正しく�
   }
   assert.equal(joined.split('G').length - 1, 1, 'スタートは1か所');
   assert.equal(joined.split('C').length - 1, 3, 'CPは3か所');
+});
+
+// ---- ⑯「魚群の王チヌ」（1vs3・絶対敗北にしないイベントバトル） ----
+
+test('BGMの参照先mp3はすべてpublic/audio/に実在する', () => {
+  // ファイルが無いとplay()が黙って失敗し、そのステージだけ無音になる
+  // （例外も出ないので気づきにくい）。参照とファイルのズレをここで止める。
+  for (const [track, url] of Object.entries(TRACK_SRC)) {
+    const file = new URL(`../public${new URL(url, 'http://x').pathname}`, import.meta.url);
+    assert.ok(existsSync(file), `${track}のBGMが存在しない: ${url}`);
+  }
+  // MAP_TRACK・対人戦の選択肢が実在しないキーを指していないこと。
+  for (const [mapId, track] of Object.entries(MAP_TRACK)) {
+    assert.ok(TRACK_SRC[track], `MAP_TRACK['${mapId}']のトラック'${track}'がTRACK_SRCに無い`);
+  }
+  for (const entry of SELECTABLE_BGM) {
+    assert.ok(TRACK_SRC[entry.track], `対人戦のBGM選択'${entry.title}'のトラックがTRACK_SRCに無い`);
+    assert.match(entry.title, /^♪/, '曲名は♪始まりで揃える');
+  }
+});
+
+test('⑯のステージBGMは専用曲（stage16bgm.mp3）', () => {
+  assert.equal(MAP_TRACK.chinu, 'chinu');
+  assert.match(TRACK_SRC.chinu, /\/audio\/stage16bgm\.mp3$/);
+  assert.ok(SELECTABLE_BGM.some((entry) => entry.track === 'chinu'), '対人戦のBGM選択にも並べる');
+});
+
+test('⑯の専用素材（チヌの立ち絵・王の間の背景）が揃っている', () => {
+  assert.match(NPC_PORTRAIT_URL['魚群の王'], /\/images\/npc-portraits\/chinu-king\.png$/);
+  const portraitFile = new URL('../public/images/npc-portraits/chinu-king.png', import.meta.url);
+  assert.ok(existsSync(portraitFile), 'チヌの立ち絵が存在しない');
+  // PNGのIHDR color type=6はRGBA。白背景を焼き込んだ不透明画像へ戻る事故を防ぐ。
+  assert.equal(readFileSync(portraitFile)[25], 6, 'チヌの立ち絵は実アルファ透過PNGであること');
+  // チヌは高みの見物で対戦に参加しない＝盤面駒は用意しない。
+  assert.equal(NPC_TOKEN_URL['魚群の王'], undefined);
+
+  // 背景は⑯専用の「王の間」。⑦の法廷絵を仮流用していた状態へ戻さない。
+  const map = MAPS.find((entry) => entry.id === 'chinu');
+  assert.match(map.background, /\/images\/stage\/king-room\.png$/);
+  const backgroundFile = new URL('../public/images/stage/king-room.png', import.meta.url);
+  assert.ok(existsSync(backgroundFile), '王の間の背景が存在しない');
+});
+
+test('⑯はステージ・マップ・敵3体の専用デッキが揃っている', () => {
+  const stage = STORY_STAGES.find((entry) => entry.key === 'chinu');
+  const map = MAPS.find((entry) => entry.id === 'chinu');
+  assert.ok(stage && map, 'ステージ・マップが両方見つからない');
+  assert.equal(stage.goalCurrency, 5000);
+  assert.deepEqual(stage.opponents.map((o) => o.name), ['ウサギン', 'ムール', '邪神ヒトデマソ']);
+  assert.deepEqual(stage.opponents.map((o) => o.deckKey), ['chinuUsagin', 'chinuMuuru', 'chinuHitodemaso']);
+  for (const opponent of stage.opponents) {
+    assert.equal(buildCharacterDeckList(opponent.deckKey).length, 40, `${opponent.name}のデッキは40枚`);
+    // buildBattlePlayerConfigsがopponent.theme.elementsを無条件で読むので必須。
+    assert.ok(Array.isArray(opponent.theme?.elements), `${opponent.name}にthemeが無い`);
+    // ⑯の下僕は共通で焼き札7枚＋バックファイア2＋1のダイス2。
+    const names = buildCharacterDeckList(opponent.deckKey).map((card) => card.name);
+    const count = (name) => names.filter((entry) => entry === name).length;
+    assert.equal(count('ファイヤーボール'), 4);
+    assert.equal(count('千本桜'), 3);
+    assert.equal(count('バックファイア'), 2);
+    assert.equal(count('1のダイス'), 2);
+  }
+  // 既存ステージのデッキを流用していない＝①〜⑮の難度に影響しない。
+  assert.notEqual(stage.opponents[0].deckKey, 'usagin');
+});
+
+test('⑯は3vs1: 下僕3体が同盟、主人公は単独', () => {
+  const stage = STORY_STAGES.find((entry) => entry.key === 'chinu');
+  // ユーザー指定（2026-09-01）。_totalAssetsOfは同盟内の総資産を合算するので、
+  // 敵側は3人ぶんの資産で目標へ届く＝主人公が圧倒的不利になる。
+  assert.equal(stage.heroAllianceId ?? null, null, '主人公は単独');
+  assert.ok(stage.enemyAllianceId, '下僕3体は同じ陣営');
+  assert.equal(stage.format, '3vs1');
+});
+
+test('⑯は絶対敗北にしない: 負けてもクリア扱い＋勝てば隠しメッセージ', () => {
+  const stage = STORY_STAGES.find((entry) => entry.key === 'chinu');
+  assert.equal(stage.clearOnDefeat, true);
+  assert.ok(stage.defeatOutro?.length, '敗北エンドの会話が必要');
+  assert.ok(stage.outro?.length, '勝利時（隠しルート）の会話が必要');
+  assert.equal(stage.heroGoesLast, true, '主人公は最後の手番');
+  assert.equal(stage.eventBattleBanner?.length, 2, '開始バナーは2行');
+  assert.equal(stage.midBattleEvent?.enemyAssetsAtLeast, 4000, '目標5,000Gの8割で割り込み会話');
+});
+
+test('⑯の盤面は1行20マスの一直線（両端が行き止まりで折り返す）', () => {
+  const map = MAPS.find((entry) => entry.id === 'chinu');
+  assert.equal(map.rows.length, 1);
+  assert.equal(map.rows[0], 'GFFWWMMTTNNMMWWTTFFC');
+  const tiles = createBoard('chinu');
+  assert.equal(tiles.length, 20);
+  assert.equal(tiles[0].type, TileType.START);
+  assert.equal(tiles[19].type, TileType.EVENT, '終端がCP＝一度は最奥まで行く必要がある');
+  // 一直線なので隣接は1（両端）か2（途中）。3以上ができていたら盤面が壊れている。
+  assert.ok(tiles.every((tile) => tile.neighbors.length >= 1 && tile.neighbors.length <= 2));
+  assert.equal(tiles.filter((tile) => tile.neighbors.length === 1).length, 2, '行き止まりは両端の2つだけ');
+  const counts = {};
+  for (const tile of tiles.filter((entry) => entry.type === TileType.LAND)) {
+    counts[tile.element] = (counts[tile.element] || 0) + 1;
+  }
+  assert.deepEqual(counts, { fire: 4, water: 4, forest: 4, thunder: 4, neutral: 2 });
+});
+
+test('⑯の割り込み会話は敵1人が4000Gに届いた時だけ、1回だけ発火する', async () => {
+  const stage = STORY_STAGES.find((entry) => entry.key === 'chinu');
+  const players = [
+    { id: 0, name: '主人公', isCPU: false, defeated: false, allianceId: null },
+    { id: 1, name: 'ウサギン', isCPU: true, defeated: false, allianceId: null },
+    { id: 2, name: 'ムール', isCPU: true, defeated: false, allianceId: null },
+  ];
+  const g = makeStub([], players);
+  const assets = new Map([[0, 900], [1, 1200], [2, 1500]]);
+  let shown = 0;
+  let allyAdded = 0;
+  Object.assign(g, {
+    storyEnded: false,
+    _isCancelled: false,
+    storyAssistTriggered: false,
+    storyAssistEvent: { enemyAssetsAtLeast: stage.midBattleEvent.enemyAssetsAtLeast, allyConfig: null, lines: stage.midBattleEvent.lines },
+    _totalAssetsOf: (player) => assets.get(player.id),
+    onStoryAssistEvent: async () => { shown += 1; },
+    _addStoryAssistPlayer: () => { allyAdded += 1; return { name: 'ally' }; },
+  });
+  await g._maybeTriggerStoryAssistEvent();
+  assert.equal(shown, 0, '4000G未満では発火しない');
+  assets.set(2, 4000);
+  await g._maybeTriggerStoryAssistEvent();
+  assert.equal(shown, 1);
+  assert.equal(allyAdded, 0, '⑯は会話だけ＝味方は参戦しない');
+  await g._maybeTriggerStoryAssistEvent();
+  assert.equal(shown, 1, '1回きり');
 });
