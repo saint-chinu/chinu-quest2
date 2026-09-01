@@ -2406,3 +2406,49 @@ test('履歴がリセットされていればバックファイアで駒は飛�
 
   assert.equal(player.tileId, 0, '履歴が尽きているのでその場に留まる（飛ばない）');
 });
+
+// ---- ネット弁慶: 盤面スケール(50)と戦闘スケール(20)の橋渡し ----
+
+test('ネット弁慶は盤面で削られた分だけ戦闘HPから引かれる', () => {
+  const fresh = unit(MONSTER_CATALOG.netBenkei, 0);
+  battle.prepareForBattle(fresh);
+  assert.equal(fresh.currentHp, 20, '無傷なら戦闘HPは上書き後の20');
+
+  const scratched = unit(MONSTER_CATALOG.netBenkei, 0);
+  scratched.currentHp = 40; // 盤面で10喰らっている（盤面スケールは50）
+  battle.prepareForBattle(scratched);
+  assert.equal(scratched.currentHp, 10, '盤面ダメージ10ぶん引かれる');
+
+  const dying = unit(MONSTER_CATALOG.netBenkei, 0);
+  dying.currentHp = 30; // 盤面で20喰らっている＝戦闘HPは0
+  battle.prepareForBattle(dying);
+  // 0にすると攻撃ループが1発も回らず無音で戦闘が終わるため下限1。
+  // 実質「開幕で相手の一撃を受けて即死」になる。
+  assert.equal(dying.currentHp, 1, '20喰らっていれば開幕1HP＝初撃で落ちる');
+});
+
+test('ネット弁慶は無傷で戦闘を終えても盤面HPが減らない', () => {
+  const harmless = { id: 'kakashi', name: 'カカシ', element: 'fire', rarity: 'N', hp: 5, atk: 0, cost: 0 };
+  const nb = unit(MONSTER_CATALOG.netBenkei, 0);
+  battle.resolveBattle(nb, unit(harmless, 1));
+  // 修正前は「戦闘スケールの20」で頭打ちにしていたため50→20に落ちていた。
+  assert.equal(nb.currentHp, 50, '一度戦っただけで盤面HPが落ちない');
+
+  const nb2 = unit(MONSTER_CATALOG.netBenkei, 0);
+  battle.resolveBattle(nb2, unit({ ...harmless, hp: 60, atk: 5 }, 1));
+  assert.equal(nb2.currentHp, 45, '戦闘で受けた5ダメージだけ盤面へ返る');
+});
+
+test('通常モンスターの盤面HP持ち越しは従来どおり（シールドは盤面HPを守る）', () => {
+  const foe = { id: 'foe', name: 'カカシ', element: 'fire', rarity: 'N', hp: 200, atk: 10, cost: 0 };
+  const ninja = unit(MONSTER_CATALOG.ninja, 0);
+  ninja.currentHp = 30; // def.hp=40 に対して10喰らっている
+  battle.resolveBattle(ninja, unit(foe, 1));
+  assert.equal(ninja.currentHp, 20, '素のHPを下回った分だけ盤面へ返る');
+
+  const armored = unit(MONSTER_CATALOG.ninja, 0);
+  armored.currentHp = 30;
+  armored.items.push(ITEM_CATALOG.heikeNoYoroi); // HP+40
+  battle.resolveBattle(armored, unit(foe, 1));
+  assert.equal(armored.currentHp, 30, 'シールドが吸った分は盤面HPを削らない');
+});

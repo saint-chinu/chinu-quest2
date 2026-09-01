@@ -235,11 +235,21 @@ function getEffect(unit, type) {
   return item ? item.effect : null;
 }
 
-/** 素の最大HP（呪い・アイテム・属性地などの一時加算を一切含まない、def由来の
- *  HP）。盤面に居る間の「持ち越しダメージ」はこのスケールで測る。ネット弁慶の
- *  statOverrideInBattleだけは素のHP自体を固定値に差し替えるので考慮する。 */
-function baseMaxHp(unit) {
-  const baseHp = unit.def.effect?.type === 'statOverrideInBattle' ? unit.def.effect.hp : unit.def.hp;
+/**
+ * 素の最大HP（呪い・アイテム・属性地などの一時加算を一切含まない、def由来のHP）。
+ * `battleScale: true`ならネット弁慶(`statOverrideInBattle`)の上書き後の値を返す。
+ *
+ * ⚠️ **盤面のスケールと戦闘のスケールを混同しないこと**（2026-09-01のユーザー
+ * 指定で整理）。ネット弁慶は**盤面では50、戦闘では20**。
+ * - 盤面スケール（既定）: 盤面HPの上限、持ち越しダメージを測る物差し。
+ * - 戦闘スケール(`battleScale`): その戦闘での素のHP。
+ * 仕様は「**盤面で削られた分を戦闘HPから引く**」＝盤面で20喰らっていれば
+ * 20-20=0で開幕即死（実際にはprepareForBattleの下限1で1HP開始→初撃で落ちる）。
+ */
+function baseMaxHp(unit, { battleScale = false } = {}) {
+  const baseHp = battleScale && unit.def.effect?.type === 'statOverrideInBattle'
+    ? unit.def.effect.hp
+    : unit.def.hp;
   // noHpBoost(くぐつの剣豪): statTotals/_baseStatsと同じ基準にしないと、
   // ここ（持ち越しダメージの基準値）だけタフネス・鋼体のHP加算を素通りさせて
   // しまい、戦闘中の実際の最大HPは据え置かれたまま基準値だけが膨らむ。
@@ -268,6 +278,9 @@ export function prepareForBattle(unit, bonus = {}) {
   // 場合も、全快させずこの値へ戻すために使う。
   unit._boardHpBeforeBattle = unit.currentHp;
   const battleMax = statTotals(unit, bonus).maxHp;
+  // 持ち越しダメージは**盤面スケール**で測る（ネット弁慶なら50基準）。
+  // これを戦闘スケール(20)で測ると、盤面で20喰らっていても
+  // max(0, 20-30)=0 となって無傷で戦闘に入れてしまう。
   const carriedDamage = Math.max(0, baseMaxHp(unit) - unit.currentHp);
   // マイナスHPアイテム（諸刃の剣-20/鉄パイプ-5）やアイテム効果2倍(Ninja)・
   // ステータス上書き(ネット弁慶)の組み合わせで最大HPが0以下になると、
@@ -278,15 +291,26 @@ export function prepareForBattle(unit, bonus = {}) {
   unit._battleMaxHp = battleMax;
 }
 
-/** 戦闘後、盤面に生き残ったユニットのcurrentHpを「素のHPスケール」へ戻す。
+/** 戦闘後、盤面に生き残ったユニットのcurrentHpを「盤面のHPスケール」へ戻す。
  *  戦闘中の一時シールド分を剥がし、受けた総ダメージだけを盤面の状態として残す
  *  ことで、次の戦闘までダメージが持ち越され、盤面表示(def.hp基準)とも一致する。 */
 function restoreOnBoardHp(unit) {
-  const boardHpBefore = Math.max(1, Math.min(baseMaxHp(unit), unit._boardHpBeforeBattle ?? unit.currentHp));
+  const boardMax = baseMaxHp(unit);
+  const boardHpBefore = Math.max(1, Math.min(boardMax, unit._boardHpBeforeBattle ?? unit.currentHp));
   // アイテム・土地レベル・応援等で増えたHPは戦闘中だけのシールド。
   // そのシールドが削れただけなら、盤面に持ち越す基礎HPは減らさない。
-  // 戦闘中HPが戦闘前の基礎HPを下回った分だけを実ダメージとして残す。
-  return Math.max(1, Math.min(boardHpBefore, unit.currentHp));
+  // ＝「素のHPを下回った分」だけを実ダメージとして盤面へ返す。
+  //
+  // ⚠️ 通常のモンスターは盤面スケール＝戦闘スケールなので、これは
+  // 従来の`min(戦闘前の盤面HP, 戦闘後HP)`と完全に同じ値になる。
+  // ネット弁慶(statOverrideInBattle)だけ両者がずれる（盤面50・戦闘20）ので、
+  // 素朴に戦闘後HPと比べると**無傷で勝っても盤面HPが50→20に落ちていた**
+  // （2026-09-01のユーザー報告）。戦闘スケールでの「素のHPからの減り分」を
+  // 求めてから盤面HPへ引く形にすれば、どちらのカードも同じ式で正しくなる。
+  const boardDamage = boardMax - boardHpBefore;
+  const unshieldedEntryHp = baseMaxHp(unit, { battleScale: true }) - boardDamage;
+  const damageTakenThisBattle = Math.max(0, unshieldedEntryHp - unit.currentHp);
+  return Math.max(1, boardHpBefore - damageTakenThisBattle);
 }
 
 /**
