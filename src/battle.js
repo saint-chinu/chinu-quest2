@@ -266,6 +266,16 @@ function baseMaxHp(unit, { battleScale = false } = {}) {
 }
 
 /**
+ * 装備前に「この戦闘の開始HP」を先読みする（盤面は一切変更しない）。
+ * game.jsが「アイテムを選ばせる前にもう死んでいるか」を判定するために使う。
+ * unit.itemsがまだ空の状態で呼ぶ前提なので、返り値は素のHP＋呪い＋土地/応援
+ * ボーナスから持ち越しダメージを引いた値になる。
+ */
+export function previewBattleEntryHp(unit, bonus = {}) {
+  return statTotals(unit, bonus).maxHp - Math.max(0, baseMaxHp(unit) - unit.currentHp);
+}
+
+/**
  * Call once right before a battle to lock in this fight's max HP.
  * 盤面に配置されている間に受けたダメージ（素の最大HPに対する不足分）は戦闘へ
  * 持ち越す（毎戦闘フル回復しない）。属性地・アイテム・呪いによるHP上乗せは
@@ -283,11 +293,14 @@ export function prepareForBattle(unit, bonus = {}) {
   // max(0, 20-30)=0 となって無傷で戦闘に入れてしまう。
   const carriedDamage = Math.max(0, baseMaxHp(unit) - unit.currentHp);
   // マイナスHPアイテム（諸刃の剣-20/鉄パイプ-5）やアイテム効果2倍(Ninja)・
-  // ステータス上書き(ネット弁慶)の組み合わせで最大HPが0以下になると、
-  // resolveBattleの攻撃ループが「currentHp > 0」ガードで全ての一撃をスキップし、
-  // 演出もダメージも撃破も出ないまま戦闘が無音で終わってしまう。最低でも1は
-  // 残し、必ず一度は戦えるようにする（諸刃の剣の"大振りできるが脆い"性質は維持）。
-  unit.currentHp = Math.max(1, battleMax - carriedDamage);
+  // ステータス上書き(ネット弁慶)の組み合わせ、盤面での持ち越しダメージにより
+  // 開始HPは0以下になりうる。**その場合は戦闘開始と同時に死亡させる**
+  // （2026-09-01のユーザー指定）。以前は下限1でごまかしていたが、それだと
+  // 「1HPで開幕して初撃で落ちる」という別の挙動になっていた。0以下のまま
+  // resolveBattleへ渡し、あちらの開幕死亡チェックで明示的に倒す
+  // （攻撃ループの`currentHp > 0`ガード任せにすると、演出も撃破も出ないまま
+  // 無音で戦闘が終わってしまうため）。
+  unit.currentHp = battleMax - carriedDamage;
   unit._battleMaxHp = battleMax;
 }
 
@@ -925,6 +938,52 @@ export function resolveBattle(attacker, defender, gold, attackerBonus = {}, defe
     `${attacker.def.name}(ATK${statTotals(attacker, attackerBonus).atk}/HP${attacker.currentHp}) vs ` +
       `${defender.def.name}(ATK${statTotals(defender, defenderBonus).atk}/HP${defender.currentHp})`
   );
+
+  // 開幕死亡（2026-09-01のユーザー指定）: 盤面での持ち越しダメージや
+  // マイナスHP装備（諸刃の剣・鉄パイプ・斬〇剣）で開始HPが0以下なら、
+  // 先手の攻撃より前にその場で倒れる。両者とも0以下なら両者死亡。
+  // 攻撃ループの`currentHp > 0`ガードに任せると一撃も再生されず無音で
+  // 終わってしまうので、専用のexchangeを積んで必ず見せる。
+  const startingDeaths = [];
+  for (const [unit, side] of [[attacker, 'attacker'], [defender, 'defender']]) {
+    if (unit.currentHp > 0) continue;
+    unit.currentHp = 0;
+    unit.curses = [];
+    startingDeaths.push({
+      // sideは「攻撃した側」を指すので、倒れる側の反対を入れる
+      // （promptBattleAttackがtargetEls＝sideの反対を被弾側として扱うため）。
+      side: side === 'attacker' ? 'defender' : 'attacker',
+      message: `${unit.def.name}は死亡した`,
+      damage: 0,
+      element: unit.def.element,
+      targetHp: 0,
+      targetDied: true,
+      targetName: unit.def.name,
+      // 攻撃モーションと属性ビームを出さず、被弾側の撃破演出だけ見せる。
+      aftermath: true,
+      special: ['HPが尽きている'],
+    });
+    log.push(`${unit.def.name}は戦闘開始と同時に力尽きた`);
+  }
+  if (startingDeaths.length > 0) {
+    attacker.items = [];
+    defender.items = [];
+    restoreSpecialAbilitySwap?.();
+    return {
+      log,
+      dmgToAttacker: 0,
+      dmgToDefender: 0,
+      attackerSurvived: attacker.currentHp > 0,
+      defenderSurvived: defender.currentHp > 0,
+      exchanges: startingDeaths,
+      itemSteals,
+      itemDestructions,
+      robberEffects: [],
+      stealEffects: [],
+      moneyGuardEffects: [],
+      startingDeath: true,
+    };
+  }
 
   const defenderGoesFirst = strikeOrderScore(defender) > strikeOrderScore(attacker);
   const first = defenderGoesFirst

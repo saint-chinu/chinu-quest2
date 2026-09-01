@@ -2,7 +2,7 @@ import { TileType, mapRequiresAllCheckpoints, mapCheckpointBonus, mapUsesAlterna
 import { PIECE_REST_Y, UNIT_ICON_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity } from './cards.js';
 import { buildStarterCardList, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf, isRewardOnlyCard } from './battleCards.js';
-import { createFieldUnit, resolveBattle, applyPreAttackItemEffects, abortPreAttackItemEffects, equipItem, applyCurse, applyPoison, GoldLedger, hasTrait, strikeOrderScore, statTotals } from './battle.js';
+import { createFieldUnit, resolveBattle, applyPreAttackItemEffects, abortPreAttackItemEffects, equipItem, applyCurse, applyPoison, GoldLedger, hasTrait, strikeOrderScore, statTotals, previewBattleEntryHp } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay, getWaitCutRate } from './utils.js';
 import { DENCHU_FIELD_MONSTER } from './thunderMonsters.js';
@@ -7374,13 +7374,21 @@ export class Game {
     // セッションが始まっているUIを巻き込むだけなので何もせず抜ける。
     if (this._isCancelled) return null;
 
+    // 開幕死亡（2026-09-01のユーザー指定）: 装備する前の時点でどちらかの
+    // 開始HPが0以下なら、アイテム選択そのものを行わずそこで終わる。
+    // 実際に倒す処理と演出はresolveBattleの開幕死亡チェックが受け持つ
+    // （ここは「選ばせない」判断だけ）。装備してから0以下になる場合は
+    // 選択・装備公開まで通常どおり進み、先手の攻撃前に倒れる。
+    const deadBeforeEquip = previewBattleEntryHp(attackerUnit, attackerBonus) <= 0
+      || previewBattleEntryHp(defenderUnit, defenderBonus) <= 0;
+
     // アイテム選択は両者とも「相手が何を選んだか一切見えない」状態で行う
     // 必要がある（後から選ぶ側が相手の装備を見てから決められると有利に
     // なってしまう）。そのため選択(onPickBattleItem)は両者分を先に済ませ、
     // 実際に装備した見た目の演出(onBattleEquip)は両者の選択が確定した
     // "後" にまとめて再生する - 選択中に相手の装備が画面上に見えることは
     // ない。
-    const attackerItemPicked = attackerPlayer.isCPU
+    const attackerItemPicked = deadBeforeEquip ? null : attackerPlayer.isCPU
       ? this._cpuChooseBattleItem(attackerPlayer, attackerUnit, defenderUnit, battleTile, false)
       : await this.onPickBattleItem(
           {
@@ -7400,7 +7408,7 @@ export class Game {
     const attackerItem = attackerPlayer.isCPU ? attackerItemPicked
       : attackerPlayer.hand.find((card) => card.id === attackerItemPicked?.id
         && isBattleItemCard(card) && (card.cost || 0) <= attackerPlayer.currency) || null;
-    const defenderItemPicked = defenderPlayer.isCPU
+    const defenderItemPicked = deadBeforeEquip ? null : defenderPlayer.isCPU
       ? this._cpuChooseBattleItem(defenderPlayer, defenderUnit, attackerUnit, battleTile, true)
       : await this.onPickBattleItem(
           {
@@ -7586,7 +7594,11 @@ export class Game {
     // ロシアンルーレットの戦闘は出目だけで決まり、先制/後攻・貫通・ATK倍率は
     // 一切効かない。効かない特性を先に大きく表示すると誤解を招くので、その
     // 回だけ特性・倍率の表示ごと飛ばす（resolveBattleの分岐と対になっている）。
-    const revealSides = result.russianRoulette ? [] : [...traitRevealSides, ...effectRevealSides];
+    // ルーレットと開幕死亡は「特性を活かす前に決着している」ので、効かない
+    // 特性・倍率の表示は挟まずそのまま結果へ進む。
+    const revealSides = (result.russianRoulette || result.startingDeath)
+      ? []
+      : [...traitRevealSides, ...effectRevealSides];
     for (const reveal of revealSides) {
       if (reveal.labels.length === 0) continue;
       await this.onBattleTraitReveal(reveal);

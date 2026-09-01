@@ -2422,9 +2422,9 @@ test('ネット弁慶は盤面で削られた分だけ戦闘HPから引かれる
   const dying = unit(MONSTER_CATALOG.netBenkei, 0);
   dying.currentHp = 30; // 盤面で20喰らっている＝戦闘HPは0
   battle.prepareForBattle(dying);
-  // 0にすると攻撃ループが1発も回らず無音で戦闘が終わるため下限1。
-  // 実質「開幕で相手の一撃を受けて即死」になる。
-  assert.equal(dying.currentHp, 1, '20喰らっていれば開幕1HP＝初撃で落ちる');
+  // 0以下のまま渡し、resolveBattleの開幕死亡チェックで明示的に倒す
+  // （下限1で誤魔化すと「1HPで開幕して初撃で落ちる」という別の挙動になる）。
+  assert.equal(dying.currentHp, 0, '20喰らっていれば開幕HPは0＝開始と同時に死亡');
 });
 
 test('ネット弁慶は無傷で戦闘を終えても盤面HPが減らない', () => {
@@ -2451,4 +2451,46 @@ test('通常モンスターの盤面HP持ち越しは従来どおり（シール
   armored.items.push(ITEM_CATALOG.heikeNoYoroi); // HP+40
   battle.resolveBattle(armored, unit(foe, 1));
   assert.equal(armored.currentHp, 30, 'シールドが吸った分は盤面HPを削らない');
+});
+
+// ---- 開幕死亡（開始HPが0以下） ----
+
+test('盤面ダメージで開始HPが0以下なら戦闘開始と同時に死亡する', () => {
+  const nb = unit(MONSTER_CATALOG.netBenkei, 0);
+  nb.currentHp = 30; // 盤面で20喰らっている＝戦闘HPは20-20=0
+  assert.equal(battle.previewBattleEntryHp(nb), 0, '装備前の時点でもう0');
+
+  const foe = unit({ id: 'foe', name: 'カカシ', element: 'fire', rarity: 'N', hp: 60, atk: 50, cost: 0 }, 1);
+  const result = battle.resolveBattle(nb, foe);
+  assert.equal(result.startingDeath, true);
+  assert.equal(result.attackerSurvived, false);
+  assert.equal(result.defenderSurvived, true, '相手は無傷');
+  assert.equal(result.exchanges.length, 1, '死亡の表示だけで殴り合いは起きない');
+  assert.equal(result.exchanges[0].message, 'ネット弁慶は死亡した');
+  // 攻撃モーションと属性ビームを出さないための印。
+  assert.equal(result.exchanges[0].aftermath, true);
+  assert.equal(result.exchanges[0].targetDied, true);
+  assert.equal(result.dmgToDefender, 0, '一撃も入れずに死ぬ');
+});
+
+test('マイナスHP装備で0以下になる場合も先手の攻撃前に死亡する', () => {
+  const frail = { id: 'frail', name: 'ひよわ', element: 'fire', rarity: 'N', hp: 20, atk: 30, cost: 0 };
+  const u = unit(frail, 0);
+  battle.equipItem(u, ITEM_CATALOG.morohaNoTsurugi); // ATK+40 / HP-20
+  assert.equal(battle.previewBattleEntryHp(u), 0, '装備してから0以下になる');
+
+  const foe = unit({ id: 'foe', name: 'カカシ', element: 'fire', rarity: 'N', hp: 60, atk: 50, cost: 0 }, 1);
+  const result = battle.resolveBattle(u, foe);
+  assert.equal(result.startingDeath, true);
+  assert.equal(result.attackerSurvived, false);
+  assert.equal(result.exchanges[0].message, 'ひよわは死亡した');
+  assert.equal(foe.currentHp, 60, 'ATK+40があっても一撃も入らない');
+});
+
+test('開始HPが1以上あれば従来どおり殴り合う', () => {
+  const ninja = unit(MONSTER_CATALOG.ninja, 0);
+  const foe = unit({ id: 'foe', name: 'カカシ', element: 'fire', rarity: 'N', hp: 60, atk: 10, cost: 0 }, 1);
+  const result = battle.resolveBattle(ninja, foe);
+  assert.ok(!result.startingDeath);
+  assert.ok(result.exchanges.length >= 2);
 });
