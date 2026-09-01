@@ -1230,6 +1230,11 @@ export const CHARACTER_DECKS = {
    *   （`_cpuMaybeUseReverseDiceSpell`等）でゴールを遠ざける。交代で撃つ等の
    *   専用スクリプトは持たせない＝プレイヤー側の工夫で崩せる余地を残す。
    * - 自分たちは`iCanFly`／`homingInstinct`で周回を稼ぐ。
+   * - 3人とも`cancelCulture`2枚（2026-09-01、実プレイで勝たれたので追加）。
+   *   CPUの使用判断は焼き札・妨害札より**後**に評価されるので（game.jsの
+   *   `_cpuMaybeUseCancelCultureSpell`の呼び出し順）、本来の動きを潰さずに
+   *   「他にやることが無いターン」だけ主人公の手札を削る。同盟内は対象外
+   *   なので下僕どうしで撃ち合うこともない。
    * - モンスターは各属性の上澄み。`chainRequired`持ちは1人4〜5枚までに抑える
    *   （⑯の想定盤面は属性ごとに4マスしかなく、連鎖待ちで手札が詰まるため）。
    *   `rainbowChameleon`は属性を問わずHPボーナスが乗るので3人とも採用。
@@ -1251,7 +1256,7 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.fireball, count: 4 }, { def: SPELL_CATALOG.senbonZakura, count: 3 },
         { def: SPELL_CATALOG.backfire, count: 2 }, { def: SPELL_CATALOG.diceOne, count: 2 },
         { def: SPELL_CATALOG.iCanFly, count: 2 }, { def: SPELL_CATALOG.homingInstinct, count: 1 },
-        { def: SPELL_CATALOG.forestMagicCircle, count: 1 }, { def: SPELL_CATALOG.realEstateAppraiser, count: 1 },
+        { def: SPELL_CATALOG.cancelCulture, count: 2 },
       ],
     },
   },
@@ -1273,7 +1278,7 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.fireball, count: 4 }, { def: SPELL_CATALOG.senbonZakura, count: 3 },
         { def: SPELL_CATALOG.backfire, count: 2 }, { def: SPELL_CATALOG.diceOne, count: 2 },
         { def: SPELL_CATALOG.iCanFly, count: 1 }, { def: SPELL_CATALOG.homingInstinct, count: 2 },
-        { def: SPELL_CATALOG.waterMagicCircle, count: 1 }, { def: SPELL_CATALOG.realEstateAppraiser, count: 1 },
+        { def: SPELL_CATALOG.cancelCulture, count: 2 },
       ],
     },
   },
@@ -1293,9 +1298,9 @@ export const CHARACTER_DECKS = {
       spells: [
         { def: SPELL_CATALOG.fireball, count: 4 }, { def: SPELL_CATALOG.senbonZakura, count: 3 },
         { def: SPELL_CATALOG.backfire, count: 2 }, { def: SPELL_CATALOG.diceOne, count: 2 },
-        { def: SPELL_CATALOG.iCanFly, count: 1 }, { def: SPELL_CATALOG.homingInstinct, count: 1 },
+        { def: SPELL_CATALOG.homingInstinct, count: 1 },
         { def: SPELL_CATALOG.forcedAscension, count: 1 }, { def: SPELL_CATALOG.psychokinesis, count: 1 },
-        { def: SPELL_CATALOG.neutralMagicCircle, count: 1 },
+        { def: SPELL_CATALOG.cancelCulture, count: 2 },
       ],
     },
   },

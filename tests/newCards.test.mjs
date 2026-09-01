@@ -2169,6 +2169,9 @@ test('⑯はステージ・マップ・敵3体の専用デッキが揃ってい�
     assert.equal(count('千本桜'), 3);
     assert.equal(count('バックファイア'), 2);
     assert.equal(count('1のダイス'), 2);
+    // 2026-09-01: 実プレイで勝たれたので手札破壊を追加。CPUの使用判断は
+    // 焼き札・妨害札より後に評価されるので、本来の動きは潰さない。
+    assert.equal(count('キャンセルカルチャー'), 2);
   }
   // 既存ステージのデッキを流用していない＝①〜⑮の難度に影響しない。
   assert.notEqual(stage.opponents[0].deckKey, 'usagin');
