@@ -2338,3 +2338,71 @@ test('1vs1は2枠だけ埋まり、残りは空のまま', () => {
   assert.equal(slots[2], undefined);
   assert.equal(slots[3], undefined);
 });
+
+// ---- ネット弁慶（statOverrideInBattle）の表示 ----
+
+test('ネット弁慶は戦闘画面の基礎ステだけ20/20になり、盤面表示は50/50のまま', () => {
+  const g = makeStub([], []);
+  const netBenkei = unit(MONSTER_CATALOG.netBenkei, 0);
+  // 盤面（HPバー・土地情報）はカードどおりの素の値。
+  assert.deepEqual(g._baseStats(netBenkei), { atk: 50, hp: 50 });
+  // 戦闘画面は上書き後。ここが素の値のままだと「弱体化していないように
+  // 見えるのに実際は20/20で戦う」＝ダメージ表示と減り方が食い違う。
+  assert.deepEqual(g._baseStats(netBenkei, { inBattle: true }), { atk: 20, hp: 20 });
+  // 実ダメージ計算（battle.jsのstatTotals）と戦闘画面の基礎ステが一致すること。
+  const totals = battle.statTotals(netBenkei);
+  assert.equal(totals.atk, 20);
+  assert.equal(totals.maxHp, 20);
+});
+
+test('上書きを持たないモンスターはinBattleでも値が変わらない', () => {
+  const g = makeStub([], []);
+  const ninja = unit(MONSTER_CATALOG.ninja, 0);
+  assert.deepEqual(g._baseStats(ninja), g._baseStats(ninja, { inBattle: true }));
+});
+
+// ---- 瞬間移動の直後にバックファイアで駒が飛ばないこと ----
+
+test('帰巣本能でゴールへ戻すと着地履歴がリセットされる', async () => {
+  const tiles = [
+    { id: 0, type: TileType.START, position: { x: 0, z: 0 }, neighbors: [1] },
+    ...[1, 2, 3, 4].map((id) => makeTile(id, { neighbors: [id - 1, id + 1] })),
+  ];
+  const player = {
+    id: 0, name: '主人公', currency: 0, tileId: 4, previousTileId: 3,
+    homeGoalTileId: 0, lapsCompleted: 0, passedCheckpoints: new Set(),
+    // ゴールへ飛ぶ直前まで 4←3←2←1←0 と歩いてきた履歴。
+    tileHistory: [4, 3, 2, 1, 0],
+  };
+  const g = makeStub(tiles, [player]);
+  Object.assign(g, { _grantGoalBonus: async () => {}, _notifyState: () => {} });
+
+  await g._spellReturnPlayerToStart(player, 250);
+
+  assert.equal(player.tileId, 0, 'ゴールへ戻る');
+  // ここが [4,3,2,1,0] のまま残ると、直後のバックファイアで
+  // ゴール(0)→4 と盤面の隣接を無視して飛ぶ（CPも踏み飛ばす）。
+  assert.deepEqual(player.tileHistory, [0], '履歴は飛び先だけにリセットされる');
+});
+
+test('履歴がリセットされていればバックファイアで駒は飛ばない', async () => {
+  const tiles = [
+    { id: 0, type: TileType.START, position: { x: 0, z: 0 }, neighbors: [1] },
+    ...[1, 2, 3, 4].map((id) => makeTile(id, { neighbors: [id - 1, id + 1] })),
+  ];
+  const player = { id: 0, name: '主人公', tileId: 0, previousTileId: null, tileHistory: [0], passedCheckpoints: new Set() };
+  const g = makeStub(tiles, [player]);
+  Object.assign(g, {
+    _turnPathIds: [], _segmentPathIds: [],
+    onMoveDestination: () => {},
+    _isForcedStopFor: () => false,
+    _emitPieceStep: () => {},
+    _stepWithCamera: async () => {},
+    _visitCheckpoint: async () => {},
+    _broadcastPieceMove: async () => {},
+  });
+
+  await g._movePlayerBackward(player, 5);
+
+  assert.equal(player.tileId, 0, '履歴が尽きているのでその場に留まる（飛ばない）');
+});

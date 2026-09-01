@@ -1909,6 +1909,7 @@ export class Game {
 
     player.previousTileId = null;
     player.tileId = target.id;
+    this._resetTileHistoryAfterTeleport(player, target.id);
     if (player.mesh) player.mesh.position.set(target.position.x, PIECE_REST_Y, target.position.z);
     this.onLog(`${player.name}は「ブルーオーシャン」で空き地に飛んだ！`);
     this._notifyState();
@@ -1931,6 +1932,7 @@ export class Game {
     if (!startTile) return;
     player.previousTileId = null;
     player.tileId = startTile.id;
+    this._resetTileHistoryAfterTeleport(player, startTile.id);
     if (player.mesh) player.mesh.position.set(startTile.position.x, PIECE_REST_Y, startTile.position.z);
     player.currency += reward;
     this.onLog(`${player.name}は「帰巣本能」でゴールに戻り、+${reward}Gを獲得した！`);
@@ -2633,6 +2635,27 @@ export class Game {
       if (states.length === 0) break;
     }
     return [...destinations];
+  }
+
+  /**
+   * ワープマス以外の「瞬間移動」（帰巣本能・ブルーオーシャン・暴走列車の
+   * 反対側転移・破産リスタート）の後始末。**着地履歴を飛び先だけにリセットする。**
+   *
+   * ⚠️ これを忘れると、直後にバックファイア(reverseNextDice)を撃たれた時に
+   * `_movePlayerBackward`が「転移前の経路」をそのまま遡り、**盤面の隣接を
+   * 無視して駒が飛ぶ**（2026-09-01のユーザー報告「サイコロを振ったら急に
+   * CPの隣へワープした・CPを踏んだ扱いにならない」）。飛び越したマスは
+   * `_visitCheckpoint`を通らないのでCPも加算されない。
+   *
+   * リセット後は履歴が1件だけになるので、直後の後退は「履歴が尽きた」
+   * 扱いでその場に留まる（既存の仕様どおり）。歩き直せば履歴は普通に貯まる。
+   *
+   * ⚠️ **ワープマス（_resolveWarpTile）はこれを使わない。** あちらは飛び先を
+   * unshiftして経路を残すことで、後退でワープ入口まで戻った時に"再ワープ"
+   * させる意図的な作りになっている（該当箇所のコメント参照）。
+   */
+  _resetTileHistoryAfterTeleport(player, tileId) {
+    player.tileHistory = [tileId];
   }
 
   /**
@@ -4316,6 +4339,7 @@ export class Game {
     });
     player.previousTileId = null;
     player.tileId = targetTile.id;
+    this._resetTileHistoryAfterTeleport(player, targetTile.id);
     if (player.mesh) player.mesh.position.set(targetTile.position.x, PIECE_REST_Y, targetTile.position.z);
     player.diceCurse = { type: 'double' };
     this.onLog(`${player.name}は暴走して反対側へ飛ばされ、次のサイコロの出目が2倍になった！`);
@@ -5212,6 +5236,7 @@ export class Game {
     player.currency = 500;
     player.tileId = startTile.id;
     player.previousTileId = null;
+    this._resetTileHistoryAfterTeleport(player, startTile.id);
     if (player.mesh) {
       player.mesh.visible = true;
       player.mesh.position.set(startTile.position.x, PIECE_REST_Y, startTile.position.z);
@@ -6840,20 +6865,34 @@ export class Game {
   }
 
   /** Base ATK/HP as shown on the battle-scene stat panel: def stats plus any永続 curses, but NOT items or the situational cheer/element bonuses (those are surfaced separately - see _runBattleScene). */
-  _baseStats(unit) {
+  /**
+   * その個体の「素のステータス」。盤面表示と戦闘画面の基礎ステ表示の両方が使う。
+   *
+   * ⚠️ **`inBattle: true`を渡すかどうかで基準が変わる**。ネット弁慶
+   * (`statOverrideInBattle`)は**盤面では50/50、戦闘中だけ20/20**という
+   * カードなので、盤面のHP表示は素のdef.hpのまま、戦闘画面は上書き後の値を
+   * 出さないと食い違う。実ダメージ計算(battle.jsのstatTotals)は常に上書きを
+   * 適用しているので、**戦闘まわりの表示は必ずinBattle:trueで呼ぶこと**。
+   * これを忘れると「弱体化していないように見えるのに、実際は20/20で戦って
+   * いる」＝ダメージ表示と減り方が合わない（2026-09-01のユーザー報告）。
+   */
+  _baseStats(unit, { inBattle = false } = {}) {
     // noHpBoost（くぐつの剣豪）はスペル由来のHP増加を受けない。statTotalsと
     // 同じ基準にしないと、戦闘画面の基礎ステ表示だけが実ダメージとズレる。
     const blocksHpBoost = unit.def.traits?.includes('noHpBoost');
     const noBoost = (value) => (blocksHpBoost ? Math.min(0, value) : value);
     const curseAtk = unit.curses.reduce((sum, c) => sum + (c.addedAtk || 0), 0);
     const curseHp = noBoost(unit.curses.reduce((sum, c) => sum + (c.addedHp || 0), 0));
+    const override = inBattle && unit.def.effect?.type === 'statOverrideInBattle'
+      ? unit.def.effect
+      : null;
     // 再生(regenerate)で積み上げた恒久ATKと、タフネスで焼き込んだ基礎HPは
     // その個体の"素のステータス"として扱う（statTotalsと同じ基準にしないと、
     // 戦闘画面の基礎ステ表示だけが実際の数値とズレる）。
     return {
       // lapGrowthAtkBonus / lapGrowthHpBonus: 周回成長型が周回ごとに積み上げた恒久値。
-      atk: unit.def.atk + (unit.regenAtkBonus || 0) + (unit.lapGrowthAtkBonus || 0) + curseAtk,
-      hp: unit.def.hp + noBoost(unit.summonBaseHpBonus || 0) + (unit.lapGrowthHpBonus || 0) + curseHp,
+      atk: (override ? override.atk : unit.def.atk) + (unit.regenAtkBonus || 0) + (unit.lapGrowthAtkBonus || 0) + curseAtk,
+      hp: (override ? override.hp : unit.def.hp) + noBoost(unit.summonBaseHpBonus || 0) + (unit.lapGrowthHpBonus || 0) + curseHp,
     };
   }
 
@@ -7292,8 +7331,8 @@ export class Game {
         this.onLog(`${unit.def.name}は戦闘開始時に自身の呪いを解除した`);
       }
     }
-    let attackerBase = this._baseStats(attackerUnit);
-    let defenderBase = this._baseStats(defenderUnit);
+    let attackerBase = this._baseStats(attackerUnit, { inBattle: true });
+    let defenderBase = this._baseStats(defenderUnit, { inBattle: true });
     // アイテム選択前の初期表示用。異次元ソケットで能力が交換される可能性が
     // あるためログはまだ出さず、攻撃前効果の確定後に実戦闘用を再計算する。
     let attackerBonus = this._battleBonus(attackerUnit, attackerPositionTile, battleTile, { log: false });
@@ -7402,8 +7441,8 @@ export class Game {
     this._applyEffectBonus(attackerUnit, defenderUnit, attackerBonus);
     this._applyEffectBonus(defenderUnit, attackerUnit, defenderBonus);
     // statOverrideInBattle等も入れ替わり得るので、装備公開の基礎表示を同期する。
-    attackerBase = this._baseStats(attackerUnit);
-    defenderBase = this._baseStats(defenderUnit);
+    attackerBase = this._baseStats(attackerUnit, { inBattle: true });
+    defenderBase = this._baseStats(defenderUnit, { inBattle: true });
     preAttackEffects.log.forEach((line) => this.onLog(line));
     for (const destruction of preAttackEffects.itemDestructions) {
       await this.onBattleItemDestroy(destruction);
