@@ -22,6 +22,7 @@ const hadWindow = 'window' in globalThis;
 if (!hadWindow) globalThis.window = { addEventListener() {} };
 const { TRACK_SRC, MAP_TRACK, SELECTABLE_BGM } = await vite.ssrLoadModule('/src/audio.js');
 const { computePlayerSlots } = await vite.ssrLoadModule('/src/playerPanels.js');
+const { CardType } = await vite.ssrLoadModule('/src/cards.js');
 if (!hadWindow) delete globalThis.window;
 const { WIP_CARD_NAMES, reclaimReleasedWipHoldings, getCardCatalog } = await vite.ssrLoadModule('/src/cardCatalog.js');
 const breedParts = await vite.ssrLoadModule('/src/breedParts.js');
@@ -2172,6 +2173,8 @@ test('⑯はステージ・マップ・敵3体の専用デッキが揃ってい�
     // 2026-09-01: 実プレイで勝たれたので手札破壊を追加。CPUの使用判断は
     // 焼き札・妨害札より後に評価されるので、本来の動きは潰さない。
     assert.equal(count('キャンセルカルチャー'), 2);
+    // 2026-09-01: ATK+直前の出目×5・貫通。守り札と入れ替えて打点を上げた。
+    assert.equal(count('イカサマのサイコロ'), 2);
   }
   // 既存ステージのデッキを流用していない＝①〜⑮の難度に影響しない。
   assert.notEqual(stage.opponents[0].deckKey, 'usagin');
@@ -2496,4 +2499,54 @@ test('開始HPが1以上あれば従来どおり殴り合う', () => {
   const result = battle.resolveBattle(ninja, foe);
   assert.ok(!result.startingDeath);
   assert.ok(result.exchanges.length >= 2);
+});
+
+// ---- キャンセルカルチャーのCPU狙い方（アイテム最優先） ----
+
+function makeCancelCultureGame() {
+  const g = Object.create(Game.prototype);
+  const casts = [];
+  Object.assign(g, {
+    players: [
+      { id: 0, name: 'CPU', isCPU: true, allianceId: 'enemy', defeated: false, currency: 500, spellUsedThisTurn: false,
+        hand: [{ ...SPELL_CATALOG.cancelCulture, id: 'cc', type: CardType.SPELL }] },
+      { id: 1, name: '味方CPU', isCPU: true, allianceId: 'enemy', defeated: false,
+        hand: [{ ...ITEM_CATALOG.zangokuKen, id: 'ally-item', type: CardType.GEAR }] },
+      { id: 2, name: '主人公', isCPU: false, allianceId: null, defeated: false, hand: [] },
+    ],
+    _totalAssetsOf: () => 1000,
+    _cpuCastSpell: async (player, card, opts) => { casts.push(opts); },
+  });
+  return { g, casts, hero: g.players[2] };
+}
+
+const asItem = (def, id) => ({ ...def, id, type: CardType.GEAR });
+const asSpell = (def, id) => ({ ...def, id, type: CardType.SPELL });
+
+test('キャンセルカルチャーは高コストのスペルより先にアイテムを潰す', async () => {
+  const { g, casts, hero } = makeCancelCultureGame();
+  // 千本桜100G（スペル）とナイフ5G（アイテム）。コスト順ならスペルを狙うが、
+  // 戦闘の勝敗を直接ひっくり返すのは装備なのでアイテムを優先する。
+  hero.hand = [asSpell(SPELL_CATALOG.senbonZakura, 's1'), asItem(ITEM_CATALOG.knife, 'i1')];
+  await g._cpuMaybeUseCancelCultureSpell(g.players[0]);
+  assert.equal(casts.at(-1)?.targetCardId, 'i1');
+  assert.equal(casts.at(-1)?.targetPlayerId, 2, '同盟外だけを狙う（味方CPUの装備は対象外）');
+});
+
+test('アイテムが複数あれば高い方から、尽きたらスペルへ移る', async () => {
+  const { g, casts, hero } = makeCancelCultureGame();
+  hero.hand = [asItem(ITEM_CATALOG.knife, 'i1'), asItem(ITEM_CATALOG.zangokuKen, 'i2'), asSpell(SPELL_CATALOG.senbonZakura, 's1')];
+  await g._cpuMaybeUseCancelCultureSpell(g.players[0]);
+  assert.equal(casts.at(-1)?.targetCardId, 'i2', '斬〇剣130G > ナイフ5G');
+
+  hero.hand = [asSpell(SPELL_CATALOG.fireball, 's1'), asSpell(SPELL_CATALOG.senbonZakura, 's2')];
+  await g._cpuMaybeUseCancelCultureSpell(g.players[0]);
+  assert.equal(casts.at(-1)?.targetCardId, 's2', 'アイテムが無ければ高コストのスペル');
+});
+
+test('潰せる手札を持つ相手がいなければ撃たない', async () => {
+  const { g, casts, hero } = makeCancelCultureGame();
+  hero.hand = [{ ...MONSTER_CATALOG.ninja, id: 'm1', type: CardType.MONSTER }]; // モンスターは対象外
+  await g._cpuMaybeUseCancelCultureSpell(g.players[0]);
+  assert.equal(casts.length, 0);
 });

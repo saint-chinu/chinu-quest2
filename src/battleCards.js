@@ -1234,7 +1234,12 @@ export const CHARACTER_DECKS = {
    *   CPUの使用判断は焼き札・妨害札より**後**に評価されるので（game.jsの
    *   `_cpuMaybeUseCancelCultureSpell`の呼び出し順）、本来の動きを潰さずに
    *   「他にやることが無いターン」だけ主人公の手札を削る。同盟内は対象外
-   *   なので下僕どうしで撃ち合うこともない。
+   *   なので下僕どうしで撃ち合うこともない。**相手のアイテムを優先して
+   *   全部潰す**（`_cpuMaybeUseCancelCultureSpell`, 2026-09-01のユーザー指定）。
+   * - 3人とも`ikasamaNoSaikoro`2枚（2026-09-01、ユーザー指定）。ATK+直前の
+   *   出目×5・貫通で、土地の同属性HPボーナスを無視して殴れる。守り札
+   *   （ナンカのお守り／ハリネズミの服／ライフジャケット）と入れ替えた＝
+   *   キャンセルカルチャーで相手の装備を剥がしつつ、自分は打点で押し切る形。
    * - モンスターは各属性の上澄み。`chainRequired`持ちは1人4〜5枚までに抑える
    *   （⑯の想定盤面は属性ごとに4マスしかなく、連鎖待ちで手札が詰まるため）。
    *   `rainbowChameleon`は属性を問わずHPボーナスが乗るので3人とも採用。
@@ -1250,7 +1255,7 @@ export const CHARACTER_DECKS = {
       ],
       items: [
         { def: ITEM_CATALOG.gomuGoNoPistol, count: 2 }, { def: ITEM_CATALOG.zangokuKen, count: 1 },
-        { def: ITEM_CATALOG.nankaNoOmamori, count: 1 }, { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 },
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 2 },
       ],
       spells: [
         { def: SPELL_CATALOG.fireball, count: 4 }, { def: SPELL_CATALOG.senbonZakura, count: 3 },
@@ -1272,7 +1277,7 @@ export const CHARACTER_DECKS = {
       ],
       items: [
         { def: ITEM_CATALOG.iceSlugger, count: 2 }, { def: ITEM_CATALOG.zangokuKen, count: 1 },
-        { def: ITEM_CATALOG.lifeJacket, count: 1 }, { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 2 },
       ],
       spells: [
         { def: SPELL_CATALOG.fireball, count: 4 }, { def: SPELL_CATALOG.senbonZakura, count: 3 },

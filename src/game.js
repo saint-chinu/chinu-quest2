@@ -9683,8 +9683,15 @@ export class Game {
   /**
    * キャンセルカルチャー（destroyHandCard）のCPU使用判断。妨害スペルなので
    * 同盟以外の相手を狙う。破壊できる手札（スペル/アイテム）を持つ相手のうち
-   * 総資産が最上位のプレイヤーを対象にし、その中で最もコストの高い（＝価値の
-   * 高い）1枚を破壊する。破壊できる手札を持つ相手がいなければ使わない。
+   * 総資産が最上位のプレイヤーを対象にする。破壊できる手札を持つ相手が
+   * いなければ使わない。
+   *
+   * ⚠️ **アイテムを最優先で潰す**（2026-09-01、ユーザー指定
+   * 「相手のアイテムを全部潰すの優先」）。相手の手札にアイテムが1枚でも
+   * 残っている限りアイテムだけを狙い、同じ種別の中で最もコストの高い
+   * （＝価値の高い）1枚を選ぶ。アイテムが尽きて初めてスペルへ移る。
+   * 戦闘の勝敗を直接ひっくり返すのは装備なので、単純なコスト順で
+   * 高いスペルから抜くより「殴り合いで確実に勝てる状態」を作りやすい。
    */
   async _cpuMaybeUseCancelCultureSpell(player) {
     if (player.spellUsedThisTurn) return;
@@ -9699,8 +9706,9 @@ export class Game {
       .sort((a, b) => this._totalAssetsOf(b) - this._totalAssetsOf(a))[0];
     if (!targetPlayer) return;
 
-    const targetCard = targetPlayer.hand
-      .filter(isDestroyable)
+    const destroyable = targetPlayer.hand.filter(isDestroyable);
+    const items = destroyable.filter((c) => c.type === CardType.GEAR);
+    const targetCard = (items.length > 0 ? items : destroyable)
       .sort((a, b) => (b.cost || 0) - (a.cost || 0))[0];
     if (!targetCard) return;
 
