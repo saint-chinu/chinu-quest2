@@ -58,7 +58,7 @@ export const MAP_TRACK = {
   'royal-guard': 'royalGuard',
   kawada: 'kawada',
   chinu: 'chinu',
-  'sea-labor': 'seaLabor',
+  roudou: 'seaLabor',
 };
 
 // 対人戦のBGM選択（ホストがステージ確定時に選ぶ）。ここに並べた曲だけが

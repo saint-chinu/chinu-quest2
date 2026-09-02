@@ -1260,9 +1260,7 @@ export const STORY_STAGES = [
   },
   {
     key: 'roudou',
-    title: '⑰ 海底労働施設（仮実装）',
-    // ⚠️ 仮実装（2026-09）。専用の背景画像・BGM・マダイ係長の会話演出が未着手
-    // なので、board.js側もwip:trueのまま。詳細はCLAUDE.md「⑰海底労働施設」。
+    title: '⑰ 海底労働施設',
     format: '2vs2',
     // 同盟合算の目標（_totalAssetsOfはチーム合算）。本編で現行最高。
     goalCurrency: 24000,

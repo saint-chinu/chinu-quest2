@@ -436,10 +436,8 @@ export const MAPS = [
   // ⑯はストーリー専用。1行20マスの細長い盤面なので対戦モードへ出す前提が
   // 無く、wipは外さない想定。背景は専用の「王の間」（海中の玉座の間）。
   { id: 'chinu', name: '⑯ 魚群の王チヌ', wip: true, rows: CHINU_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/king-room.png'), spacing: 2.8 },
-  // ⑰はストーリー専用の仮実装。専用背景とBGMがまだ無いので、用意できるまで
-  // 背景は⑮の裏路地を流用している（getMapBackgroundはフォールバックを持たず
-  // undefinedをそのままCSSへ入れてしまうため、必ず何かを指定すること）。
-  { id: 'roudou', name: '⑰ 海底労働施設', wip: true, rows: ROUDOU_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage15-kawada-alley.png'), spacing: 2.8 },
+  // ⑰はストーリー専用。海底収容所の専用背景を使用する。
+  { id: 'roudou', name: '⑰ 海底労働施設', wip: true, rows: ROUDOU_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage17-underwater-prison.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {
