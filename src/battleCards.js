@@ -176,27 +176,23 @@ export const ITEM_CATALOG = {
   // 貫通を無視して反射する。くねくね自身の反射は従来どおり貫通で抜けるので、
   // 両者を混同しないこと。
   suijinNoTate: item('suijinNoTate', '水神の盾', Rarity.R, ItemType.ARMOR, 80, 10, 20, {
-    traits: ['pierce'],
     effect: { type: 'wielderElementReflect', wielderElement: Element.WATER },
-    effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。水属性モンスターが装備すると、受けるダメージを反射する（この反射は相手の貫通では無効化されない）',
+    effectDescription: '水属性モンスターが装備すると、受けるダメージを反射する（この反射は相手の貫通では無効化されない）',
     imageDataUrl: assetUrl('/images/card-art/suijinNoTate.png'),
   }),
   kajinNoTate: item('kajinNoTate', '火神の盾', Rarity.R, ItemType.ARMOR, 80, 10, 20, {
-    traits: ['pierce'],
     effect: { type: 'wielderElementReflect', wielderElement: Element.FIRE },
-    effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。火属性モンスターが装備すると、受けるダメージを反射する（この反射は相手の貫通では無効化されない）',
+    effectDescription: '火属性モンスターが装備すると、受けるダメージを反射する（この反射は相手の貫通では無効化されない）',
     imageDataUrl: assetUrl('/images/card-art/kajinNoTate.png'),
   }),
   raijinNoTate: item('raijinNoTate', '雷神の盾', Rarity.R, ItemType.ARMOR, 80, 10, 20, {
-    traits: ['pierce'],
     effect: { type: 'wielderElementReflect', wielderElement: Element.THUNDER },
-    effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。雷属性モンスターが装備すると、受けるダメージを反射する（この反射は相手の貫通では無効化されない）',
+    effectDescription: '雷属性モンスターが装備すると、受けるダメージを反射する（この反射は相手の貫通では無効化されない）',
     imageDataUrl: assetUrl('/images/card-art/raijinNoTate.png'),
   }),
   shinrinjinNoTate: item('shinrinjinNoTate', '森神の盾', Rarity.R, ItemType.ARMOR, 80, 10, 20, {
-    traits: ['pierce'],
     effect: { type: 'wielderElementReflect', wielderElement: Element.FOREST },
-    effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。森属性モンスターが装備すると、受けるダメージを反射する（この反射は相手の貫通では無効化されない）',
+    effectDescription: '森属性モンスターが装備すると、受けるダメージを反射する（この反射は相手の貫通では無効化されない）',
     imageDataUrl: assetUrl('/images/card-art/shinrinjinNoTate.png'),
   }),
 
@@ -402,7 +398,7 @@ export const SPELL_CATALOG = {
     150,
     'anyMonster',
     { type: 'curseForcedStop' },
-    '対象モンスターの土地に強制停止の呪い。使用者・同盟者以外は通過できない',
+    '対象モンスターに強制停止の呪い。その土地は使用者・同盟者以外は通過できない。モンスターへの呪いなので戦闘では消えず、そのモンスターが倒れるか別の呪いで上書きされるまで残る',
   ),
   homingInstinct: spell(
     'homingInstinct',
@@ -421,9 +417,9 @@ export const SPELL_CATALOG = {
     '増税通知',
     Rarity.N,
     40,
-    'anyTile',
+    'anyMonster',
     { type: 'tollReductionCurse', ratio: 0.3 },
-    '対象の土地に「通行料30%減」の呪いをかける',
+    '対象モンスターに「通行料30%減」の呪いをかける（そのモンスターが倒れるか別の呪いで上書きされるまで残る）',
   ),
   splitEvenly: spell('splitEvenly', '山分け', Rarity.S, 100, 'none', { type: 'redistributeGoldEvenly' }, '場の手持ちG合計を全員で均等に分配し直す'),
   specialAudit: spell(
@@ -431,9 +427,9 @@ export const SPELL_CATALOG = {
     '追徴課税',
     Rarity.S,
     70,
-    'anyTile',
+    'anyMonster',
     { type: 'tollBonusOnceCurse', multiplier: 1.5 },
-    '対象の土地に止まった次の相手から、通常の1.5倍の通行料を得る（1回限り）',
+    '対象モンスターに追徴課税の呪い。その土地に止まった次の相手から通常の1.5倍の通行料を得る（1回限り）',
   ),
   taxEvasion: spell('taxEvasion', '脱税', Rarity.N, 80, 'self', { type: 'tollWaiverCurse' }, '自分が次に支払うはずだった通行料を1回無効化する'),
   lottery: spell(
@@ -1609,7 +1605,7 @@ export const CHARACTER_DECKS = {
         // 甲鉄要塞がSレアなのが効いていて、無属性地に据えた瞬間から
         // 「Sレアの属性が土地と食い違っている」＝最適化の発動条件になる。
         { def: MONSTER_CATALOG.koutetsuYousai, count: 4 },   // 40G 周回成長→3周目で強制停止
-        { def: MONSTER_CATALOG.tenhou, count: 2 },           // 50G R 先制・与ダメ×5G強奪
+        { def: MONSTER_CATALOG.tenhou, count: 2 },           // 50G R 先制・与ダメ×3G強奪
         { def: MONSTER_CATALOG.tetsuo, count: 3 },            // 30G HP40の無条件壁
         { def: MONSTER_CATALOG.erekiKagayaki, count: 1 },     // 30G S・先制は1枚だけ残す
         { def: MONSTER_CATALOG.thunderbird, count: 1 },       // 空き地に雷雲を増やせる先制役

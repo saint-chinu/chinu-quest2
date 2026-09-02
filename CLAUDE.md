@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v277`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v278`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## チュートリアルの不自然さ修正（2026-08、ユーザー報告）
@@ -309,6 +309,53 @@ JS側は正しく1.5秒で`add('hidden')`していたので、コードを読ん
     こと。コメント中の例文（`#app.hidden { display: none; }`等）を拾ってしまい、
     規則を先頭へ動かしても素通りする。行頭アンカーで拾った実際の規則の
     indexを使う。
+
+## ⚠️ 呪いは「モンスター呪い」と「プレイヤー呪い」しかない（2026-09、ユーザー指定）
+
+> 「土地につく呪いっていうのはないよ、呪いはモンスター呪いとプレイヤー呪いしかない」
+
+以前は土地へ直接フラグを生やしていたものが3つあり、すべて`unit.curses`
+（モンスター呪い）へ移した。**`tile.*`に呪いを生やさないこと。**
+
+| 呪い | 旧（土地フラグ） | 新（モンスター呪い） |
+|---|---|---|
+| アリジゴク | `tile.forcedStopCursed = 詠唱者id` | `{ forcedStop: { casterId } }` |
+| ほこら「右の頬を〜」 | `tile.forcedStopCursed = true` | `{ forcedStop: { once: true } }` |
+| 増税通知 | `tile.tollReductionRatio` | `{ tollReductionRatio }` |
+| 追徴課税 | `tile.tollBonusOnceMultiplier` | `{ tollBonusOnceMultiplier }` |
+
+- 読み出しは必ず**`_monsterCurseOf(tile, key)`**系を通す。強制停止は
+  `_forcedStopCurseOf` / `_isForcedStopCursed` / `_isForcedStopFor`。
+- **アリジゴクは戦闘では消えない**（ユーザー指定「アリジゴクは呪いやから戦闘しても
+  消えない」）。旧実装は戦闘直後に`tile.forcedStopCursed = false`を4か所で
+  実行していた（移動侵略・侵略・着地侵略・お前も〇ぬんだ）。**全部撤去した。**
+  消えるのは①付与先のモンスターが倒れる／入れ替わる ②別の呪いで上書きされる、
+  のどちらか。
+- **ほこら効果は「1回だけの別呪い」**（同指定）。`forcedStop.once`が立っており、
+  誰か1人を止めた時点で`_consumeOnceForcedStop`が外す。免除されるのは
+  土地の持ち主（アリジゴクは詠唱者）。**アリジゴクとは別物なので、片方の
+  挙動を変えるときにもう片方を巻き込まないこと。**
+- 増税通知・追徴課税は`target`を`anyTile`→**`anyMonster`**へ変更した
+  （呪いはモンスターに付くので、モンスターの居ない土地には撃てない）。
+- 土地側の後片付け（売却時・征服時のフラグクリア）は**不要になったので削除**した。
+  モンスターごと消えるため、書き忘れによる「誰も居ない土地に呪いが残る」事故が
+  構造的に起きない。
+- ⚠️ **`applyCurse`（battle.js）は以前 name/addedAtk/addedHp/traits しか
+  転記しておらず、`forcedStop`のような呪い固有のデータを黙って捨てていた。**
+  この移行で踏んだので`...spellDef`を展開する形へ直した。新しい種類の呪いを
+  足す時はここを必ず確認すること。
+- ⚠️ `unit.curses`は**1体につき1つ**（battle.jsの`setCurse`が置き換える）。
+  強制停止も増税通知も聖域も同じ枠を奪い合う。
+- 回帰テスト: `npm run test:cards`「土地に直接生やす呪いは存在しない」
+  「アリジゴクは戦闘では消えず、ほこらの強制停止は1回で消える」
+  「呪いは1体につき1つ。別の呪いで上書きされる」。`applyCurse`を旧仕様へ
+  戻すと6件、ほこらの1回消費をアリジゴクにも効かせると1件落ちる。
+
+## カード調整（2026-09、ユーザー指定）
+- **属性神の盾4種から貫通を撤去**（「強すぎる」）。80G・ATK+10/HP+20・
+  一致属性で反射（貫通無効）は据え置き。`_itemPowerScore`の不一致時の評価は
+  40→30になる。
+- **テンホウの強奪を与ダメージ×5G→×3G**へ引き下げ。
 
 ## 聖域(sanctuary)はモンスターへの呪い（2026-09、ユーザー指定で仕様変更）
 

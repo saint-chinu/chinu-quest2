@@ -153,10 +153,17 @@ function setCurse(unit, curse) {
   ];
 }
 
-/** Casts a spell onto a monster already on the field ("curse" status)。既存の呪いは上書きされる。 */
+/**
+ * Casts a spell onto a monster already on the field ("curse" status)。既存の呪いは上書きされる。
+ * ⚠️ **渡したフィールドはそのまま呪いへ載る**。以前はname/addedAtk/addedHp/traitsだけを
+ * 転記しており、`forcedStop`（アリジゴク・ほこら）や`tollReductionRatio`（増税通知）の
+ * ような**呪い固有のデータが黙って捨てられていた**（2026-09、土地フラグをモンスター呪いへ
+ * 移した時に踏んだ）。呪いの種類を増やす時はGame側の読み出しヘルパ
+ * （_monsterCurseOf等）とセットで使うこと。
+ */
 export function applyCurse(unit, spellDef) {
   setCurse(unit, {
-    name: spellDef.name,
+    ...spellDef,
     addedAtk: spellDef.addedAtk || 0,
     addedHp: spellDef.addedHp || 0,
     traits: spellDef.traits || [],

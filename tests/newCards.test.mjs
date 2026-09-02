@@ -106,17 +106,18 @@ test('破産すると土地だけでなく保有お札もすべて手放す', as
 });
 
 test('呪い解除は増税通知(通行料30%減)も一緒に解除する', async () => {
-  // 増税通知はカード自身が「通行料30%減の呪いをかける」と明言しているのに、
-  // tollReductionRatioは土地側のプロパティでunit.cursesに乗らないため、
-  // 呪い解除(cleanseCurses)でも鉄火の料理人系の全体回復+呪い解除でも
-  // 解除できていなかった（ユーザー報告のバグ）。
-  const tile = makeTile(0, { owner: 'A', tollReductionRatio: 0.3 });
+  // 増税通知はモンスター呪い（2026-09の仕様変更「土地につく呪いっていうのは
+  // ないよ」）。unit.cursesに乗るので、呪い解除(cleanseCurses)や全体回復+
+  // 呪い解除で一緒に外れる。
+  const tile = makeTile(0, { owner: 'A' });
   tile.unit = unit(mon('壁', 50, 10), 'A');
+  battle.applyCurse(tile.unit, { name: '増税通知', tollReductionRatio: 0.3 });
   const player = { id: 'A', name: 'テスト', diceCurse: null };
   const g = Object.create(Game.prototype);
   Object.assign(g, { tiles: [tile], onLog: () => {}, _notifyState: () => {} });
+  assert.ok(g._monsterCurseOf(tile, 'tollReductionRatio'), '前提: 呪いが乗っている');
   await g._applySpellEffect(player, { effect: { type: 'cleanseCurses' }, target: 'ownMonster' }, { targetTileId: tile.id });
-  assert.equal(tile.tollReductionRatio, null);
+  assert.equal(g._monsterCurseOf(tile, 'tollReductionRatio'), null);
 });
 
 test('ワープ直後にバックファイア(後退)を使うと、ワープ入口を経てワープ前の経路を遡る', async () => {
@@ -455,27 +456,45 @@ test('塞ぎ込んだ男はCP・ゴール最短が同点なら左下ループの
   assert.equal(g._nearestFusagikondaLoopEmptyLandTileId({ tileId: 0, previousTileId: null }), loopFar.id);
 });
 
-test('アリジゴクの詠唱者がid=0でも、forcedStopCursedのtruthy判定崩れで無視されない', () => {
-  // player.idは0始まりなので、forcedStopCursedへ詠唱者id(0)が入ると
-  // 素朴な!!/if(tile.forcedStopCursed)判定は「呪い無し」と誤認する
-  // (_isForcedStopCursedが無い旧実装の再発防止)。
-  const cursedByHuman = makeTile(1, { forcedStopCursed: 0 });
-  const cursedByShrine = makeTile(2, { forcedStopCursed: true });
-  const uncursed = makeTile(3, {});
-  const clearedFlag = makeTile(4, { forcedStopCursed: false });
+test('強制停止はモンスター呪い。詠唱者id=0でもtruthy判定崩れで無視されない', () => {
+  // 2026-09の仕様変更で強制停止はモンスター呪いになった（土地フラグは廃止）。
+  // player.idは0始まりなので、casterIdに0が入る場合の !casterId 判定崩れは
+  // 引き続き踏まないこと（旧実装の再発防止）。
   const g = Object.create(Game.prototype);
-  assert.equal(g._isForcedStopCursed(cursedByHuman), true);
-  assert.equal(g._isForcedStopCursed(cursedByShrine), true);
-  assert.equal(g._isForcedStopCursed(uncursed), false);
-  assert.equal(g._isForcedStopCursed(clearedFlag), false);
+  const withCurse = (id, curse) => {
+    const t = makeTile(id, { owner: 9 });
+    t.unit = unit(mon('壁', 50, 10), 9);
+    if (curse) battle.applyCurse(t.unit, curse);
+    return t;
+  };
+  const byHuman = withCurse(1, { name: 'アリジゴク', forcedStop: { casterId: 0 } });
+  const byShrine = withCurse(2, { name: '強制停止', forcedStop: { once: true } });
+  const otherCurse = withCurse(3, { name: 'ATKダウン', addedAtk: -10 });
+  const noCurse = withCurse(4, null);
+  const noUnit = makeTile(5, { owner: 9 });
+  assert.equal(g._isForcedStopCursed(byHuman), true, 'casterId:0 を「呪い無し」と誤認しない');
+  assert.equal(g._isForcedStopCursed(byShrine), true);
+  assert.equal(g._isForcedStopCursed(otherCurse), false, '別種の呪いは強制停止ではない');
+  assert.equal(g._isForcedStopCursed(noCurse), false);
+  assert.equal(g._isForcedStopCursed(noUnit), false, 'モンスターが居なければ呪いも無い');
+
+  // 免除: アリジゴクは詠唱者、ほこら(once)は土地の持ち主。
+  const players = [{ id: 0, allianceId: null }, { id: 9, allianceId: null }];
+  Object.assign(g, { players });
+  g._unitHasTrait = () => false;
+  assert.equal(g._isForcedStopFor(players[0], byHuman), false, '詠唱者(id0)は素通り');
+  assert.equal(g._isForcedStopFor(players[1], byHuman), true, '詠唱者以外は止まる');
+  assert.equal(g._isForcedStopFor(players[1], byShrine), false, 'ほこらは土地の持ち主を免除');
+  assert.equal(g._isForcedStopFor(players[0], byShrine), true);
 });
 
 test('サイコキネシスのアリジゴク対策は、詠唱者id=0の土地でも最優先で選ぶ', async () => {
   const antlionUnit = unit(mon('弱い見張り', 10, 1), 0);
   const decoyUnit = unit(mon('育った壁', 200, 20), 0);
   // アリジゴクが張られた土地はLv1・低地価だが、詠唱者(人間側=id 0)が
-  // かけたものなので forcedStopCursed には player.id である 0 が入る。
-  const antlionSource = makeTile(1, { owner: 0, unit: antlionUnit, level: 1, price: 100, forcedStopCursed: 0 });
+  // かけたものなので、モンスター呪いの forcedStop.casterId に 0 が入る。
+  const antlionSource = makeTile(1, { owner: 0, unit: antlionUnit, level: 1, price: 100 });
+  battle.applyCurse(antlionUnit, { name: 'アリジゴク', forcedStop: { casterId: 0 } });
   // おとりは通常のスコア計算だけならこちらが勝つ高レベル・高地価の土地。
   const decoySource = makeTile(2, { owner: 0, unit: decoyUnit, level: 5, price: 500 });
   const destA = makeTile(10, { owner: 1, unit: unit(mon('自軍地', 50, 5), 1) });
@@ -1385,14 +1404,19 @@ test('水神の盾は水属性が装備すると被ダメージを反射する',
   assert.equal(defenderHit.damage, 0, '守備側は反射でノーダメージのはず');
 });
 
-test('水神の盾は属性が違うと反射せず、ATK+10/HP+20・貫通だけの防具になる', () => {
+test('水神の盾は属性が違うと反射せず、ATK+10/HP+20だけの防具になる', () => {
   const attacker = unit(mon('攻', 50, 30, { element: 'neutral' }), 'A');
   const defender = unit(mon('守', 50, 10, { element: 'fire' }), 'D');
   battle.equipItem(defender, ITEM_CATALOG.suijinNoTate);
   const stats = battle.statTotals(defender);
   assert.equal(stats.maxHp, 70, 'HP+20は属性を問わず乗る（戦闘前に確認、戦闘後はアイテムが外れる）');
   assert.equal(stats.atk, 20, 'ATK+10は属性を問わず乗る');
-  assert.ok(battle.hasTrait(defender, 'pierce'), '貫通は属性を問わず乗る');
+  // 貫通は2026-09にユーザー指定で撤去（「強すぎる」）。4種とも持たない。
+  for (const id of ['suijinNoTate', 'kajinNoTate', 'raijinNoTate', 'shinrinjinNoTate']) {
+    assert.ok(!(ITEM_CATALOG[id].traits || []).includes('pierce'), `${id}に貫通が復活している`);
+    assert.ok(!/貫通（/.test(ITEM_CATALOG[id].effectDescription), `${id}の説明文に貫通が残っている`);
+  }
+  assert.ok(!battle.hasTrait(defender, 'pierce'), '貫通は持たない');
   const r = battle.resolveBattle(attacker, defender, new battle.GoldLedger());
   assert.ok(!r.exchanges.some((e) => e.reflected), '属性が違えば反射しない');
 });
@@ -1418,7 +1442,7 @@ test('火神の盾・雷神の盾・森神の盾も一致属性でだけ反射�
   }
 });
 
-test('_itemPowerScore: 属性神の盾は一致属性の時だけ反射込みの高評価になる（不一致は素のATK/HP/貫通どまり）', () => {
+test('_itemPowerScore: 属性神の盾は一致属性の時だけ反射込みの高評価になる（不一致は素のATK/HPどまり）', () => {
   const g = Object.create(Game.prototype);
   Object.assign(g, { players: [] });
   const waterUnit = { def: { element: 'water' } };
@@ -1426,8 +1450,9 @@ test('_itemPowerScore: 属性神の盾は一致属性の時だけ反射込みの
   const matchedScore = g._itemPowerScore(ITEM_CATALOG.suijinNoTate, waterUnit);
   const mismatchedScore = g._itemPowerScore(ITEM_CATALOG.suijinNoTate, fireUnit);
   assert.ok(matchedScore > mismatchedScore, '一致属性は反射効果分だけ高く評価されるはず');
-  // ATK+10/HP+20・貫通(+10)分は不一致でも残るので、無価値な0点にはならない。
-  assert.equal(mismatchedScore, 40);
+  // ATK+10/HP+20分は不一致でも残るので、無価値な0点にはならない
+  //（2026-09に貫通(+10)を撤去したので40→30）。
+  assert.equal(mismatchedScore, 30);
 });
 
 test('CPUのアイテム選択: 属性神の盾は一致属性なら反射込みで確実に装備し、不一致では結果を変える時だけ装備する', () => {
@@ -2836,4 +2861,94 @@ test('class="hidden" を付けた要素は必ず隠れる（素の.hidden規則�
     assert.ok(hasExplicitHide(id),
       `#${id} はID側でdisplayを宣言しているので #${id}.hidden の明示規則が要る`);
   }
+});
+
+// ---- 呪いはモンスター呪いとプレイヤー呪いだけ（2026-09、ユーザー指定） ----
+
+test('土地に直接生やす呪いは存在しない（アリジゴク・増税通知・追徴課税）', async () => {
+  const g = Object.create(Game.prototype);
+  const tile = makeTile(0, { owner: 1, element: 'fire' });
+  tile.unit = unit(mon('壁', 50, 10), 1);
+  Object.assign(g, { tiles: [tile], players: [{ id: 0 }, { id: 1 }], onLog: () => {}, _notifyState: () => {} });
+  const caster = { id: 0, name: '詠唱者' };
+
+  for (const [card, key] of [
+    [SPELL_CATALOG.antlion, 'forcedStop'],
+    [SPELL_CATALOG.taxHike, 'tollReductionRatio'],
+    [SPELL_CATALOG.specialAudit, 'tollBonusOnceMultiplier'],
+  ]) {
+    tile.unit.curses = [];
+    await g._applySpellEffect(caster, card, { targetTileId: 0 });
+    assert.ok(g._monsterCurseOf(tile, key), `${card.name} がモンスター呪いとして乗らない`);
+    // 土地側には一切生やさない。
+    assert.equal(tile.forcedStopCursed, undefined, `${card.name} が土地フラグを作っている`);
+    assert.equal(tile.tollReductionRatio, undefined, `${card.name} が土地フラグを作っている`);
+    assert.equal(tile.tollBonusOnceMultiplier, undefined, `${card.name} が土地フラグを作っている`);
+  }
+
+  // 対象がモンスターであること（土地単体には撃てない）。
+  for (const card of [SPELL_CATALOG.antlion, SPELL_CATALOG.taxHike, SPELL_CATALOG.specialAudit]) {
+    assert.equal(card.target, 'anyMonster', `${card.name} の対象がモンスターでない`);
+  }
+
+  // モンスターが居なくなれば呪いも消える（土地に残らない）。
+  tile.unit = null;
+  assert.equal(g._isForcedStopCursed(tile), false);
+  assert.equal(g._monsterCurseOf(tile, 'tollReductionRatio'), null);
+});
+
+test('アリジゴクは戦闘では消えず、ほこらの強制停止は1回で消える', () => {
+  const g = Object.create(Game.prototype);
+  const make = (curse) => {
+    const t = makeTile(0, { owner: 1 });
+    t.unit = unit(mon('壁', 50, 10), 1);
+    battle.applyCurse(t.unit, curse);
+    return t;
+  };
+  // ほこら(once): 誰か1人を止めた時点で消える＝「1回だけの別呪い」。
+  const shrine = make({ name: '強制停止', forcedStop: { once: true } });
+  assert.equal(g._isForcedStopCursed(shrine), true);
+  g._consumeOnceForcedStop(shrine);
+  assert.equal(g._isForcedStopCursed(shrine), false, 'ほこらは1回で消える');
+
+  // アリジゴク: 止めても消えない。戦闘後に消す処理も無い。
+  const antlion = make({ name: 'アリジゴク', forcedStop: { casterId: 0 } });
+  g._consumeOnceForcedStop(antlion);
+  assert.equal(g._isForcedStopCursed(antlion), true, 'アリジゴクは止めても消えない');
+  // 戦闘を抜けても呪いは個体に残る（unit.cursesは死亡時にしか消えない）。
+  antlion.unit.currentHp = 10;
+  assert.equal(g._isForcedStopCursed(antlion), true, 'アリジゴクは戦闘では消えない');
+
+  // 倒されて別のモンスターに置き換われば当然消える。
+  antlion.unit = unit(mon('侵略者', 50, 10), 0);
+  assert.equal(g._isForcedStopCursed(antlion), false);
+});
+
+test('呪いは1体につき1つ。別の呪いで上書きされる（強制停止も例外ではない）', () => {
+  const g = Object.create(Game.prototype);
+  const t = makeTile(0, { owner: 1 });
+  t.unit = unit(mon('壁', 50, 10), 1);
+  battle.applyCurse(t.unit, { name: 'アリジゴク', forcedStop: { casterId: 0 } });
+  assert.equal(g._isForcedStopCursed(t), true);
+  battle.applyCurse(t.unit, { name: '増税通知', tollReductionRatio: 0.3 });
+  assert.equal(t.unit.curses.length, 1, '呪い枠は常に1つ');
+  assert.equal(g._isForcedStopCursed(t), false, '上書きで強制停止が消える');
+  assert.ok(g._monsterCurseOf(t, 'tollReductionRatio'));
+});
+
+test('属性神の盾4種から貫通を撤去した（強すぎるというユーザー指定）', () => {
+  for (const id of ['suijinNoTate', 'kajinNoTate', 'raijinNoTate', 'shinrinjinNoTate']) {
+    const item = ITEM_CATALOG[id];
+    assert.ok(!(item.traits || []).includes('pierce'), `${id}に貫通が復活している`);
+    assert.equal(item.effect.type, 'wielderElementReflect', '反射そのものは残す');
+    assert.equal(item.cost, 80);
+    assert.equal(item.atkBonus, 10);
+    assert.equal(item.hpBonus, 20);
+  }
+});
+
+test('テンホウの強奪は与ダメージ×3G（5Gから引き下げ）', () => {
+  assert.equal(MONSTER_CATALOG.tenhou.effect.type, 'stealDamageMultiple');
+  assert.equal(MONSTER_CATALOG.tenhou.effect.multiplier, 3);
+  assert.match(MONSTER_CATALOG.tenhou.effectDescription, /×3G/);
 });

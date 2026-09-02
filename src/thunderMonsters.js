@@ -169,8 +169,9 @@ export const THUNDER_MONSTER_CATALOG = {
   }),
   tenhou: thunderMonster('tenhou', 'テンホウ', Rarity.R, 30, 30, {
     traits: ['firstStrike'],
-    effect: { type: 'stealDamageMultiple', multiplier: 5 },
-    effectDescription: '先制。攻撃成功時、与えたダメージ×5Gを相手から奪う',
+    // 2026-09、ユーザー指定で ×5G → ×3G へ引き下げ。
+    effect: { type: 'stealDamageMultiple', multiplier: 3 },
+    effectDescription: '先制。攻撃成功時、与えたダメージ×3Gを相手から奪う',
   }),
   raijin: thunderMonster('raijin', '雷神', Rarity.R, 40, 25, {
     cost: 150,

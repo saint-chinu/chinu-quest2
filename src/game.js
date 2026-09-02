@@ -1434,8 +1434,8 @@ export class Game {
           this.onLog('対象が既にいません');
           return false;
         }
-        targetTile.forcedStopCursed = player.id;
-        this.onLog(`${targetTile.unit.def.name}の土地に強制停止の呪いがかかった`);
+        applyCurse(targetTile.unit, { name: card.name, forcedStop: { casterId: player.id } });
+        this.onLog(`${targetTile.unit.def.name}に強制停止の呪いがかかった（戦闘では消えない）`);
         return false;
 
       case 'returnPlayerToStart':
@@ -1454,9 +1454,12 @@ export class Game {
       }
 
       case 'tollReductionCurse':
-        if (!targetTile) return false;
-        targetTile.tollReductionRatio = effect.ratio;
-        this.onLog(`${ELEMENT_LABEL[targetTile.element]}属性の土地に通行料減少の呪いをかけた`);
+        if (!targetTile?.unit) {
+          this.onLog('対象が既にいません');
+          return false;
+        }
+        applyCurse(targetTile.unit, { name: card.name, tollReductionRatio: effect.ratio });
+        this.onLog(`${targetTile.unit.def.name}に通行料減少の呪いをかけた`);
         return false;
 
       case 'redistributeGoldEvenly': {
@@ -1469,9 +1472,12 @@ export class Game {
       }
 
       case 'tollBonusOnceCurse':
-        if (!targetTile) return false;
-        targetTile.tollBonusOnceMultiplier = effect.multiplier;
-        this.onLog(`${ELEMENT_LABEL[targetTile.element]}属性の土地に追徴課税の呪いをかけた`);
+        if (!targetTile?.unit) {
+          this.onLog('対象が既にいません');
+          return false;
+        }
+        applyCurse(targetTile.unit, { name: card.name, tollBonusOnceMultiplier: effect.multiplier });
+        this.onLog(`${targetTile.unit.def.name}に追徴課税の呪いをかけた`);
         return false;
 
       case 'tollWaiverCurse':
@@ -1629,11 +1635,9 @@ export class Game {
         player.hackingTurnsRemaining = 0;
         player.landlessGoalBonus = 0;
         if (targetTile?.unit) targetTile.unit.curses = [];
-        // 増税通知(tollReductionRatio)はカード自身が「通行料30%減の呪いを
-        // かける」と明言しているのに、土地側のプロパティなのでunit.cursesの
-        // クリアだけでは解除できていなかった（ユーザー報告）。選択した
-        // モンスターが乗っている、その土地自体の呪いとして一緒に解除する。
-        if (targetTile) targetTile.tollReductionRatio = null;
+        // 増税通知・追徴課税・強制停止もモンスター呪いなので、上の
+        // unit.curses = [] で一緒に解除される（2026-09の仕様変更）。
+
         this.onLog(`${player.name}は呪いを解除した`);
         return false;
 
@@ -2247,7 +2251,6 @@ export class Game {
       const defenderUnit = destTile.unit;
       const result = await this._runBattleScene(unit, unitOwner, defenderUnit, defenderPlayer, null, destTile);
       if (!result) return;
-      destTile.forcedStopCursed = false;
       await this._maybeRedirectDeathToLightningRod(defenderPlayer, destTile, result);
 
       if (result.attackerSurvived && !result.defenderSurvived) {
@@ -2612,9 +2615,9 @@ export class Game {
       // 止められる（このターンの残りステップは消化しない）。
       if (this._isForcedStopFor(player, toTile)) {
         if (i < steps - 1) this.onLog(`${player.name}は強制停止の呪いで足を止めた！`);
-        // ほこら由来（boolean true）の強制停止は、この土地で誰かを一度
-        // 止めた時点で消費される。アリジゴク等の数値ID型の呪いは従来通り。
-        if (toTile.forcedStopCursed === true) toTile.forcedStopCursed = false;
+        // ほこら由来（forcedStop.once）は誰か1人を止めた時点で消費される。
+        // アリジゴクは呪いなので止めても戦闘しても消えない。
+        this._consumeOnceForcedStop(toTile);
         break;
       }
     }
@@ -2745,7 +2748,7 @@ export class Game {
 
       if (this._isForcedStopFor(player, toTile)) {
         if (i < steps - 1) this.onLog(`${player.name}は強制停止の呪いで足を止めた！`);
-        if (toTile.forcedStopCursed === true) toTile.forcedStopCursed = false;
+        this._consumeOnceForcedStop(toTile);
         break;
       }
     }
@@ -3242,15 +3245,44 @@ export class Game {
   }
 
   /**
-   * `tile.forcedStopCursed`に呪いが実際に乗っているか。通常`true`（ほこら効果）
-   * だが、アリジゴク（スペル）は免除対象を「詠唱者」に変えたいので、代わりに
-   * 免除するプレイヤーidそのものを入れておける。player.idは0始まりなので、
-   * 詠唱者がプレイヤー0の時`!tile.forcedStopCursed`だと`!0`=trueになり
-   * 「呪い無し」と誤判定してしまう - null/undefined/falseだけを
-   * 「呪い無し」として明示的に弾き、呼び出し元全員がこれを経由すること。
+   * ⚠️ **呪いはモンスター呪いとプレイヤー呪いしかない**（2026-09、ユーザー指定
+   * 「土地につく呪いっていうのはないよ」）。以前は`tile.forcedStopCursed`
+   * `tile.tollReductionRatio` `tile.tollBonusOnceMultiplier`のように土地へ
+   * 直接生やしていたが、全て`unit.curses`（モンスター呪い）へ移した。
+   * 土地から呪いを読むときは必ずこの手の関数を通し、`tile.*`を直接見ないこと。
+   *
+   * `unit.curses`は1体につき1つしか保持しない（battle.jsの`setCurse`）ので、
+   * 別の呪いをかければ上書きされて消える。モンスターが倒れる・入れ替わる時も
+   * 個体ごと消えるため、土地側のフラグを片付けて回る必要が無い。
    */
+  _monsterCurseOf(tile, key) {
+    return tile?.unit?.curses?.find((curse) => curse[key] != null) ?? null;
+  }
+
+  /**
+   * 強制停止の呪い（アリジゴク／ほこら）が乗っているか。
+   * ⚠️ **アリジゴクは戦闘では消えない**（2026-09、ユーザー指定「アリジゴクは
+   * 呪いやから戦闘しても消えない」）。消えるのは付与先のモンスターが倒れた
+   * ときと、別の呪いで上書きされたときだけ。
+   * ⚠️ **ほこら効果は「1回だけの別呪い」**（同指定）。`forcedStop.once`が
+   * 立っており、誰か1人を止めた時点で消える（_movePlayer参照）。
+   */
+  _forcedStopCurseOf(tile) {
+    return this._monsterCurseOf(tile, 'forcedStop');
+  }
+
   _isForcedStopCursed(tile) {
-    return tile.forcedStopCursed != null && tile.forcedStopCursed !== false;
+    return !!this._forcedStopCurseOf(tile);
+  }
+
+  /**
+   * ほこら由来（`forcedStop.once`）の強制停止を消費する。誰か1人を止めた
+   * 時点で1回だけ効いて消える。アリジゴク（`casterId`持ち）はここでは消えない。
+   */
+  _consumeOnceForcedStop(tile) {
+    const curse = this._forcedStopCurseOf(tile);
+    if (!curse?.forcedStop?.once) return;
+    tile.unit.curses = tile.unit.curses.filter((c) => c !== curse);
   }
 
   /**
@@ -3265,9 +3297,11 @@ export class Game {
       if (owner?.allianceId != null && owner.allianceId === player.allianceId) return false;
       return true;
     }
-    if (!this._isForcedStopCursed(tile)) return false;
+    const curse = this._forcedStopCurseOf(tile);
+    if (!curse) return false;
     if (tile.type !== TileType.LAND || tile.owner == null) return false;
-    const exemptId = tile.forcedStopCursed === true ? tile.owner : tile.forcedStopCursed;
+    // アリジゴクは詠唱者を、ほこら（once）は土地の持ち主を免除する。
+    const exemptId = curse.forcedStop.casterId ?? tile.owner;
     if (exemptId === player.id) return false;
     const exemptPlayer = this.players.find((p) => p.id === exemptId);
     if (exemptPlayer?.allianceId != null && exemptPlayer.allianceId === player.allianceId) return false;
@@ -3813,7 +3847,10 @@ export class Game {
   /** 右の頬をシバかれたら、左の頬をシバきなさい: 盤上に配置中の全モンスターの土地に強制停止の呪いをかける（自分の土地以外を素通りできなくなる。同盟仲間は対象外 - _isForcedStopFor参照）。各土地の呪いは誰かを一度停止させると消える。 */
   _shrineForcedStop() {
     const targets = this.tiles.filter((t) => t.unit != null);
-    for (const tile of targets) tile.forcedStopCursed = true;
+    // ⚠️ アリジゴクとは**別の呪い**。casterIdを持たないので免除されるのは
+    // 土地の持ち主だけ、かつonce付きで誰か1人を止めた時点で消える
+    // （2026-09、ユーザー指定「ほこらの効果は1回だけの別呪い」）。
+    for (const tile of targets) applyCurse(tile.unit, { name: '強制停止', forcedStop: { once: true } });
     const message = `「右の頬をシバかれたら、左の頬をシバきなさい」\n全モンスターの土地に強制停止の呪い！（${targets.length}箇所）`;
     this.onLog(message.replace('\n', '……'));
     return { message };
@@ -4109,9 +4146,10 @@ export class Game {
 
     let toll = this._tollOfTile(tile);
     // 追徴課税: 対象の土地に止まった最初の相手にだけ1.5倍（1回限り消費）。
-    if (tile.tollBonusOnceMultiplier) {
-      toll = Math.round(toll * tile.tollBonusOnceMultiplier);
-      tile.tollBonusOnceMultiplier = null;
+    const bonusCurse = this._monsterCurseOf(tile, 'tollBonusOnceMultiplier');
+    if (bonusCurse) {
+      toll = Math.round(toll * bonusCurse.tollBonusOnceMultiplier);
+      tile.unit.curses = tile.unit.curses.filter((c) => c !== bonusCurse); // 1回限り
       this.onLog('「追徴課税」の効果で通行料が割り増しされた！');
     }
     // 脱税: 次に支払うはずだった通行料を1回無効化する（自分への呪い）。
@@ -4662,7 +4700,8 @@ export class Game {
     if (monsterTollMultiplier !== 1) toll = Math.round(toll * monsterTollMultiplier);
     // 増税通知: 通行料を割合で恒久的に減らす呪い（表示にも反映される安定した値、
     // 追徴課税の1回限り倍率とは別枠 - こちらは_settleLandingToll側で扱う）。
-    if (tile.tollReductionRatio) toll = Math.round(toll * (1 - tile.tollReductionRatio));
+    const reduction = this._monsterCurseOf(tile, 'tollReductionRatio');
+    if (reduction) toll = Math.round(toll * (1 - reduction.tollReductionRatio));
     return toll;
   }
 
@@ -4994,7 +5033,6 @@ export class Game {
       const defenderUnit = targetTile.unit;
       const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, null, targetTile);
       if (!result) return false;
-      targetTile.forcedStopCursed = false; // 戦闘が終わると消える - _shrineForcedStop参照。
       await this._maybeRedirectDeathToLightningRod(defenderPlayer, targetTile, result);
 
       if (result.attackerSurvived && !result.defenderSurvived) {
@@ -5118,9 +5156,8 @@ export class Game {
     tile.unit = null;
     tile.level = 1;
     tile.transparentCursed = false;
-    tile.forcedStopCursed = false;
-    tile.tollReductionRatio = null;
-    tile.tollBonusOnceMultiplier = null;
+    // 強制停止・増税通知・追徴課税はモンスター呪いなので、unitを外した時点で
+    // 一緒に消える（tile側に持たせていた頃の後片付けは不要）。
     this._repaintTileToElement(tile);
     // レベルを1へ戻したら枠線も戻す（_sellLandTile等レベルを触る全箇所と同じ）。
     // これが無いと換金後もLv5の枠が残り、空き地なのに高レベルに見える。
@@ -5495,9 +5532,7 @@ export class Game {
         if (!t.unit) continue;
         t.unit.curses = [];
         t.unit.currentHp = this._baseStats(t.unit).hp;
-        // 増税通知(tollReductionRatio)は土地側の呪いなのでunit.cursesには
-        // 乗らない。「呪いを解除した」と謳う以上、ここも一緒に外す。
-        t.tollReductionRatio = null;
+        // 増税通知等もモンスター呪いなので上のunit.curses=[]で一緒に外れる。
         healedCount += 1;
       }
       this.onLog(`${player.name}の${unitDef.name}が味方全体を回復し、呪いを解除した（${healedCount}体）`);
@@ -6005,14 +6040,13 @@ export class Game {
       const ownedUnits = this._ownedTiles(player).filter((candidate) => candidate.unit);
       const needsHealing = ownedUnits.some((candidate) => {
         const maxHp = this._baseStats(candidate.unit).hp + this._elementHpBonus(candidate.unit, candidate);
-        return candidate.unit.currentHp < maxHp || (candidate.unit.curses?.length || 0) > 0 || candidate.tollReductionRatio;
+        return candidate.unit.currentHp < maxHp || (candidate.unit.curses?.length || 0) > 0;
       });
       if (!needsHealing) return false;
       spend();
       for (const candidate of ownedUnits) {
         candidate.unit.curses = [];
         candidate.unit.currentHp = this._baseStats(candidate.unit).hp;
-        candidate.tollReductionRatio = null;
       }
       this.onLog(`${player.name}の${unitDef.name}が味方全体を回復し、呪いを解除した (-${cost}G)`);
       this._notifyState();
@@ -7865,7 +7899,6 @@ export class Game {
       if (!this._conqueredLandingTiles) this._conqueredLandingTiles = new Set();
       this._conqueredLandingTiles.add(`${player.id}:${tile.id}`);
       tile.transparentCursed = false;
-      tile.forcedStopCursed = false;
       this._paintTile(tile, player.color);
       await this._handleUnitDeath(defenderUnit, defenderPlayer);
       await this._presentLandLoss(defenderLandLoss);
@@ -7876,8 +7909,8 @@ export class Game {
 
     const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, null, tile);
     if (!result) return;
-    // 強制停止の呪いは「戦闘が終わると消える」(勝敗を問わない) - _shrineForcedStop参照。
-    tile.forcedStopCursed = false;
+    // ⚠️ ここで強制停止を消さないこと。アリジゴクは呪いなので戦闘では消えない
+    // （2026-09、ユーザー指定）。付与先のモンスターが倒れれば個体ごと消える。
     await this._maybeRedirectDeathToLightningRod(defenderPlayer, tile, result);
 
     if (!result.defenderSurvived) {
@@ -8513,7 +8546,6 @@ export class Game {
     attackerUnit.curses = [];
     const result = await this._runBattleScene(attackerUnit, player, defenderUnit, defenderPlayer, null, target);
     if (!result) return false;
-    target.forcedStopCursed = false;
     await this._maybeRedirectDeathToLightningRod(defenderPlayer, target, result);
 
     if (result.attackerSurvived && !result.defenderSurvived) {
@@ -8776,7 +8808,7 @@ export class Game {
     // 追徴課税は自分の最も高い通行料を持つ守備土地へ付与する。
     const audit = affordable('tollBonusOnceCurse');
     const auditTarget = this._ownedTiles(player)
-      .filter((tile) => tile.unit && !tile.tollBonusOnceMultiplier)
+      .filter((tile) => tile.unit && !this._monsterCurseOf(tile, 'tollBonusOnceMultiplier'))
       .sort((a, b) => this._tollOfTile(b) - this._tollOfTile(a))[0];
     if (audit && auditTarget) await this._cpuCastSpell(player, audit, { targetTileId: auditTarget.id });
   }
@@ -9249,7 +9281,8 @@ export class Game {
     if (player.spellUsedThisTurn) return;
     const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'tollBonusOnceCurse');
     if (!card || player.currency < (card.cost || 0)) return;
-    const candidates = this.tiles.filter((t) => t.owner === player.id && !t.tollBonusOnceMultiplier);
+    const candidates = this.tiles.filter((t) => t.owner === player.id && t.unit
+      && !this._monsterCurseOf(t, 'tollBonusOnceMultiplier'));
     const best = [...candidates].sort((a, b) => this._tollOfTile(b) - this._tollOfTile(a))[0];
     if (!best) return;
     const gain = this._tollOfTile(best) * ((card.effect.multiplier || 1) - 1);
@@ -9430,7 +9463,8 @@ export class Game {
     const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'tollReductionCurse');
     if (!card || player.currency < (card.cost || 0)) return;
     const candidates = this.tiles.filter((t) => {
-      if (t.owner == null || t.owner === player.id || t.tollReductionRatio) return false;
+      if (t.owner == null || t.owner === player.id || !t.unit) return false;
+      if (this._monsterCurseOf(t, 'tollReductionRatio')) return false;
       const owner = this.players.find((p) => p.id === t.owner);
       return owner && !owner.defeated && !this._isAllyOf(owner, player);
     });
@@ -9568,7 +9602,7 @@ export class Game {
         if (intoOwnLand && attackerWinRate > CPU_PSYCHOKINESIS_MAX_ATTACKER_WIN_RATE) continue;
         const defenderPower = (destination.unit.currentHp || 0) + (destination.unit.def.atk || 0)
           + this._elementHpBonus(destination.unit, destination);
-        // aiProfile.psychokinesisTargetAntlion: 敵地にアリジゴク(forcedStopCursed)
+        // aiProfile.psychokinesisTargetAntlion: 敵地にアリジゴクの呪い
         // が張られていれば最優先で引き剥がす。守備モンスターがいなくなればその
         // 土地は所有者ごと空き地に戻り、アリジゴクの罠として機能しなくなる。
         // source.level*1000（下のスコア基準）を確実に上回る値を足して、
