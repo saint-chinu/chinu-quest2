@@ -337,6 +337,20 @@ const CHINU_ROWS = [
   'GFFWWMMTTNCMMWWTTFFC',
 ];
 
+// ⑰海底労働施設。10列×10行の洞窟型（実マス39）。
+const SEA_LABOR_ROWS = [
+  'G.........',
+  'F........C',
+  'F........W',
+  'F.....FMWW',
+  'WTTTMMM...',
+  'M.....T...',
+  'M....NTT..',
+  'MTN..F.W..',
+  'T.F..FFC..',
+  'NMCWWW....',
+];
+
 /**
  * ⑬の島判定。上段は3列に分かれた周回島（gridXの帯で見分ける）、
  * gridZ 8以降がゴール島。ワープの飛び先候補（ゴール島⇔CP島の往復だけ。
@@ -406,6 +420,7 @@ export const MAPS = [
   // ⑯はストーリー専用。1行20マスの細長い盤面なので対戦モードへ出す前提が
   // 無く、wipは外さない想定。背景は専用の「王の間」（海中の玉座の間）。
   { id: 'chinu', name: '⑯ 魚群の王チヌ', wip: true, rows: CHINU_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/king-room.png'), spacing: 2.8 },
+  { id: 'sea-labor', name: '⑰ 海底労働施設', wip: true, rows: SEA_LABOR_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/stage17-underwater-prison.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {

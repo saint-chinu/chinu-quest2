@@ -32,6 +32,7 @@ export const TRACK_SRC = {
   royalGuard: assetUrl('/audio/stage14bgm.mp3'), // ⑭王都の番人？？
   kawada: assetUrl('/audio/stage15bgm.mp3'), // ⑮是々非々のマーモット（自称）
   chinu: assetUrl('/audio/stage16bgm.mp3'), // ⑯魚群の王チヌ
+  seaLabor: assetUrl('/audio/stage17bgm.mp3'), // ⑰海底労働施設・レジスタンスの反乱
 };
 
 // mapId(board.jsのMAPS)→専用トラック。無いキーはplayMapTheme側でboardに
@@ -57,6 +58,7 @@ export const MAP_TRACK = {
   'royal-guard': 'royalGuard',
   kawada: 'kawada',
   chinu: 'chinu',
+  'sea-labor': 'seaLabor',
 };
 
 // 対人戦のBGM選択（ホストがステージ確定時に選ぶ）。ここに並べた曲だけが
@@ -79,6 +81,7 @@ export const SELECTABLE_BGM = [
   { track: 'royalGuard', title: '♪王都の番人' },
   { track: 'kawada', title: '♪路地裏のレジスタンス' },
   { track: 'chinu', title: '♪玉座の重み' },
+  { track: 'seaLabor', title: '♪海底労働施設の反乱' },
   { track: 'battle', title: '♪一触即発' },
 ];
 
