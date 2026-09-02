@@ -136,6 +136,7 @@ export const ITEM_CATALOG = {
   diamondShield: item('diamondShield', 'ダイヤモンドの盾', Rarity.S, ItemType.ARMOR, 55, -20, 60, {
     traits: ['lastStrike'],
     effectDescription: '後攻。HP+60、ATK-20',
+    imageDataUrl: assetUrl('/images/card-art/diamondShield.png'),
   }),
   // ATK/HPの実数値（素のステータス・アイテムのatkBonus/hpBonus）はそのまま、
   // 特殊能力だけを丸ごと交換する。詳細な実装はbattle.jsの
@@ -178,25 +179,25 @@ export const ITEM_CATALOG = {
     traits: ['pierce'],
     effect: { type: 'wielderElementReflect', wielderElement: Element.WATER },
     effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。水属性モンスターが装備すると、受けるダメージを反射する（この反射は相手の貫通では無効化されない）',
-    imageDataUrl: null,
+    imageDataUrl: assetUrl('/images/card-art/suijinNoTate.png'),
   }),
   kajinNoTate: item('kajinNoTate', '火神の盾', Rarity.R, ItemType.ARMOR, 80, 10, 20, {
     traits: ['pierce'],
     effect: { type: 'wielderElementReflect', wielderElement: Element.FIRE },
     effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。火属性モンスターが装備すると、受けるダメージを反射する（この反射は相手の貫通では無効化されない）',
-    imageDataUrl: null,
+    imageDataUrl: assetUrl('/images/card-art/kajinNoTate.png'),
   }),
   raijinNoTate: item('raijinNoTate', '雷神の盾', Rarity.R, ItemType.ARMOR, 80, 10, 20, {
     traits: ['pierce'],
     effect: { type: 'wielderElementReflect', wielderElement: Element.THUNDER },
     effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。雷属性モンスターが装備すると、受けるダメージを反射する（この反射は相手の貫通では無効化されない）',
-    imageDataUrl: null,
+    imageDataUrl: assetUrl('/images/card-art/raijinNoTate.png'),
   }),
   shinrinjinNoTate: item('shinrinjinNoTate', '森神の盾', Rarity.R, ItemType.ARMOR, 80, 10, 20, {
     traits: ['pierce'],
     effect: { type: 'wielderElementReflect', wielderElement: Element.FOREST },
     effectDescription: '貫通（HPの土地レベルボーナス・ダメージ無効化・反射を無視するが、アイテムのHP増加は無視できない）。森属性モンスターが装備すると、受けるダメージを反射する（この反射は相手の貫通では無効化されない）',
-    imageDataUrl: null,
+    imageDataUrl: assetUrl('/images/card-art/shinrinjinNoTate.png'),
   }),
 
   fushichoNoTate: item('fushichoNoTate', '不死鳥の盾', Rarity.R, ItemType.ARMOR, 90, 10, 20, {
