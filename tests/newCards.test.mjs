@@ -2248,7 +2248,7 @@ test('⑯は絶対敗北にしない: 負けてもクリア扱い＋勝てば隠
 test('⑯の盤面は1行20マスの一直線（両端が行き止まりで折り返す）', () => {
   const map = MAPS.find((entry) => entry.id === 'chinu');
   assert.equal(map.rows.length, 1);
-  assert.equal(map.rows[0], 'GFFWWMMTTNNMMWWTTFFC');
+  assert.equal(map.rows[0], 'GFFWWMMTTNCMMWWTTFFC');
   const tiles = createBoard('chinu');
   assert.equal(tiles.length, 20);
   assert.equal(tiles[0].type, TileType.START);
@@ -2260,7 +2260,38 @@ test('⑯の盤面は1行20マスの一直線（両端が行き止まりで折�
   for (const tile of tiles.filter((entry) => entry.type === TileType.LAND)) {
     counts[tile.element] = (counts[tile.element] || 0) + 1;
   }
-  assert.deepEqual(counts, { fire: 4, water: 4, forest: 4, thunder: 4, neutral: 2 });
+  assert.deepEqual(counts, { fire: 4, water: 4, forest: 4, thunder: 4, neutral: 1 });
+  assert.equal(map.checkpointBonus, 150, 'CP収入は150G（ユーザー指定）');
+});
+
+test('⑯の中央CPがくぐつの剣豪の横断を止める（くぐつ対策）', () => {
+  // くぐつの剣豪(autoInvadeEachTurn)は「空き地だけで到達できる最短の敵へ
+  // 毎手番1マス進む」が特殊マスは通れない。一直線の盤面では中央に特殊マスを
+  // 1つ置くだけで、盤面の端から端まで延々と侵略され続けるのを止められる
+  // （2026-09、ユーザー指定「くぐつ対策で真ん中にチェックポイント」）。
+  const tiles = createBoard('chinu');
+  const special = tiles.filter((t) => t.type !== TileType.LAND).map((t) => t.id);
+  assert.deepEqual(special, [0, 10, 19], 'スタート・中央CP・終端CPの3つが特殊マス');
+
+  // 土地マスだけを辿ると、中央CPで左右に分断されていること。
+  const landIds = new Set(tiles.filter((t) => t.type === TileType.LAND).map((t) => t.id));
+  const reach = (from) => {
+    const seen = new Set([from]); const st = [from];
+    while (st.length) {
+      for (const n of tiles[st.pop()].neighbors) {
+        if (landIds.has(n) && !seen.has(n)) { seen.add(n); st.push(n); }
+      }
+    }
+    return seen;
+  };
+  const left = reach(1);
+  assert.ok(!left.has(11), 'くぐつは中央CPを越えて右半分へ渡れない');
+  assert.deepEqual([...left].sort((a, b) => a - b), [1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  assert.deepEqual([...reach(11)].sort((a, b) => a - b), [11, 12, 13, 14, 15, 16, 17, 18]);
+
+  // くぐつの剣豪が実際にこの制約を持つカードであることも押さえておく。
+  assert.equal(MONSTER_CATALOG.kugutsuNoKengou.effect.type, 'autoInvadeEachTurn');
+  assert.match(MONSTER_CATALOG.kugutsuNoKengou.effectDescription, /特殊マスは通れず/);
 });
 
 test('⑯の割り込み会話は敵1人が4000Gに届いた時だけ、1回だけ発火する', async () => {

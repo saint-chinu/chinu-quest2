@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v272`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v273`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## チュートリアルの不自然さ修正（2026-08、ユーザー報告）
@@ -318,15 +318,32 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
   と表示する**（2行）。
 
 ### 盤面（実装済み・`board.js`の`CHINU_ROWS` / MAPS id:'chinu'）
-`G火火水水森森雷雷無無森森水水雷雷火火C` ＝ **`'GFFWWMMTTNNMMWWTTFFC'`（1行20マス）**。
+`G火火水水森森雷雷無C森森水水雷雷火火C` ＝ **`'GFFWWMMTTNCMMWWTTFFC'`（1行20マス）**。
 board.jsの記号は F=火 W=水 T=雷 M=森 N=無 G=スタート C=CP（確認済み）。
 - ⚠️ **ループではなく両端が行き止まりだが、そのまま動く**。`_movePlayer`は
   `const forward = neighbors.filter(id => id !== previousTileId);`
   `const options = forward.length > 0 ? forward : neighbors;` なので、
   行き止まりでは`forward`が空になり**来た道へ折り返す**（game.js 2416付近）。
-  つまりG↔Cの往復になり、**片道1回＝「半周」**として扱える。
-- CPが終端Cの1マスだけなので、`requireAllCheckpoints`を有効にすれば
+  つまりG↔終端Cの往復になり、**片道1回＝「半周」**として扱える。
+- 終端がCPなので、`requireAllCheckpoints`を有効にすれば
   「一度は最奥まで行かないとゴールできない」が自然に成立する。
+- ⚠️ **中央(index10)のCPは「くぐつの剣豪」対策**（2026-09、ユーザー指定）。
+  くぐつの剣豪（`chinuHitodemaso`に2枚）は`autoInvadeEachTurn`で、隣接する敵が
+  居なければ「空き地だけで到達できる最短の敵へ毎手番1マス進む」が、
+  **特殊マスは通れない**（neutralMonsters.jsの`effectDescription`）。
+  一直線の盤面では中央に特殊マスを1つ置くだけでくぐつが反対側へ渡れなくなり、
+  端から端まで延々と侵略され続けるのを止められる。中央の無属性2マスのうち
+  1マスをCPへ置き換えたので、**無属性は1マス**になった（火水森雷は各4マスのまま）。
+- **CP収入は150G**（`checkpointBonus: 150`。ユーザー指定、元から設定済み）。
+  ⚠️ 副作用として**CPが2つになり、1周あたりのCP収入が150G→300G**になる
+  （`_visitCheckpoint`は1周につきCP1つ1回だけ加算し、ゴール通過で
+  `passedCheckpoints`がクリアされる）。**敵は3人居るので敵側同盟の伸びの方が
+  大きい**——「圧倒的不利」の方向に効くので趣旨には沿うが、決着が早すぎると
+  感じたら`goalCurrency`で調整すること。
+- 回帰テスト: `npm run test:cards`「⑯の盤面は1行20マスの一直線」
+  「⑯の中央CPがくぐつの剣豪の横断を止める（くぐつ対策）」。後者は土地マスだけを
+  辿って**左半分(1-9)と右半分(11-18)が分断されている**ことを検証するので、
+  中央CPを消すと落ちる（実際に落ちることを確認済み）。
 
 ### 対戦仕様（ユーザー指定）
 - **3vs1**（主人公 vs ウサギン・ムール・邪神ヒトデマソの同盟）。目標総資産5,000。
