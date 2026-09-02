@@ -2780,3 +2780,60 @@ test('聖域中のモンスターは土地コマンドの特殊効果も受け�
   assert.deepEqual(targetsFrom(1), [], '主人公から見て聖域の土地は候補に出ない');
   assert.deepEqual(targetsFrom(0), [1], '相手側は従来どおり候補に出る');
 });
+
+test('class="hidden" を付けた要素は必ず隠れる（素の.hidden規則が末尾にある）', () => {
+  // ⚠️ このプロジェクトには長らく素の`.hidden`規則が無く、要素ごとに
+  // `#foo.hidden { display: none; }` を書いて回る運用だった。書き忘れた要素は
+  // classList.add('hidden') しても隠れない（2026-09、対人戦の戦闘画面に
+  // 「装備なし」が出っぱなしになる不具合として発覚）。
+  const css = readFileSync(new URL('../src/style.css', import.meta.url), 'utf8');
+  const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+
+  // ① 素の .hidden が display:none を宣言していること。
+  // 行頭の素の .hidden（他のセレクタと連結していないもの）だけを見る。
+  const bare = [...css.matchAll(/^\.hidden\s*\{([^}]*)\}/gm)];
+  assert.ok(bare.length > 0, '素の .hidden 規則が無い（要素ごとの書き忘れが即バグになる）');
+  assert.ok(bare.some((m) => /display\s*:\s*none/.test(m[1])), '素の .hidden が display:none を宣言していない');
+
+  // ② 詳細度が同じクラス規則との勝負は「後に書いた方」で決まるので、
+  //    素の .hidden は hidden と併用されるクラスの display 宣言より後に無いといけない。
+  // ⚠️ 位置は必ず①で拾った実際の規則から取る。`lastIndexOf('.hidden {')`だと
+  //    コメント中の例文（`#app.hidden { display: none; }` 等）を拾ってしまい、
+  //    規則をファイル先頭へ動かしても素通りする。
+  const lastHidden = bare[bare.length - 1].index;
+  const companions = new Set();
+  for (const m of html.matchAll(/class="([^"]*\bhidden\b[^"]*)"/g)) {
+    for (const c of m[1].split(/\s+/)) if (c && c !== 'hidden') companions.add(c);
+  }
+  for (const c of companions) {
+    const re = new RegExp(`\\.${c.replace(/-/g, '\\-')}\\s*\\{[^}]*display\\s*:`, 'g');
+    for (const m of css.matchAll(re)) {
+      assert.ok(m.index < lastHidden,
+        `.${c} の display 宣言が素の .hidden より後にあり、.hidden が負ける（.hidden をファイル末尾へ）`);
+    }
+  }
+
+  // ③ IDセレクタ(1-0-0)は .hidden(0-1-0) に勝つので、ID側で display を
+  //    宣言している要素だけは従来どおり明示の #id.hidden が要る。
+  const idsWithHidden = new Set();
+  for (const tag of html.match(/<[^>]+>/g) || []) {
+    if (!/\bclass="[^"]*\bhidden\b/.test(tag)) continue;
+    const id = (tag.match(/\bid="([\w-]+)"/) || [])[1];
+    if (id) idsWithHidden.add(id);
+  }
+  // ⚠️ セレクタは「, 」で並べて書かれていることがある
+  // （例: `#deck-select-confirm.hidden,\n#deck-select-picker.hidden { ... }`）。
+  // ルール単位で切り出してからセレクタ一覧を調べる。
+  const rules = [...css.matchAll(/([^{}]+)\{([^}]*)\}/g)]
+    .map((m) => ({ selectors: m[1].split(',').map((x) => x.trim()), body: m[2] }));
+  const hasExplicitHide = (id) => rules.some((r) => (
+    /display\s*:\s*none/.test(r.body)
+    && r.selectors.some((sel) => new RegExp(`^#${id}(\\.[\\w-]+)*\\.hidden$`).test(sel))
+  ));
+  for (const id of idsWithHidden) {
+    const idRule = rules.find((r) => r.selectors.includes(`#${id}`));
+    if (!idRule || !/display\s*:/.test(idRule.body)) continue; // 素の .hidden が効く
+    assert.ok(hasExplicitHide(id),
+      `#${id} はID側でdisplayを宣言しているので #${id}.hidden の明示規則が要る`);
+  }
+});

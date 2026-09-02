@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v276`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v277`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## チュートリアルの不自然さ修正（2026-08、ユーザー報告）
@@ -277,6 +277,38 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 ②盤面の途中 ③勝利後の会話 のどれか。③なら川田のoutroを
 クエと誤認した可能性が高く、①②なら本当に別ステージのデータが混ざっている。
 併せて、その人が⑮の直前に⑫か⑬を遊んでいたかどうか。
+
+## ⚠️ `class="hidden"` は素の`.hidden`規則で効かせる（2026-09、対人戦のバグ修正）
+
+報告: 「対人戦で戦闘画面にずっと装備無しが表示されてる」。
+
+原因は**このプロジェクトに長らく素の`.hidden { display: none; }`が無かった**こと。
+要素ごとに`#foo.hidden { display: none; }`を書いて回る運用で、書き忘れた要素は
+`classList.add('hidden')`しても**一切隠れない**。`#battle-item-none-notice`
+（「装備なし」）がまさにそれで、`position:absolute; top:50%; left:50%`の
+装飾付きなので**戦闘画面が開いている間ずっと中央に出っぱなし**になっていた。
+JS側は正しく1.5秒で`add('hidden')`していたので、コードを読んでも見つからない。
+
+- 調査時点で、index.htmlの`class="hidden"`を持つ**110要素のうち12要素**が
+  同じ状態だった（装備なし通知のほか、再参加ボタン・各種プレビュー・
+  ゲームメニューの一部など）。**単発の書き忘れではなく構造的な穴**。
+- 対処: `src/style.css`の**末尾**へ素の`.hidden { display: none; }`を追加した。
+- ⚠️ **必ずファイル末尾に置くこと。** `.hidden`(0-1-0)と`.pg-screen`(0-1-0)の
+  ような他のクラス規則は詳細度が同じで、勝敗は**後に書いた方**で決まる。
+  先頭に置くと`.pg-screen { display: flex }`等に負けて隠れない。
+- ⚠️ **IDセレクタ(1-0-0)には`.hidden`(0-1-0)が負ける。** `#app { display: block }`
+  のようにID側でdisplayを宣言している要素は、従来どおり
+  `#app.hidden { display: none; }`の明示規則が要る（既存の明示規則は
+  すべてそのまま残してある）。
+- 回帰テスト: `npm run test:cards`「class="hidden" を付けた要素は必ず隠れる」。
+  ①素の`.hidden`が`display:none`を宣言している ②それが`hidden`と併用される
+  クラスのdisplay宣言より**後ろ**にある ③ID側でdisplayを宣言している要素には
+  `#id.hidden`の明示規則がある——の3点をindex.htmlとstyle.cssから検証する。
+  3つとも、わざと崩すと落ちることを確認済み。
+  - ⚠️ テスト内で`.hidden`の位置を取る時に`lastIndexOf('.hidden {')`を使わない
+    こと。コメント中の例文（`#app.hidden { display: none; }`等）を拾ってしまい、
+    規則を先頭へ動かしても素通りする。行頭アンカーで拾った実際の規則の
+    indexを使う。
 
 ## 聖域(sanctuary)はモンスターへの呪い（2026-09、ユーザー指定で仕様変更）
 
