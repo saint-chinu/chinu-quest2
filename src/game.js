@@ -109,6 +109,28 @@ const OFUDA_ELEMENTS = [Element.FIRE, Element.WATER, Element.FOREST, Element.THU
 // LightningRod)、くねくねは被ダメージを全反射するので、どちらも通常の戦闘
 // では処理できない。_cpuPickDamageTarget参照。
 const INVASION_BLOCKER_IDS = new Set(['raiheishinZamurai', 'kunekune']);
+/**
+ * 🚫 **プレイヤー呪いの全一覧と「かかっていない」状態の値。**
+ * 呪いは重なったら後から撃たれたものが有効——という不可侵のルール
+ * （2026-09、ユーザー指定）に従い、**プレイヤーにかかる呪いは常に1つだけ**。
+ * 有益な呪い（脱税・絶対攻撃・お前も〇ぬんだ・不動産鑑〇士・タフネス・
+ * 宝くじ・持たざる者・アイキャンフライ）も同じ1枠を使うので、
+ * マイナスの呪いを後から撃てば打ち消せる（ユーザー曰く「醍醐味」）。
+ * ⚠️ **プレイヤー呪いを増やす時は必ずここへ足すこと。**足し忘れると
+ * その呪いだけ1枠ルールの外側に出てしまう。
+ */
+const PLAYER_CURSE_FIELDS = {
+  diceCurse: null,                     // 出目固定/反転/2倍
+  hasteTurnsRemaining: 0,              // 高速化の呪い（ソニックムーヴ）
+  hackingTurnsRemaining: 0,            // ハッキング
+  toughnessTurnsRemaining: 0,          // タフネス
+  allTilesAccessTurnsRemaining: 0,     // 不動産鑑〇士
+  tollWaiverCharges: 0,                // 脱税
+  lotteryOnNextGoal: false,            // 宝くじ
+  pierceNextInvasion: false,           // 絶対攻撃
+  guaranteedNextInvasionWin: false,    // お前も〇ぬんだ
+  landlessGoalBonus: 0,                // 持たざる者
+};
 // ダメージ系スペルでCPUが「一撃で倒せなくても最優先で削る」モンスター。
 // くぐつの剣豪(autoInvadeEachTurn)は毎手番こちらの土地へ自動で侵略し続け、
 // traitsのimmovableByMoveCommandで動かすこともできない。避雷針侍・くねくねは
@@ -1412,17 +1434,17 @@ export class Game {
       }
 
       case 'setNextDice':
-        targetPlayer.diceCurse = { type: 'fixed', value: effect.value };
+        this._applyPlayerCurse(targetPlayer, 'diceCurse', { type: 'fixed', value: effect.value });
         this.onLog(`${targetPlayer.name}は次のサイコロが${effect.value}に固定される呪いをかけられた`);
         return false;
 
       case 'reverseNextDice':
-        targetPlayer.diceCurse = { type: 'reverse' };
+        this._applyPlayerCurse(targetPlayer, 'diceCurse', { type: 'reverse' });
         this.onLog(`${targetPlayer.name}は次のサイコロで後退する呪いをかけられた`);
         return false;
 
       case 'doubleNextDice':
-        targetPlayer.diceCurse = { type: 'double' };
+        this._applyPlayerCurse(targetPlayer, 'diceCurse', { type: 'double' });
         this.onLog(`${targetPlayer.name}は次のサイコロの出目が2倍になる呪いをかけられた`);
         return false;
 
@@ -1481,14 +1503,13 @@ export class Game {
         return false;
 
       case 'tollWaiverCurse':
-        player.tollWaiverCharges += 1;
+        this._applyPlayerCurse(player, 'tollWaiverCharges', 1);
         this.onLog(`${player.name}は脱税の準備をした`);
         return false;
 
       case 'summonBaseHpBoostCurse':
         if (!targetPlayer || !this._isAllyOf(targetPlayer, player)) return false;
-        // 重複加算はせず、再使用時は残り期間を3ターンへ更新する。
-        targetPlayer.toughnessTurnsRemaining = effect.turns;
+        this._applyPlayerCurse(targetPlayer, 'toughnessTurnsRemaining', effect.turns);
         this.onLog(`${targetPlayer.name}は${effect.turns}ターンの間、空き地への召喚時に基礎HP+${effect.hpBonus}を得る`);
         return false;
 
@@ -1524,12 +1545,12 @@ export class Game {
 
       case 'landlessGoalBonusCurse':
         if (!targetPlayer || !this._isAllyOf(targetPlayer, player)) return false;
-        targetPlayer.landlessGoalBonus = Math.max(targetPlayer.landlessGoalBonus || 0, effect.amount || 500);
+        this._applyPlayerCurse(targetPlayer, 'landlessGoalBonus', effect.amount || 500);
         this.onLog(`${targetPlayer.name}は「持たざる者」の呪いを受けた。土地を持たずにゴールすると+${targetPlayer.landlessGoalBonus}G`);
         return false;
 
       case 'lotteryOnNextGoal':
-        player.lotteryOnNextGoal = true;
+        this._applyPlayerCurse(player, 'lotteryOnNextGoal', true);
         this.onLog(`${player.name}は宝くじを手に入れた`);
         return false;
 
@@ -1575,7 +1596,7 @@ export class Game {
 
       case 'grantPierceNextInvasion':
         if (!targetPlayer) return false;
-        targetPlayer.pierceNextInvasion = true;
+        this._applyPlayerCurse(targetPlayer, 'pierceNextInvasion', true);
         this.onLog(`${targetPlayer.name}は次の侵略で貫通を得る`);
         return false;
 
@@ -1606,7 +1627,7 @@ export class Game {
           this.onLog('Gが足りません');
           return false;
         }
-        player.guaranteedNextInvasionWin = true;
+        this._applyPlayerCurse(player, 'guaranteedNextInvasionWin', true);
         this.onLog(`${player.name}は禁断の呪いに手を染めた……`);
         return false;
 
@@ -1625,18 +1646,9 @@ export class Game {
       case 'cleanseCurses':
         // 有益な呪い（宝くじ・絶対攻撃・お前も〇ぬんだ・不動産鑑〇士・脱税）も
         // 対象に含める＝自分にかかっている呪い状態を種類を問わず全て解除する。
-        player.diceCurse = null;
-        player.tollWaiverCharges = 0;
-        player.lotteryOnNextGoal = false;
-        player.pierceNextInvasion = false;
-        player.guaranteedNextInvasionWin = false;
-        player.allTilesAccessTurnsRemaining = 0;
-        player.toughnessTurnsRemaining = 0;
-        player.hackingTurnsRemaining = 0;
-        // 高速化の呪い（ソニックムーヴ）はカード側で明確に「呪い」と名乗って
-        // いるのに、ここだけ取りこぼしていた（2026-09に発覚）。
-        player.hasteTurnsRemaining = 0;
-        player.landlessGoalBonus = 0;
+        // PLAYER_CURSE_FIELDSを唯一の一覧にして、書き漏らしが起きないようにする
+        // （以前は個別に並べていて高速化の呪いを取りこぼしていた）。
+        this._clearPlayerCurses(player);
         if (targetTile?.unit) targetTile.unit.curses = [];
         // 増税通知・追徴課税・強制停止もモンスター呪いなので、上の
         // unit.curses = [] で一緒に解除される（2026-09の仕様変更）。
@@ -1651,7 +1663,7 @@ export class Game {
         return false;
 
       case 'enableAllOwnTileAbilities':
-        player.allTilesAccessTurnsRemaining = effect.turns;
+        this._applyPlayerCurse(player, 'allTilesAccessTurnsRemaining', effect.turns);
         this.onLog(`${player.name}は${effect.turns}ターンの間、全ての土地の土地コマンドを使えるようになった`);
         return false;
 
@@ -3258,6 +3270,23 @@ export class Game {
    * 別の呪いをかければ上書きされて消える。モンスターが倒れる・入れ替わる時も
    * 個体ごと消えるため、土地側のフラグを片付けて回る必要が無い。
    */
+  /** かかっているプレイヤー呪いを種類を問わず全て解除する。 */
+  _clearPlayerCurses(player) {
+    for (const [key, empty] of Object.entries(PLAYER_CURSE_FIELDS)) player[key] = empty;
+  }
+
+  /**
+   * プレイヤー呪いを1つかける。**既存の呪いは種類を問わず上書きされて消える**
+   * （不可侵のルール: 呪いは後から撃たれたものが有効）。
+   * ⚠️ 付与は必ずこれを通すこと。`player.xxx = ...`と直接書くと1枠ルールを
+   * すり抜ける。消費・減算（振った後のdiceCurse=null、通行料を1回免除した
+   * 後のtollWaiverCharges-=1など）は呪いを「かける」操作ではないので対象外。
+   */
+  _applyPlayerCurse(player, key, value) {
+    this._clearPlayerCurses(player);
+    player[key] = value;
+  }
+
   _monsterCurseOf(tile, key) {
     return tile?.unit?.curses?.find((curse) => curse[key] != null) ?? null;
   }
@@ -4047,7 +4076,7 @@ export class Game {
     const warpLabel = tile.warpKind === 'parallel' ? 'パラレルワールド' : tile.warpKind === 'wormhole' ? 'ワームホール' : 'ワープ';
     this.onLog(`${player.name}は${warpLabel}で転移した！`);
     if (doubleNextDice) {
-      player.diceCurse = { type: 'double' };
+      this._applyPlayerCurse(player, 'diceCurse', { type: 'double' });
       this.onLog(`${player.name}はワームホールにちょうど停止！ 次のサイコロの出目が2倍になる！`);
     }
     this._notifyState();
@@ -4435,7 +4464,7 @@ export class Game {
     player.tileId = targetTile.id;
     this._resetTileHistoryAfterTeleport(player, targetTile.id);
     if (player.mesh) player.mesh.position.set(targetTile.position.x, PIECE_REST_Y, targetTile.position.z);
-    player.diceCurse = { type: 'double' };
+    this._applyPlayerCurse(player, 'diceCurse', { type: 'double' });
     this.onLog(`${player.name}は暴走して反対側へ飛ばされ、次のサイコロの出目が2倍になった！`);
     await this.onTargetEffect?.({
       tileId: targetTile.id,
@@ -5690,7 +5719,7 @@ export class Game {
 
     if (ability.type === 'curseOwnerDoubleDice') {
       if (!(await confirmAndSpend())) return false;
-      player.diceCurse = { type: 'double' };
+      this._applyPlayerCurse(player, 'diceCurse', { type: 'double' });
       this.onLog(`${player.name}の次のサイコロの出目が2倍になる`);
       this._notifyState();
       return true;
@@ -5710,7 +5739,7 @@ export class Game {
       );
       if (targetId == null || !(await confirmAndSpend())) return false;
       const target = this.players.find((candidate) => candidate.id === targetId);
-      target.hackingTurnsRemaining = ability.turns;
+      this._applyPlayerCurse(target, 'hackingTurnsRemaining', ability.turns);
       target.hand = randomSample(target.hand, target.hand.length);
       this.onLog(`${player.name}の${unitDef.name}が${target.name}を${ability.turns}ターン、ハッキングした`);
       this._notifyState();
@@ -5740,9 +5769,7 @@ export class Game {
       if (!(await confirmAndSpend())) return false;
 
       const targetPlayer = this.players.find((p) => p.id === targetId);
-      // ⚠️ 加算ではなく上書き。呪いは重なったら「後から撃たれたものが有効」
-      // というのが不可侵のルール（2026-09、ユーザー指定）。
-      targetPlayer.hasteTurnsRemaining = ability.turns;
+      this._applyPlayerCurse(targetPlayer, 'hasteTurnsRemaining', ability.turns);
       this.onLog(`${player.name}の${unitDef.name}が${targetPlayer.name}に高速化の呪いをかけた`);
       this._notifyState();
       await this.onTargetEffect?.({
@@ -6129,7 +6156,7 @@ export class Game {
     if (ability.type === 'curseOwnerDoubleDice') {
       if (player.diceCurse?.type === 'double') return false;
       spend();
-      player.diceCurse = { type: 'double' };
+      this._applyPlayerCurse(player, 'diceCurse', { type: 'double' });
       this.onLog(`${player.name}は${unitDef.name}の能力で次のサイコロが2倍になった (-${cost}G)`);
       this._notifyState();
       return true;
@@ -6141,7 +6168,7 @@ export class Game {
         .sort((a, b) => this._totalAssetsOf(b) - this._totalAssetsOf(a))[0];
       if (!target || target.hackingTurnsRemaining > 0) return false;
       spend();
-      target.hackingTurnsRemaining = ability.turns;
+      this._applyPlayerCurse(target, 'hackingTurnsRemaining', ability.turns);
       target.hand = randomSample(target.hand, target.hand.length);
       this.onLog(`${player.name}の${unitDef.name}が${target.name}を${ability.turns}ターン、ハッキングした (-${cost}G)`);
       this._notifyState();
@@ -6154,8 +6181,7 @@ export class Game {
         .sort((a, b) => this._totalAssetsOf(b) - this._totalAssetsOf(a))[0];
       if (!target) return false;
       spend();
-      // ⚠️ 加算ではなく上書き（呪いは後から撃たれたものが有効）。
-      target.hasteTurnsRemaining = ability.turns;
+      this._applyPlayerCurse(target, 'hasteTurnsRemaining', ability.turns);
       this.onLog(`${player.name}の${unitDef.name}が${target.name}に高速化の呪いをかけた (-${cost}G)`);
       this._notifyState();
       return true;

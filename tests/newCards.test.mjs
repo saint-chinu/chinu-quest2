@@ -2989,3 +2989,90 @@ test('呪い解除は高速化の呪いも外す', async () => {
   assert.equal(player.lotteryOnNextGoal, false);
   assert.equal(player.landlessGoalBonus, 0);
 });
+
+test('プレイヤー呪いも1枠: 後から撃った呪いが前の呪いを打ち消す', async () => {
+  // 🚫 不可侵のルール（2026-09、ユーザー指定）:
+  //「モンスター呪いもプレイヤー呪いも重なったらあとから撃たれたものが有効」
+  //「有益な呪いをマイナス呪いで打ち消したりするのも醍醐味だ」。
+  const g = Object.create(Game.prototype);
+  Object.assign(g, { tiles: [], onLog: () => {}, _notifyState: () => {} });
+  const fresh = () => ({
+    id: 0, name: 'テスト', currency: 5000,
+    diceCurse: null, hasteTurnsRemaining: 0, hackingTurnsRemaining: 0,
+    toughnessTurnsRemaining: 0, allTilesAccessTurnsRemaining: 0, tollWaiverCharges: 0,
+    lotteryOnNextGoal: false, pierceNextInvasion: false,
+    guaranteedNextInvasionWin: false, landlessGoalBonus: 0,
+  });
+
+  // 有益な呪い（脱税）を持っているところへ、マイナスの呪い（出目1固定）が飛ぶ。
+  const player = fresh();
+  g.players = [player];
+  await g._applySpellEffect(player, SPELL_CATALOG.taxEvasion, {});
+  assert.equal(player.tollWaiverCharges, 1, '前提: 脱税がかかっている');
+  await g._applySpellEffect(player, SPELL_CATALOG.diceOne, { targetPlayerId: 0 });
+  assert.deepEqual(player.diceCurse, { type: 'fixed', value: 1 });
+  assert.equal(player.tollWaiverCharges, 0, 'マイナス呪いで有益な呪いが打ち消される');
+
+  // 逆向きも同じ。出目の呪いを有益な呪いで上書きできる。
+  const player2 = fresh();
+  g.players = [player2];
+  await g._applySpellEffect(player2, SPELL_CATALOG.diceOne, { targetPlayerId: 0 });
+  await g._applySpellEffect(player2, SPELL_CATALOG.taxEvasion, {});
+  assert.equal(player2.diceCurse, null, '後から撃った脱税が出目の呪いを消す');
+  assert.equal(player2.tollWaiverCharges, 1);
+});
+
+test('呪いの「消費」では他の呪いを巻き込まない', () => {
+  // 振り終わったdiceCurseのクリアや、通行料を1回免除した後の減算は
+  // 「呪いをかける」操作ではないので、他の呪いを消してはいけない。
+  const g = Object.create(Game.prototype);
+  const player = {
+    id: 0, diceCurse: null, hasteTurnsRemaining: 0, hackingTurnsRemaining: 0,
+    toughnessTurnsRemaining: 0, allTilesAccessTurnsRemaining: 0, tollWaiverCharges: 0,
+    lotteryOnNextGoal: false, pierceNextInvasion: false,
+    guaranteedNextInvasionWin: false, landlessGoalBonus: 0,
+  };
+  g._applyPlayerCurse(player, 'tollWaiverCharges', 1);
+  player.tollWaiverCharges -= 1; // 消費（通行料を1回免除した）
+  assert.equal(player.tollWaiverCharges, 0);
+
+  g._applyPlayerCurse(player, 'diceCurse', { type: 'double' });
+  assert.deepEqual(player.diceCurse, { type: 'double' });
+  g._clearPlayerCurses(player);
+  assert.equal(player.diceCurse, null);
+});
+
+test('プレイヤー呪いの付与は必ず_applyPlayerCurse経由（1枠ルールの抜け道を作らない）', () => {
+  // 直接 player.xxx = ... と書くと1枠ルールをすり抜ける。付与サイトが
+  // 増えた時にここで気づけるよう、ソースを走査して見張る。
+  const src = readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');
+  const fields = src.match(/^const PLAYER_CURSE_FIELDS = \{([\s\S]*?)^\};/m);
+  assert.ok(fields, 'PLAYER_CURSE_FIELDS が見つからない');
+  const names = [...fields[1].matchAll(/^\s{2}(\w+):/gm)].map((m) => m[1]);
+  assert.ok(names.length >= 10, `プレイヤー呪いの一覧が短すぎる: ${names.join(',')}`);
+
+  // _applyPlayerCurse に渡すキーは全て一覧に載っていること。
+  for (const m of src.matchAll(/_applyPlayerCurse\([^,]+,\s*'(\w+)'/g)) {
+    assert.ok(names.includes(m[1]), `${m[1]} が PLAYER_CURSE_FIELDS に無い`);
+  }
+  // 呪い解除は一覧をそのまま使う（個別に並べて書き漏らさない）。
+  assert.match(src, /case 'cleanseCurses':[\s\S]{0,400}this\._clearPlayerCurses\(player\)/);
+
+  // 「かける」向きの直接代入が残っていないこと（空値への代入＝消費はOK）。
+  const empties = { diceCurse: 'null', hasteTurnsRemaining: '0', hackingTurnsRemaining: '0',
+    toughnessTurnsRemaining: '0', allTilesAccessTurnsRemaining: '0', tollWaiverCharges: '0',
+    lotteryOnNextGoal: 'false', pierceNextInvasion: 'false',
+    guaranteedNextInvasionWin: 'false', landlessGoalBonus: '0' };
+  for (const name of names) {
+    // ⚠️ `=` は比較(===/!==)と区別する。`\+?=` だけだと `.name === 0` の
+    //    最後の `=` を代入と誤認して落ちる。
+    for (const m of src.matchAll(new RegExp(`\\.${name}\\s*(\\+=|=(?!=))\\s*([^;\\n]+);`, 'g'))) {
+      const [, op, rhs] = m;
+      if (op === '+=') assert.fail(`${name} が加算されている（重ねがけ禁止）: ${m[0].trim()}`);
+      const value = rhs.trim();
+      if (value === empties[name]) continue;                 // 消費（空値へ戻す）
+      if (/^cfg\.|^\{ \.\.\./.test(value)) continue;          // プレイヤー生成時の初期値
+      assert.fail(`${name} を直接かけている（_applyPlayerCurse を使うこと）: ${m[0].trim()}`);
+    }
+  }
+});

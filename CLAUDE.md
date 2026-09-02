@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v279`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v280`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## チュートリアルの不自然さ修正（2026-08、ユーザー報告）
@@ -321,19 +321,36 @@ JS側は正しく1.5秒で`add('hidden')`していたので、コードを読ん
 - **モンスター呪い**: `unit.curses`は1体につき1つ。battle.jsの`setCurse`が
   常に配列ごと置き換えるので、この規則は構造的に守られている。
   `applyCurse`/`applyPoison`/`applyShock`/`applyAtkDown`は全て`setCurse`経由。
-- **プレイヤー呪い**: `player`直下のフィールドで表現されている
-  （`diceCurse` / `hasteTurnsRemaining` / `hackingTurnsRemaining` ほか）。
-  `diceCurse`は元から1枠で上書き。
-  - ⚠️ **高速化の呪い（ソニックムーヴ）だけ`+= turns`で加算していた**
-    （撃つほど拘束が伸びる重ねがけ）。2026-09に**上書きへ修正**した。
-    付与箇所は人間用(_humanAbilityFlowInner)とCPU用の2か所。
-  - ⚠️ **呪い解除(`cleanseCurses`)が高速化の呪いを取りこぼしていた。**
-    カード側は明確に「呪い」と名乗っているのに、解除リストから漏れていた。
-    2026-09に追加。**プレイヤー呪いを1つ足したら、必ずここへも足すこと。**
-- 回帰テスト: `npm run test:cards`「呪いは後から撃たれたものが有効:
-  高速化の呪いは重ねがけできない」（game.jsのソースを走査して`+=`型の代入が
-  無いことを検査する）「呪い解除は高速化の呪いも外す」（解除漏れの再発防止に
-  プレイヤー呪い全項目を確認する）。どちらも旧挙動へ戻すと落ちる。
+- **プレイヤー呪いも1体につき1つ**（2026-09、ユーザー指定「それでいいんだよ。
+  有益な呪いをマイナス呪いで打ち消したりするのも醍醐味だ」）。
+  - 一覧は**`PLAYER_CURSE_FIELDS`**（game.js冒頭）。10種:
+    `diceCurse`(出目固定/反転/2倍) / `hasteTurnsRemaining`(高速化) /
+    `hackingTurnsRemaining`(ハッキング) / `toughnessTurnsRemaining`(タフネス) /
+    `allTilesAccessTurnsRemaining`(不動産鑑〇士) / `tollWaiverCharges`(脱税) /
+    `lotteryOnNextGoal`(宝くじ) / `pierceNextInvasion`(絶対攻撃) /
+    `guaranteedNextInvasionWin`(お前も〇ぬんだ) / `landlessGoalBonus`(持たざる者)。
+  - 付与は**必ず`_applyPlayerCurse(player, key, value)`を通す**。中で
+    `_clearPlayerCurses`を呼んでから1つだけ立てるので、**有益な呪いを
+    持っていても後から撃たれたマイナス呪いで消える**（逆も同じ）。
+    ⚠️ `player.xxx = ...`と直接書くと1枠ルールをすり抜ける。
+  - **消費・減算は対象外**。振り終わった`diceCurse = null`、通行料を1回免除した
+    後の`tollWaiverCharges -= 1`、ターン経過の`-= 1`などは「かける」操作では
+    ないので、他の呪いを巻き込んではいけない。
+  - 呪い解除(`cleanseCurses`)は`_clearPlayerCurses`を呼ぶだけにした。
+    以前は10個を手で並べていて**高速化の呪いを取りこぼしていた**。
+  - ⚠️ **プレイヤー呪いを増やす時は`PLAYER_CURSE_FIELDS`へ足すこと。**
+    足し忘れるとその呪いだけ1枠ルールの外へ出る。
+  - 直した重ねがけ: 高速化の呪いが`+= turns`（撃つほど拘束が伸びる）、
+    脱税が`+= 1`、持たざる者が`Math.max(既存, 新規)`。全て上書きへ。
+- 回帰テスト: `npm run test:cards`
+  「プレイヤー呪いも1枠: 後から撃った呪いが前の呪いを打ち消す」
+  「呪いの『消費』では他の呪いを巻き込まない」
+  「プレイヤー呪いの付与は必ず_applyPlayerCurse経由（1枠ルールの抜け道を
+  作らない）」（ソースを走査し、`+=`型の代入と、空値以外への直接代入を禁じる）
+  「呪いは後から撃たれたものが有効: 高速化の呪いは重ねがけできない」
+  「呪い解除は高速化の呪いも外す」。いずれも旧挙動へ戻すと落ちる。
+  - ⚠️ ソース走査の正規表現で`=`を拾う時は`===`/`!==`と区別すること
+    （`\+?=`だけだと`.name === 0`の最後の`=`を代入と誤認して落ちる）。
 
 ## ⚠️ 呪いは「モンスター呪い」と「プレイヤー呪い」しかない（2026-09、ユーザー指定）
 
