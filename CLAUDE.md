@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v283`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v284`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## チュートリアルの不自然さ修正（2026-08、ユーザー報告）
@@ -664,18 +664,19 @@ board.jsの記号は F=火 W=水 T=雷 M=森 N=無 G=スタート C=CP（確認�
 ### 未確定・要確認
 - （⑯自体の未確定事項は無し。負けた後の労働施設は下の⑰へ分離した）
 
-## ⑰「海底労働施設」（2026-09 **仮実装済み**）
-⚠️ **仮実装（プレイ可能）**。story.js`roudou` / board.js`ROUDOU_ROWS`(id:'roudou')。
-タイトルは「⑰ 海底労働施設（仮実装）」で、**マップはwip:true**のまま
-（対戦モードのマップ選択には出さない）。⑯で敗北した主人公が投獄される先。
+## ⑰「海底労働施設」（2026-09 **実装済み**）
+story.js`roudou` / board.js`ROUDOU_ROWS`(id:'roudou')。⑯で敗北した主人公が
+投獄される先。**マップは`wip: true`のまま**＝ストーリー専用で、対戦モードの
+マップ選択には出さない（⑯と同じ扱い）。
 
-### 仮実装で足りていないもの
-- **専用の背景画像**。用意できるまで⑮の裏路地(`stage15-kawada-alley.png`)を
-  流用している。⚠️ `getMapBackground`はフォールバックを持たず`undefined`を
-  そのままCSSへ入れてしまうので、**必ず何かを指定すること**。
-- **BGM**。`MAP_TRACK`に`roudou`キーが無く共通曲(`board`)へ落ちる。
-- **マダイ係長の演出**。立ち絵は②の`madai.png`を`npcArt.js`へ
-  「マダイ係長」名義で登録して流用（同一人物）。専用絵があれば差し替える。
+### 素材状況
+- ✅ **専用背景**（`/images/stage/stage17-underwater-prison.png`）。
+  ⚠️ `getMapBackground`はフォールバックを持たず`undefined`をそのままCSSへ
+  入れてしまうので、マップには**必ず何かを指定すること**。
+- ✅ **BGM**（`/audio/stage17bgm.mp3`、曲名「♪海底労働施設の反乱」）。
+  `TRACK_SRC.seaLabor` / `MAP_TRACK.roudou` / 対人戦のBGM選択に登録済み。
+- **マダイ係長の立ち絵**は②の`madai.png`を`npcArt.js`へ「マダイ係長」名義で
+  登録して流用中（同一人物。②では「暴君マダイ」名義）。専用絵があれば差し替える。
 - AIプロファイル（opponents[].aiProfile）は未設定。
 - 決着後の進行（⑱へ繋ぐ演出）は未着手。
 
