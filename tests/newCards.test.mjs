@@ -3076,3 +3076,38 @@ test('プレイヤー呪いの付与は必ず_applyPlayerCurse経由（1枠ル�
     }
   }
 });
+
+test('⑰のムール専用デッキ(roudouMuuru)は40枚で、⑨のmuuruを壊していない', () => {
+  const base = buildCharacterCardList('muuru');
+  const stage17 = buildCharacterCardList('roudouMuuru');
+  assert.equal(base.length, 40, '⑨のムールは40枚のまま');
+  assert.equal(stage17.length, 40);
+
+  const count = (cards) => cards.reduce((m, c) => m.set(c.name, (m.get(c.name) || 0) + 1), new Map());
+  const a = count(base);
+  const b = count(stage17);
+  // ユーザー指定の差し替え（2026-09）。⑨側は一切動かさない。
+  const expected = {
+    アオリイカ: -2, ボムボックリ: +2,
+    // 成長型の水はアイランドホエール1種だけ（他は火/雷/森/無）。
+    氷柱: -2, アイランドホエール: +2,
+    オサフネ: -1, イカサマのサイコロ: +1,
+    薄氷の剣: -1, ナンカのお守り: -1, 水神の盾: +2,
+    追徴課税: -1, 不動産鑑〇士: -1, タフネス: -1,
+    避雷針侍: +2, バックファイア: +1,
+    ブルーオーシャン: -1, 副業収入: -1,
+    サイコキネシス: +1, 帰巣本能: +1, // 帰巣本能は1→2枚
+  };
+  const actual = {};
+  for (const name of new Set([...a.keys(), ...b.keys()])) {
+    const diff = (b.get(name) || 0) - (a.get(name) || 0);
+    if (diff !== 0) actual[name] = diff;
+  }
+  assert.deepEqual(actual, expected);
+
+  // ⑨のムールは水単のまま（別キーにした意味がここ）。
+  const elems = (cards) => cards.filter((c) => c.type === CardType.MONSTER)
+    .reduce((m, c) => ({ ...m, [c.element]: (m[c.element] || 0) + 1 }), {});
+  assert.deepEqual(elems(base), { water: 19, neutral: 1 });
+  assert.deepEqual(elems(stage17), { water: 17, forest: 2, neutral: 1, thunder: 2 });
+});

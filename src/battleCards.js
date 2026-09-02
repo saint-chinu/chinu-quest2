@@ -1142,6 +1142,65 @@ export const CHARACTER_DECKS = {
     },
   },
   /**
+   * ⑰海底労働施設のムール。⑨の`muuru`をベースにユーザー指定で組み替えた
+   * 2026-09の専用デッキ（⑨の難度を動かさないよう別キーにしてある）。
+   * 変更点: アオリイカ2→ボムボックリ2／オサフネ→イカサマのサイコロ／
+   * 薄氷の剣1・ナンカのお守り1→水神の盾2／追徴課税・不動産鑑〇士・
+   * タフネス1を抜いて避雷針侍2・バックファイア1。
+   * ⚠️ 追徴課税と不動産鑑〇士が抜けたので、⑨の「通行料を搾る調査官」から
+   * 「盤面を固めて相手を進ませない看守」へ役割が寄っている。
+   */
+  roudouMuuru: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.kaikyouSekishoKurage, count: 3 },
+        { def: MONSTER_CATALOG.bigMermaid, count: 2 },
+        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 3 },
+        { def: MONSTER_CATALOG.kaizokuS, count: 2 },
+        // アイランドホエール(水40G 25/40): このゲームで唯一の成長型の水属性。
+        // 空き地への通常召喚専用で移動・侵略に使えない代わりに、周回ごとに
+        // 育って後半の壁になる。氷柱2枚と入れ替えた（2026-09、ユーザー指定
+        // 「氷柱2枚抜いて成長型の水2体」）。
+        { def: MONSTER_CATALOG.islandWhale, count: 2 },
+        // ボムボックリ(森40G 1/1): 倒されるとランダムな空き地へボックリを2体
+        // 召喚する。洞窟マップは分岐が多く足が止まりやすいので、潰されるほど
+        // 土地が増える置き土産として効く。
+        { def: MONSTER_CATALOG.bombBokkuri, count: 2 },
+        { def: MONSTER_CATALOG.shinkaiCleaner, count: 2 },
+        { def: MONSTER_CATALOG.hangyojin, count: 2 },
+        { def: MONSTER_CATALOG.azarashisan, count: 1 },
+        { def: MONSTER_CATALOG.kunekune, count: 1 },
+        // 避雷針侍(雷50G 30/15): 場に居る限り味方の戦死を肩代わりする。
+        // 召喚に手札1枚の生贄が要る点に注意。
+        { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.iceSlugger, count: 1 },
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 1 },
+        // 水神の盾: 水属性が装備すると被ダメージを反射する（貫通で消せない）。
+        // 味方の川田も水軸で同じ盾を持つので、⑰は盾同士のにらみ合いになる。
+        { def: ITEM_CATALOG.suijinNoTate, count: 2 },
+        { def: ITEM_CATALOG.zangokuKen, count: 1 },
+        { def: ITEM_CATALOG.fushichoNoTate, count: 1 },
+        { def: ITEM_CATALOG.lifeJacket, count: 1 },
+        { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.toughness, count: 1 },
+        { def: SPELL_CATALOG.waterRelease, count: 2 },
+        { def: SPELL_CATALOG.waterMagicCircle, count: 2 },
+        { def: SPELL_CATALOG.manaExtraction, count: 1 },
+        // ブルーオーシャン・副業収入と入れ替え（2026-09、ユーザー指定）。
+        // サイコキネシスは配置モンスターを1マス強制移動させる妨害で、
+        // CPUの判断はowner/同盟/勝率だけを見る汎用ロジックなので死に札に
+        // ならない。帰巣本能は1→2枚。
+        { def: SPELL_CATALOG.psychokinesis, count: 1 },
+        { def: SPELL_CATALOG.homingInstinct, count: 2 },
+        { def: SPELL_CATALOG.backfire, count: 1 },
+      ],
+    },
+  },
+  /**
    * ⑨の専門調査官・A（少女Aの裏の顔）。③の少女Aデッキとは別物で、
    * 雷＝先制の手数、森＝殴り合いの地力、無属性＝仕上げ役という構成。
    * 召喚条件付きは0枚にして、序盤から途切れず盤面を作れるようにしてある。
