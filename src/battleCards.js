@@ -1772,6 +1772,48 @@ export const CHARACTER_DECKS = {
     },
   },
   /**
+   * ⑰海底労働施設のダンボール男。⑤の`danball`をベースにユーザー指定で
+   * 組み替えた2026-09の専用デッキ（⑤の難度を動かさないよう別キー）。
+   * 差し替え: カエンタケ1・人魂2→煉獄の門番兵1・炎の魔導士1／雷雲2→テンホウ3／
+   * レインボーカメレオン1→くぐつの剣豪1／ファイアキック1→ボムボックリ1／
+   * 発電鬼1→甲鉄要塞1（雷の成長型）／平家の鎧→ダイヤモンドの盾／
+   * ハリネズミの服→異次元ソケット／諸刃の剣→イカサマのサイコロ。
+   * ⚠️ 古代のギア9枚（＝ガシャーン合体）はそのまま残してある。
+   */
+  roudouDanball: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.kodaiNoGearA, count: 3 }, { def: MONSTER_CATALOG.kodaiNoGearB, count: 3 },
+        { def: MONSTER_CATALOG.kodaiNoGearC, count: 3 }, { def: MONSTER_CATALOG.kunekune, count: 1 },
+        // くぐつの剣豪(無120G 50/50): 手番開始時に隣接する敵地へ自動侵略する。
+        // ⚠️ 特殊マスを通れないので、洞窟マップでは分断された側へ渡れない。
+        { def: MONSTER_CATALOG.kugutsuNoKengou, count: 1 },
+        { def: MONSTER_CATALOG.rengokuMonbanhei, count: 1 },
+        { def: MONSTER_CATALOG.honooNoMadoushi, count: 1 },
+        // ボムボックリ(森40G 1/1): 倒されるとボックリ2体を空き地へ置く。
+        { def: MONSTER_CATALOG.bombBokkuri, count: 1 },
+        { def: MONSTER_CATALOG.hezumaDragon, count: 1 }, { def: MONSTER_CATALOG.flameGod, count: 1 },
+        // 甲鉄要塞(雷40G 10/40): 雷の成長型。3周目で「強制停止」を覚える。
+        { def: MONSTER_CATALOG.koutetsuYousai, count: 1 },
+        { def: MONSTER_CATALOG.tenhou, count: 3 },
+        { def: MONSTER_CATALOG.erekiMagician, count: 1 }, { def: MONSTER_CATALOG.aruKagakuNo, count: 1 },
+        { def: MONSTER_CATALOG.raijin, count: 1 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 1 }, { def: ITEM_CATALOG.dimensionalSocket, count: 1 },
+        { def: ITEM_CATALOG.stegoro, count: 1 }, { def: ITEM_CATALOG.twinHammer, count: 1 },
+        { def: ITEM_CATALOG.fushichoNoKen, count: 1 }, { def: ITEM_CATALOG.diamondShield, count: 1 },
+        { def: ITEM_CATALOG.zangokuKen, count: 1 }, { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
+        { def: ITEM_CATALOG.peeStaff, count: 1 }, { def: ITEM_CATALOG.pegasusSword, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.twitterLand, count: 1 }, { def: SPELL_CATALOG.senbonZakura, count: 2 },
+        { def: SPELL_CATALOG.sideIncome, count: 1 }, { def: SPELL_CATALOG.neutralMagicCircle, count: 1 },
+        { def: SPELL_CATALOG.necromancer, count: 1 }, { def: SPELL_CATALOG.encounterUnknown, count: 1 },
+      ],
+    },
+  },
+  /**
    * ⑮（story.js`kawada`、CLAUDE.md「新ストーリー『川田』」参照）の川田。
    * ビーバーだが本人はマーモットだと思い込んでいる王都のレジスタンス。
    * 「純粋な殴り合い」というユーザー要望どおり、専用モンスターや妨害トリック

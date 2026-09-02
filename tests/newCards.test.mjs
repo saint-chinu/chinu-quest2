@@ -3111,3 +3111,41 @@ test('⑰のムール専用デッキ(roudouMuuru)は40枚で、⑨のmuuruを壊
   assert.deepEqual(elems(base), { water: 19, neutral: 1 });
   assert.deepEqual(elems(stage17), { water: 17, forest: 2, neutral: 1, thunder: 2 });
 });
+
+test('⑰のダンボール男専用デッキ(roudouDanball)は40枚で、⑤のdanballを壊していない', () => {
+  const base = buildCharacterCardList('danball');
+  const stage17 = buildCharacterCardList('roudouDanball');
+  assert.equal(base.length, 40, '⑤のダンボール男は40枚のまま');
+  assert.equal(stage17.length, 40);
+
+  const count = (cards) => cards.reduce((m, c) => m.set(c.name, (m.get(c.name) || 0) + 1), new Map());
+  const a = count(base);
+  const b = count(stage17);
+  const expected = {
+    カエンタケ: -1, 人魂: -2, 煉獄の門番兵: +1, 炎の魔導士: +1,
+    // 雷雲2→テンホウ3。上の3枚→2枚のぶん1枠余るので、ユーザー判断で
+    // テンホウを3枚にして40枚へ合わせた（2026-09）。
+    雷雲: -2, テンホウ: +3,
+    レインボーカメレオン: -1, くぐつの剣豪: +1,
+    ファイアキック: -1, ボムボックリ: +1,
+    発電鬼: -1, 甲鉄要塞: +1,
+    平家の鎧: -1, ダイヤモンドの盾: +1,
+    ハリネズミの服: -1, 異次元ソケット: +1,
+    諸刃の剣: -1, イカサマのサイコロ: +1,
+  };
+  const actual = {};
+  for (const name of new Set([...a.keys(), ...b.keys()])) {
+    const diff = (b.get(name) || 0) - (a.get(name) || 0);
+    if (diff !== 0) actual[name] = diff;
+  }
+  assert.deepEqual(actual, expected);
+
+  // 古代のギア9枚（ガシャーン合体の素）は⑰でもそのまま残す。
+  for (const gear of ['古代のギアA', '古代のギアB', '古代のギアC']) {
+    assert.equal(b.get(gear), 3, `${gear}が3枚でない`);
+  }
+  const elems = (cards) => cards.filter((c) => c.type === CardType.MONSTER)
+    .reduce((m, c) => ({ ...m, [c.element]: (m[c.element] || 0) + 1 }), {});
+  assert.deepEqual(elems(base), { neutral: 11, fire: 6, thunder: 6 });
+  assert.deepEqual(elems(stage17), { neutral: 11, fire: 4, forest: 1, thunder: 7 });
+});
