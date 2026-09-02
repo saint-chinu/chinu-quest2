@@ -74,6 +74,11 @@ if (flag('help') || flag('h')) {
 
   --deckA=<key|@file>   Aのデッキ。CHARACTER_DECKSのキー、または @path/to/deck.json
   --deckB=<key|@file>   Bのデッキ（同上）
+  --allyA=<key|@file>   A陣営の相方。指定すると2vs2（同盟戦）になる
+  --allyB=<key|@file>   B陣営の相方（同上）
+  --aiA/--aiB/--aiA2/--aiB2=<json>
+                        AI性格の部分上書き（story.jsのaiProfileと同じ形）。
+                        例 --aiB='{"minWinProbabilityToInvade":0.35}'
   --map=<mapId>         board.jsのMAPSのid（例 kawada, royal-guard, hitode）
   --games=<n>           試合数（既定 50）
   --goal=<n>            goalCurrency（省略時はmapと同名のストーリーステージの値）
@@ -300,6 +305,29 @@ const goalCurrency = num('goal', stage?.goalCurrency ?? null);
 const startingCurrency = num('start', stage?.startingCurrency ?? 500);
 const deckA = resolveDeck(FLAGS.deckA ?? 'kawada', 'A');
 const deckB = resolveDeck(FLAGS.deckB ?? 'fusagikonda', 'B');
+// 2vs2用の相方（省略すれば従来どおり1vs1）。A陣営=--allyA、B陣営=--allyB。
+// ⚠️ Game側の総資産判定(_totalAssetsOf)は同盟合算なので、2vs2の目標総資産は
+// 1vs1と同じ数字では早く終わる。--goalは必ずステージの値に合わせること。
+const allyA = FLAGS.allyA ? resolveDeck(FLAGS.allyA, 'A2') : null;
+const allyB = FLAGS.allyB ? resolveDeck(FLAGS.allyB, 'B2') : null;
+const teamMode = !!(allyA || allyB);
+// AI性格の部分上書き（story.jsのopponents[].aiProfileと同じ形をJSONで渡す）。
+// 名前ベースのプロファイル(aiProfiles.js)へ差分としてマージされる。
+// 例: --aiB='{"offElementSummonChance":0.4,"minWinProbabilityToInvade":0.35}'
+function parseProfileFlag(key) {
+  if (!FLAGS[key]) return null;
+  try {
+    return JSON.parse(FLAGS[key]);
+  } catch (e) {
+    console.error(`--${key} のJSONが壊れている: ${e.message}`);
+    process.exit(2);
+  }
+  return null;
+}
+for (const [deck, key] of [[deckA, 'aiA'], [deckB, 'aiB'], [allyA, 'aiA2'], [allyB, 'aiB2']]) {
+  const override = parseProfileFlag(key);
+  if (deck && override) deck.aiProfile = { ...(deck.aiProfile || {}), ...override };
+}
 const games = num('games', 50);
 const seed = num('seed', 1);
 const maxTurns = num('maxTurns', 200);
@@ -368,11 +396,18 @@ async function runOne(gameSeed, index) {
     let settle = null;
     const finished = new Promise((resolve) => { settle = resolve; });
 
-    const playerConfigs = [deckA, deckB].map((deck) => ({
+    // 座席順は A → B → A2 → B2。allianceIdを振ると Game 側が同盟戦として
+    // 扱う（総資産合算・仲間の土地は通行料無し・仲間には侵略しない）。
+    const seats = teamMode
+      ? [[deckA, 'red'], [deckB, 'white'], [allyA ?? deckA, 'red'], [allyB ?? deckB, 'white']]
+      : [[deckA, null], [deckB, null]];
+    const playerConfigs = seats.map(([deck, allianceId], seatIndex) => ({
+      // 同じデッキを2枚使う場合に名前が衝突しないようにする（AIの性格は
+      // 名前で引くので、末尾の連番は付けずキャラ名はそのまま保つ）。
       name: deck.name,
-      isCPU: true, // ★ 両者CPU。人間の入力は一切要らない
-      color: deck.color,
-      allianceId: null,
+      isCPU: true, // ★ 全員CPU。人間の入力は一切要らない
+      color: deck.color + seatIndex,
+      allianceId,
       deckList: deck.cards,
       elements: deck.elements,
       aiProfile: deck.aiProfile,
@@ -472,11 +507,15 @@ if (goalCurrency == null) {
 }
 console.log(`A: ${label(deckA, 0)}  ${deckA.cards.length}枚  得意属性=${deckA.elements?.join('/') ?? '(なし)'}`);
 console.log(`B: ${label(deckB, 1)}  ${deckB.cards.length}枚  得意属性=${deckB.elements?.join('/') ?? '(なし)'}`);
+if (teamMode) {
+  console.log(`  ※2vs2（同盟戦）。A陣営: ${deckA.name} + ${(allyA ?? deckA).name} / B陣営: ${deckB.name} + ${(allyB ?? deckB).name}`);
+  console.log('  ※総資産は同盟合算で判定される（_totalAssetsOf）。');
+}
 console.log('');
 
 const tally = { A: 0, B: 0, draw: 0, turnCap: 0, timeout: 0, error: 0 };
 const turnCounts = [];
-const assetSums = [[], []];
+const assetSums = [[], [], [], []];
 const failures = [];
 const perGame = [];
 
@@ -490,7 +529,8 @@ for (let i = 0; i < games; i++) {
     failures.push({ i, msg: r.error.message, tail: r.logs.slice(-6) });
     tag = 'ERR';
   } else if (r.outcome.kind === 'win') {
-    const side = r.outcome.winnerId === 0 ? 'A' : 'B';
+    // 2vs2では座席0/2がA陣営、1/3がB陣営。
+    const side = r.outcome.winnerId % 2 === 0 ? 'A' : 'B';
     tally[side] += 1;
     turnCounts.push(r.turns);
     r.assets.forEach((a, idx) => assetSums[idx].push(a));
@@ -510,16 +550,22 @@ const avg = (list, pick) => (list.length ? (list.reduce((s, x) => s + pick(x), 0
 
 console.log('──────── 結果 ────────');
 console.log(`実施          ${games}試合（決着 ${decided} / 打ち切り ${tally.turnCap} / 時間切れ ${tally.timeout} / 引き分け ${tally.draw} / 異常 ${tally.error}）`);
-console.log(`A ${deckA.name}[${deckA.label}]  ${tally.A}勝 ${tally.B}敗  勝率 ${pct(tally.A)}`);
-console.log(`B ${deckB.name}[${deckB.label}]  ${tally.B}勝 ${tally.A}敗  勝率 ${pct(tally.B)}`);
+const teamLabel = (deck, ally) => (teamMode ? `${deck.name}+${(ally ?? deck).name}` : `${deck.name}[${deck.label}]`);
+console.log(`A ${teamLabel(deckA, allyA)}  ${tally.A}勝 ${tally.B}敗  勝率 ${pct(tally.A)}`);
+console.log(`B ${teamLabel(deckB, allyB)}  ${tally.B}勝 ${tally.A}敗  勝率 ${pct(tally.B)}`);
 if (turnCounts.length) {
   const sorted = [...turnCounts].sort((a, b) => a - b);
   console.log(`決着までの手番数（両者合計）平均 ${(turnCounts.reduce((s, n) => s + n, 0) / turnCounts.length).toFixed(1)} / 中央値 ${sorted[sorted.length >> 1]} / 最短 ${sorted[0]} / 最長 ${sorted.at(-1)}`);
 }
-for (const [idx, side] of [[0, 'A'], [1, 'B']]) {
+for (const [idx, side] of [[0, 'A'], [1, 'B'], [2, 'A'], [3, 'B']]) {
   const rows = assetSums[idx];
   if (!rows.length) continue;
   console.log(`${side} ${rows[0].name}: 最終総資産 平均 ${avg(rows, (r) => r.total).toFixed(0)}G / 所持G ${avg(rows, (r) => r.currency).toFixed(0)} / 土地 ${avg(rows, (r) => r.lands).toFixed(1)}枚 / 周回 ${avg(rows, (r) => r.laps).toFixed(1)}`);
+}
+if (teamMode) {
+  // ⚠️ _totalAssetsOf は同盟合算を返すので、各席の表示は既にチーム合計。
+  // ここで足すと二重計上になる。片方の席の値をそのまま使う。
+  console.log(`同盟合算の最終総資産（目標 ${goalCurrency}G）: A ${avg(assetSums[0], (r) => r.total).toFixed(0)}G / B ${avg(assetSums[1], (r) => r.total).toFixed(0)}G`);
 }
 if (tally.turnCap || tally.timeout) {
   console.log(`※ 打ち切り${tally.turnCap}件・時間切れ${tally.timeout}件は勝敗に数えていない（分母は決着した${decided}試合）`);
