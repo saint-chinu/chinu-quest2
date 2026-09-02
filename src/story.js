@@ -1158,6 +1158,106 @@ export const STORY_STAGES = [
       },
     ],
   },
+  {
+    key: 'chinu',
+    title: '⑯ 魚群の王チヌ',
+    // 主人公 vs ウサギン・ムール・邪神ヒトデマソ。
+    // **下僕3体は1チーム（同盟）**、主人公は単独（ユーザー指定 2026-09-01
+    // 「3vs1でCPU同士は同盟。主人公圧倒的不利」）。
+    // ⚠️ この構成では総資産が同盟内で合算される（`_totalAssetsOf`）ため、
+    // 敵側は3人ぶんの資産で目標5,000Gへ届く＝主人公の3倍速で伸びる。
+    // 「圧倒的不利」はこれで作っている。決着が早すぎると感じた場合に
+    // 触るのはgoalCurrencyであって、この同盟設定ではない。
+    format: '3vs1',
+    heroAllianceId: null,
+    enemyAllianceId: 'chinu',
+    goalCurrency: 5000,
+    // ⚠️ **絶対敗北にはしない**（2026-08ユーザー指定）。勝てば下の隠し
+    // メッセージ(outro)が出る。難度は敵3体の専用デッキ（chinuUsagin等）
+    // と人数差だけで作り、勝利を握り潰す仕掛けは入れない。
+    // 負けてもクリア扱いにして⑰へ進める（clearOnDefeat）。
+    clearOnDefeat: true,
+    // 主人公は最後に行動する（ユーザー指定）。
+    heroGoesLast: true,
+    // 盤面開始時の大バナー（2行）。
+    eventBattleBanner: ['イベントバトル！！', '何があっても諦めるな！'],
+    // 盤面途中の割り込み会話。CPUの誰か1人の総資産が4,000G（目標の8割）へ
+    // 届いた時点で1回だけ発火する（game.jsの_maybeTriggerStoryAssistEvent）。
+    // ⑪のmidBattleAssistと違い味方は参戦しない＝会話だけ。
+    midBattleEvent: {
+      enemyAssetsAtLeast: 4000,
+      overlay: { leftName: '魚群の王', rightName: '主人公' },
+      lines: [
+        { speaker: '魚群の王', text: 'フハハハハハ！！無様よのう。力のない者は何も成し遂げられないのだよ。' },
+        { speaker: '主人公', text: 'こんなの無茶苦茶だ！！' },
+        { speaker: '魚群の王', text: 'その程度でよくもまぁワイに噛みついてきたものよ。身の程知らずにはお似合いの身分をプレゼントしてやる。楽しみにしておれ' },
+        { speaker: '主人公', text: 'ぐぬぬ…' },
+      ],
+    },
+    overlaySpeakerSides: {
+      主人公: 'right',
+      '魚群の王': 'left',
+    },
+    intro: [
+      { speaker: '主人公', text: '川田が教えてくれた抜け道で、無事王の間まで辿りつけたぞ。…ん？謁見申請書？' },
+      { speaker: '暗・少女A', text: '謁見を希望される方はこちらにお名前をご記入ください' },
+      { speaker: '主人公', text: 'や、やけにやさぐれた受付だな。えーと、俺の名前をここに書くだけか。主人公、っと。' },
+      { speaker: '暗・少女A', text: 'お通りください' },
+      { speaker: '主人公', text: 'え！？こんだけ！？' },
+      { speaker: '暗・少女A', text: 'はい。' },
+      { speaker: '主人公', text: 'ま、まぁええか。セキュリティ、ザルやな…' },
+      { speaker: '???', text: 'お前が主人公か。' },
+      { speaker: '主人公', text: 'あんたが魚群の王か' },
+      { speaker: '魚群の王', text: 'いかにも。ワイが魚群の王、チヌである' },
+      { speaker: '主人公', text: '俺は王になりにきた。' },
+      { speaker: '魚群の王', text: 'キサマのような田舎魚が王になる…？妄言を。現実をわからせやる。いでよ、下僕達よ！！' },
+      { speaker: 'ウサギン', text: 'は。' },
+      { speaker: 'ムール', text: '参上致しました' },
+      { speaker: '邪神ヒトデマソ', text: '逃ゲロ…逃ゲテ…' },
+      { speaker: '主人公', text: 'ウサギン！？ムール！？ヒトデまで！！' },
+      { speaker: '魚群の王', text: 'キサマごとき、ワイの手を煩わせるほどでない。虫ケラ、いや魚ケラよ！！' },
+      { speaker: '主人公', text: 'てめぇきたねーぞ！！' },
+      { speaker: '魚群の王', text: '夢？友情？努力？…そんなものは全てワイが否定する。「力」の差を思い知るがいい、雑魚よ。自身の無力を悔いて、底辺に甘んじるがいい。キサマのヒレはワイには届かない。さあゆけ、下僕共。' },
+      { speaker: 'ウサギン', text: '御意。全てのフェ◯ニストは俺が駆逐する。' },
+      { speaker: '主人公', text: 'ちがうんだが！？' },
+      { speaker: 'ムール', text: '固定資産税、払ってくださいね。' },
+      { speaker: '主人公', text: 'アーアー聞こえない！！' },
+      { speaker: '邪神ヒトデマソ', text: 'うぎょぎょぎょぎょ…' },
+      { speaker: '主人公', text: 'ヒトデ、待ってろ。俺が今、楽にしてやる' },
+    ],
+    // 敗北時（想定される通常の結末）。再生後に画面が暗転してクリア扱いになる。
+    defeatOutro: [
+      { speaker: '魚群の王', text: '…フン。余興にもならなかったな。おい、お前ら、そこの負け犬を地下にぶちこんどけ' },
+      { speaker: '主人公', text: 'うわぁ！近づくな！！やめろ！やめてくれ！！らめええええ' },
+    ],
+    // 勝ってしまった場合の隠しメッセージ。⚠️ **仮実装中はメッセージだけで、
+    // EXカードは実際には配らない**（ユーザー指定）。配る時はmain.jsの
+    // handleStoryBattleEnd側に付与処理を足すこと。
+    outro: [
+      { speaker: '???', text: 'こんなのクリアするなんて◯チガイですか？暇なんですか？' },
+      { speaker: '???', text: 'EXカードを全て1枚ずつ手に入れた' },
+    ],
+    opponents: [
+      {
+        name: 'ウサギン',
+        color: 0xe63946,
+        deckKey: 'chinuUsagin',
+        theme: { elements: [Element.FOREST] },
+      },
+      {
+        name: 'ムール',
+        color: 0x3949ab,
+        deckKey: 'chinuMuuru',
+        theme: { elements: [Element.WATER] },
+      },
+      {
+        name: '邪神ヒトデマソ',
+        color: 0x6a1b2a,
+        deckKey: 'chinuHitodemaso',
+        theme: { elements: [Element.NEUTRAL] },
+      },
+    ],
+  },
 ];
 
 export function isStageUnlocked(character, index) {

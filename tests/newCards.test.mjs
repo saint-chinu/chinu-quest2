@@ -15,6 +15,15 @@ const battle = await vite.ssrLoadModule('/src/battle.js');
 const { TileType, MAPS, createBoard } = await vite.ssrLoadModule('/src/board.js');
 const { STORY_STAGES } = await vite.ssrLoadModule('/src/story.js');
 const { NPC_PORTRAIT_URL, NPC_TOKEN_URL } = await vite.ssrLoadModule('/src/npcArt.js');
+// audio.jsはトップレベルでwindow.addEventListenerを呼ぶ（自動再生アンロック用）
+// のでNode上ではそのままでは読めない。読み込む間だけ最小のwindowを差し込み、
+// 直後に必ず消す（他モジュールのtypeof window判定を汚さないため）。
+const hadWindow = 'window' in globalThis;
+if (!hadWindow) globalThis.window = { addEventListener() {} };
+const { TRACK_SRC, MAP_TRACK, SELECTABLE_BGM } = await vite.ssrLoadModule('/src/audio.js');
+const { computePlayerSlots } = await vite.ssrLoadModule('/src/playerPanels.js');
+const { CardType } = await vite.ssrLoadModule('/src/cards.js');
+if (!hadWindow) delete globalThis.window;
 const { WIP_CARD_NAMES, reclaimReleasedWipHoldings, getCardCatalog } = await vite.ssrLoadModule('/src/cardCatalog.js');
 const breedParts = await vite.ssrLoadModule('/src/breedParts.js');
 test.after(() => vite.close());
@@ -1500,21 +1509,14 @@ test('ダメージスペルのCPUは避雷針侍・くねくねを最優先で�
   assert.equal(g._cpuPickDamageTarget([fat, plain], 15).id, fat.id, 'ロック不在なら総資産1位');
 });
 
-test('川田のデッキに他キャラ固有のEXカードを混ぜない（演出の筋）', () => {
+test('川田のデッキに資本主義の権化を1枚含める（ユーザー指定）', () => {
   const kawada = buildCharacterCardList('kawada');
   assert.equal(kawada.length, 40);
-  // 資本主義の権化は⑫でクエを破産させた時だけ手に入るクエ専用のEX。
-  // 裏路地のレジスタンスが金融街のフィクサーの切り札を撃つのは演出として
-  // 筋が通らないので撤去した（2026-08、ユーザー指摘）。勝率は代替の
-  // アイランドホエール4枚目と実質同値（CLAUDE.md参照）。
+  // 川田デッキにはユーザー指定で資本主義の権化を1枚採用する。
   assert.equal(
-    kawada.filter((c) => c.name === '資本主義の権化').length, 0,
-    '資本主義の権化（クエ専用EX）が川田のデッキに復活している',
+    kawada.filter((c) => c.name === '資本主義の権化').length, 1,
+    '川田デッキに資本主義の権化が1枚ない',
   );
-  // 一般化: 川田のデッキにEXカードを入れない。EXはどれも特定キャラの
-  // 撃破報酬なので、混ぜると必ず「関係ないキャラの札」になる。
-  const exCards = kawada.filter((c) => c.rarity === 'EX').map((c) => c.name);
-  assert.deepEqual(exCards, [], `川田のデッキにEXカードが入っている: ${exCards.join(', ')}`);
 });
 
 test('お札を開幕から仕込むCPUは居ない（全ステージ、盤面で自然に買わせる）', () => {
@@ -2154,4 +2156,443 @@ test('チュートリアル: 初期手札にスペルを入れず、案内しな
   for (const m of deckBody[1].matchAll(/tutorialCopies\(SPELL_CATALOG\.(\w+),/g)) {
     assert.ok(taughtSpells.has(m[1]), `チュートリアルデッキに台本が教えないスペル「${m[1]}」が入っている`);
   }
+});
+// ---- ⑯「魚群の王チヌ」（1vs3・絶対敗北にしないイベントバトル） ----
+
+test('BGMの参照先mp3はすべてpublic/audio/に実在する', () => {
+  // ファイルが無いとplay()が黙って失敗し、そのステージだけ無音になる
+  // （例外も出ないので気づきにくい）。参照とファイルのズレをここで止める。
+  for (const [track, url] of Object.entries(TRACK_SRC)) {
+    const file = new URL(`../public${new URL(url, 'http://x').pathname}`, import.meta.url);
+    assert.ok(existsSync(file), `${track}のBGMが存在しない: ${url}`);
+  }
+  // MAP_TRACK・対人戦の選択肢が実在しないキーを指していないこと。
+  for (const [mapId, track] of Object.entries(MAP_TRACK)) {
+    assert.ok(TRACK_SRC[track], `MAP_TRACK['${mapId}']のトラック'${track}'がTRACK_SRCに無い`);
+  }
+  for (const entry of SELECTABLE_BGM) {
+    assert.ok(TRACK_SRC[entry.track], `対人戦のBGM選択'${entry.title}'のトラックがTRACK_SRCに無い`);
+    assert.match(entry.title, /^♪/, '曲名は♪始まりで揃える');
+  }
+});
+
+test('⑯のステージBGMは専用曲（stage16bgm.mp3）', () => {
+  assert.equal(MAP_TRACK.chinu, 'chinu');
+  assert.match(TRACK_SRC.chinu, /\/audio\/stage16bgm\.mp3$/);
+  assert.ok(SELECTABLE_BGM.some((entry) => entry.track === 'chinu'), '対人戦のBGM選択にも並べる');
+});
+
+test('⑯の専用素材（チヌの立ち絵・王の間の背景）が揃っている', () => {
+  assert.match(NPC_PORTRAIT_URL['魚群の王'], /\/images\/npc-portraits\/chinu-king\.png$/);
+  const portraitFile = new URL('../public/images/npc-portraits/chinu-king.png', import.meta.url);
+  assert.ok(existsSync(portraitFile), 'チヌの立ち絵が存在しない');
+  // PNGのIHDR color type=6はRGBA。白背景を焼き込んだ不透明画像へ戻る事故を防ぐ。
+  assert.equal(readFileSync(portraitFile)[25], 6, 'チヌの立ち絵は実アルファ透過PNGであること');
+  // チヌは高みの見物で対戦に参加しない＝盤面駒は用意しない。
+  assert.equal(NPC_TOKEN_URL['魚群の王'], undefined);
+
+  // 背景は⑯専用の「王の間」。⑦の法廷絵を仮流用していた状態へ戻さない。
+  const map = MAPS.find((entry) => entry.id === 'chinu');
+  assert.match(map.background, /\/images\/stage\/king-room\.png$/);
+  const backgroundFile = new URL('../public/images/stage/king-room.png', import.meta.url);
+  assert.ok(existsSync(backgroundFile), '王の間の背景が存在しない');
+});
+
+test('⑯はステージ・マップ・敵3体の専用デッキが揃っている', () => {
+  const stage = STORY_STAGES.find((entry) => entry.key === 'chinu');
+  const map = MAPS.find((entry) => entry.id === 'chinu');
+  assert.ok(stage && map, 'ステージ・マップが両方見つからない');
+  assert.equal(stage.goalCurrency, 5000);
+  assert.deepEqual(stage.opponents.map((o) => o.name), ['ウサギン', 'ムール', '邪神ヒトデマソ']);
+  assert.deepEqual(stage.opponents.map((o) => o.deckKey), ['chinuUsagin', 'chinuMuuru', 'chinuHitodemaso']);
+  for (const opponent of stage.opponents) {
+    assert.equal(buildCharacterDeckList(opponent.deckKey).length, 40, `${opponent.name}のデッキは40枚`);
+    // buildBattlePlayerConfigsがopponent.theme.elementsを無条件で読むので必須。
+    assert.ok(Array.isArray(opponent.theme?.elements), `${opponent.name}にthemeが無い`);
+    // ⑯の下僕は共通で焼き札7枚＋バックファイア2＋1のダイス2。
+    const names = buildCharacterDeckList(opponent.deckKey).map((card) => card.name);
+    const count = (name) => names.filter((entry) => entry === name).length;
+    assert.equal(count('ファイヤーボール'), 4);
+    assert.equal(count('千本桜'), 3);
+    assert.equal(count('バックファイア'), 2);
+    assert.equal(count('1のダイス'), 2);
+    // 2026-09-01: 実プレイで勝たれたので手札破壊を追加。CPUの使用判断は
+    // 焼き札・妨害札より後に評価されるので、本来の動きは潰さない。
+    assert.equal(count('キャンセルカルチャー'), 2);
+    // 2026-09-01: ATK+直前の出目×5・貫通。守り札と入れ替えて打点を上げた。
+    assert.equal(count('イカサマのサイコロ'), 2);
+  }
+  // 既存ステージのデッキを流用していない＝①〜⑮の難度に影響しない。
+  assert.notEqual(stage.opponents[0].deckKey, 'usagin');
+});
+
+test('⑯は3vs1: 下僕3体が同盟、主人公は単独', () => {
+  const stage = STORY_STAGES.find((entry) => entry.key === 'chinu');
+  // ユーザー指定（2026-09-01）。_totalAssetsOfは同盟内の総資産を合算するので、
+  // 敵側は3人ぶんの資産で目標へ届く＝主人公が圧倒的不利になる。
+  assert.equal(stage.heroAllianceId ?? null, null, '主人公は単独');
+  assert.ok(stage.enemyAllianceId, '下僕3体は同じ陣営');
+  assert.equal(stage.format, '3vs1');
+});
+
+test('⑯は絶対敗北にしない: 負けてもクリア扱い＋勝てば隠しメッセージ', () => {
+  const stage = STORY_STAGES.find((entry) => entry.key === 'chinu');
+  assert.equal(stage.clearOnDefeat, true);
+  assert.ok(stage.defeatOutro?.length, '敗北エンドの会話が必要');
+  assert.ok(stage.outro?.length, '勝利時（隠しルート）の会話が必要');
+  assert.equal(stage.heroGoesLast, true, '主人公は最後の手番');
+  assert.equal(stage.eventBattleBanner?.length, 2, '開始バナーは2行');
+  assert.equal(stage.midBattleEvent?.enemyAssetsAtLeast, 4000, '目標5,000Gの8割で割り込み会話');
+});
+
+test('⑯の盤面は1行20マスの一直線（両端が行き止まりで折り返す）', () => {
+  const map = MAPS.find((entry) => entry.id === 'chinu');
+  assert.equal(map.rows.length, 1);
+  assert.equal(map.rows[0], 'GFFWWMMTTNNMMWWTTFFC');
+  const tiles = createBoard('chinu');
+  assert.equal(tiles.length, 20);
+  assert.equal(tiles[0].type, TileType.START);
+  assert.equal(tiles[19].type, TileType.EVENT, '終端がCP＝一度は最奥まで行く必要がある');
+  // 一直線なので隣接は1（両端）か2（途中）。3以上ができていたら盤面が壊れている。
+  assert.ok(tiles.every((tile) => tile.neighbors.length >= 1 && tile.neighbors.length <= 2));
+  assert.equal(tiles.filter((tile) => tile.neighbors.length === 1).length, 2, '行き止まりは両端の2つだけ');
+  const counts = {};
+  for (const tile of tiles.filter((entry) => entry.type === TileType.LAND)) {
+    counts[tile.element] = (counts[tile.element] || 0) + 1;
+  }
+  assert.deepEqual(counts, { fire: 4, water: 4, forest: 4, thunder: 4, neutral: 2 });
+});
+
+test('⑯の割り込み会話は敵1人が4000Gに届いた時だけ、1回だけ発火する', async () => {
+  const stage = STORY_STAGES.find((entry) => entry.key === 'chinu');
+  const players = [
+    { id: 0, name: '主人公', isCPU: false, defeated: false, allianceId: null },
+    { id: 1, name: 'ウサギン', isCPU: true, defeated: false, allianceId: null },
+    { id: 2, name: 'ムール', isCPU: true, defeated: false, allianceId: null },
+  ];
+  const g = makeStub([], players);
+  const assets = new Map([[0, 900], [1, 1200], [2, 1500]]);
+  let shown = 0;
+  let allyAdded = 0;
+  Object.assign(g, {
+    storyEnded: false,
+    _isCancelled: false,
+    storyAssistTriggered: false,
+    storyAssistEvent: { enemyAssetsAtLeast: stage.midBattleEvent.enemyAssetsAtLeast, allyConfig: null, lines: stage.midBattleEvent.lines },
+    _totalAssetsOf: (player) => assets.get(player.id),
+    onStoryAssistEvent: async () => { shown += 1; },
+    _addStoryAssistPlayer: () => { allyAdded += 1; return { name: 'ally' }; },
+  });
+  await g._maybeTriggerStoryAssistEvent();
+  assert.equal(shown, 0, '4000G未満では発火しない');
+  assets.set(2, 4000);
+  await g._maybeTriggerStoryAssistEvent();
+  assert.equal(shown, 1);
+  assert.equal(allyAdded, 0, '⑯は会話だけ＝味方は参戦しない');
+  await g._maybeTriggerStoryAssistEvent();
+  assert.equal(shown, 1, '1回きり');
+});
+
+// ---- 合体ロボ・ガシャーンの図鑑登録（自分で合体させた時だけ） ----
+
+test('ギアの合体はonCardSeenへ「誰が合体させたか」を渡す', () => {
+  const gearA = MONSTER_CATALOG.kodaiNoGearA;
+  const tiles = [
+    makeTile(0, { element: 'neutral' }),
+    makeTile(1, { element: 'neutral' }),
+    makeTile(2, { element: 'neutral' }),
+  ];
+  const player = { id: 3, name: 'テスト', color: 1, currency: 0, isCPU: false };
+  const g = makeStub(tiles, [player]);
+  const seen = [];
+  Object.assign(g, {
+    onCardSeen: (def, meta) => seen.push({ name: def.name, meta }),
+    _paintTile: () => {},
+    _repaintTileToElement: () => {},
+  });
+  // 残り2種のギアが自分の土地に配置済み。
+  tiles[1].unit = unit(MONSTER_CATALOG.kodaiNoGearB, player.id);
+  tiles[1].owner = player.id;
+  tiles[2].unit = unit(MONSTER_CATALOG.kodaiNoGearC, player.id);
+  tiles[2].owner = player.id;
+
+  g._maybeFuseGear(tiles[0], player, { ...gearA, catalogId: 'kodaiNoGearA' });
+
+  assert.equal(tiles[0].unit.def.name, '合体ロボ・ガシャーン', '合体していない');
+  assert.equal(tiles[1].unit, null, '素材のギアは消える');
+  assert.equal(tiles[2].unit, null, '素材のギアは消える');
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].name, '合体ロボ・ガシャーン');
+  // byPlayerIdが無いと、main.js側で「敵が合体させたのを見ただけ」と区別できない。
+  assert.equal(seen[0].meta?.byPlayerId, player.id);
+});
+
+test('ギアが揃っていなければ合体もonCardSeenも起きない', () => {
+  const gearA = MONSTER_CATALOG.kodaiNoGearA;
+  const tiles = [makeTile(0, { element: 'neutral' }), makeTile(1, { element: 'neutral' })];
+  const player = { id: 0, name: 'テスト', color: 1, currency: 0, isCPU: false };
+  const g = makeStub(tiles, [player]);
+  const seen = [];
+  Object.assign(g, { onCardSeen: (def) => seen.push(def.name), _paintTile: () => {}, _repaintTileToElement: () => {} });
+  tiles[1].unit = unit(MONSTER_CATALOG.kodaiNoGearB, player.id); // Cが無い
+  tiles[1].owner = player.id;
+
+  g._maybeFuseGear(tiles[0], player, { ...gearA, catalogId: 'kodaiNoGearA' });
+
+  assert.equal(tiles[0].unit, null);
+  assert.equal(tiles[1].unit.def.name, '古代のギアB', '素材は消さない');
+  assert.deepEqual(seen, []);
+});
+
+// ---- 盤面四隅のプレイヤーパネル（誰をどの隅に出すか） ----
+
+test('⑯の1vs3（敵3人が同盟）でも4人全員がパネルに出る', () => {
+  // 2026-09-01のユーザー報告「邪神ヒトデマソの手持ちG・総資産が出ていない」。
+  // 陣営ごとに[左0,右0,左1,右1]と並べるだけだと、3人目の敵がどの枠にも
+  // 入らず表示が丸ごと消えていた。
+  const players = [
+    { id: 0, name: '主人公', allianceId: null },
+    { id: 1, name: 'ウサギン', allianceId: 'chinu' },
+    { id: 2, name: 'ムール', allianceId: 'chinu' },
+    { id: 3, name: '邪神ヒトデマソ', allianceId: 'chinu' },
+  ];
+  const slots = computePlayerSlots(players);
+  assert.equal(slots.filter(Boolean).length, 4, '4隅すべて埋まる');
+  for (const player of players) {
+    assert.ok(slots.includes(player), `${player.name}がどの枠にも入っていない`);
+  }
+  assert.equal(slots[0], players[0], '主人公は左上のまま');
+});
+
+test('2vs2は従来どおり左列＝自陣営・右列＝敵陣営に並ぶ', () => {
+  const players = [
+    { id: 0, name: '主人公', allianceId: 'red' },
+    { id: 1, name: '朕', allianceId: 'red' },
+    { id: 2, name: '「彼」', allianceId: 'white' },
+    { id: 3, name: '段ボール男', allianceId: 'white' },
+  ];
+  const slots = computePlayerSlots(players);
+  assert.deepEqual(slots.map((p) => p.name), ['主人公', '「彼」', '朕', '段ボール男']);
+});
+
+test('同盟なし（FFA）は手番順のまま4隅へ', () => {
+  const players = [0, 1, 2, 3].map((id) => ({ id, name: `P${id}`, allianceId: null }));
+  assert.deepEqual(computePlayerSlots(players).map((p) => p.name), ['P0', 'P1', 'P2', 'P3']);
+});
+
+test('1vs1は2枠だけ埋まり、残りは空のまま', () => {
+  const slots = computePlayerSlots([
+    { id: 0, name: '主人公', allianceId: null },
+    { id: 1, name: '川田', allianceId: null },
+  ]);
+  assert.equal(slots[0].name, '主人公');
+  assert.equal(slots[1].name, '川田');
+  assert.equal(slots[2], undefined);
+  assert.equal(slots[3], undefined);
+});
+
+// ---- ネット弁慶（statOverrideInBattle）の表示 ----
+
+test('ネット弁慶は戦闘画面の基礎ステだけ20/20になり、盤面表示は50/50のまま', () => {
+  const g = makeStub([], []);
+  const netBenkei = unit(MONSTER_CATALOG.netBenkei, 0);
+  // 盤面（HPバー・土地情報）はカードどおりの素の値。
+  assert.deepEqual(g._baseStats(netBenkei), { atk: 50, hp: 50 });
+  // 戦闘画面は上書き後。ここが素の値のままだと「弱体化していないように
+  // 見えるのに実際は20/20で戦う」＝ダメージ表示と減り方が食い違う。
+  assert.deepEqual(g._baseStats(netBenkei, { inBattle: true }), { atk: 20, hp: 20 });
+  // 実ダメージ計算（battle.jsのstatTotals）と戦闘画面の基礎ステが一致すること。
+  const totals = battle.statTotals(netBenkei);
+  assert.equal(totals.atk, 20);
+  assert.equal(totals.maxHp, 20);
+});
+
+test('上書きを持たないモンスターはinBattleでも値が変わらない', () => {
+  const g = makeStub([], []);
+  const ninja = unit(MONSTER_CATALOG.ninja, 0);
+  assert.deepEqual(g._baseStats(ninja), g._baseStats(ninja, { inBattle: true }));
+});
+
+// ---- 瞬間移動の直後にバックファイアで駒が飛ばないこと ----
+
+test('帰巣本能でゴールへ戻すと着地履歴がリセットされる', async () => {
+  const tiles = [
+    { id: 0, type: TileType.START, position: { x: 0, z: 0 }, neighbors: [1] },
+    ...[1, 2, 3, 4].map((id) => makeTile(id, { neighbors: [id - 1, id + 1] })),
+  ];
+  const player = {
+    id: 0, name: '主人公', currency: 0, tileId: 4, previousTileId: 3,
+    homeGoalTileId: 0, lapsCompleted: 0, passedCheckpoints: new Set(),
+    // ゴールへ飛ぶ直前まで 4←3←2←1←0 と歩いてきた履歴。
+    tileHistory: [4, 3, 2, 1, 0],
+  };
+  const g = makeStub(tiles, [player]);
+  Object.assign(g, { _grantGoalBonus: async () => {}, _notifyState: () => {} });
+
+  await g._spellReturnPlayerToStart(player, 250);
+
+  assert.equal(player.tileId, 0, 'ゴールへ戻る');
+  // ここが [4,3,2,1,0] のまま残ると、直後のバックファイアで
+  // ゴール(0)→4 と盤面の隣接を無視して飛ぶ（CPも踏み飛ばす）。
+  assert.deepEqual(player.tileHistory, [0], '履歴は飛び先だけにリセットされる');
+});
+
+test('履歴がリセットされていればバックファイアで駒は飛ばない', async () => {
+  const tiles = [
+    { id: 0, type: TileType.START, position: { x: 0, z: 0 }, neighbors: [1] },
+    ...[1, 2, 3, 4].map((id) => makeTile(id, { neighbors: [id - 1, id + 1] })),
+  ];
+  const player = { id: 0, name: '主人公', tileId: 0, previousTileId: null, tileHistory: [0], passedCheckpoints: new Set() };
+  const g = makeStub(tiles, [player]);
+  Object.assign(g, {
+    _turnPathIds: [], _segmentPathIds: [],
+    onMoveDestination: () => {},
+    _isForcedStopFor: () => false,
+    _emitPieceStep: () => {},
+    _stepWithCamera: async () => {},
+    _visitCheckpoint: async () => {},
+    _broadcastPieceMove: async () => {},
+  });
+
+  await g._movePlayerBackward(player, 5);
+
+  assert.equal(player.tileId, 0, '履歴が尽きているのでその場に留まる（飛ばない）');
+});
+
+// ---- ネット弁慶: 盤面スケール(50)と戦闘スケール(20)の橋渡し ----
+
+test('ネット弁慶は盤面で削られた分だけ戦闘HPから引かれる', () => {
+  const fresh = unit(MONSTER_CATALOG.netBenkei, 0);
+  battle.prepareForBattle(fresh);
+  assert.equal(fresh.currentHp, 20, '無傷なら戦闘HPは上書き後の20');
+
+  const scratched = unit(MONSTER_CATALOG.netBenkei, 0);
+  scratched.currentHp = 40; // 盤面で10喰らっている（盤面スケールは50）
+  battle.prepareForBattle(scratched);
+  assert.equal(scratched.currentHp, 10, '盤面ダメージ10ぶん引かれる');
+
+  const dying = unit(MONSTER_CATALOG.netBenkei, 0);
+  dying.currentHp = 30; // 盤面で20喰らっている＝戦闘HPは0
+  battle.prepareForBattle(dying);
+  // 0以下のまま渡し、resolveBattleの開幕死亡チェックで明示的に倒す
+  // （下限1で誤魔化すと「1HPで開幕して初撃で落ちる」という別の挙動になる）。
+  assert.equal(dying.currentHp, 0, '20喰らっていれば開幕HPは0＝開始と同時に死亡');
+});
+
+test('ネット弁慶は無傷で戦闘を終えても盤面HPが減らない', () => {
+  const harmless = { id: 'kakashi', name: 'カカシ', element: 'fire', rarity: 'N', hp: 5, atk: 0, cost: 0 };
+  const nb = unit(MONSTER_CATALOG.netBenkei, 0);
+  battle.resolveBattle(nb, unit(harmless, 1));
+  // 修正前は「戦闘スケールの20」で頭打ちにしていたため50→20に落ちていた。
+  assert.equal(nb.currentHp, 50, '一度戦っただけで盤面HPが落ちない');
+
+  const nb2 = unit(MONSTER_CATALOG.netBenkei, 0);
+  battle.resolveBattle(nb2, unit({ ...harmless, hp: 60, atk: 5 }, 1));
+  assert.equal(nb2.currentHp, 45, '戦闘で受けた5ダメージだけ盤面へ返る');
+});
+
+test('通常モンスターの盤面HP持ち越しは従来どおり（シールドは盤面HPを守る）', () => {
+  const foe = { id: 'foe', name: 'カカシ', element: 'fire', rarity: 'N', hp: 200, atk: 10, cost: 0 };
+  const ninja = unit(MONSTER_CATALOG.ninja, 0);
+  ninja.currentHp = 30; // def.hp=40 に対して10喰らっている
+  battle.resolveBattle(ninja, unit(foe, 1));
+  assert.equal(ninja.currentHp, 20, '素のHPを下回った分だけ盤面へ返る');
+
+  const armored = unit(MONSTER_CATALOG.ninja, 0);
+  armored.currentHp = 30;
+  armored.items.push(ITEM_CATALOG.heikeNoYoroi); // HP+40
+  battle.resolveBattle(armored, unit(foe, 1));
+  assert.equal(armored.currentHp, 30, 'シールドが吸った分は盤面HPを削らない');
+});
+
+// ---- 開幕死亡（開始HPが0以下） ----
+
+test('盤面ダメージで開始HPが0以下なら戦闘開始と同時に死亡する', () => {
+  const nb = unit(MONSTER_CATALOG.netBenkei, 0);
+  nb.currentHp = 30; // 盤面で20喰らっている＝戦闘HPは20-20=0
+  assert.equal(battle.previewBattleEntryHp(nb), 0, '装備前の時点でもう0');
+
+  const foe = unit({ id: 'foe', name: 'カカシ', element: 'fire', rarity: 'N', hp: 60, atk: 50, cost: 0 }, 1);
+  const result = battle.resolveBattle(nb, foe);
+  assert.equal(result.startingDeath, true);
+  assert.equal(result.attackerSurvived, false);
+  assert.equal(result.defenderSurvived, true, '相手は無傷');
+  assert.equal(result.exchanges.length, 1, '死亡の表示だけで殴り合いは起きない');
+  assert.equal(result.exchanges[0].message, 'ネット弁慶は死亡した');
+  // 攻撃モーションと属性ビームを出さないための印。
+  assert.equal(result.exchanges[0].aftermath, true);
+  assert.equal(result.exchanges[0].targetDied, true);
+  assert.equal(result.dmgToDefender, 0, '一撃も入れずに死ぬ');
+});
+
+test('マイナスHP装備で0以下になる場合も先手の攻撃前に死亡する', () => {
+  const frail = { id: 'frail', name: 'ひよわ', element: 'fire', rarity: 'N', hp: 20, atk: 30, cost: 0 };
+  const u = unit(frail, 0);
+  battle.equipItem(u, ITEM_CATALOG.morohaNoTsurugi); // ATK+40 / HP-20
+  assert.equal(battle.previewBattleEntryHp(u), 0, '装備してから0以下になる');
+
+  const foe = unit({ id: 'foe', name: 'カカシ', element: 'fire', rarity: 'N', hp: 60, atk: 50, cost: 0 }, 1);
+  const result = battle.resolveBattle(u, foe);
+  assert.equal(result.startingDeath, true);
+  assert.equal(result.attackerSurvived, false);
+  assert.equal(result.exchanges[0].message, 'ひよわは死亡した');
+  assert.equal(foe.currentHp, 60, 'ATK+40があっても一撃も入らない');
+});
+
+test('開始HPが1以上あれば従来どおり殴り合う', () => {
+  const ninja = unit(MONSTER_CATALOG.ninja, 0);
+  const foe = unit({ id: 'foe', name: 'カカシ', element: 'fire', rarity: 'N', hp: 60, atk: 10, cost: 0 }, 1);
+  const result = battle.resolveBattle(ninja, foe);
+  assert.ok(!result.startingDeath);
+  assert.ok(result.exchanges.length >= 2);
+});
+
+// ---- キャンセルカルチャーのCPU狙い方（アイテム最優先） ----
+
+function makeCancelCultureGame() {
+  const g = Object.create(Game.prototype);
+  const casts = [];
+  Object.assign(g, {
+    players: [
+      { id: 0, name: 'CPU', isCPU: true, allianceId: 'enemy', defeated: false, currency: 500, spellUsedThisTurn: false,
+        hand: [{ ...SPELL_CATALOG.cancelCulture, id: 'cc', type: CardType.SPELL }] },
+      { id: 1, name: '味方CPU', isCPU: true, allianceId: 'enemy', defeated: false,
+        hand: [{ ...ITEM_CATALOG.zangokuKen, id: 'ally-item', type: CardType.GEAR }] },
+      { id: 2, name: '主人公', isCPU: false, allianceId: null, defeated: false, hand: [] },
+    ],
+    _totalAssetsOf: () => 1000,
+    _cpuCastSpell: async (player, card, opts) => { casts.push(opts); },
+  });
+  return { g, casts, hero: g.players[2] };
+}
+
+const asItem = (def, id) => ({ ...def, id, type: CardType.GEAR });
+const asSpell = (def, id) => ({ ...def, id, type: CardType.SPELL });
+
+test('キャンセルカルチャーは高コストのスペルより先にアイテムを潰す', async () => {
+  const { g, casts, hero } = makeCancelCultureGame();
+  // 千本桜100G（スペル）とナイフ5G（アイテム）。コスト順ならスペルを狙うが、
+  // 戦闘の勝敗を直接ひっくり返すのは装備なのでアイテムを優先する。
+  hero.hand = [asSpell(SPELL_CATALOG.senbonZakura, 's1'), asItem(ITEM_CATALOG.knife, 'i1')];
+  await g._cpuMaybeUseCancelCultureSpell(g.players[0]);
+  assert.equal(casts.at(-1)?.targetCardId, 'i1');
+  assert.equal(casts.at(-1)?.targetPlayerId, 2, '同盟外だけを狙う（味方CPUの装備は対象外）');
+});
+
+test('アイテムが複数あれば高い方から、尽きたらスペルへ移る', async () => {
+  const { g, casts, hero } = makeCancelCultureGame();
+  hero.hand = [asItem(ITEM_CATALOG.knife, 'i1'), asItem(ITEM_CATALOG.zangokuKen, 'i2'), asSpell(SPELL_CATALOG.senbonZakura, 's1')];
+  await g._cpuMaybeUseCancelCultureSpell(g.players[0]);
+  assert.equal(casts.at(-1)?.targetCardId, 'i2', '斬〇剣130G > ナイフ5G');
+
+  hero.hand = [asSpell(SPELL_CATALOG.fireball, 's1'), asSpell(SPELL_CATALOG.senbonZakura, 's2')];
+  await g._cpuMaybeUseCancelCultureSpell(g.players[0]);
+  assert.equal(casts.at(-1)?.targetCardId, 's2', 'アイテムが無ければ高コストのスペル');
+});
+
+test('潰せる手札を持つ相手がいなければ撃たない', async () => {
+  const { g, casts, hero } = makeCancelCultureGame();
+  hero.hand = [{ ...MONSTER_CATALOG.ninja, id: 'm1', type: CardType.MONSTER }]; // モンスターは対象外
+  await g._cpuMaybeUseCancelCultureSpell(g.players[0]);
+  assert.equal(casts.length, 0);
 });

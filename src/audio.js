@@ -10,7 +10,10 @@
 
 import { assetUrl } from './assetUrl.js';
 
-const TRACK_SRC = {
+// TRACK_SRC/MAP_TRACKをexportしているのは回帰テスト（tests/newCards.test.mjs）が
+// 「参照先のmp3がpublic/に実在するか」「マップ→曲の対応が実在するキーを指すか」を
+// 検証するため。実行時に外から使う想定は無い。
+export const TRACK_SRC = {
   board: assetUrl('/audio/board-theme.mp3'), // 専用曲の無いマップの既定
   hitode: assetUrl('/audio/stage1newbgm.mp3'), // ①ヒトデの縄張り
   battle: assetUrl('/audio/newbattle.mp3'), // 全マップ共通の戦闘シーン曲
@@ -27,11 +30,13 @@ const TRACK_SRC = {
   ofudaField: assetUrl('/audio/stage12bgm.mp3'), // ⑫海上金融街のフィクサー
   kessan: assetUrl('/audio/stage13newbgm.mp3'), // ⑬船上のロンド（初戦・再戦共通）
   royalGuard: assetUrl('/audio/stage14bgm.mp3'), // ⑭王都の番人？？
+  kawada: assetUrl('/audio/stage15bgm.mp3'), // ⑮是々非々のマーモット（自称）
+  chinu: assetUrl('/audio/stage16bgm.mp3'), // ⑯魚群の王チヌ
 };
 
 // mapId(board.jsのMAPS)→専用トラック。無いキーはplayMapTheme側でboardに
 // フォールバックする。
-const MAP_TRACK = {
+export const MAP_TRACK = {
   tutorial: 'finalAlliance',
   // ①は初戦だけ別マップ(hitode-first)で始まる（main.jsのstartStoryBattle参照）。
   // 両方を同じ曲に繋がないと、全プレイヤーが最初に聴く初戦だけ共通曲のままになる。
@@ -50,7 +55,36 @@ const MAP_TRACK = {
   'ofuda-field': 'ofudaField',
   kessan: 'kessan',
   'royal-guard': 'royalGuard',
+  kawada: 'kawada',
+  chinu: 'chinu',
 };
+
+// 対人戦のBGM選択（ホストがステージ確定時に選ぶ）。ここに並べた曲だけが
+// プルダウンに出る。titleは表示用の曲名で、実体は上のTRACK_SRCのキー。
+export const SELECTABLE_BGM = [
+  { track: 'board', title: '♪果てなき海図' },
+  { track: 'hitode', title: '♪はじまりの潮騒' },
+  { track: 'madai', title: '♪岩礁のワルツ' },
+  { track: 'budou', title: '♪決闘前夜' },
+  { track: 'qTrain', title: '♪暴走列車ブギ' },
+  { track: 'boss', title: '♪暗転した世界' },
+  { track: 'kare', title: '♪彼と呼ばれた男' },
+  { track: 'finalAlliance', title: '♪創造主への異議' },
+  { track: 'chinHarbor', title: '♪花火港のカーニバル' },
+  { track: 'taxAudit', title: '♪追徴のマーチ' },
+  { track: 'hitodemaso', title: '♪成れの果て' },
+  { track: 'mahjongDuo', title: '♪ふたりの牌歌' },
+  { track: 'ofudaField', title: '♪金融街のネオン' },
+  { track: 'kessan', title: '♪船上のロンド' },
+  { track: 'royalGuard', title: '♪王都の番人' },
+  { track: 'kawada', title: '♪路地裏のレジスタンス' },
+  { track: 'chinu', title: '♪玉座の重み' },
+  { track: 'battle', title: '♪一触即発' },
+];
+
+export function bgmTitleOf(track) {
+  return SELECTABLE_BGM.find((entry) => entry.track === track)?.title || null;
+}
 
 const VOLUME = 0.5;
 
@@ -73,6 +107,15 @@ let pageExited = false;
 // BGMは盤面内だけ許可する。ログイン／メニューへ戻った後に古い戦闘演出の
 // setTimeoutが完了してplayMapThemeを呼んでも再生を復活させないための門番。
 let musicPlaybackAllowed = false;
+// 盤面BGMの上書き（対人戦のBGM選択）。設定されている間はmapIdに紐づく
+// 専用曲ではなくこの曲を鳴らす。盤面を閉じる（blockMusicPlayback）と必ず
+// 解除されるので、次のストーリー／CPU戦へ持ち越さない。
+let bgmOverride = null;
+
+/** 盤面BGMを指定の曲で上書きする。nullでマップ標準へ戻す。 */
+export function setBgmOverride(track) {
+  bgmOverride = track && TRACK_SRC[track] ? track : null;
+}
 
 // iOS Safariの既知の挙動対策: Web Audio API（playSfxが使うAudioContext）で
 // 鳴らす音は、マナーモード（サイレントスイッチ）が入っていても関係なく
@@ -200,7 +243,7 @@ function playTrack(track) {
 
 /** 盤面BGM: mapIdに専用曲があればそれを、無ければ共通のboard-theme.mp3を鳴らす。 */
 export function playMapTheme(mapId) {
-  playTrack(MAP_TRACK[mapId] ?? 'board');
+  playTrack(bgmOverride ?? MAP_TRACK[mapId] ?? 'board');
 }
 export function playBattleTheme() {
   playTrack('battle');
@@ -223,6 +266,7 @@ export function allowMusicPlayback() {
 /** ログイン・メニュー画面用。停止後の遅延コールバックによる再開も遮断する。 */
 export function blockMusicPlayback() {
   musicPlaybackAllowed = false;
+  bgmOverride = null;
   stopMusic();
 }
 

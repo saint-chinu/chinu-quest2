@@ -1217,6 +1217,98 @@ export const CHARACTER_DECKS = {
       ],
     },
   },
+  /**
+   * ⑯「魚群の王チヌ」の下僕3体（ウサギン／ムール／邪神ヒトデマソ）の専用デッキ。
+   * ①〜⑮で使う`usagin`/`muuru`/`hitodemaso`とは別キーなので、既存ステージの
+   * 難度には一切影響しない。
+   *
+   * 設計方針（2026-08 ユーザー指定）: ⑯は**強制敗北にしない**（勝った時の隠し
+   * イベントがあるため）。1vs3という人数差そのものが壁なので、勝てなくする
+   * 仕掛けは足さず、**デッキの地力だけで「ほぼ勝てない」を作る**。
+   * - 3人とも`fireball`4／`senbonZakura`3で主人公のモンスターを焼き続ける。
+   * - 3人とも`backfire`2／`diceOne`2を持ち、既存の妨害AI
+   *   （`_cpuMaybeUseReverseDiceSpell`等）でゴールを遠ざける。交代で撃つ等の
+   *   専用スクリプトは持たせない＝プレイヤー側の工夫で崩せる余地を残す。
+   * - 自分たちは`iCanFly`／`homingInstinct`で周回を稼ぐ。
+   * - 3人とも`cancelCulture`2枚（2026-09-01、実プレイで勝たれたので追加）。
+   *   CPUの使用判断は焼き札・妨害札より**後**に評価されるので（game.jsの
+   *   `_cpuMaybeUseCancelCultureSpell`の呼び出し順）、本来の動きを潰さずに
+   *   「他にやることが無いターン」だけ主人公の手札を削る。同盟内は対象外
+   *   なので下僕どうしで撃ち合うこともない。**相手のアイテムを優先して
+   *   全部潰す**（`_cpuMaybeUseCancelCultureSpell`, 2026-09-01のユーザー指定）。
+   * - 3人とも`ikasamaNoSaikoro`2枚（2026-09-01、ユーザー指定）。ATK+直前の
+   *   出目×5・貫通で、土地の同属性HPボーナスを無視して殴れる。守り札
+   *   （ナンカのお守り／ハリネズミの服／ライフジャケット）と入れ替えた＝
+   *   キャンセルカルチャーで相手の装備を剥がしつつ、自分は打点で押し切る形。
+   * - モンスターは各属性の上澄み。`chainRequired`持ちは1人4〜5枚までに抑える
+   *   （⑯の想定盤面は属性ごとに4マスしかなく、連鎖待ちで手札が詰まるため）。
+   *   `rainbowChameleon`は属性を問わずHPボーナスが乗るので3人とも採用。
+   */
+  chinuUsagin: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.yamagami, count: 2 }, { def: MONSTER_CATALOG.moriNoYousei, count: 2 },
+        { def: MONSTER_CATALOG.mountGorilla, count: 2 }, { def: MONSTER_CATALOG.jukaiNoOnryou, count: 3 },
+        { def: MONSTER_CATALOG.nazoNoKyotou, count: 2 }, { def: MONSTER_CATALOG.matagiNoKoshirou, count: 2 },
+        { def: MONSTER_CATALOG.saboriTender, count: 2 }, { def: MONSTER_CATALOG.kyochinhei, count: 1 },
+        { def: MONSTER_CATALOG.rainbowChameleon, count: 3 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.gomuGoNoPistol, count: 2 }, { def: ITEM_CATALOG.zangokuKen, count: 1 },
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 2 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.fireball, count: 4 }, { def: SPELL_CATALOG.senbonZakura, count: 3 },
+        { def: SPELL_CATALOG.backfire, count: 2 }, { def: SPELL_CATALOG.diceOne, count: 2 },
+        { def: SPELL_CATALOG.iCanFly, count: 2 }, { def: SPELL_CATALOG.homingInstinct, count: 1 },
+        { def: SPELL_CATALOG.cancelCulture, count: 2 },
+      ],
+    },
+  },
+  chinuMuuru: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.bigMermaid, count: 2 }, { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 3 },
+        { def: MONSTER_CATALOG.suijin, count: 1 }, { def: MONSTER_CATALOG.uminoieTencho, count: 1 },
+        { def: MONSTER_CATALOG.kaikyouSekishoKurage, count: 1 }, { def: MONSTER_CATALOG.tsurara, count: 2 },
+        { def: MONSTER_CATALOG.aoriika, count: 2 }, { def: MONSTER_CATALOG.ryanmenSukuna, count: 2 },
+        { def: MONSTER_CATALOG.shinkaiCleaner, count: 1 }, { def: MONSTER_CATALOG.yukiOnna, count: 1 },
+        { def: MONSTER_CATALOG.rainbowChameleon, count: 3 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.iceSlugger, count: 2 }, { def: ITEM_CATALOG.zangokuKen, count: 1 },
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 2 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.fireball, count: 4 }, { def: SPELL_CATALOG.senbonZakura, count: 3 },
+        { def: SPELL_CATALOG.backfire, count: 2 }, { def: SPELL_CATALOG.diceOne, count: 2 },
+        { def: SPELL_CATALOG.iCanFly, count: 1 }, { def: SPELL_CATALOG.homingInstinct, count: 2 },
+        { def: SPELL_CATALOG.cancelCulture, count: 2 },
+      ],
+    },
+  },
+  chinuHitodemaso: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.kontonNoAtama, count: 3 }, { def: MONSTER_CATALOG.kyousenshi, count: 3 },
+        { def: MONSTER_CATALOG.ninja, count: 3 }, { def: MONSTER_CATALOG.netBenkei, count: 2 },
+        { def: MONSTER_CATALOG.mysteriousInvader, count: 2 }, { def: MONSTER_CATALOG.kugutsuNoKengou, count: 2 },
+        { def: MONSTER_CATALOG.sentinel, count: 1 }, { def: MONSTER_CATALOG.kunekune, count: 1 },
+        { def: MONSTER_CATALOG.rainbowChameleon, count: 2 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 2 }, { def: ITEM_CATALOG.twinHammer, count: 1 },
+        { def: ITEM_CATALOG.zangokuKen, count: 1 }, { def: ITEM_CATALOG.lifeJacket, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.fireball, count: 4 }, { def: SPELL_CATALOG.senbonZakura, count: 3 },
+        { def: SPELL_CATALOG.backfire, count: 2 }, { def: SPELL_CATALOG.diceOne, count: 2 },
+        { def: SPELL_CATALOG.homingInstinct, count: 1 },
+        { def: SPELL_CATALOG.forcedAscension, count: 1 }, { def: SPELL_CATALOG.psychokinesis, count: 1 },
+        { def: SPELL_CATALOG.cancelCulture, count: 2 },
+      ],
+    },
+  },
   hofuku: {
     composition: {
       monsters: [
@@ -1645,12 +1737,8 @@ export const CHARACTER_DECKS = {
         // 育つので後半の壁として機能する。40Gでこのデッキ最高の1.63 pts/Gなので、
         // 水神150Gを抜いた枠もここへ回して3枚にした（2026-08、シミュレーションで
         // 4シード×120戦 32.3%→35.4%）。
-        // さらに2026-08、資本主義の権化（クエ専用EX。演出上の理由で撤去、下記）の
-        // 枠もここへ回して4枚にした。差し替え候補4案を4シード×120戦で比べた結果、
-        // 資本主義あり178/480(37.1%)に対しアイランドホエール4枚目が176/480(36.7%)と
-        // 実質同値で最良だった（くぐつの剣豪4枚目153/480、混沌の頭162/480、
-        // 逆流カジキ157/480はいずれも明確に悪化）。
-        { def: MONSTER_CATALOG.islandWhale, count: 4 }, // S 40G 40/25 成長: 先制→1/2無効化
+        // 資本主義の権化を戻すため、島鯨は3枚に戻す。
+        { def: MONSTER_CATALOG.islandWhale, count: 3 }, // S 40G 40/25 成長: 先制→1/2無効化
         // ゆきおんな3体: 1体でも盤面にいれば全水属性モンスターがATK+30
         // （重複なし）。本体も先制持ちなので単体でも押せる。
         { def: MONSTER_CATALOG.yukiOnna, count: 3 }, // S 50G 15/35 先制/水全体ATK+30
@@ -1701,12 +1789,8 @@ export const CHARACTER_DECKS = {
         // ほぼ常に土地と属性が噛み合わないので刺さる。川田の水モンスターは
         // 自分の水土地にいる限り対象外。土地神の怒りと違い自分は巻き込まない。
         { def: SPELL_CATALOG.shakaiFutekigou, count: 1 }, // R 70G 属性違い2体を手札に戻す
-        // ⚠️ 資本主義の権化(EX)はここから撤去した（2026-08、ユーザー指摘）。
-        // ⑫でクエを破産させた時にだけ手に入るクエ専用のEXカードで、⑫の
-        // ストーリーでも「クエが去った跡に残されていた」と明示されている。
-        // 裏路地のレジスタンスがフィクサーの切り札を撃つのは演出として
-        // 筋が通らない。勝率上も代替（アイランドホエール4枚目）と実質同値
-        // なので、残す理由が無い。枠の経緯は上のislandWhaleのコメント参照。
+        // クエから奪った切り札を川田が使う、という演出上の遊び枠。
+        { def: SPELL_CATALOG.capitalismIncarnate, count: 1 }, // EX 30G 手札のモンスターを連続召喚
       ],
     },
   },

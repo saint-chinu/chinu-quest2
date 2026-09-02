@@ -106,6 +106,22 @@ export async function createPvpRoom({ name, color, iconDataUrl = '', mapId, goal
   throw new Error('空いている部屋コードを確保できませんでした。少し待って再試行してください');
 }
 
+/**
+ * ホストが選んだ盤面BGM（audio.jsのTRACK_SRCキー）を部屋へ書き込む。
+ *
+ * createPvpRoomのペイロードに混ぜないのは、firestore.rulesのcreateが
+ * keys().hasOnly([...])でフィールドを固定しているため。ルール側は手動
+ * デプロイ（CIに含まれていない）なので、キーを増やすとルールを更新する
+ * までPvPの部屋作成そのものが permission-denied で全滅する。ホストの
+ * updateはキー制限が無い（hostUid/guestUidを変えないことだけが条件）ので、
+ * 作成直後の追記なら既存ルールのまま通る。
+ * 失敗しても対戦自体は成立させたいので、呼び出し側で握り潰してよい。
+ */
+export async function setPvpRoomBgmTrack(roomCode, bgmTrack) {
+  if (!bgmTrack) return;
+  await updateDoc(roomRef(roomCode), { bgmTrack });
+}
+
 /** Joins an existing waiting room as guest, submitting their deck choice in the same write (guests can only write further fields once past 'waiting' status per firestore.rules, so the deck has to ride along with the join itself). Throws a Japanese-language Error on failure (room not found / already full). */
 export async function joinPvpRoom(roomCodeInput, { name, color, iconDataUrl = '', deckList }) {
   const roomCode = roomCodeInput.trim().toUpperCase();
