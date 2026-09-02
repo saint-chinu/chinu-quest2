@@ -48,6 +48,7 @@ import {
   publishPrivateHand,
   finishPvpRoom,
   beginPvpMatch,
+  setPvpRoomBgmTrack,
 } from './pvp.js';
 import {
   dismissPvpInvite,
@@ -59,7 +60,8 @@ import {
   sendPvpInvite,
   updatePvpPresence,
 } from './pvpFriends.js';
-import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted, playSfx, allowMusicPlayback, blockMusicPlayback } from './audio.js';
+import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted, playSfx, allowMusicPlayback, blockMusicPlayback, setBgmOverride, SELECTABLE_BGM, bgmTitleOf } from './audio.js';
+import { computePlayerSlots } from './playerPanels.js';
 import { getSpeedMultiplier, setSpeedMultiplier, getWaitCutRate, setWaitCutRate, tween, easeInOutQuad } from './utils.js';
 import { pvpQueueAnimationScale } from './pvpQueue.js';
 
@@ -1275,35 +1277,6 @@ function hexColor(colorInt) {
   return `#${colorInt.toString(16).padStart(6, '0')}`;
 }
 
-/**
- * Maps players to the 4 HUD corner slots [TL, TR, BL, BR].
- * No alliances: turn order fills TL, TR, then wraps to BL (under TL) and
- * BR (under TR). With alliances: the team containing the first-turn player
- * takes the left column (leader TL, teammates stacked under at BL), the
- * next team takes the right column the same way - turn order within a
- * team doesn't matter for placement.
- */
-function computePlayerSlots(players) {
-  const hasAlliances = players.some((p) => p.allianceId != null);
-  if (!hasAlliances) {
-    return [players[0], players[1], players[2], players[3]];
-  }
-
-  const teams = [];
-  const teamIndexByKey = new Map();
-  for (const p of players) {
-    const key = p.allianceId ?? `solo-${p.id}`;
-    if (!teamIndexByKey.has(key)) {
-      teamIndexByKey.set(key, teams.length);
-      teams.push([]);
-    }
-    teams[teamIndexByKey.get(key)].push(p);
-  }
-
-  const [left = [], right = []] = teams;
-  return [left[0], right[0], left[1], right[1]];
-}
-
 /** プレイヤー名の下に出すチェックポイント通過状況の番号列（暗い数字→そのチェックポイントを通過すると点灯）。checkpointNumbersが空/未指定（チェックポイントの無いマップ・データが来る前の初期フレーム等）なら何も出さない。 */
 function checkpointRowHtml(checkpointNumbers, passedCheckpointNumbers) {
   if (!checkpointNumbers?.length) return '';
@@ -2140,6 +2113,61 @@ async function promptGoalAchieved({ position, playerName }) {
   await Promise.all([scene.playBlessingLight(position), new Promise((resolve) => setTimeout(resolve, 2600))]);
   message.remove();
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 320);
+}
+
+/**
+ * ⑯の開始バナー。盤面は見えているが最初の手番はまだ始まっていない状態で、
+ * 2行（タイトル／煽り）を大きく出す。クリックで即閉じられる。
+ */
+function showEventBattleBanner(lines) {
+  playSfx('ominous');
+  const banner = document.createElement('div');
+  banner.className = 'fx-event-battle';
+  const [headingText, detailText] = Array.isArray(lines) ? lines : [String(lines || ''), ''];
+  const heading = document.createElement('strong');
+  heading.textContent = headingText || '';
+  const detail = document.createElement('span');
+  detail.textContent = detailText || '';
+  banner.append(heading, detail);
+  fxLayer.appendChild(banner);
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      banner.remove();
+      document.removeEventListener('pointerdown', finish, true);
+      resolve();
+    };
+    const timer = setTimeout(finish, 3200);
+    // 直前の操作（デッキ選択の確定・横持ち確認の「完了」）から続けて指が
+    // 触れていた場合に即閉じしないよう、最初の500msだけ入力を無視する。
+    setTimeout(() => {
+      if (!settled) document.addEventListener('pointerdown', finish, true);
+    }, 500);
+  });
+}
+
+/**
+ * 画面全体を黒へ落とす転換演出（⑯の敗北エンド用）。返り値の`fadeOut()`で
+ * 明けるまでが1セット。**pointer-events: noneにしてある**ので、途中で例外が
+ * 出て取り残されても操作を塞がない（最悪でも黒い膜が残るだけ）。
+ */
+async function playBlackoutTransition(holdMs = 900) {
+  const overlay = document.createElement('div');
+  overlay.className = 'story-blackout';
+  document.body.appendChild(overlay);
+  await new Promise((resolve) => requestAnimationFrame(resolve));
+  overlay.classList.add('show');
+  await new Promise((resolve) => setTimeout(resolve, 1000 + holdMs));
+  return {
+    async fadeOut() {
+      overlay.classList.remove('show');
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      overlay.remove();
+    },
+  };
 }
 
 function finishSpellPresentation() {
@@ -3526,6 +3554,7 @@ function startBattle(character, storyOptions = {}) {
     tutorialOpeningCardIds: storyOptions.tutorialOpeningCardIds ?? [],
     tutorialDiceQueues: storyOptions.tutorialDiceQueues ?? null,
     storyAssistEvent: storyOptions.storyAssistEvent ?? null,
+    heroGoesLast: storyOptions.heroGoesLast ?? false,
     playerConfigs: storyOptions.playerConfigs,
     humanPlayer: storyOptions.playerConfigs
       ? undefined
@@ -3543,6 +3572,9 @@ function startBattle(character, storyOptions = {}) {
 
   if (!storyOptions.deferInit) startedGame.init(storyOptions.resumeState || null);
   allowMusicPlayback();
+  // 対人戦だけホストが選んだ曲で上書きする。ストーリー／CPU戦はbgmTrackを
+  // 渡さない＝必ずnullで呼ばれ、前の対戦の選曲を持ち越さない。
+  setBgmOverride(storyOptions.bgmTrack ?? null);
   playMapTheme(currentMapId);
   requestAnimationFrame(animate);
   return startedGame;
@@ -4129,6 +4161,7 @@ const pvpMapSelectBack = document.getElementById('pvp-map-select-back');
 const pvpMapConfirmModal = document.getElementById('pvp-map-confirm-modal');
 const pvpMapConfirmThumb = document.getElementById('pvp-map-confirm-thumb');
 const pvpMapConfirmText = document.getElementById('pvp-map-confirm-text');
+const pvpBgmSelect = document.getElementById('pvp-bgm-select');
 const pvpMapConfirmYes = document.getElementById('pvp-map-confirm-yes');
 const pvpMapConfirmNo = document.getElementById('pvp-map-confirm-no');
 const breedScreen = document.getElementById('breed-screen');
@@ -4214,7 +4247,7 @@ const TUTORIAL_LESSONS = [
   },
   {
     title: '手札とスペル',
-    text: '自分の手札は左下に常時表示されます。自分のターンでスペルをタップし、詳細画面から使用します。「占術」や「1のダイス」を実際に使ってみましょう。スペル使用後もサイコロを振れます。',
+    text: '自分の手札は左下に常時表示されます。自分のターンでスペルをタップし、詳細画面から使用します。チュートリアルでは終盤に「アイキャンフライ」が手札に来るので、そこで実際に使ってみましょう。スペル使用後もサイコロを振れます。',
   },
   {
     title: 'サイコロ・移動・CP',
@@ -4287,17 +4320,22 @@ function tutorialCopies(def, count) {
 }
 
 /**
- * チュートリアルのプレイヤーデッキ（42枚）。
+ * チュートリアルのプレイヤーデッキ（45枚）。
+ * （枚数は長らく「42枚」と書かれていたが実際は45枚。2026-08に数え直した）
  *
- * ⚠️ スペルは6枚まで。台本(TUTORIAL_FLOW_STEPS)が実際に使い方を教えるのは
- * 占術とアイキャンフライの2種だけなので、スペルを厚く積むと「使い方の
- * 分からないスペルが手札に溜まる一方」になる（2026-08のユーザー報告）。
- * 以前は12枚(全体の29%)積んでいて、癒し・副業収入・ファイヤーボールは
- * 一度も案内されないまま手札を圧迫していた。
- * 残す3種はどれも台本か初期手札で必ず触るもの:
- *   占術・イカサマ=1 → tutorialOpeningCardIds の初期手札
- *   アイキャンフライ → tutorialDrawQueues で必ず引かせる誘導ステップ用
- * 抜いたぶんは、その場で必ず使えるモンスターとアイテムへ回している。
+ * ⚠️ スペルはアイキャンフライ2枚だけ。台本(TUTORIAL_FLOW_STEPS)が実際に
+ * 使い方を教えるのはこの1種だけで、しかも誘導中はhandPanelの
+ * spellAllowedInTutorialが「今の吹き出しが指すスペル」以外を一切使わせない。
+ * つまり台本で案内しないスペルは、手札に来ても最後まで触れない置物になる
+ * （2026-08のユーザー報告「スペルカードが手札にたまっていく一方」、および
+ * 「最初手札にスペルがあるけど使えない」）。
+ * 経緯: 12枚(29%)→6枚→4枚→現在の2枚。1のダイスは一度も案内していなかった
+ * ので撤去し、占術も「スペルを使うフェーズがもう1つあるなら要らない」という
+ * ユーザー判断で撤去した（どちらも2026-08）。
+ * ⚠️ **ここにスペルを足す時は、台本のどのステップで使わせるかを先に決めること。**
+ * 現在は初期手札もドローも全部指定してあるので、デッキの残りは実質予備。
+ *   初期手札(tutorialOpeningCardIds) … モンスターとアイテムだけ
+ *   アイキャンフライ                 … tutorialDrawQueuesで使う手番に配る
  */
 function buildTutorialPlayerDeck() {
   return [
@@ -4310,11 +4348,11 @@ function buildTutorialPlayerDeck() {
     ...tutorialCopies(MONSTER_CATALOG.fireStarter, 7),
     ...tutorialCopies(MONSTER_CATALOG.flameLizard, 5),
     ...tutorialCopies(MONSTER_CATALOG.kunekune, 1),
-    ...tutorialCopies(MONSTER_CATALOG.sekizou, 4),
+    ...tutorialCopies(MONSTER_CATALOG.sekizou, 8),
     ...tutorialCopies(ITEM_CATALOG.knife, 7),
     ...tutorialCopies(ITEM_CATALOG.potLid, 7),
-    ...tutorialCopies(SPELL_CATALOG.divination, 2),
-    ...tutorialCopies(SPELL_CATALOG.diceOne, 2),
+    // ⚠️ スペルは台本が使い方を教えるアイキャンフライ2枚だけ。1のダイスと
+    // 占術は台本で案内しないので撤去した（2026-08）。枠は石像へ回している。
     ...tutorialCopies(SPELL_CATALOG.iCanFly, 2),
   ];
 }
@@ -4349,9 +4387,11 @@ const TUTORIAL_FLOW_STEPS = [
   { event: 'roll', text: 'サイコロをタップして振ってみよう！' },
   { event: 'summon', requireCard: 'fireStarter', text: '空き地に止まった！「召喚／侵略」から「火付け役」を召喚してみよう' },
   { event: 'battleEnd', defenderIsHuman: true, requireItem: 'potLid', text: '敵が攻めてきた！アイテム選択で「なべのふた」を選んで防御しよう。防ぎ切れば通行料ももらえる' },
-  { event: 'levelUp', text: '土地を守り切った！ 続けて同じメニューの「土地Lvアップ」で、この土地を強化してみよう（払ったGは土地の価値に変わる）' },
+  // ⚠️ 占術のステップはここに置いていたが撤去した（2026-08、ユーザー指定
+  // 「スペル使うフェーズあるなら占術は無しにして」）。スペルの体験は
+  // 自6のアイキャンフライが担っており、占術は同じことを二度教えるだけ。
+  { event: 'levelUp', text: 'CPにちょうど止まった！ 「土地」→さっきの土地→「土地Lvアップ」で強化してみよう（払ったGは土地の価値に変わる）' },
   { event: 'summon', requireCard: 'kunekune', text: '次の空き地では「くねくね」を召喚してみよう（HPは低いが攻撃を反射する）' },
-  { event: 'spell', card: 'divination', requireCard: 'divination', text: '自分のターンが来たら、サイコロを振る前に手札の「占術」を使ってみよう（スペルは1ターン1回）' },
   { event: 'summon', requireCard: 'molotovMan', text: '空き地に止まった！「火炎瓶男」を召喚しよう（土地コマンドで使える特殊効果を持っている）' },
   { event: 'ability', text: 'スタートに止まると自分の全部の土地に土地コマンドが使える！「土地」→火炎瓶男の土地→「特殊効果」で、離れた樹海の怨霊を削ってみよう' },
   { event: 'spell', card: 'iCanFly', requireCard: 'iCanFly', targetSelf: true, text: '「アイキャンフライ」を引いた！自分に使うと次のサイコロが2倍。マス7のくねくねまで進もう' },
@@ -4512,7 +4552,12 @@ async function startTutorialDemo() {
       await finishTutorial(true);
     },
     tutorialMode: true,
-    tutorialOpeningCardIds: ['divination', 'diceOne', 'fireStarter', 'knife', 'potLid', 'kunekune'],
+    // ⚠️ 初期手札はモンスターとアイテムだけ（2026-08、ユーザー指定
+    // 「最初手札にスペルがあるけど使えない」）。誘導中はhandPanelの
+    // spellAllowedInTutorialが「今の吹き出しが指すスペル」以外を弾くので、
+    // 開幕から握らせたスペルは何手番も触れないまま手札を占める。
+    // スペルは使わせたい手番にtutorialDrawQueuesでちょうど配る。
+    tutorialOpeningCardIds: ['fireStarter', 'knife', 'potLid', 'kunekune'],
     tutorialCpuOpeningCardIds: ['salarymander', 'jukaiNoOnryou'],
     // ⚠️ チュートリアルは最後まで完全な台本で進む（運の要素を排除する、という
     // ユーザー指定 2026-08）。出目・引くカード・CPUの行動を全手番ぶん固定し、
@@ -4530,7 +4575,7 @@ async function startTutorialDemo() {
     //   敵2: 2歩→マス4(森)へ着地、樹海の怨霊を召喚
     //   自3: 2歩→マス4を通過してマス7(火)へ着地、くねくねを召喚
     //   敵3: 2歩→マス6へ着地（台本のpassで何もしない）
-    //   自4: 占術を使ってから2歩→マス5へ着地、火炎瓶男を召喚
+    //   自4: 2歩→マス5へ着地、火炎瓶男を召喚
     //        ⚠️ マス5なのは火炎瓶男の射程3に収めるため。マス4(怨霊)までの
     //        距離はマス5からなら3だが、マス3からだと4になって届かない
     //        （_tileDistanceはneighborsのBFS）。
@@ -4544,11 +4589,18 @@ async function startTutorialDemo() {
     //    「チュートリアルの台本どおりに進むと想定のマスへ着地する」が
     //    リング順を辿って着地マスを検証するので、必ず一緒に更新すること。
     tutorialDiceQueues: { human: [1, 1, 2, 2, 2, 2], cpu: [1, 2, 2, 2, 2] },
-    // くねくね・占術は初期手札(tutorialOpeningCardIds)にあるので引かせる必要は
-    // ない。火炎瓶男とアイキャンフライだけは、使わせたい手番でちょうど手札へ
-    // 来るように指定する（早く配ると別の手番で使われて出目が想定とずれる）。
+    // ⚠️ プレイヤーのドローは全手番ぶん指定する（nullを残さない）。nullだと
+    // 山札の先頭＝シャッフル済みの残りから引くため、台本が使い方を教えて
+    // いないスペル（占術の2枚目・アイキャンフライの2枚目）が早い手番で
+    // 手札へ来てしまい、「使えないスペルが溜まる」状態に戻る。
+    //   自1 炎トカゲ   … ただの手札。召喚は台本の火付け役に限定される
+    //   自2 石像       … ただの手札（0G）
+    //   自3 ナイフ     … ただの手札
+    //   自4 火炎瓶男   … マス5で召喚して特殊効果を教える
+    //   自5 なべのふた … ただの手札
+    //   自6 アイキャンフライ … 唯一のスペル体験。2倍移動でマス7へ戻る
     tutorialDrawQueues: {
-      human: [null, null, null, 'molotovMan', null, 'iCanFly'],
+      human: ['flameLizard', 'sekizou', 'knife', 'molotovMan', 'potLid', 'iCanFly'],
       cpu: [],
     },
     // 台本の無い手番でCPUが通常AIに落ちると打ち回しがランダムになるので、
@@ -5677,6 +5729,15 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
       };
     }
   }
+  // ⑯のように「味方は来ないが盤面を止めて会話だけ挟む」割り込みイベント。
+  // 味方参戦（midBattleAssist）とは別フィールドで、allyConfigを持たない。
+  if (!isReplay && !storyAssistEvent && stage.midBattleEvent) {
+    storyAssistEvent = {
+      enemyAssetsAtLeast: stage.midBattleEvent.enemyAssetsAtLeast,
+      allyConfig: null,
+      lines: stage.midBattleEvent.lines || [],
+    };
+  }
 
   await confirmLandscapeReady();
 
@@ -5699,11 +5760,16 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
           speaker === '主人公' ? iconDataUrl : npcPortraitUrl(speaker),
         ]),
       );
+      // 左右の立ち絵はステージごとに違う（⑪＝闇・ホフク／サーティー、
+      // ⑯＝魚群の王／主人公）。指定が無ければ従来の⑪の並びのまま。
+      const overlay = stage.midBattleEvent?.overlay;
+      const leftName = overlay?.leftName ?? '闇・ホフク';
+      const rightName = overlay?.rightName ?? 'サーティー';
       await playOverlayDialogueLines(event.lines || [], {
-        leftName: '闇・ホフク',
-        leftPortraitUrl: npcPortraitUrl('闇・ホフク'),
-        rightName: 'サーティー',
-        rightPortraitUrl: npcPortraitUrl('サーティー'),
+        leftName,
+        leftPortraitUrl: leftName === '主人公' ? iconDataUrl : npcPortraitUrl(leftName),
+        rightName,
+        rightPortraitUrl: rightName === '主人公' ? iconDataUrl : npcPortraitUrl(rightName),
         speakerSides: stage.overlaySpeakerSides,
         speakerPortraitUrls,
         heroPortraitUrl: iconDataUrl,
@@ -5711,9 +5777,23 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
       });
     },
     storyAssistEvent,
-    deferInit: !resumeState && !isReplay && !!(stage.overlayNpc || stage.boardDialogue),
+    heroGoesLast: !!stage.heroGoesLast,
+    // 会話オーバーレイ（①②⑪）と開始バナー（⑯）はどちらも「盤面は見せるが
+    // 最初の手番はまだ始めない」演出なので、初手のドロー/CPU行動を止める。
+    deferInit: !resumeState && !isReplay && !!(stage.overlayNpc || stage.boardDialogue || stage.eventBattleBanner),
     resumeState,
   });
+
+  // ⑯: 盤面表示直後に「イベントバトル！！／何があっても諦めるな！」の
+  // 大バナーを出してから最初の手番を始める。
+  if (!resumeState && !isReplay && stage.eventBattleBanner) {
+    await showEventBattleBanner(stage.eventBattleBanner);
+    // 会話演出と同じ理由のガード: バナー表示中に別の盤面へ移っていたら、
+    // グローバルgameは既に別物なので二重initしない。
+    if (game !== startedGame || startedGame._isCancelled) return;
+    startedGame.init();
+    return;
+  }
 
   // overlayNpc持ちのステージ（①②）だけ: 盤面が表示された直後、その上に
   // 会話をオーバーレイする（盤面は隠さない）。サイコロ等の操作はオーバー
@@ -5938,6 +6018,25 @@ async function handleStoryBattleEnd(index, result = {}) {
   latestStoryCheckpoint = null;
 
   if (!won) {
+    // ⑯: 負けても「クリア扱い」にするステージ（チヌに地下へ落とされる＝
+    // ⑰への導入そのものが敗北エンド）。専用の敗北会話→暗転→進行度更新。
+    // 勝った時（隠しルート）は下の通常フローでstage.outroが出る。
+    if (stage.clearOnDefeat) {
+      showScreen(storyDialogueScreen);
+      await playDialogueLines(stage.defeatOutro || [], {
+        background: getMapBackground(stage.key),
+        stageBadgeText: `STORY${stage.title}`,
+      });
+      const blackout = await playBlackoutTransition();
+      if (index + 1 > (currentCharacter.storyProgress || 0)) {
+        currentCharacter.storyProgress = index + 1;
+      }
+      saveCharacter(currentUserId, currentCharacter);
+      showStoryScreen();
+      await blackout.fadeOut();
+      showToast(`ストーリー報酬として${mReward.earnedM}M獲得しました`, 2400);
+      return;
+    }
     showScreen(storyDialogueScreen);
     await playDialogueLines(
       [{ speaker: '???', text: '力及ばず、敗れてしまった……もう一度挑もう。' }],
@@ -6829,12 +6928,29 @@ function isCatalogSeen(key) {
  * 敵の使用を見る以外に図鑑を埋める手段が無い）。
  * 既に所持しているカードは所持数で登録済み扱いになるので何もしない。
  */
-function handleCardSeen(def) {
+function handleCardSeen(def, meta = null) {
   if (!def || !currentCharacter) return;
+  // byPlayerId付きの呼び出しは「操作している本人がやった時だけ図鑑に載せる」意味。
+  // 合体ロボ・ガシャーンがこれで、**自分でギアを3種そろえて合体させ、盤面に
+  // 出したのを見た時だけ**登録する（ユーザー指定）。敵が合体させたのを見ても
+  // 埋まらない＝ダンボール男や「彼」に見せてもらう抜け道を塞ぐ。
+  if (meta?.byPlayerId != null && !isLocalHumanPlayer(meta.byPlayerId)) return;
   const unobtainable = def.npcExclusive || def.rewardOnly || def.rarity === Rarity.EX;
   if (!unobtainable) return;
   if (ownedCountOf(cardKey(def)) > 0) return;
   markCatalogSeen(def);
+}
+
+/**
+ * そのplayerIdが「この端末を操作している人間」か。
+ * 対人戦ではホストのGameが全員ぶんの盤面を回すので、自分の駒だけをtrueにする
+ * （他の参加者の合体でホストの図鑑が埋まってしまうのを防ぐ）。
+ * ⚠️ 参加者側はGameを持たない＝この経路自体が走らないので、対人戦で自分が
+ * 合体させても図鑑には載らない。図鑑を埋める想定の経路はストーリー／CPU戦。
+ */
+function isLocalHumanPlayer(playerId) {
+  if (pvpMatch) return playerId === pvpMatch.localPlayerId;
+  return !!game?.players?.some((player) => player.id === playerId && !player.isCPU);
 }
 
 
@@ -8578,7 +8694,8 @@ function enterPvpRoomScreen(session) {
       }
       return;
     }
-    pvpRoomSettings.textContent = `ステージ: ${MAPS.find((map) => map.id === room.mapId)?.name || room.mapId} / 目標G: ${Number(room.goalCurrency || 5000).toLocaleString('ja-JP')}G`;
+    const bgmLabel = bgmTitleOf(room.bgmTrack) || 'ステージ標準';
+    pvpRoomSettings.textContent = `ステージ: ${MAPS.find((map) => map.id === room.mapId)?.name || room.mapId} / 目標G: ${Number(room.goalCurrency || 5000).toLocaleString('ja-JP')}G / BGM: ${bgmLabel}`;
     if (room.allianceMode) {
       const names = normalizePvpParticipants(room).map((p) => p.name).filter(Boolean);
       if (room.randomAlliance) {
@@ -8627,9 +8744,26 @@ function showPvpMapSelectScreen() {
   showScreen(pvpMapSelectScreen);
 }
 
+// BGMプルダウンの中身。曲はaudio.jsのSELECTABLE_BGMが唯一の定義元で、
+// 先頭に「マップ標準（＝そのステージ本来の曲）」を置く。
+function fillPvpBgmSelect() {
+  if (pvpBgmSelect.options.length) return; // 初回のみ
+  const auto = document.createElement('option');
+  auto.value = '';
+  auto.textContent = 'ステージ標準';
+  pvpBgmSelect.appendChild(auto);
+  for (const entry of SELECTABLE_BGM) {
+    const option = document.createElement('option');
+    option.value = entry.track;
+    option.textContent = entry.title;
+    pvpBgmSelect.appendChild(option);
+  }
+}
+
 function showPvpMapConfirm(map) {
   pvpMapConfirmThumb.replaceChildren(createMapThumbnailCanvas(map.id, 16));
   pvpMapConfirmText.textContent = `「${map.name}」で遊びますか？`;
+  fillPvpBgmSelect();
   pvpMapConfirmModal.classList.remove('hidden');
 
   function cleanup() {
@@ -8648,7 +8782,11 @@ function showPvpMapConfirm(map) {
       const cpuNames = pvpCpuSelects.map((select) => select.value).filter(Boolean).slice(0, playerCount - 1);
       const characterIcon = await resolveCharacterIcon(currentCharacter);
       const iconDataUrl = compactCharacterIconDataUrl(characterIcon);
+      const bgmTrack = pvpBgmSelect.value || '';
       const session = await createPvpRoom({ name: currentCharacter.name, color: currentCharacter.color, iconDataUrl, mapId: map.id, goalCurrency, playerCount, allianceMode, randomAlliance, cpuNames });
+      // 選曲は部屋作成の直後に追記する（理由はpvp.jsのsetPvpRoomBgmTrack参照）。
+      // 失敗しても対戦は成立するので、ステージ標準の曲へ落として続行する。
+      if (bgmTrack) await setPvpRoomBgmTrack(session.roomCode, bgmTrack).catch((error) => console.warn('BGMの選択を保存できませんでした', error));
       enterPvpRoomScreen(session);
     } catch (error) {
       console.error('PvP room creation failed:', error);
@@ -9634,6 +9772,8 @@ async function startPvpGuestBattle() {
   }
   requestAnimationFrame(animate);
   allowMusicPlayback();
+  // ゲストはstartBattleを通らないので、ホストの選曲をここで自分で反映する。
+  setBgmOverride(pvpLastRoom?.bgmTrack || null);
   playMapTheme(currentMapId);
 
   // 旧リスナーはここで破棄し、最初のpublicStateを盤面に反映した後に
@@ -9821,6 +9961,7 @@ pvpRoomStart.addEventListener('click', async () => {
   startBattle(currentCharacter, {
     mapId: pvpLastRoom.mapId,
     goalCurrency: pvpLastRoom.goalCurrency || 5000,
+    bgmTrack: pvpLastRoom.bgmTrack || null,
     playerConfigs,
     // 対人戦も目標総資産到達＋ゴール、または生存陣営確定で決着させる。
     storyMode: true,

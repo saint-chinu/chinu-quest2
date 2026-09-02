@@ -2,7 +2,7 @@ import { TileType, mapRequiresAllCheckpoints, mapCheckpointBonus, mapUsesAlterna
 import { PIECE_REST_Y, UNIT_ICON_REST_Y } from './scene.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity } from './cards.js';
 import { buildStarterCardList, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf, isRewardOnlyCard } from './battleCards.js';
-import { createFieldUnit, resolveBattle, applyPreAttackItemEffects, abortPreAttackItemEffects, equipItem, applyCurse, applyPoison, GoldLedger, hasTrait, strikeOrderScore, statTotals } from './battle.js';
+import { createFieldUnit, resolveBattle, applyPreAttackItemEffects, abortPreAttackItemEffects, equipItem, applyCurse, applyPoison, GoldLedger, hasTrait, strikeOrderScore, statTotals, previewBattleEntryHp } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay, getWaitCutRate } from './utils.js';
 import { DENCHU_FIELD_MONSTER } from './thunderMonsters.js';
@@ -109,6 +109,20 @@ const OFUDA_ELEMENTS = [Element.FIRE, Element.WATER, Element.FOREST, Element.THU
 // LightningRod)、くねくねは被ダメージを全反射するので、どちらも通常の戦闘
 // では処理できない。_cpuPickDamageTarget参照。
 const INVASION_BLOCKER_IDS = new Set(['raiheishinZamurai', 'kunekune']);
+// ダメージ系スペルでCPUが「一撃で倒せなくても最優先で削る」モンスター。
+// くぐつの剣豪(autoInvadeEachTurn)は毎手番こちらの土地へ自動で侵略し続け、
+// traitsのimmovableByMoveCommandで動かすこともできない。避雷針侍・くねくねは
+// 「置かれている間だけ侵略を妨げる」受け身のロックだが、くぐつは能動的に
+// 盤面を削り取ってくるので、他に一撃で倒せる相手が居てもこちらを削る
+// （ユーザー指定、2026-09）。⚠️ この優先はkillable判定より前に効かせる -
+// HP50のくぐつはファイヤーボール15では落ちないので、killableで絞ってから
+// 順位付けすると「倒せる別のモンスターが1体でも居る限り永久に狙われない」。
+const DAMAGE_SPELL_PRIORITY_IDS = new Set(['kugutsuNoKengou']);
+// キャンセルカルチャーでCPUが最優先で抜くカード。パンデミックは盤面の
+// モンスターを全てゾンビ(HP20/ATK20)へ置き換える＝積み上げた盤面を一撃で
+// 更地にするので、通したときの損失が他のどのカードより大きい
+// （ユーザー指定、2026-09）。
+const CANCEL_CULTURE_PRIORITY_IDS = new Set(['pandemic']);
 
 // 150Gぶんの売買で相場が1G動く。小さくするほど「買い」が自己成就的に
 // 価格を押し上げ、先回り買いの旨味が増す（大きくすると土地レベル一辺倒になる）。
@@ -239,6 +253,7 @@ export class Game {
     tutorialCpuScript = [],
     onTutorialEvent = null,
     storyAssistEvent = null,
+    heroGoesLast = false,
   }) {
     this.tiles = tiles;
     this.mapId = mapId;
@@ -326,6 +341,9 @@ export class Game {
     this.onCardSeen = onCardSeen;
     this.storyAssistEvent = storyAssistEvent;
     this.storyAssistTriggered = false;
+    // ⑯: 先攻をランダム抽選せず、人間を必ず最後の手番にする（story.jsの
+    // heroGoesLast）。実際の適用はplayers構築後（currentPlayerIndexの初期化）。
+    this.heroGoesLast = heroGoesLast;
     // ストーリー途中保存用。操作可能な安全地点だけをmain.jsへ渡す。
     this.onResumeCheckpoint = onResumeCheckpoint;
     // 対人戦(PvP)ホスト側のみ使う: _notifyStateのたびに盤面全体のスナップ
@@ -501,9 +519,15 @@ export class Game {
     });
     // 盤面開始時に一度だけ先攻を抽選し、以後はこの順番を固定する。
     // プレイヤーIDや同盟順は変えず、ホスト／ゲストの同期も壊さない。
+    // heroGoesLast: 人間の「次」から始める＝1巡目で人間が最後になる。
+    // プレイヤーIDや配列順そのものは変えないので、対人戦の同期・同盟の
+    // 並びには影響しない（ランダム抽選をやめるだけ）。
+    const humanIndex = this.players.findIndex((player) => !player.isCPU);
     this.currentPlayerIndex = this.tutorialMode
-      ? Math.max(0, this.players.findIndex((player) => !player.isCPU))
-      : Math.floor(Math.random() * this.players.length);
+      ? Math.max(0, humanIndex)
+      : this.heroGoesLast && humanIndex >= 0
+        ? (humanIndex + 1) % this.players.length
+        : Math.floor(Math.random() * this.players.length);
     this._assignGoalStarts(resolvedConfigs);
     this.isBusy = false;
     this.tilesSincePan = 0;
@@ -628,22 +652,33 @@ export class Game {
     return player;
   }
 
+  /**
+   * 盤面途中の割り込みイベント。発火条件は2種類あり、ステージ側がどちらかを指定する:
+   * - `ratio`（⑪のmidBattleAssist）: 敵の総資産が主人公の`ratio`倍以上に開いた時。
+   * - `enemyAssetsAtLeast`（⑯のmidBattleEvent）: 敵の**誰か1人**の総資産が
+   *   その絶対値に届いた時。⑯は目標5,000Gに対して4,000Gで発火する。
+   * `allyConfig`が無いイベントは会話だけで終わる（味方は参戦しない）。
+   */
   async _maybeTriggerStoryAssistEvent() {
     const event = this.storyAssistEvent;
     if (!event || this.storyAssistTriggered || this.storyEnded || this._isCancelled) return;
     const human = this.players.find((player) => !player.isCPU && !player.defeated);
     if (!human) return;
-    const enemy = this.players.find((player) => (
+    const enemies = this.players.filter((player) => (
       !player.defeated && player.id !== human.id
       && !(player.allianceId != null && player.allianceId === human.allianceId)
     ));
-    if (!enemy) return;
-    const heroAssets = Math.max(1, this._totalAssetsOf(human));
-    const enemyAssets = this._totalAssetsOf(enemy);
-    if (enemyAssets < heroAssets * (event.ratio || 2.5)) return;
+    if (!enemies.length) return;
+    if (event.enemyAssetsAtLeast != null) {
+      if (!enemies.some((enemy) => this._totalAssetsOf(enemy) >= event.enemyAssetsAtLeast)) return;
+    } else {
+      const heroAssets = Math.max(1, this._totalAssetsOf(human));
+      if (this._totalAssetsOf(enemies[0]) < heroAssets * (event.ratio || 2.5)) return;
+    }
     this.storyAssistTriggered = true;
     await this.onStoryAssistEvent(event);
     if (this._isCancelled || this.storyEnded) return;
+    if (!event.allyConfig) return;
     const added = this._addStoryAssistPlayer(event.allyConfig);
     this.onLog(`${added.name}が紅組に参戦した！`);
   }
@@ -1888,6 +1923,7 @@ export class Game {
 
     player.previousTileId = null;
     player.tileId = target.id;
+    this._resetTileHistoryAfterTeleport(player, target.id);
     if (player.mesh) player.mesh.position.set(target.position.x, PIECE_REST_Y, target.position.z);
     this.onLog(`${player.name}は「ブルーオーシャン」で空き地に飛んだ！`);
     this._notifyState();
@@ -1910,6 +1946,7 @@ export class Game {
     if (!startTile) return;
     player.previousTileId = null;
     player.tileId = startTile.id;
+    this._resetTileHistoryAfterTeleport(player, startTile.id);
     if (player.mesh) player.mesh.position.set(startTile.position.x, PIECE_REST_Y, startTile.position.z);
     player.currency += reward;
     this.onLog(`${player.name}は「帰巣本能」でゴールに戻り、+${reward}Gを獲得した！`);
@@ -2612,6 +2649,27 @@ export class Game {
       if (states.length === 0) break;
     }
     return [...destinations];
+  }
+
+  /**
+   * ワープマス以外の「瞬間移動」（帰巣本能・ブルーオーシャン・暴走列車の
+   * 反対側転移・破産リスタート）の後始末。**着地履歴を飛び先だけにリセットする。**
+   *
+   * ⚠️ これを忘れると、直後にバックファイア(reverseNextDice)を撃たれた時に
+   * `_movePlayerBackward`が「転移前の経路」をそのまま遡り、**盤面の隣接を
+   * 無視して駒が飛ぶ**（2026-09-01のユーザー報告「サイコロを振ったら急に
+   * CPの隣へワープした・CPを踏んだ扱いにならない」）。飛び越したマスは
+   * `_visitCheckpoint`を通らないのでCPも加算されない。
+   *
+   * リセット後は履歴が1件だけになるので、直後の後退は「履歴が尽きた」
+   * 扱いでその場に留まる（既存の仕様どおり）。歩き直せば履歴は普通に貯まる。
+   *
+   * ⚠️ **ワープマス（_resolveWarpTile）はこれを使わない。** あちらは飛び先を
+   * unshiftして経路を残すことで、後退でワープ入口まで戻った時に"再ワープ"
+   * させる意図的な作りになっている（該当箇所のコメント参照）。
+   */
+  _resetTileHistoryAfterTeleport(player, tileId) {
+    player.tileHistory = [tileId];
   }
 
   /**
@@ -4295,6 +4353,7 @@ export class Game {
     });
     player.previousTileId = null;
     player.tileId = targetTile.id;
+    this._resetTileHistoryAfterTeleport(player, targetTile.id);
     if (player.mesh) player.mesh.position.set(targetTile.position.x, PIECE_REST_Y, targetTile.position.z);
     player.diceCurse = { type: 'double' };
     this.onLog(`${player.name}は暴走して反対側へ飛ばされ、次のサイコロの出目が2倍になった！`);
@@ -5191,6 +5250,7 @@ export class Game {
     player.currency = 500;
     player.tileId = startTile.id;
     player.previousTileId = null;
+    this._resetTileHistoryAfterTeleport(player, startTile.id);
     if (player.mesh) {
       player.mesh.visible = true;
       player.mesh.position.set(startTile.position.x, PIECE_REST_Y, startTile.position.z);
@@ -6819,20 +6879,34 @@ export class Game {
   }
 
   /** Base ATK/HP as shown on the battle-scene stat panel: def stats plus any永続 curses, but NOT items or the situational cheer/element bonuses (those are surfaced separately - see _runBattleScene). */
-  _baseStats(unit) {
+  /**
+   * その個体の「素のステータス」。盤面表示と戦闘画面の基礎ステ表示の両方が使う。
+   *
+   * ⚠️ **`inBattle: true`を渡すかどうかで基準が変わる**。ネット弁慶
+   * (`statOverrideInBattle`)は**盤面では50/50、戦闘中だけ20/20**という
+   * カードなので、盤面のHP表示は素のdef.hpのまま、戦闘画面は上書き後の値を
+   * 出さないと食い違う。実ダメージ計算(battle.jsのstatTotals)は常に上書きを
+   * 適用しているので、**戦闘まわりの表示は必ずinBattle:trueで呼ぶこと**。
+   * これを忘れると「弱体化していないように見えるのに、実際は20/20で戦って
+   * いる」＝ダメージ表示と減り方が合わない（2026-09-01のユーザー報告）。
+   */
+  _baseStats(unit, { inBattle = false } = {}) {
     // noHpBoost（くぐつの剣豪）はスペル由来のHP増加を受けない。statTotalsと
     // 同じ基準にしないと、戦闘画面の基礎ステ表示だけが実ダメージとズレる。
     const blocksHpBoost = unit.def.traits?.includes('noHpBoost');
     const noBoost = (value) => (blocksHpBoost ? Math.min(0, value) : value);
     const curseAtk = unit.curses.reduce((sum, c) => sum + (c.addedAtk || 0), 0);
     const curseHp = noBoost(unit.curses.reduce((sum, c) => sum + (c.addedHp || 0), 0));
+    const override = inBattle && unit.def.effect?.type === 'statOverrideInBattle'
+      ? unit.def.effect
+      : null;
     // 再生(regenerate)で積み上げた恒久ATKと、タフネスで焼き込んだ基礎HPは
     // その個体の"素のステータス"として扱う（statTotalsと同じ基準にしないと、
     // 戦闘画面の基礎ステ表示だけが実際の数値とズレる）。
     return {
       // lapGrowthAtkBonus / lapGrowthHpBonus: 周回成長型が周回ごとに積み上げた恒久値。
-      atk: unit.def.atk + (unit.regenAtkBonus || 0) + (unit.lapGrowthAtkBonus || 0) + curseAtk,
-      hp: unit.def.hp + noBoost(unit.summonBaseHpBonus || 0) + (unit.lapGrowthHpBonus || 0) + curseHp,
+      atk: (override ? override.atk : unit.def.atk) + (unit.regenAtkBonus || 0) + (unit.lapGrowthAtkBonus || 0) + curseAtk,
+      hp: (override ? override.hp : unit.def.hp) + noBoost(unit.summonBaseHpBonus || 0) + (unit.lapGrowthHpBonus || 0) + curseHp,
     };
   }
 
@@ -7271,8 +7345,8 @@ export class Game {
         this.onLog(`${unit.def.name}は戦闘開始時に自身の呪いを解除した`);
       }
     }
-    let attackerBase = this._baseStats(attackerUnit);
-    let defenderBase = this._baseStats(defenderUnit);
+    let attackerBase = this._baseStats(attackerUnit, { inBattle: true });
+    let defenderBase = this._baseStats(defenderUnit, { inBattle: true });
     // アイテム選択前の初期表示用。異次元ソケットで能力が交換される可能性が
     // あるためログはまだ出さず、攻撃前効果の確定後に実戦闘用を再計算する。
     let attackerBonus = this._battleBonus(attackerUnit, attackerPositionTile, battleTile, { log: false });
@@ -7314,13 +7388,21 @@ export class Game {
     // セッションが始まっているUIを巻き込むだけなので何もせず抜ける。
     if (this._isCancelled) return null;
 
+    // 開幕死亡（2026-09-01のユーザー指定）: 装備する前の時点でどちらかの
+    // 開始HPが0以下なら、アイテム選択そのものを行わずそこで終わる。
+    // 実際に倒す処理と演出はresolveBattleの開幕死亡チェックが受け持つ
+    // （ここは「選ばせない」判断だけ）。装備してから0以下になる場合は
+    // 選択・装備公開まで通常どおり進み、先手の攻撃前に倒れる。
+    const deadBeforeEquip = previewBattleEntryHp(attackerUnit, attackerBonus) <= 0
+      || previewBattleEntryHp(defenderUnit, defenderBonus) <= 0;
+
     // アイテム選択は両者とも「相手が何を選んだか一切見えない」状態で行う
     // 必要がある（後から選ぶ側が相手の装備を見てから決められると有利に
     // なってしまう）。そのため選択(onPickBattleItem)は両者分を先に済ませ、
     // 実際に装備した見た目の演出(onBattleEquip)は両者の選択が確定した
     // "後" にまとめて再生する - 選択中に相手の装備が画面上に見えることは
     // ない。
-    const attackerItemPicked = attackerPlayer.isCPU
+    const attackerItemPicked = deadBeforeEquip ? null : attackerPlayer.isCPU
       ? this._cpuChooseBattleItem(attackerPlayer, attackerUnit, defenderUnit, battleTile, false)
       : await this.onPickBattleItem(
           {
@@ -7340,7 +7422,7 @@ export class Game {
     const attackerItem = attackerPlayer.isCPU ? attackerItemPicked
       : attackerPlayer.hand.find((card) => card.id === attackerItemPicked?.id
         && isBattleItemCard(card) && (card.cost || 0) <= attackerPlayer.currency) || null;
-    const defenderItemPicked = defenderPlayer.isCPU
+    const defenderItemPicked = deadBeforeEquip ? null : defenderPlayer.isCPU
       ? this._cpuChooseBattleItem(defenderPlayer, defenderUnit, attackerUnit, battleTile, true)
       : await this.onPickBattleItem(
           {
@@ -7381,8 +7463,8 @@ export class Game {
     this._applyEffectBonus(attackerUnit, defenderUnit, attackerBonus);
     this._applyEffectBonus(defenderUnit, attackerUnit, defenderBonus);
     // statOverrideInBattle等も入れ替わり得るので、装備公開の基礎表示を同期する。
-    attackerBase = this._baseStats(attackerUnit);
-    defenderBase = this._baseStats(defenderUnit);
+    attackerBase = this._baseStats(attackerUnit, { inBattle: true });
+    defenderBase = this._baseStats(defenderUnit, { inBattle: true });
     preAttackEffects.log.forEach((line) => this.onLog(line));
     for (const destruction of preAttackEffects.itemDestructions) {
       await this.onBattleItemDestroy(destruction);
@@ -7526,7 +7608,11 @@ export class Game {
     // ロシアンルーレットの戦闘は出目だけで決まり、先制/後攻・貫通・ATK倍率は
     // 一切効かない。効かない特性を先に大きく表示すると誤解を招くので、その
     // 回だけ特性・倍率の表示ごと飛ばす（resolveBattleの分岐と対になっている）。
-    const revealSides = result.russianRoulette ? [] : [...traitRevealSides, ...effectRevealSides];
+    // ルーレットと開幕死亡は「特性を活かす前に決着している」ので、効かない
+    // 特性・倍率の表示は挟まずそのまま結果へ進む。
+    const revealSides = (result.russianRoulette || result.startingDeath)
+      ? []
+      : [...traitRevealSides, ...effectRevealSides];
     for (const reveal of revealSides) {
       if (reveal.labels.length === 0) continue;
       await this.onBattleTraitReveal(reveal);
@@ -7717,6 +7803,8 @@ export class Game {
         // 混ぜると41枚目以降として増殖するため、盤面外生成として扱う。
         generatedOutsideDeck: true,
       };
+      // 侵略と同時の合体も「自分で合体させた」に含める（_maybeFuseGearと同じ扱い）。
+      this.onCardSeen?.(card, { byPlayerId: player.id });
       this.onLog(`${player.name}のギアが侵略と同時に合体し「${card.name}」が出撃！ (召喚コスト払い戻し)`);
       this._notifyState();
     }
@@ -7968,6 +8056,9 @@ export class Game {
       generatedOutsideDeck: true,
     };
     tile.unit = createFieldUnit(fusedDef, player.id);
+    // ガシャーンの図鑑登録は「自分で合体させて盤面に出した時だけ」（ユーザー指定）。
+    // byPlayerIdを渡した呼び出しは、main.js側が操作者本人かどうかを見て弾く。
+    this.onCardSeen?.(fusedDef, { byPlayerId: player.id });
     this.onLog(`${player.name}のギアが合体し「${fusedDef.name}」が誕生した！ (召喚コスト${card.cost}Gを払い戻し)`);
     this._notifyState();
   }
@@ -9380,8 +9471,13 @@ export class Game {
     // ①そのスペルで確実に倒せる相手モンスターがいれば最優先（複数なら総資産が
     // 最上位のプレイヤーのモンスター）。②倒せる相手がいなければ、総資産1位の
     // プレイヤーのモンスターを狙う。いずれも同点は土地レベルが高い方。
-    const killable = candidates.filter((t) => t.unit.currentHp <= amount);
-    const pool = killable.length > 0 ? killable : candidates;
+    // くぐつの剣豪が場に居る間は、そもそも候補をくぐつだけに絞る
+    // （DAMAGE_SPELL_PRIORITY_IDSの定義参照。killable判定より前に効かせないと、
+    //  倒せる別のモンスターが居る限り永久に狙われない）。
+    const priority = candidates.filter((t) => DAMAGE_SPELL_PRIORITY_IDS.has(catalogIdOf(t.unit.def)));
+    const base = priority.length > 0 ? priority : candidates;
+    const killable = base.filter((t) => t.unit.currentHp <= amount);
+    const pool = killable.length > 0 ? killable : base;
     // 侵略そのものを封じてくる2種は、他の何より先に落とす。
     // ・避雷針侍: 1体でも場にいる限り、その所有者の"他の全土地"の侵略勝率が
     //   0と評価され（_defenderProtectedByLightningRod）、CPUが一切侵略でき
@@ -9606,8 +9702,21 @@ export class Game {
   /**
    * キャンセルカルチャー（destroyHandCard）のCPU使用判断。妨害スペルなので
    * 同盟以外の相手を狙う。破壊できる手札（スペル/アイテム）を持つ相手のうち
-   * 総資産が最上位のプレイヤーを対象にし、その中で最もコストの高い（＝価値の
-   * 高い）1枚を破壊する。破壊できる手札を持つ相手がいなければ使わない。
+   * 総資産が最上位のプレイヤーを対象にする。破壊できる手札を持つ相手が
+   * いなければ使わない。
+   *
+   * ⚠️ 優先順位は **パンデミック ＞ アイテム ＞ その他のスペル**。
+   * ①**パンデミック最優先**（2026-09、ユーザー指定「キャンセルカルチャーは
+   *   パンデミック優先」）。盤面のモンスターを全てゾンビ(HP20/ATK20)へ
+   *   置き換えるので、通した時の損失が他のどのカードより大きい。
+   *   **対象プレイヤーの選定にも効かせる** - 総資産1位だけを見ていると、
+   *   パンデミックを持っているのが別の相手だった時に永久に抜けない。
+   * ②**アイテム**（2026-09-01、ユーザー指定「相手のアイテムを全部潰すの優先」）。
+   *   相手の手札にアイテムが1枚でも残っている限りアイテムだけを狙う。
+   *   戦闘の勝敗を直接ひっくり返すのは装備なので、単純なコスト順で
+   *   高いスペルから抜くより「殴り合いで確実に勝てる状態」を作りやすい。
+   * ③アイテムが尽きて初めて残りのスペルへ移る。
+   * どの段でも、同じ種別の中では最もコストの高い（＝価値の高い）1枚を選ぶ。
    */
   async _cpuMaybeUseCancelCultureSpell(player) {
     if (player.spellUsedThisTurn) return;
@@ -9615,15 +9724,21 @@ export class Game {
     if (!card || player.currency < (card.cost || 0)) return;
 
     const isDestroyable = (c) => c.type === CardType.SPELL || c.type === CardType.GEAR;
+    const isPriority = (c) => CANCEL_CULTURE_PRIORITY_IDS.has(catalogIdOf(c));
+    const holdsPriority = (p) => p.hand.some((c) => isDestroyable(c) && isPriority(c));
     const targetPlayer = this.players
       .filter((p) => !p.defeated && p.id !== player.id
         && !(p.allianceId != null && p.allianceId === player.allianceId)
         && p.hand.some(isDestroyable))
-      .sort((a, b) => this._totalAssetsOf(b) - this._totalAssetsOf(a))[0];
+      // パンデミックを握っている相手を、総資産より先に見る。
+      .sort((a, b) => (holdsPriority(b) ? 1 : 0) - (holdsPriority(a) ? 1 : 0)
+        || this._totalAssetsOf(b) - this._totalAssetsOf(a))[0];
     if (!targetPlayer) return;
 
-    const targetCard = targetPlayer.hand
-      .filter(isDestroyable)
+    const destroyable = targetPlayer.hand.filter(isDestroyable);
+    const priority = destroyable.filter(isPriority);
+    const items = destroyable.filter((c) => c.type === CardType.GEAR);
+    const targetCard = (priority.length > 0 ? priority : items.length > 0 ? items : destroyable)
       .sort((a, b) => (b.cost || 0) - (a.cost || 0))[0];
     if (!targetCard) return;
 
