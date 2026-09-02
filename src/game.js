@@ -109,6 +109,20 @@ const OFUDA_ELEMENTS = [Element.FIRE, Element.WATER, Element.FOREST, Element.THU
 // LightningRod)、くねくねは被ダメージを全反射するので、どちらも通常の戦闘
 // では処理できない。_cpuPickDamageTarget参照。
 const INVASION_BLOCKER_IDS = new Set(['raiheishinZamurai', 'kunekune']);
+// ダメージ系スペルでCPUが「一撃で倒せなくても最優先で削る」モンスター。
+// くぐつの剣豪(autoInvadeEachTurn)は毎手番こちらの土地へ自動で侵略し続け、
+// traitsのimmovableByMoveCommandで動かすこともできない。避雷針侍・くねくねは
+// 「置かれている間だけ侵略を妨げる」受け身のロックだが、くぐつは能動的に
+// 盤面を削り取ってくるので、他に一撃で倒せる相手が居てもこちらを削る
+// （ユーザー指定、2026-09）。⚠️ この優先はkillable判定より前に効かせる -
+// HP50のくぐつはファイヤーボール15では落ちないので、killableで絞ってから
+// 順位付けすると「倒せる別のモンスターが1体でも居る限り永久に狙われない」。
+const DAMAGE_SPELL_PRIORITY_IDS = new Set(['kugutsuNoKengou']);
+// キャンセルカルチャーでCPUが最優先で抜くカード。パンデミックは盤面の
+// モンスターを全てゾンビ(HP20/ATK20)へ置き換える＝積み上げた盤面を一撃で
+// 更地にするので、通したときの損失が他のどのカードより大きい
+// （ユーザー指定、2026-09）。
+const CANCEL_CULTURE_PRIORITY_IDS = new Set(['pandemic']);
 
 // 150Gぶんの売買で相場が1G動く。小さくするほど「買い」が自己成就的に
 // 価格を押し上げ、先回り買いの旨味が増す（大きくすると土地レベル一辺倒になる）。
@@ -9457,8 +9471,13 @@ export class Game {
     // ①そのスペルで確実に倒せる相手モンスターがいれば最優先（複数なら総資産が
     // 最上位のプレイヤーのモンスター）。②倒せる相手がいなければ、総資産1位の
     // プレイヤーのモンスターを狙う。いずれも同点は土地レベルが高い方。
-    const killable = candidates.filter((t) => t.unit.currentHp <= amount);
-    const pool = killable.length > 0 ? killable : candidates;
+    // くぐつの剣豪が場に居る間は、そもそも候補をくぐつだけに絞る
+    // （DAMAGE_SPELL_PRIORITY_IDSの定義参照。killable判定より前に効かせないと、
+    //  倒せる別のモンスターが居る限り永久に狙われない）。
+    const priority = candidates.filter((t) => DAMAGE_SPELL_PRIORITY_IDS.has(catalogIdOf(t.unit.def)));
+    const base = priority.length > 0 ? priority : candidates;
+    const killable = base.filter((t) => t.unit.currentHp <= amount);
+    const pool = killable.length > 0 ? killable : base;
     // 侵略そのものを封じてくる2種は、他の何より先に落とす。
     // ・避雷針侍: 1体でも場にいる限り、その所有者の"他の全土地"の侵略勝率が
     //   0と評価され（_defenderProtectedByLightningRod）、CPUが一切侵略でき
@@ -9686,12 +9705,18 @@ export class Game {
    * 総資産が最上位のプレイヤーを対象にする。破壊できる手札を持つ相手が
    * いなければ使わない。
    *
-   * ⚠️ **アイテムを最優先で潰す**（2026-09-01、ユーザー指定
-   * 「相手のアイテムを全部潰すの優先」）。相手の手札にアイテムが1枚でも
-   * 残っている限りアイテムだけを狙い、同じ種別の中で最もコストの高い
-   * （＝価値の高い）1枚を選ぶ。アイテムが尽きて初めてスペルへ移る。
-   * 戦闘の勝敗を直接ひっくり返すのは装備なので、単純なコスト順で
-   * 高いスペルから抜くより「殴り合いで確実に勝てる状態」を作りやすい。
+   * ⚠️ 優先順位は **パンデミック ＞ アイテム ＞ その他のスペル**。
+   * ①**パンデミック最優先**（2026-09、ユーザー指定「キャンセルカルチャーは
+   *   パンデミック優先」）。盤面のモンスターを全てゾンビ(HP20/ATK20)へ
+   *   置き換えるので、通した時の損失が他のどのカードより大きい。
+   *   **対象プレイヤーの選定にも効かせる** - 総資産1位だけを見ていると、
+   *   パンデミックを持っているのが別の相手だった時に永久に抜けない。
+   * ②**アイテム**（2026-09-01、ユーザー指定「相手のアイテムを全部潰すの優先」）。
+   *   相手の手札にアイテムが1枚でも残っている限りアイテムだけを狙う。
+   *   戦闘の勝敗を直接ひっくり返すのは装備なので、単純なコスト順で
+   *   高いスペルから抜くより「殴り合いで確実に勝てる状態」を作りやすい。
+   * ③アイテムが尽きて初めて残りのスペルへ移る。
+   * どの段でも、同じ種別の中では最もコストの高い（＝価値の高い）1枚を選ぶ。
    */
   async _cpuMaybeUseCancelCultureSpell(player) {
     if (player.spellUsedThisTurn) return;
@@ -9699,16 +9724,21 @@ export class Game {
     if (!card || player.currency < (card.cost || 0)) return;
 
     const isDestroyable = (c) => c.type === CardType.SPELL || c.type === CardType.GEAR;
+    const isPriority = (c) => CANCEL_CULTURE_PRIORITY_IDS.has(catalogIdOf(c));
+    const holdsPriority = (p) => p.hand.some((c) => isDestroyable(c) && isPriority(c));
     const targetPlayer = this.players
       .filter((p) => !p.defeated && p.id !== player.id
         && !(p.allianceId != null && p.allianceId === player.allianceId)
         && p.hand.some(isDestroyable))
-      .sort((a, b) => this._totalAssetsOf(b) - this._totalAssetsOf(a))[0];
+      // パンデミックを握っている相手を、総資産より先に見る。
+      .sort((a, b) => (holdsPriority(b) ? 1 : 0) - (holdsPriority(a) ? 1 : 0)
+        || this._totalAssetsOf(b) - this._totalAssetsOf(a))[0];
     if (!targetPlayer) return;
 
     const destroyable = targetPlayer.hand.filter(isDestroyable);
+    const priority = destroyable.filter(isPriority);
     const items = destroyable.filter((c) => c.type === CardType.GEAR);
-    const targetCard = (items.length > 0 ? items : destroyable)
+    const targetCard = (priority.length > 0 ? priority : items.length > 0 ? items : destroyable)
       .sort((a, b) => (b.cost || 0) - (a.cost || 0))[0];
     if (!targetCard) return;
 

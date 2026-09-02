@@ -1507,6 +1507,24 @@ test('ダメージスペルのCPUは避雷針侍・くねくねを最優先で�
   // ロックが居なければ従来どおり総資産1位を狙う（既存挙動を壊していない）。
   const plain = withUnit(3, mon('雑魚', 10, 10), 'P', 1);
   assert.equal(g._cpuPickDamageTarget([fat, plain], 15).id, fat.id, 'ロック不在なら総資産1位');
+
+  // くぐつの剣豪はさらに上。毎手番こちらの土地へ自動侵略してくるうえ
+  // 移動コマンドでも動かせないので、一撃で倒せなくても削りにいく
+  // （ユーザー指定、2026-09）。
+  const kugutsu = withUnit(4, MONSTER_CATALOG.kugutsuNoKengou, 'P', 1);
+  assert.ok(MONSTER_CATALOG.kugutsuNoKengou.hp > 15, 'HP50なのでファイヤーボール15では落ちない前提');
+  // 一撃で倒せる「カモ」(HP10)が総資産1位の高レベル土地に居ても、
+  // 倒せないくぐつの方を狙う＝killable判定より前に優先が効いていること。
+  assert.equal(g._cpuPickDamageTarget([fat, kugutsu], 15).id, kugutsu.id,
+    'くぐつは倒せなくても最優先で削るはず');
+  // 避雷針侍・くねくねよりも上。
+  assert.equal(g._cpuPickDamageTarget([rod, kugutsu], 15).id, kugutsu.id, 'くぐつ > 避雷針侍');
+  assert.equal(g._cpuPickDamageTarget([kune, kugutsu], 15).id, kugutsu.id, 'くぐつ > くねくね');
+  // くぐつが複数居るなら、その中で倒せる方（＝削れている方）を仕留める。
+  const hurtKugutsu = withUnit(5, MONSTER_CATALOG.kugutsuNoKengou, 'P', 1);
+  hurtKugutsu.unit.currentHp = 10;
+  assert.equal(g._cpuPickDamageTarget([kugutsu, hurtKugutsu], 15).id, hurtKugutsu.id,
+    'くぐつが複数なら倒せる方を先に落とす');
 });
 
 test('川田のデッキに資本主義の権化を1枚含める（ユーザー指定）', () => {
@@ -2597,8 +2615,11 @@ function makeCancelCultureGame() {
   return { g, casts, hero: g.players[2] };
 }
 
-const asItem = (def, id) => ({ ...def, id, type: CardType.GEAR });
-const asSpell = (def, id) => ({ ...def, id, type: CardType.SPELL });
+// 実物のデッキのカードは duplicateForDeck が catalogId を付けたうえで id を
+// 振り直す（catalogIdOf は catalogId ?? id を返す）。カード種別で引く判定を
+// 検証できるよう、ヘルパも同じ形にしておく。
+const asItem = (def, id) => ({ ...def, catalogId: def.id, id, type: CardType.GEAR });
+const asSpell = (def, id) => ({ ...def, catalogId: def.id, id, type: CardType.SPELL });
 
 test('キャンセルカルチャーは高コストのスペルより先にアイテムを潰す', async () => {
   const { g, casts, hero } = makeCancelCultureGame();
@@ -2619,6 +2640,36 @@ test('アイテムが複数あれば高い方から、尽きたらスペルへ�
   hero.hand = [asSpell(SPELL_CATALOG.fireball, 's1'), asSpell(SPELL_CATALOG.senbonZakura, 's2')];
   await g._cpuMaybeUseCancelCultureSpell(g.players[0]);
   assert.equal(casts.at(-1)?.targetCardId, 's2', 'アイテムが無ければ高コストのスペル');
+});
+
+test('キャンセルカルチャーはアイテムより先にパンデミックを潰す', async () => {
+  // パンデミックは盤面のモンスターを全てゾンビ(HP20/ATK20)へ置き換える＝
+  // 積み上げた盤面を一撃で更地にするので、通した時の損失が最大
+  // （ユーザー指定、2026-09「キャンセルカルチャーはパンデミック優先」）。
+  const { g, casts, hero } = makeCancelCultureGame();
+  hero.hand = [asItem(ITEM_CATALOG.zangokuKen, 'i1'), asSpell(SPELL_CATALOG.pandemic, 'p1')];
+  await g._cpuMaybeUseCancelCultureSpell(g.players[0]);
+  assert.equal(casts.at(-1)?.targetCardId, 'p1', '斬〇剣130G > パンデミック100G でもパンデミックが上');
+
+  // パンデミックが無ければ従来どおりアイテム優先（既存挙動を壊していない）。
+  hero.hand = [asItem(ITEM_CATALOG.zangokuKen, 'i1'), asSpell(SPELL_CATALOG.senbonZakura, 's1')];
+  await g._cpuMaybeUseCancelCultureSpell(g.players[0]);
+  assert.equal(casts.at(-1)?.targetCardId, 'i1');
+});
+
+test('パンデミックを持つ相手が総資産1位でなくても、そちらを狙う', async () => {
+  // 対象プレイヤーの選定にも優先を効かせないと、パンデミックを握っているのが
+  // 別の相手だった時に永久に抜けない。
+  const { g, casts } = makeCancelCultureGame();
+  const rich = { id: 3, name: '金持ち', isCPU: false, allianceId: null, defeated: false,
+    hand: [asItem(ITEM_CATALOG.zangokuKen, 'rich-item')] };
+  const poor = { id: 4, name: '貧乏', isCPU: false, allianceId: null, defeated: false,
+    hand: [asSpell(SPELL_CATALOG.pandemic, 'poor-pandemic')] };
+  g.players = [g.players[0], rich, poor];
+  g._totalAssetsOf = (p) => (p.id === 3 ? 99999 : 1);
+  await g._cpuMaybeUseCancelCultureSpell(g.players[0]);
+  assert.equal(casts.at(-1)?.targetPlayerId, 4, '総資産1位の金持ちではなくパンデミック持ちを狙う');
+  assert.equal(casts.at(-1)?.targetCardId, 'poor-pandemic');
 });
 
 test('潰せる手札を持つ相手がいなければ撃たない', async () => {
