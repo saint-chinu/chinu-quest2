@@ -228,8 +228,11 @@ test('新カードはカタログに載り、参照している画像が実在�
   assert.ok(ITEM_CATALOG.diamondShield.traits.includes('lastStrike'));
   assert.equal(SPELL_CATALOG.tochigamiNoIkari.imageDataUrl, null, '専用絵が無い土地神の怒りは共通スペル絵へフォールバックする');
   assert.equal(SPELL_CATALOG.shakaiFutekigou.imageDataUrl, null, '専用絵が無い社会不適合は共通スペル絵へフォールバックする');
+  // 属性神の盾4種は2026-09に専用絵が用意された（それまではnullで共通アイテム絵へ
+  // フォールバックしていた）。上のループが public/ に実在するかまで見ている。
   for (const id of ['suijinNoTate', 'kajinNoTate', 'raijinNoTate', 'shinrinjinNoTate']) {
-    assert.equal(ITEM_CATALOG[id].imageDataUrl, null, `${id}は専用絵が無い間、共通アイテム絵へフォールバックする`);
+    assert.match(ITEM_CATALOG[id].imageDataUrl, new RegExp(`/images/card-art/${id}\\.png$`),
+      `${id}は専用絵を参照する`);
   }
 });
 

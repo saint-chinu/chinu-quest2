@@ -1157,10 +1157,11 @@ Rスペル60G `damageAllUnitsOnMismatchedLand` target='none'。
 - **背景画像**（`/images/stage/stage15-kawada-alley.png`）と**川田自身の
   立ち絵・NPCアイコン**（npcArt.js）は実装済み。いずれも実ファイルを追加し、
   ステージ15の背景・会話・盤面表示から参照する。
-- **属性神の盾4種の専用画像**は未作成。カード定義は`imageDataUrl: null`で
-  共通アイテム絵へフォールバックする。
-- **BGM**は未設定。`src/audio.js`の`MAP_TRACK`に`kawada`キーが無く、ステージ15は
-  共通曲(`board`)へフォールバックしている。生成用プロンプトは次節に記録済み。
+- ~~属性神の盾4種の専用画像~~ → ✅ **2026-09に用意済み**
+  （`public/images/card-art/{suijinNoTate,kajinNoTate,raijinNoTate,shinrinjinNoTate}.png`）。
+- ~~BGM~~ → ✅ **2026-09に用意済み**。`/audio/stage15bgm.mp3`、曲名
+  「♪路地裏のレジスタンス」。`TRACK_SRC.kawada`／`MAP_TRACK.kawada`／
+  対人戦のBGM選択に登録済み。生成用プロンプトは次節に残してある（作り直す時用）。
 - **AIプロファイル**（story.jsのopponents[].aiProfile）は未設計。
 - チヌ・ウサギン・ムールの1vs3バトル(⑯。**強制敗北ではない**)は**実装済み**
   （素材待ち。上の⑯の節を参照）。海底労働施設(⑰)は未着手。
