@@ -2108,3 +2108,50 @@ test('ステージ15(川田)は専用マップ・会話・デッキへ正しく�
   assert.equal(joined.split('G').length - 1, 1, 'スタートは1か所');
   assert.equal(joined.split('C').length - 1, 3, 'CPは3か所');
 });
+
+test('チュートリアル: 初期手札にスペルを入れず、案内しないスペルを引かせない', () => {
+  // 誘導中はhandPanelのspellAllowedInTutorialが「今の吹き出しが指すスペル」
+  // 以外を一切使わせないので、台本で案内しないスペルが手札に来ると最後まで
+  // 触れない置物になる（2026-08のユーザー報告「最初手札にスペルがあるけど
+  // 使えない」）。main.jsは丸ごとimportするとDOMを触るので、台本の宣言を
+  // テキストとして読み出して検証する。
+  const src = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const pick = (key) => {
+    const m = src.match(new RegExp(`${key}:\\s*(\\[[^\\]]*\\])`));
+    assert.ok(m, `${key} が main.js に見つからない`);
+    return m[1];
+  };
+  const idsIn = (literal) => [...literal.matchAll(/'([A-Za-z][\w-]*)'/g)].map((m) => m[1]);
+
+  // 1) 初期手札はモンスターとアイテムだけ。
+  const opening = idsIn(pick('tutorialOpeningCardIds'));
+  assert.ok(opening.length > 0, '初期手札の指定が空');
+  for (const id of opening) {
+    assert.ok(!SPELL_CATALOG[id], `初期手札にスペル「${id}」が入っている`);
+    assert.ok(MONSTER_CATALOG[id] || ITEM_CATALOG[id], `初期手札の「${id}」がカタログに無い`);
+  }
+
+  // 2) プレイヤーのドローは全手番ぶん指定する（nullを残さない）。nullだと
+  //    山札の先頭＝案内していないスペルが早い手番で来てしまう。
+  const drawBlock = src.match(/tutorialDrawQueues:\s*\{\s*human:\s*(\[[^\]]*\])/);
+  assert.ok(drawBlock, 'tutorialDrawQueues.human が見つからない');
+  assert.ok(!/\bnull\b/.test(drawBlock[1]), 'tutorialDrawQueues.human に null が残っている');
+
+  // 3) 引かせるスペルは、台本(TUTORIAL_FLOW_STEPS)が使い方を教えるものだけ。
+  const taughtSpells = new Set(
+    [...src.matchAll(/\{\s*event:\s*'spell',\s*card:\s*'([\w-]+)'/g)].map((m) => m[1]),
+  );
+  assert.ok(taughtSpells.size > 0, '台本にスペルのステップが無い');
+  for (const id of idsIn(drawBlock[1])) {
+    if (!SPELL_CATALOG[id]) continue;
+    assert.ok(taughtSpells.has(id), `台本が教えないスペル「${id}」を引かせている`);
+  }
+
+  // 4) デッキ側にも、台本が教えないスペルを積まない。ドローを全部指定して
+  //    いる今は表に出ないが、指定を1つnullへ戻した瞬間に湧いてくるので。
+  const deckBody = src.match(/function buildTutorialPlayerDeck\(\) \{([\s\S]*?)\n\}/);
+  assert.ok(deckBody, 'buildTutorialPlayerDeck が見つからない');
+  for (const m of deckBody[1].matchAll(/tutorialCopies\(SPELL_CATALOG\.(\w+),/g)) {
+    assert.ok(taughtSpells.has(m[1]), `チュートリアルデッキに台本が教えないスペル「${m[1]}」が入っている`);
+  }
+});

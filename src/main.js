@@ -4214,7 +4214,7 @@ const TUTORIAL_LESSONS = [
   },
   {
     title: '手札とスペル',
-    text: '自分の手札は左下に常時表示されます。自分のターンでスペルをタップし、詳細画面から使用します。「占術」や「1のダイス」を実際に使ってみましょう。スペル使用後もサイコロを振れます。',
+    text: '自分の手札は左下に常時表示されます。自分のターンでスペルをタップし、詳細画面から使用します。チュートリアルでは途中で「占術」が手札に来るので、そこで実際に使ってみましょう。スペル使用後もサイコロを振れます。',
   },
   {
     title: 'サイコロ・移動・CP',
@@ -4287,17 +4287,21 @@ function tutorialCopies(def, count) {
 }
 
 /**
- * チュートリアルのプレイヤーデッキ（42枚）。
+ * チュートリアルのプレイヤーデッキ（45枚）。
+ * （枚数は長らく「42枚」と書かれていたが実際は45枚。2026-08に数え直した）
  *
- * ⚠️ スペルは6枚まで。台本(TUTORIAL_FLOW_STEPS)が実際に使い方を教えるのは
- * 占術とアイキャンフライの2種だけなので、スペルを厚く積むと「使い方の
- * 分からないスペルが手札に溜まる一方」になる（2026-08のユーザー報告）。
- * 以前は12枚(全体の29%)積んでいて、癒し・副業収入・ファイヤーボールは
- * 一度も案内されないまま手札を圧迫していた。
- * 残す3種はどれも台本か初期手札で必ず触るもの:
- *   占術・イカサマ=1 → tutorialOpeningCardIds の初期手札
- *   アイキャンフライ → tutorialDrawQueues で必ず引かせる誘導ステップ用
- * 抜いたぶんは、その場で必ず使えるモンスターとアイテムへ回している。
+ * ⚠️ スペルは4枚まで（占術2・アイキャンフライ2）。台本(TUTORIAL_FLOW_STEPS)が
+ * 実際に使い方を教えるのはこの2種だけで、しかも誘導中はhandPanelの
+ * spellAllowedInTutorialが「今の吹き出しが指すスペル」以外を一切使わせない。
+ * つまり台本で案内しないスペルは、手札に来ても最後まで触れない置物になる
+ * （2026-08のユーザー報告「スペルカードが手札にたまっていく一方」、および
+ * 「最初手札にスペルがあるけど使えない」）。
+ * 経緯: 12枚(29%)→6枚→現在の4枚。1のダイスは一度も案内していなかったので
+ * 2026-08に撤去した。
+ * ⚠️ **ここにスペルを足す時は、台本のどのステップで使わせるかを先に決めること。**
+ * 現在は初期手札もドローも全部指定してあるので、デッキの残りは実質予備。
+ *   初期手札(tutorialOpeningCardIds) … モンスターとアイテムだけ
+ *   占術・アイキャンフライ           … tutorialDrawQueuesで使う手番に配る
  */
 function buildTutorialPlayerDeck() {
   return [
@@ -4310,11 +4314,12 @@ function buildTutorialPlayerDeck() {
     ...tutorialCopies(MONSTER_CATALOG.fireStarter, 7),
     ...tutorialCopies(MONSTER_CATALOG.flameLizard, 5),
     ...tutorialCopies(MONSTER_CATALOG.kunekune, 1),
-    ...tutorialCopies(MONSTER_CATALOG.sekizou, 4),
+    ...tutorialCopies(MONSTER_CATALOG.sekizou, 6),
     ...tutorialCopies(ITEM_CATALOG.knife, 7),
     ...tutorialCopies(ITEM_CATALOG.potLid, 7),
+    // ⚠️ スペルは台本が使い方を教える2種だけ。1のダイスは一度も案内しないまま
+    // 積んでいたので撤去した（2026-08）。枠は石像へ回している。
     ...tutorialCopies(SPELL_CATALOG.divination, 2),
-    ...tutorialCopies(SPELL_CATALOG.diceOne, 2),
     ...tutorialCopies(SPELL_CATALOG.iCanFly, 2),
   ];
 }
@@ -4349,9 +4354,15 @@ const TUTORIAL_FLOW_STEPS = [
   { event: 'roll', text: 'サイコロをタップして振ってみよう！' },
   { event: 'summon', requireCard: 'fireStarter', text: '空き地に止まった！「召喚／侵略」から「火付け役」を召喚してみよう' },
   { event: 'battleEnd', defenderIsHuman: true, requireItem: 'potLid', text: '敵が攻めてきた！アイテム選択で「なべのふた」を選んで防御しよう。防ぎ切れば通行料ももらえる' },
-  { event: 'levelUp', text: '土地を守り切った！ 続けて同じメニューの「土地Lvアップ」で、この土地を強化してみよう（払ったGは土地の価値に変わる）' },
+  // 占術はここ（自2の頭）で1回だけ触らせる。この手番は出目が1で固定＝CPに
+  // ちょうど停止するだけなので、占術で何を引いても台本の進行は一切変わらない
+  // （ユーザー指定「結果に関係ないどうでもいい場面で」）。以前は自4の
+  // 火炎瓶男を召喚する手番に置いていたが、あそこは着地マスも召喚も決まって
+  // いる「結果に関わる手番」だった。ここへ移すと40Gの支払いも自4より前に
+  // ずれるので、自4で占術40G＋召喚50Gを同じ手番に払う必要も無くなる。
+  { event: 'spell', card: 'divination', requireCard: 'divination', text: 'カードを引いた！サイコロを振る前に手札の「占術」を使ってみよう（スペルは1ターン1回。ここは何を引いても展開は変わらないので気軽にどうぞ）' },
+  { event: 'levelUp', text: 'CPにちょうど止まった！ 「土地」→さっきの土地→「土地Lvアップ」で強化してみよう（払ったGは土地の価値に変わる）' },
   { event: 'summon', requireCard: 'kunekune', text: '次の空き地では「くねくね」を召喚してみよう（HPは低いが攻撃を反射する）' },
-  { event: 'spell', card: 'divination', requireCard: 'divination', text: '自分のターンが来たら、サイコロを振る前に手札の「占術」を使ってみよう（スペルは1ターン1回）' },
   { event: 'summon', requireCard: 'molotovMan', text: '空き地に止まった！「火炎瓶男」を召喚しよう（土地コマンドで使える特殊効果を持っている）' },
   { event: 'ability', text: 'スタートに止まると自分の全部の土地に土地コマンドが使える！「土地」→火炎瓶男の土地→「特殊効果」で、離れた樹海の怨霊を削ってみよう' },
   { event: 'spell', card: 'iCanFly', requireCard: 'iCanFly', targetSelf: true, text: '「アイキャンフライ」を引いた！自分に使うと次のサイコロが2倍。マス7のくねくねまで進もう' },
@@ -4512,7 +4523,12 @@ async function startTutorialDemo() {
       await finishTutorial(true);
     },
     tutorialMode: true,
-    tutorialOpeningCardIds: ['divination', 'diceOne', 'fireStarter', 'knife', 'potLid', 'kunekune'],
+    // ⚠️ 初期手札はモンスターとアイテムだけ（2026-08、ユーザー指定
+    // 「最初手札にスペルがあるけど使えない」）。誘導中はhandPanelの
+    // spellAllowedInTutorialが「今の吹き出しが指すスペル」以外を弾くので、
+    // 開幕から握らせたスペルは何手番も触れないまま手札を占める。
+    // スペルは使わせたい手番にtutorialDrawQueuesでちょうど配る。
+    tutorialOpeningCardIds: ['fireStarter', 'knife', 'potLid', 'kunekune'],
     tutorialCpuOpeningCardIds: ['salarymander', 'jukaiNoOnryou'],
     // ⚠️ チュートリアルは最後まで完全な台本で進む（運の要素を排除する、という
     // ユーザー指定 2026-08）。出目・引くカード・CPUの行動を全手番ぶん固定し、
@@ -4525,12 +4541,15 @@ async function startTutorialDemo() {
     // 属性は 1=火 3=雷 4=森 5=無 6=水 7=火、2がCP）。
     //   自1: 1歩→マス1(火)へ着地、火付け役を召喚
     //   敵1: 1歩→マス1へ侵略（プレイヤーはなべのふたで防衛）
-    //   自2: 1歩→マス2(CP)にちょうど停止。CP停止中は全所有地に土地コマンドが
-    //        使えるので、ここでマス1を土地Lvアップさせる
+    //   自2: 引いた占術を使ってから1歩→マス2(CP)にちょうど停止。CP停止中は
+    //        全所有地に土地コマンドが使えるので、ここでマス1を土地Lvアップ。
+    //        ⚠️ 占術をこの手番に置いているのは、出目1でCPに停止するだけの
+    //        「結果に関係ない手番」だから（ユーザー指定）。占術が何を引いても
+    //        以降の台本は変わらない。
     //   敵2: 2歩→マス4(森)へ着地、樹海の怨霊を召喚
     //   自3: 2歩→マス4を通過してマス7(火)へ着地、くねくねを召喚
     //   敵3: 2歩→マス6へ着地（台本のpassで何もしない）
-    //   自4: 占術を使ってから2歩→マス5へ着地、火炎瓶男を召喚
+    //   自4: 2歩→マス5へ着地、火炎瓶男を召喚
     //        ⚠️ マス5なのは火炎瓶男の射程3に収めるため。マス4(怨霊)までの
     //        距離はマス5からなら3だが、マス3からだと4になって届かない
     //        （_tileDistanceはneighborsのBFS）。
@@ -4544,11 +4563,18 @@ async function startTutorialDemo() {
     //    「チュートリアルの台本どおりに進むと想定のマスへ着地する」が
     //    リング順を辿って着地マスを検証するので、必ず一緒に更新すること。
     tutorialDiceQueues: { human: [1, 1, 2, 2, 2, 2], cpu: [1, 2, 2, 2, 2] },
-    // くねくね・占術は初期手札(tutorialOpeningCardIds)にあるので引かせる必要は
-    // ない。火炎瓶男とアイキャンフライだけは、使わせたい手番でちょうど手札へ
-    // 来るように指定する（早く配ると別の手番で使われて出目が想定とずれる）。
+    // ⚠️ プレイヤーのドローは全手番ぶん指定する（nullを残さない）。nullだと
+    // 山札の先頭＝シャッフル済みの残りから引くため、台本が使い方を教えて
+    // いないスペル（占術の2枚目・アイキャンフライの2枚目）が早い手番で
+    // 手札へ来てしまい、「使えないスペルが溜まる」状態に戻る。
+    //   自1 炎トカゲ   … ただの手札。召喚は台本の火付け役に限定される
+    //   自2 占術       … この手番でスペルを1回だけ体験する（下記の理由）
+    //   自3 石像       … ただの手札（0G）
+    //   自4 火炎瓶男   … マス5で召喚して特殊効果を教える
+    //   自5 なべのふた … ただの手札
+    //   自6 アイキャンフライ … 2倍移動でマス7へ戻る
     tutorialDrawQueues: {
-      human: [null, null, null, 'molotovMan', null, 'iCanFly'],
+      human: ['flameLizard', 'divination', 'sekizou', 'molotovMan', 'potLid', 'iCanFly'],
       cpu: [],
     },
     // 台本の無い手番でCPUが通常AIに落ちると打ち回しがランダムになるので、
