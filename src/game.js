@@ -1006,6 +1006,40 @@ export class Game {
   }
 
   /**
+   * 単体スペルの対象にできないモンスターか。**スペルの対象選択だけ**で使う。
+   * ① `singleTargetImmune`（カード固有の特性。スペルも土地コマンドの
+   *    特殊効果もまとめて弾く従来どおりの強い耐性）
+   * ② **`spellUntargetable`の呪い** … 聖域が付ける（2026-09、ユーザー指定
+   *    「スペルの対象にならない効果も付与して」）。**スペルだけ**を弾き、
+   *    火炎瓶男・センチネルのような土地コマンドの特殊効果は通す。
+   *    ユーザー指定が「スペルの対象にならない」なので能力までは止めない
+   *    ——聖域の土地は侵略もできないため、能力まで止めると全体スペル以外に
+   *    干渉手段が無くなる。
+   * ⚠️ `_unitHasTrait`はdef/awakenedしか見ない（battle.jsの`hasTrait`と違い
+   * items/cursesを見ない）ので、呪い由来の特性はここで別途拾う。
+   */
+  _isSpellUntargetableUnit(unit) {
+    return this._isSingleTargetImmuneUnit(unit)
+      || !!unit?.curses?.some((curse) => curse.traits?.includes('spellUntargetable'));
+  }
+
+  /**
+   * 侵略不能・通行料ゼロの「透過」状態か。発生源が2つあるので必ずここで判定する。
+   * ①`tile.transparentCursed` … 透過の呪い(curseTransparency)。モンスターの
+   *   土地コマンドで、その土地そのものに付くフラグ。
+   * ②**聖域(curseSanctuary)** … `traits:['sanctuary','singleTargetImmune']`を
+   *   持つ**モンスターへの呪い**（2026-09、ユーザー指定「あれはモンスターへの
+   *   呪いなので、他の呪いで上書きできる」）。unit.cursesは1つしか保持
+   *   しない仕様(battle.jsのsetCurse)なので、後から別の呪いをかければ
+   *   聖域は自動的に消える。モンスターが死ぬ・移動する・入れ替わる時も
+   *   個体ごと消えるので、土地側のフラグを片付ける必要が無い。
+   */
+  _isTransparentTile(tile) {
+    return !!tile?.transparentCursed
+      || !!tile?.unit?.curses?.some((curse) => curse.traits?.includes('sanctuary'));
+  }
+
+  /**
    * カードのtargetに応じた対象選択UIを出し、`{}`（対象なし）や
    * `{targetTileId}`/`{targetPlayerId}`/`{targetTileIds:[a,b]}`のような
    * 選択結果を返す。キャンセルされたらnull。既存のonPickAbilityTargetを
@@ -1055,7 +1089,7 @@ export class Game {
     if (target === 'enemyMonster' || target === 'anyMonster' || target === 'ownMonster') {
       const tiles = this.tiles.filter((t) => {
         if (!t.unit) return false;
-        if (this._isSingleTargetImmuneUnit(t.unit)) return false;
+        if (this._isSpellUntargetableUnit(t.unit)) return false;
         if (target === 'enemyMonster') return t.unit.ownerId !== player.id;
         if (target === 'ownMonster') return t.unit.ownerId === player.id;
         return true;
@@ -1263,7 +1297,7 @@ export class Game {
 
     if (targetTile?.unit
       && ['enemyMonster', 'anyMonster', 'ownMonster'].includes(card.target)
-      && this._isSingleTargetImmuneUnit(targetTile.unit)) {
+      && this._isSpellUntargetableUnit(targetTile.unit)) {
       this.onLog(`${targetTile.unit.def.name}は単体スペルの対象にならない`);
       return false;
     }
@@ -1753,9 +1787,17 @@ export class Game {
         return false;
 
       case 'curseSanctuary':
-        if (!targetTile) return false;
-        targetTile.transparentCursed = true;
-        this.onLog(`${ELEMENT_LABEL[targetTile.element]}属性の土地に聖域の呪いをかけた（侵略不能・通行料ゼロ）`);
+        // ⚠️ 土地フラグ(transparentCursed)ではなく**モンスターへの呪い**として
+        // 付ける（2026-09、ユーザー指定）。unit.cursesは1つしか保持しないので、
+        // 後から別の呪いをかけられれば聖域は上書きされて消える。
+        // singleTargetImmuneも一緒に付けるので、単体スペルの対象にならない
+        // （全体スペルはtarget:'none'で対象選択を経由しないため普通に通る）。
+        if (!targetTile?.unit) return false;
+        applyCurse(targetTile.unit, {
+          name: card.name,
+          traits: ['sanctuary', 'spellUntargetable'],
+        });
+        this.onLog(`${targetTile.unit.def.name}に聖域の呪いをかけた（侵略不能・通行料ゼロ・単体スペルの対象外）`);
         return false;
 
       case 'encounterUnknown':
@@ -4026,7 +4068,7 @@ export class Game {
           canSummon:
             tile.type === TileType.LAND &&
             !isAlliedLand &&
-            !(tile.owner != null && tile.owner !== player.id && tile.transparentCursed) &&
+            !(tile.owner != null && tile.owner !== player.id && this._isTransparentTile(tile)) &&
             this._affordableMonsterCards(player, tile).length > 0,
         },
         player.id,
@@ -4613,7 +4655,7 @@ export class Game {
    * 透過の呪い（深海魚X）がかかった土地は通行料ゼロ。
    */
   _tollOfTile(tile) {
-    if (tile.transparentCursed) return 0;
+    if (this._isTransparentTile(tile)) return 0;
     let toll = Math.round(
       this._baseLandValueOfTile(tile)
         * this._chainMultiplier(tile.owner, tile.element)
@@ -4642,7 +4684,7 @@ export class Game {
       this.onLog('同盟仲間の土地には侵略できません');
       return false;
     }
-    if (tile.owner != null && tile.owner !== player.id && tile.transparentCursed) {
+    if (tile.owner != null && tile.owner !== player.id && this._isTransparentTile(tile)) {
       this.onLog('透過の呪いがかかっており侵略できません');
       return false;
     }
@@ -4873,7 +4915,7 @@ export class Game {
           visited.add(stateKey);
           queue.push({ id: next.id, distance, specialCount });
         }
-        if (next.type !== TileType.LAND || next.transparentCursed) continue;
+        if (next.type !== TileType.LAND || this._isTransparentTile(next)) continue;
         if (next.owner === player.id) continue;
         const owner = next.owner != null ? this.players.find((p) => p.id === next.owner) : null;
         if (owner?.allianceId != null && owner.allianceId === player.allianceId) continue;
@@ -5721,7 +5763,7 @@ export class Game {
     if (!card || player.currency < (card.cost || 0)) return false;
 
     if (step.type === 'invade') {
-      if (tile.type !== TileType.LAND || tile.owner == null || tile.owner === player.id || !tile.unit || tile.transparentCursed) return false;
+      if (tile.type !== TileType.LAND || tile.owner == null || tile.owner === player.id || !tile.unit || this._isTransparentTile(tile)) return false;
       this.tutorialCpuScript.shift();
       await delay(CPU_DECISION_MS);
       player.hand = player.hand.filter((c) => c.id !== card.id);
@@ -5777,7 +5819,7 @@ export class Game {
     // 聖域/透過の呪い（transparentCursed）がかかった敵地には侵略できない。
     // 人間側の_humanSummonFlowと同じ保護をCPUにも適用する（これが無いと
     // CPUだけが聖域を無視して侵略できてしまい、効果が発動しないように見える）。
-    if (tile.owner != null && tile.owner !== player.id && tile.transparentCursed) {
+    if (tile.owner != null && tile.owner !== player.id && this._isTransparentTile(tile)) {
       this.onLog(`${player.name}は透過の呪いがかかった土地に侵略できず見送った`);
       return;
     }
@@ -5998,7 +6040,7 @@ export class Game {
     }
 
     if (ability.type === 'curseTransparency') {
-      if (tile.transparentCursed || tile.level < 3) return false;
+      if (this._isTransparentTile(tile) || tile.level < 3) return false;
       spend();
       tile.transparentCursed = true;
       this.onLog(`${player.name}の${unitDef.name}が透過の呪いで土地を守った (-${cost}G)`);
@@ -6498,7 +6540,7 @@ export class Game {
    *  聖域/透過の呪い無し。ガシャーン/未知の侵略者の運用AIで共用する。 */
   _isInvadeWorthyEnemyLand(tile, player) {
     if (!tile || tile.type !== TileType.LAND || tile.level < 3 || tile.owner == null || tile.owner === player.id || !tile.unit) return false;
-    if (tile.transparentCursed) return false;
+    if (this._isTransparentTile(tile)) return false;
     const owner = this.players.find((candidate) => candidate.id === tile.owner);
     return !!owner && !this._isAllyOf(owner, player);
   }
@@ -8176,7 +8218,7 @@ export class Game {
       } : null,
       hasAbility: !!tile.unit?.def.ability,
       cursed: this._isForcedStopCursed(tile),
-      transparentCursed: !!tile.transparentCursed,
+      transparentCursed: this._isTransparentTile(tile),
     };
   }
 
@@ -8352,7 +8394,7 @@ export class Game {
 
   /** その土地が、くぐつの剣豪から見た合法な侵略終点か。経路としては通過しない。 */
   _isAutoInvadeEnemyTile(tile, player) {
-    if (!tile || tile.type !== TileType.LAND || tile.transparentCursed || !tile.unit || tile.owner == null) return false;
+    if (!tile || tile.type !== TileType.LAND || this._isTransparentTile(tile) || !tile.unit || tile.owner == null) return false;
     const owner = this.players.find((candidate) => candidate.id === tile.owner);
     return !!owner && !this._isAllyOf(owner, player);
   }
@@ -8379,7 +8421,7 @@ export class Game {
       const neighborIds = [...current.tile.neighbors].sort((a, b) => a - b);
       for (const neighborId of neighborIds) {
         const next = tilesById.get(neighborId);
-        if (!next || next.type !== TileType.LAND || next.transparentCursed) continue;
+        if (!next || next.type !== TileType.LAND || this._isTransparentTile(next)) continue;
 
         if (next.unit || next.owner != null) {
           if (current.firstStep && this._isAutoInvadeEnemyTile(next, player)) {
@@ -8423,7 +8465,7 @@ export class Game {
       || source.owner !== player.id
       || !isAdjacent
       || destination.type !== TileType.LAND
-      || destination.transparentCursed
+      || this._isTransparentTile(destination)
       || destination.owner != null
       || destination.unit) return false;
 
@@ -8626,7 +8668,7 @@ export class Game {
     if (target === 'enemyMonster' || target === 'anyMonster' || target === 'ownMonster') {
       const candidates = this.tiles.filter((tile) => {
         if (!tile.unit) return false;
-        if (this._isSingleTargetImmuneUnit(tile.unit)) return false;
+        if (this._isSpellUntargetableUnit(tile.unit)) return false;
         if (target === 'enemyMonster') return tile.unit.ownerId !== player.id;
         if (target === 'ownMonster') return tile.unit.ownerId === player.id;
         return true;
@@ -9026,7 +9068,7 @@ export class Game {
       && this._opponentHoldsSpellEffect(player, 'curseForcedStop')) return;
 
     const candidates = this.tiles
-      .filter((t) => t.type === TileType.LAND && t.owner === player.id && t.unit && !t.transparentCursed)
+      .filter((t) => t.type === TileType.LAND && t.owner === player.id && t.unit && !this._isTransparentTile(t))
       // アリジゴク済みの土地は除外（聖域は通行料ゼロ化なので、強制停止で
       // 搾る土地にかけると互いに台無しになる）。
       .filter((t) => !this._isForcedStopCursed(t))
@@ -9051,7 +9093,7 @@ export class Game {
     const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'curseSanctuary');
     if (!card || player.currency < (card.cost || 0)) return;
     const gates = this.tiles
-      .filter((t) => t.type === TileType.LAND && t.unit && !t.transparentCursed
+      .filter((t) => t.type === TileType.LAND && t.unit && !this._isTransparentTile(t)
         && this._isForcedStopFor(player, t) && this._tollOfTile(t) > 0)
       .sort((a, b) => this._tollOfTile(b) - this._tollOfTile(a));
     if (gates.length === 0) return;
@@ -9086,7 +9128,7 @@ export class Game {
     if (!card || player.currency < (card.cost || 0)) return;
     const candidates = this.tiles
       .filter((t) => t.type === TileType.LAND && t.owner === player.id && t.unit
-        && !t.transparentCursed && !this._isForcedStopCursed(t)
+        && !this._isTransparentTile(t) && !this._isForcedStopCursed(t)
         && !this._unitHasTrait(t.unit, 'permanentForcedStop'))
       .map((t) => ({ tile: t, toll: this._tollOfTile(t) }))
       .filter(({ toll }) => toll >= (card.cost || 0))
@@ -9154,7 +9196,7 @@ export class Game {
       if (t.type !== TileType.LAND || t.owner == null || t.owner === player.id || !t.unit) return false;
       const owner = this.players.find((p) => p.id === t.owner);
       if (!owner || owner.defeated || this._isAllyOf(owner, player)) return false;
-      if (t.transparentCursed) return false;
+      if (this._isTransparentTile(t)) return false;
       // アリジゴクで強制停止をかけられた敵地は、レベルを問わず最優先の的。
       // 放置すると毎周そこで止まらされて通行料を搾り取られ続ける
       // （⑫はサドンデスなので、ジリ貧がそのまま敗北になる）。奪えば
@@ -9563,7 +9605,7 @@ export class Game {
 
     const candidates = this.tiles.filter((t) => t.unit
       && !this._isFriendlyUnitTile(t, player)
-      && !this._isSingleTargetImmuneUnit(t.unit));
+      && !this._isSpellUntargetableUnit(t.unit));
     const target = this._cpuPickDamageTarget(candidates, card.effect.amount);
     if (!target) return;
 
@@ -10131,7 +10173,7 @@ export class Game {
     const targetTile = cast?.targetTileId != null ? this.tiles[cast.targetTileId] : null;
     if (targetTile?.unit
       && ['enemyMonster', 'anyMonster', 'ownMonster'].includes(card.target)
-      && this._isSingleTargetImmuneUnit(targetTile.unit)) {
+      && this._isSpellUntargetableUnit(targetTile.unit)) {
       return false;
     }
     this.onCardSeen?.(card);

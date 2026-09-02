@@ -2678,3 +2678,76 @@ test('潰せる手札を持つ相手がいなければ撃たない', async () =>
   await g._cpuMaybeUseCancelCultureSpell(g.players[0]);
   assert.equal(casts.length, 0);
 });
+
+// ---- 聖域はモンスターへの呪い（2026-09、ユーザー指定） ----
+
+/** 聖域の効果適用だけを叩く最小のGame。土地は2枚（0=自分、1=相手）。 */
+function makeSanctuaryGame() {
+  const g = Object.create(Game.prototype);
+  const own = makeTile(0, { element: 'fire' });
+  own.owner = 0;
+  own.unit = unit(MONSTER_CATALOG.fireStarter, 0);
+  const logs = [];
+  Object.assign(g, {
+    tiles: [own],
+    players: [
+      { id: 0, name: 'CPU', isCPU: true, allianceId: null, defeated: false, currency: 500 },
+      { id: 1, name: '主人公', isCPU: false, allianceId: null, defeated: false, currency: 500 },
+    ],
+    onLog: (m) => logs.push(m),
+    _notifyState: () => {},
+  });
+  return { g, tile: own, logs };
+}
+
+test('聖域はモンスターへの呪いとして付く（土地フラグではない）', async () => {
+  const { g, tile } = makeSanctuaryGame();
+  await g._applySpellEffect(g.players[0], SPELL_CATALOG.sanctuary, { targetTileId: 0 });
+
+  // 土地側のフラグは立てない。判定は必ず_isTransparentTile経由。
+  assert.equal(tile.transparentCursed, undefined, '土地フラグは使わない');
+  assert.equal(tile.unit.curses.length, 1, 'モンスターの呪い枠に入る');
+  assert.equal(tile.unit.curses[0].name, '聖域');
+  assert.ok(g._isTransparentTile(tile), '侵略不能・通行料ゼロの判定は効く');
+  assert.ok(g._isSpellUntargetableUnit(tile.unit), '単体スペルの対象にならない');
+  assert.ok(!g._isSingleTargetImmuneUnit(tile.unit), '土地コマンドの特殊効果までは止めない');
+});
+
+test('聖域は別の呪いで上書きされて消える', async () => {
+  const { g, tile } = makeSanctuaryGame();
+  await g._applySpellEffect(g.players[0], SPELL_CATALOG.sanctuary, { targetTileId: 0 });
+  assert.ok(g._isTransparentTile(tile));
+
+  // unit.cursesは1つしか保持しない（battle.jsのsetCurse）。別の呪いをかければ
+  // 聖域は上書きされ、侵略不能も単体スペル耐性も同時に切れる。
+  battle.applyCurse(tile.unit, { name: '別の呪い', addedAtk: 5, addedHp: 0 });
+  assert.equal(tile.unit.curses.length, 1);
+  assert.equal(tile.unit.curses[0].name, '別の呪い');
+  assert.ok(!g._isTransparentTile(tile), '上書きで侵略不能が解ける');
+  assert.ok(!g._isSpellUntargetableUnit(tile.unit), '上書きで単体スペル耐性も解ける');
+});
+
+test('聖域はモンスターが居なくなれば自動的に消える（土地に残らない）', async () => {
+  const { g, tile } = makeSanctuaryGame();
+  await g._applySpellEffect(g.players[0], SPELL_CATALOG.sanctuary, { targetTileId: 0 });
+  assert.ok(g._isTransparentTile(tile));
+  // 戦闘で落ちた／移動した等でunitが外れた状態。土地フラグを片付ける処理は
+  // 一切通していないのに、透過状態も一緒に消えている必要がある。
+  tile.unit = null;
+  assert.ok(!g._isTransparentTile(tile), 'モンスターが居なければ透過も消える');
+});
+
+test('聖域中のモンスターは単体スペルの対象一覧に出ないが、全体スペルは通る', async () => {
+  const { g, tile } = makeSanctuaryGame();
+  await g._applySpellEffect(g.players[0], SPELL_CATALOG.sanctuary, { targetTileId: 0 });
+
+  // 単体スペル(target:'anyMonster')の対象収集から外れる。
+  g.onPickAbilityTarget = async () => { throw new Error('対象選択まで来てはいけない'); };
+  g._browseTileSummary = (t) => ({ id: t.id });
+  const cast = await g._resolveSpellCast(g.players[1], SPELL_CATALOG.senbonZakura);
+  assert.equal(cast, null, '対象がいない扱いになる');
+
+  // 全体スペルはtarget:'none'で対象選択を経由しないので普通に当たる。
+  assert.equal(SPELL_CATALOG.pandemic.target, 'none');
+  assert.equal(SPELL_CATALOG.meteor?.target ?? 'none', 'none');
+});
