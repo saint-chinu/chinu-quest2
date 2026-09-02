@@ -2952,3 +2952,40 @@ test('テンホウの強奪は与ダメージ×3G（5Gから引き下げ）', ()
   assert.equal(MONSTER_CATALOG.tenhou.effect.multiplier, 3);
   assert.match(MONSTER_CATALOG.tenhou.effectDescription, /×3G/);
 });
+
+test('呪いは後から撃たれたものが有効: 高速化の呪いは重ねがけできない', async () => {
+  // ⚠️ 不可侵のルール（2026-09、ユーザー指定）:
+  //「モンスター呪いもプレイヤー呪いも、重なったら後から撃たれたものが有効」。
+  // 高速化の呪い(ソニックムーヴ)だけ `+= turns` で加算されており、撃つほど
+  // 拘束が伸びる重ねがけになっていた。
+  const src = readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');
+  assert.ok(!/hasteTurnsRemaining\s*=\s*\(.*\|\|\s*0\)\s*\+/.test(src),
+    '高速化の呪いが加算（重ねがけ）に戻っている');
+  const assigns = [...src.matchAll(/\.hasteTurnsRemaining\s*=\s*([^;]+);/g)].map((m) => m[1].trim());
+  for (const rhs of assigns) {
+    assert.ok(/^ability\.turns$|^0$/.test(rhs), `高速化の呪いの代入が上書きでない: ${rhs}`);
+  }
+});
+
+test('呪い解除は高速化の呪いも外す', async () => {
+  const g = Object.create(Game.prototype);
+  Object.assign(g, { tiles: [], onLog: () => {}, _notifyState: () => {} });
+  const player = {
+    id: 0, name: 'テスト', diceCurse: { type: 'reverse' }, tollWaiverCharges: 1,
+    lotteryOnNextGoal: true, pierceNextInvasion: true, guaranteedNextInvasionWin: true,
+    allTilesAccessTurnsRemaining: 2, toughnessTurnsRemaining: 2,
+    hackingTurnsRemaining: 2, hasteTurnsRemaining: 2, landlessGoalBonus: 100,
+  };
+  await g._applySpellEffect(player, { name: '呪い解除', effect: { type: 'cleanseCurses' }, target: 'ownMonster' }, {});
+  assert.equal(player.hasteTurnsRemaining, 0, '高速化の呪いが残っている');
+  // 取りこぼしが再発しないよう、他のプレイヤー呪いもまとめて確認する。
+  assert.equal(player.diceCurse, null);
+  assert.equal(player.hackingTurnsRemaining, 0);
+  assert.equal(player.toughnessTurnsRemaining, 0);
+  assert.equal(player.allTilesAccessTurnsRemaining, 0);
+  assert.equal(player.tollWaiverCharges, 0);
+  assert.equal(player.pierceNextInvasion, false);
+  assert.equal(player.guaranteedNextInvasionWin, false);
+  assert.equal(player.lotteryOnNextGoal, false);
+  assert.equal(player.landlessGoalBonus, 0);
+});

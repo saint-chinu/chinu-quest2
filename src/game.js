@@ -1633,6 +1633,9 @@ export class Game {
         player.allTilesAccessTurnsRemaining = 0;
         player.toughnessTurnsRemaining = 0;
         player.hackingTurnsRemaining = 0;
+        // 高速化の呪い（ソニックムーヴ）はカード側で明確に「呪い」と名乗って
+        // いるのに、ここだけ取りこぼしていた（2026-09に発覚）。
+        player.hasteTurnsRemaining = 0;
         player.landlessGoalBonus = 0;
         if (targetTile?.unit) targetTile.unit.curses = [];
         // 増税通知・追徴課税・強制停止もモンスター呪いなので、上の
@@ -5737,7 +5740,9 @@ export class Game {
       if (!(await confirmAndSpend())) return false;
 
       const targetPlayer = this.players.find((p) => p.id === targetId);
-      targetPlayer.hasteTurnsRemaining = (targetPlayer.hasteTurnsRemaining || 0) + ability.turns;
+      // ⚠️ 加算ではなく上書き。呪いは重なったら「後から撃たれたものが有効」
+      // というのが不可侵のルール（2026-09、ユーザー指定）。
+      targetPlayer.hasteTurnsRemaining = ability.turns;
       this.onLog(`${player.name}の${unitDef.name}が${targetPlayer.name}に高速化の呪いをかけた`);
       this._notifyState();
       await this.onTargetEffect?.({
@@ -6149,7 +6154,8 @@ export class Game {
         .sort((a, b) => this._totalAssetsOf(b) - this._totalAssetsOf(a))[0];
       if (!target) return false;
       spend();
-      target.hasteTurnsRemaining = (target.hasteTurnsRemaining || 0) + ability.turns;
+      // ⚠️ 加算ではなく上書き（呪いは後から撃たれたものが有効）。
+      target.hasteTurnsRemaining = ability.turns;
       this.onLog(`${player.name}の${unitDef.name}が${target.name}に高速化の呪いをかけた (-${cost}G)`);
       this._notifyState();
       return true;
