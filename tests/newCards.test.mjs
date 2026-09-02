@@ -2712,8 +2712,9 @@ test('聖域はモンスターへの呪いとして付く（土地フラグで�
   assert.equal(tile.unit.curses.length, 1, 'モンスターの呪い枠に入る');
   assert.equal(tile.unit.curses[0].name, '聖域');
   assert.ok(g._isTransparentTile(tile), '侵略不能・通行料ゼロの判定は効く');
-  assert.ok(g._isSpellUntargetableUnit(tile.unit), '単体スペルの対象にならない');
-  assert.ok(!g._isSingleTargetImmuneUnit(tile.unit), '土地コマンドの特殊効果までは止めない');
+  // 単体で対象を選ぶ干渉は、スペルも土地コマンドの特殊効果もまとめて弾く
+  // （ユーザー指定「全体スペルだけでいいんだよ」）。
+  assert.ok(g._isSingleTargetImmuneUnit(tile.unit), '単体対象の干渉を受け付けない');
 });
 
 test('聖域は別の呪いで上書きされて消える', async () => {
@@ -2727,7 +2728,7 @@ test('聖域は別の呪いで上書きされて消える', async () => {
   assert.equal(tile.unit.curses.length, 1);
   assert.equal(tile.unit.curses[0].name, '別の呪い');
   assert.ok(!g._isTransparentTile(tile), '上書きで侵略不能が解ける');
-  assert.ok(!g._isSpellUntargetableUnit(tile.unit), '上書きで単体スペル耐性も解ける');
+  assert.ok(!g._isSingleTargetImmuneUnit(tile.unit), '上書きで単体対象耐性も解ける');
 });
 
 test('聖域はモンスターが居なくなれば自動的に消える（土地に残らない）', async () => {
@@ -2753,4 +2754,29 @@ test('聖域中のモンスターは単体スペルの対象一覧に出ない�
   // 全体スペルはtarget:'none'で対象選択を経由しないので普通に当たる。
   assert.equal(SPELL_CATALOG.pandemic.target, 'none');
   assert.equal(SPELL_CATALOG.meteor?.target ?? 'none', 'none');
+});
+
+test('聖域中のモンスターは土地コマンドの特殊効果も受け付けない（残るは全体スペルだけ）', async () => {
+  // 火炎瓶男(射程内へダメージ)・センチネル(1体へダメージして自爆)のような
+  // 単体対象の特殊効果も弾く（ユーザー指定「全体スペルだけでいいんだよ」）。
+  // 聖域の土地は侵略もできないので、干渉手段は全体スペルだけになる。
+  const { g, tile } = makeSanctuaryGame();
+  const enemy = makeTile(1, { element: 'fire' });
+  enemy.owner = 1;
+  enemy.unit = unit(MONSTER_CATALOG.jukaiNoOnryou, 1);
+  g.tiles.push(enemy);
+
+  await g._applySpellEffect(g.players[0], SPELL_CATALOG.sanctuary, { targetTileId: 0 });
+
+  // 能力側の判定も同じ _isSingleTargetImmuneUnit を通る。
+  assert.ok(g._isSingleTargetImmuneUnit(tile.unit), '聖域中は能力の対象からも外れる');
+  assert.ok(!g._isSingleTargetImmuneUnit(enemy.unit), '聖域でないモンスターは従来どおり狙える');
+
+  // 能力の射程内候補を集める式（game.jsの火炎瓶男/センチネルと同じ条件）で、
+  // 聖域のモンスターだけが落ちること。
+  const targetsFrom = (viewerId) => g.tiles.filter((t) => (
+    t.owner != null && t.owner !== viewerId && !g._isSingleTargetImmuneUnit(t.unit)
+  )).map((t) => t.id);
+  assert.deepEqual(targetsFrom(1), [], '主人公から見て聖域の土地は候補に出ない');
+  assert.deepEqual(targetsFrom(0), [1], '相手側は従来どおり候補に出る');
 });

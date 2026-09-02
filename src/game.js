@@ -1001,26 +1001,21 @@ export class Game {
     return player?.hackingTurnsRemaining > 0 ? cards.map((card) => this._maskedCard(card)) : cards;
   }
 
-  _isSingleTargetImmuneUnit(unit) {
-    return this._unitHasTrait(unit, 'singleTargetImmune');
-  }
-
   /**
-   * 単体スペルの対象にできないモンスターか。**スペルの対象選択だけ**で使う。
-   * ① `singleTargetImmune`（カード固有の特性。スペルも土地コマンドの
-   *    特殊効果もまとめて弾く従来どおりの強い耐性）
-   * ② **`spellUntargetable`の呪い** … 聖域が付ける（2026-09、ユーザー指定
-   *    「スペルの対象にならない効果も付与して」）。**スペルだけ**を弾き、
-   *    火炎瓶男・センチネルのような土地コマンドの特殊効果は通す。
-   *    ユーザー指定が「スペルの対象にならない」なので能力までは止めない
-   *    ——聖域の土地は侵略もできないため、能力まで止めると全体スペル以外に
-   *    干渉手段が無くなる。
+   * 「単体で対象を選ぶ」あらゆる干渉の対象外か。**スペルも土地コマンドの
+   * 特殊効果（火炎瓶男・センチネル等）もまとめて弾く**。
+   * ① カード固有の特性`singleTargetImmune`（fireMonsters.js）
+   * ② **聖域(curseSanctuary)の呪い** … 同じ`singleTargetImmune`を呪いとして
+   *    付ける（2026-09、ユーザー指定「全体スペルだけでいいんだよ」）。
+   *    聖域の土地は侵略もできないので、**残る干渉手段は全体スペルだけ**に
+   *    なる。これは意図した強さ。
    * ⚠️ `_unitHasTrait`はdef/awakenedしか見ない（battle.jsの`hasTrait`と違い
-   * items/cursesを見ない）ので、呪い由来の特性はここで別途拾う。
+   * items/cursesを見ない）ので、呪い由来の特性はここで別途拾う。ここを
+   * `_unitHasTrait`だけに戻すと、聖域が付いていても素通りする。
    */
-  _isSpellUntargetableUnit(unit) {
-    return this._isSingleTargetImmuneUnit(unit)
-      || !!unit?.curses?.some((curse) => curse.traits?.includes('spellUntargetable'));
+  _isSingleTargetImmuneUnit(unit) {
+    return this._unitHasTrait(unit, 'singleTargetImmune')
+      || !!unit?.curses?.some((curse) => curse.traits?.includes('singleTargetImmune'));
   }
 
   /**
@@ -1089,7 +1084,7 @@ export class Game {
     if (target === 'enemyMonster' || target === 'anyMonster' || target === 'ownMonster') {
       const tiles = this.tiles.filter((t) => {
         if (!t.unit) return false;
-        if (this._isSpellUntargetableUnit(t.unit)) return false;
+        if (this._isSingleTargetImmuneUnit(t.unit)) return false;
         if (target === 'enemyMonster') return t.unit.ownerId !== player.id;
         if (target === 'ownMonster') return t.unit.ownerId === player.id;
         return true;
@@ -1297,7 +1292,7 @@ export class Game {
 
     if (targetTile?.unit
       && ['enemyMonster', 'anyMonster', 'ownMonster'].includes(card.target)
-      && this._isSpellUntargetableUnit(targetTile.unit)) {
+      && this._isSingleTargetImmuneUnit(targetTile.unit)) {
       this.onLog(`${targetTile.unit.def.name}は単体スペルの対象にならない`);
       return false;
     }
@@ -1790,14 +1785,16 @@ export class Game {
         // ⚠️ 土地フラグ(transparentCursed)ではなく**モンスターへの呪い**として
         // 付ける（2026-09、ユーザー指定）。unit.cursesは1つしか保持しないので、
         // 後から別の呪いをかけられれば聖域は上書きされて消える。
-        // singleTargetImmuneも一緒に付けるので、単体スペルの対象にならない
-        // （全体スペルはtarget:'none'で対象選択を経由しないため普通に通る）。
+        // singleTargetImmuneも一緒に付けるので、単体で対象を選ぶスペルも
+        // 土地コマンドの特殊効果も受け付けない（ユーザー指定「全体スペル
+        // だけでいいんだよ」）。全体スペルはtarget:'none'で対象選択を
+        // 経由しないため普通に通る。
         if (!targetTile?.unit) return false;
         applyCurse(targetTile.unit, {
           name: card.name,
-          traits: ['sanctuary', 'spellUntargetable'],
+          traits: ['sanctuary', 'singleTargetImmune'],
         });
-        this.onLog(`${targetTile.unit.def.name}に聖域の呪いをかけた（侵略不能・通行料ゼロ・単体スペルの対象外）`);
+        this.onLog(`${targetTile.unit.def.name}に聖域の呪いをかけた（侵略不能・通行料ゼロ・単体対象の干渉を受けない）`);
         return false;
 
       case 'encounterUnknown':
@@ -8668,7 +8665,7 @@ export class Game {
     if (target === 'enemyMonster' || target === 'anyMonster' || target === 'ownMonster') {
       const candidates = this.tiles.filter((tile) => {
         if (!tile.unit) return false;
-        if (this._isSpellUntargetableUnit(tile.unit)) return false;
+        if (this._isSingleTargetImmuneUnit(tile.unit)) return false;
         if (target === 'enemyMonster') return tile.unit.ownerId !== player.id;
         if (target === 'ownMonster') return tile.unit.ownerId === player.id;
         return true;
@@ -9605,7 +9602,7 @@ export class Game {
 
     const candidates = this.tiles.filter((t) => t.unit
       && !this._isFriendlyUnitTile(t, player)
-      && !this._isSpellUntargetableUnit(t.unit));
+      && !this._isSingleTargetImmuneUnit(t.unit));
     const target = this._cpuPickDamageTarget(candidates, card.effect.amount);
     if (!target) return;
 
@@ -10173,7 +10170,7 @@ export class Game {
     const targetTile = cast?.targetTileId != null ? this.tiles[cast.targetTileId] : null;
     if (targetTile?.unit
       && ['enemyMonster', 'anyMonster', 'ownMonster'].includes(card.target)
-      && this._isSpellUntargetableUnit(targetTile.unit)) {
+      && this._isSingleTargetImmuneUnit(targetTile.unit)) {
       return false;
     }
     this.onCardSeen?.(card);
