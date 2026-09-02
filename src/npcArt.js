@@ -11,6 +11,9 @@ export const NPC_PORTRAIT_URL = {
   Q: assetUrl('/images/npc-portraits/q.png?v=2'),
   'ダンボール男': assetUrl('/images/npc-portraits/danballman.png'),
   '暴君マダイ': assetUrl('/images/npc-portraits/madai.png'),
+  // ⑰海底労働施設では「マダイ係長」として出る（②で北の海の王だったマダイが
+  // チヌに投獄され、施設の係長をやらされている）。同一人物なので同じ立ち絵。
+  'マダイ係長': assetUrl('/images/npc-portraits/madai.png'),
   'お肉': assetUrl('/images/npc-portraits/nikuchan-mosaic.png?v=2'),
   '紫の魔女ホフク': assetUrl('/images/npc-portraits/hofuku.png'),
   '少女A': assetUrl('/images/npc-portraits/wonderland-girl.png'),
@@ -57,6 +60,7 @@ export const NPC_TOKEN_URL = {
   Q: assetUrl('/images/npc-tokens/q.png?v=2'),
   'ダンボール男': assetUrl('/images/npc-tokens/danballman.png?v=2'),
   '暴君マダイ': assetUrl('/images/npc-tokens/madai.png'),
+  'マダイ係長': assetUrl('/images/npc-tokens/madai.png'),
   'お肉': assetUrl('/images/npc-tokens/nikuchan-mosaic.png?v=2'),
   '紫の魔女ホフク': assetUrl('/images/npc-tokens/hofuku.png'),
   '少女A': assetUrl('/images/npc-tokens/wonderland-girl.png'),

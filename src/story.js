@@ -1259,19 +1259,30 @@ export const STORY_STAGES = [
     ],
   },
   {
-    key: 'sea-labor',
-    title: '⑰ 海底労働施設',
+    key: 'roudou',
+    title: '⑰ 海底労働施設（仮実装）',
+    // ⚠️ 仮実装（2026-09）。専用の背景画像・BGM・マダイ係長の会話演出が未着手
+    // なので、board.js側もwip:trueのまま。詳細はCLAUDE.md「⑰海底労働施設」。
     format: '2vs2',
+    // 同盟合算の目標（_totalAssetsOfはチーム合算）。本編で現行最高。
+    goalCurrency: 24000,
     heroAllianceId: 'red',
     enemyAllianceId: 'white',
-    goalCurrency: 24000,
+    ally: {
+      name: '川田',
+      color: 0x4a6d8c,
+      // ⑮の`kawada`をそのまま流用（ユーザー指定「川田はそのままで仮実装して」）。
+      deckKey: 'kawada',
+      theme: { elements: [Element.WATER] },
+    },
     intro: [
+      { speaker: '???', text: '劣悪な岩穴。囚人たちは鞭の下で、来る日も来る日も藻を採取させられていた。' },
       { speaker: '主人公', text: 'はぁ、はぁ。今日のノルマまであと15往復…' },
       { speaker: '???', text: 'おい、主人公。タラタラやってんじゃねえぞ！！' },
       { speaker: '主人公', text: 'ヒッ、係長！！申し訳ありません…' },
-      { speaker: '暴君マダイ', text: 'チャキチャキやれ！！ノルマ分を納めないと看守にしばかれるぞ！！' },
+      { speaker: 'マダイ係長', text: 'チャキチャキやれ！！ノルマ分を納めないと看守にしばかれるぞ！！' },
       { speaker: '主人公', text: 'は、はい。急ぎます' },
-      { speaker: '暴君マダイ', text: '無茶はすんなよ。いつここから出られるかはわかんねえが、俺だって真面目にやってるんだ。チクショウ、チヌの野郎…' },
+      { speaker: 'マダイ係長', text: '無茶はすんなよ。いつここから出られるかはわかんねえが、俺だって真面目にやってるんだ。チクショウ、チヌの野郎…' },
       { speaker: '主人公', text: '（俺は…もうダメだ…チヌに逆らわず、田舎で遊んでりゃ良かった）' },
       { speaker: '主人公', text: '（いつになったら出られるんだろう…はらへった…）' },
       { speaker: '???', text: '随分と、しょぼくれた顔になったじゃないか。' },
@@ -1300,20 +1311,31 @@ export const STORY_STAGES = [
       { speaker: 'ムール', text: '私達2人相手に貴方達で勝てますかね？身の程を教えてあげましょう' },
     ],
     outro: [
-      { speaker: 'ダンボール男', text: 'おれ　は　しょうき　に　もどった　の　か！？' },
+      { speaker: 'ダンボール男', text: 'おれ　は　しょうき　に　もどった　のか！？' },
       { speaker: '主人公', text: '知らねえよ！！元ネタが古いんだよ！！' },
+      // ⚠️「主人公」は丸括弧を付けずそのまま書く。withHeroName(main.js)が表示直前に
+      // プレイヤーのキャラ名へ置換する（⑬でお肉が「お、主人公やんけ」と呼ぶのと同じ）。
       { speaker: '川田', text: 'レジスタンスの解放にご協力ありがとう。主人公はチヌのもとに行くんだろう？配下は俺たちに任せろ。' },
       { speaker: 'ムール', text: '...やれやれ。あなた達では王には勝てないでしょうけど、がんばってください。' },
       { speaker: '主人公', text: '止めないのか？' },
-      { speaker: 'ムール', text: '私は「プロ」として職務を全うしたまでです。ルールはルールであり、それ以上でも以下でもない。それが私の正義。' },
+      { speaker: 'ムール', text: '私は『プロ』として職務を全うしたまでです。ルールはルールであり、それ以上でも以下でもない。それが私の正義。' },
       { speaker: '主人公', text: 'ムールらしいな。' },
       { speaker: 'ムール', text: 'あなたの延滞税はどんどん加算されてますけどね' },
       { speaker: '主人公', text: '！？！？！？' },
     ],
-    ally: { name: '川田', color: 0x4a6d8c, deckKey: 'kawada', theme: { elements: [Element.WATER] } },
     opponents: [
-      { name: 'ムール', color: 0x3949ab, deckKey: 'muuru', theme: { elements: [Element.WATER] } },
-      { name: 'ダンボール男', color: 0x6b4f3a, deckKey: 'danball', theme: { elements: [Element.NEUTRAL, Element.FIRE] } },
+      {
+        name: 'ムール',
+        color: 0x3949ab,
+        deckKey: 'roudouMuuru',
+        theme: { elements: [Element.WATER] },
+      },
+      {
+        name: 'ダンボール男',
+        color: 0x8d6e63,
+        deckKey: 'roudouDanball',
+        theme: { elements: [Element.NEUTRAL, Element.THUNDER, Element.FIRE] },
+      },
     ],
   },
 ];

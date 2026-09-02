@@ -3076,3 +3076,153 @@ test('プレイヤー呪いの付与は必ず_applyPlayerCurse経由（1枠ル�
     }
   }
 });
+
+test('⑰のムール専用デッキ(roudouMuuru)は40枚で、⑨のmuuruを壊していない', () => {
+  const base = buildCharacterCardList('muuru');
+  const stage17 = buildCharacterCardList('roudouMuuru');
+  assert.equal(base.length, 40, '⑨のムールは40枚のまま');
+  assert.equal(stage17.length, 40);
+
+  const count = (cards) => cards.reduce((m, c) => m.set(c.name, (m.get(c.name) || 0) + 1), new Map());
+  const a = count(base);
+  const b = count(stage17);
+  // ユーザー指定の差し替え（2026-09）。⑨側は一切動かさない。
+  const expected = {
+    アオリイカ: -2, ボムボックリ: +2,
+    // 成長型の水はアイランドホエール1種だけ（他は火/雷/森/無）。
+    氷柱: -2, アイランドホエール: +2,
+    オサフネ: -1, イカサマのサイコロ: +1,
+    薄氷の剣: -1, ナンカのお守り: -1, 水神の盾: +2,
+    追徴課税: -1, 不動産鑑〇士: -1, タフネス: -1,
+    避雷針侍: +2, バックファイア: +1,
+    ブルーオーシャン: -1, 副業収入: -1,
+    サイコキネシス: +1, 帰巣本能: +1, // 帰巣本能は1→2枚
+  };
+  const actual = {};
+  for (const name of new Set([...a.keys(), ...b.keys()])) {
+    const diff = (b.get(name) || 0) - (a.get(name) || 0);
+    if (diff !== 0) actual[name] = diff;
+  }
+  assert.deepEqual(actual, expected);
+
+  // ⑨のムールは水単のまま（別キーにした意味がここ）。
+  const elems = (cards) => cards.filter((c) => c.type === CardType.MONSTER)
+    .reduce((m, c) => ({ ...m, [c.element]: (m[c.element] || 0) + 1 }), {});
+  assert.deepEqual(elems(base), { water: 19, neutral: 1 });
+  assert.deepEqual(elems(stage17), { water: 17, forest: 2, neutral: 1, thunder: 2 });
+});
+
+test('⑰のダンボール男専用デッキ(roudouDanball)は40枚で、⑤のdanballを壊していない', () => {
+  const base = buildCharacterCardList('danball');
+  const stage17 = buildCharacterCardList('roudouDanball');
+  assert.equal(base.length, 40, '⑤のダンボール男は40枚のまま');
+  assert.equal(stage17.length, 40);
+
+  const count = (cards) => cards.reduce((m, c) => m.set(c.name, (m.get(c.name) || 0) + 1), new Map());
+  const a = count(base);
+  const b = count(stage17);
+  const expected = {
+    カエンタケ: -1, 人魂: -2, 煉獄の門番兵: +1, 炎の魔導士: +1,
+    // 雷雲2→テンホウ3。上の3枚→2枚のぶん1枠余るので、ユーザー判断で
+    // テンホウを3枚にして40枚へ合わせた（2026-09）。
+    雷雲: -2, テンホウ: +3,
+    レインボーカメレオン: -1, くぐつの剣豪: +1,
+    ファイアキック: -1, ボムボックリ: +1,
+    発電鬼: -1, 甲鉄要塞: +1,
+    平家の鎧: -1, ダイヤモンドの盾: +1,
+    ハリネズミの服: -1, 異次元ソケット: +1,
+    諸刃の剣: -1, イカサマのサイコロ: +1,
+  };
+  const actual = {};
+  for (const name of new Set([...a.keys(), ...b.keys()])) {
+    const diff = (b.get(name) || 0) - (a.get(name) || 0);
+    if (diff !== 0) actual[name] = diff;
+  }
+  assert.deepEqual(actual, expected);
+
+  // 古代のギア9枚（ガシャーン合体の素）は⑰でもそのまま残す。
+  for (const gear of ['古代のギアA', '古代のギアB', '古代のギアC']) {
+    assert.equal(b.get(gear), 3, `${gear}が3枚でない`);
+  }
+  const elems = (cards) => cards.filter((c) => c.type === CardType.MONSTER)
+    .reduce((m, c) => ({ ...m, [c.element]: (m[c.element] || 0) + 1 }), {});
+  assert.deepEqual(elems(base), { neutral: 11, fire: 6, thunder: 6 });
+  assert.deepEqual(elems(stage17), { neutral: 11, fire: 4, forest: 1, thunder: 7 });
+});
+
+test('⑰海底労働施設のステージ定義（仮実装）', () => {
+  const stage = STORY_STAGES.find((s) => s.key === 'roudou');
+  assert.ok(stage, '⑰がSTORY_STAGESに無い');
+  assert.equal(STORY_STAGES.indexOf(stage), 16, '⑯の次に並んでいること');
+  assert.equal(stage.format, '2vs2');
+  assert.equal(stage.goalCurrency, 24000, '同盟合算の目標（本編で現行最高）');
+  assert.equal(stage.heroAllianceId, 'red');
+  assert.equal(stage.enemyAllianceId, 'white');
+
+  // 味方＝川田（⑮のkawadaをそのまま流用）、敵＝ムール＋ダンボール男の⑰専用デッキ。
+  assert.equal(stage.ally.name, '川田');
+  assert.equal(stage.ally.deckKey, 'kawada');
+  assert.deepEqual(stage.opponents.map((o) => o.name), ['ムール', 'ダンボール男']);
+  assert.deepEqual(stage.opponents.map((o) => o.deckKey), ['roudouMuuru', 'roudouDanball']);
+  for (const key of ['kawada', 'roudouMuuru', 'roudouDanball']) {
+    assert.equal(buildCharacterCardList(key).length, 40, `${key}が40枚でない`);
+  }
+  // マダイは冒頭の会話に出るだけで対戦には絡まない（ユーザー指定）。
+  assert.ok(!stage.opponents.some((o) => /マダイ/.test(o.name)));
+  assert.ok(!/マダイ/.test(stage.ally.name));
+
+  // outroの川田の台詞は withHeroName が置換できるよう「主人公」を素で書く。
+  const kawadaLine = stage.outro.find((l) => l.speaker === '川田');
+  assert.match(kawadaLine.text, /主人公はチヌのもとに行くんだろう/);
+  assert.ok(!/（主人公）/.test(kawadaLine.text), '丸括弧付きだとwithHeroNameが置換できない');
+
+  // 仮実装なのでマップはwipのまま（対戦モードの選択肢へ出さない）。
+  const map = MAPS.find((m) => m.id === 'roudou');
+  assert.ok(map.wip, '仮実装のうちはwipを外さない');
+  assert.ok(map.hasOfuda, 'お札あり（ユーザー指定）');
+  assert.equal(map.checkpointBonus, 150);
+  assert.ok(map.requireAllCheckpoints);
+  assert.ok(map.background, '背景未指定だとCSSにundefinedが入る');
+});
+
+test('⑰の盤面は洞窟型39マス・CP3・4属性均等（連鎖は全属性3+3+1+1）', () => {
+  const tiles = createBoard('roudou');
+  assert.equal(tiles.length, 39, '土地35＋スタート1＋CP3');
+  assert.equal(tiles.filter((t) => t.type === TileType.START).length, 1);
+  const cps = tiles.filter((t) => t.type === TileType.EVENT);
+  assert.deepEqual(cps.map((t) => t.checkpointNumber), [1, 2, 3]);
+
+  // 全マスがスタートから到達できること。
+  const seen = new Set([0]);
+  const stack = [0];
+  while (stack.length) for (const n of tiles[stack.pop()].neighbors) if (!seen.has(n)) { seen.add(n); stack.push(n); }
+  assert.equal(seen.size, tiles.length, '孤立したマスがある');
+
+  // 行き止まりはスタートとCP①の2つだけ（どちらも_movePlayerの折り返しで成立）。
+  assert.deepEqual(tiles.filter((t) => t.neighbors.length === 1).map((t) => t.id), [0, 2]);
+
+  // 属性は4種各8マス＋無属性3マス。
+  const counts = {};
+  for (const t of tiles.filter((t) => t.type === TileType.LAND)) counts[t.element] = (counts[t.element] || 0) + 1;
+  assert.deepEqual(counts, { fire: 8, water: 8, forest: 8, thunder: 8, neutral: 3 });
+
+  // 連鎖の偏りが無いこと: 4属性とも「3マスの塊×2＋単独×2」。
+  for (const element of ['fire', 'water', 'thunder', 'forest']) {
+    const pts = new Set(tiles.filter((t) => t.element === element).map((t) => t.id));
+    const sizes = [];
+    const done = new Set();
+    for (const id of pts) {
+      if (done.has(id)) continue;
+      let size = 0;
+      const st = [id];
+      done.add(id);
+      while (st.length) {
+        const cur = st.pop();
+        size += 1;
+        for (const n of tiles[cur].neighbors) if (pts.has(n) && !done.has(n)) { done.add(n); st.push(n); }
+      }
+      sizes.push(size);
+    }
+    assert.deepEqual(sizes.sort((a, b) => b - a), [3, 3, 1, 1], `${element}の連鎖分布が崩れている`);
+  }
+});
