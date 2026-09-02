@@ -1258,6 +1258,86 @@ export const STORY_STAGES = [
       },
     ],
   },
+  {
+    key: 'roudou',
+    title: '⑰ 海底労働施設（仮実装）',
+    // ⚠️ 仮実装（2026-09）。専用の背景画像・BGM・マダイ係長の会話演出が未着手
+    // なので、board.js側もwip:trueのまま。詳細はCLAUDE.md「⑰海底労働施設」。
+    format: '2vs2',
+    // 同盟合算の目標（_totalAssetsOfはチーム合算）。本編で現行最高。
+    goalCurrency: 24000,
+    heroAllianceId: 'red',
+    enemyAllianceId: 'white',
+    ally: {
+      name: '川田',
+      color: 0x4a6d8c,
+      // ⑮の`kawada`をそのまま流用（ユーザー指定「川田はそのままで仮実装して」）。
+      deckKey: 'kawada',
+      theme: { elements: [Element.WATER] },
+    },
+    intro: [
+      { speaker: '???', text: '劣悪な岩穴。囚人たちは鞭の下で、来る日も来る日も藻を採取させられていた。' },
+      { speaker: '主人公', text: 'はぁ、はぁ。今日のノルマまであと15往復…' },
+      { speaker: '???', text: 'おい、主人公。タラタラやってんじゃねえぞ！！' },
+      { speaker: '主人公', text: 'ヒッ、係長！！申し訳ありません…' },
+      { speaker: 'マダイ係長', text: 'チャキチャキやれ！！ノルマ分を納めないと看守にしばかれるぞ！！' },
+      { speaker: '主人公', text: 'は、はい。急ぎます' },
+      { speaker: 'マダイ係長', text: '無茶はすんなよ。いつここから出られるかはわかんねえが、俺だって真面目にやってるんだ。チクショウ、チヌの野郎…' },
+      { speaker: '主人公', text: '（俺は…もうダメだ…チヌに逆らわず、田舎で遊んでりゃ良かった）' },
+      { speaker: '主人公', text: '（いつになったら出られるんだろう…はらへった…）' },
+      { speaker: '???', text: '随分と、しょぼくれた顔になったじゃないか。' },
+      { speaker: '主人公', text: 'だれだっ！！…川田？お前もここに居たのか！' },
+      { speaker: '川田', text: 'なんだ、まだ死んでないじゃないか。俺はお前を手引きした罪でしょっ引かれたよ。' },
+      { speaker: '主人公', text: '俺のせいで…面目ねぇ…' },
+      { speaker: '川田', text: 'いや、かえって好都合だがね。ここに来る必要があったから。' },
+      { speaker: '主人公', text: 'どういう意味だ？' },
+      { speaker: '川田', text: 'ここには、仲間が、たくさんいる。お前が掘ってる岩の向こう側だけどな。' },
+      { speaker: '主人公', text: '岩の向こう…？　毎日削ってたのに、気づきもしなかった' },
+      { speaker: '主人公', text: 'どうするつもりだ？' },
+      { speaker: '川田', text: '決まっているだろう。仲間と結託し、海底労働施設を壊す。チヌの力の源泉はここから生み出されるＧだ。ほれ、どいてろ。ちょいちょいっとな。' },
+      { speaker: '主人公', text: 'お、おい！　何する気だ！？' },
+      { speaker: '主人公', text: '岩が崩れた！！' },
+      { speaker: '川田', text: '俺は今から暴れてくる。お前も来るか？' },
+      { speaker: '主人公', text: 'あたりまえだっ！！' },
+      { speaker: '???', text: '囚人達は一斉に蜂起した！！' },
+      { speaker: '???', text: '随分と騒がしいですね。' },
+      { speaker: 'ムール', text: 'おや、また貴方達ですか。懲りないですね。' },
+      { speaker: '主人公', text: 'てめぇ！！今度こそやってやる！！' },
+      { speaker: 'ムール', text: 'フフフ、何度やっても無駄ですけどね。そうそう、面白い人が仲間に加わったんですよ。' },
+      { speaker: '川田', text: '誰だ？' },
+      { speaker: 'ムール', text: 'ダンボールさん、この者達を始末しなさい' },
+      { speaker: 'ダンボール男', text: 'ぐ…俺が…殺る…' },
+      { speaker: '主人公', text: 'ダンボール男まで…！！チヌの野郎、許せねえ！！' },
+      { speaker: 'ムール', text: '私達2人相手に貴方達で勝てますかね？身の程を教えてあげましょう' },
+    ],
+    outro: [
+      { speaker: 'ダンボール男', text: 'おれ　は　しょうき　に　もどった　のか！？' },
+      { speaker: '主人公', text: '知らねえよ！！元ネタが古いんだよ！！' },
+      // ⚠️「主人公」は丸括弧を付けずそのまま書く。withHeroName(main.js)が表示直前に
+      // プレイヤーのキャラ名へ置換する（⑬でお肉が「お、主人公やんけ」と呼ぶのと同じ）。
+      { speaker: '川田', text: 'レジスタンスの解放にご協力ありがとう。主人公はチヌのもとに行くんだろう？配下は俺たちに任せろ。' },
+      { speaker: 'ムール', text: '...やれやれ。あなた達では王には勝てないでしょうけど、がんばってください。' },
+      { speaker: '主人公', text: '止めないのか？' },
+      { speaker: 'ムール', text: '私は『プロ』として職務を全うしたまでです。ルールはルールであり、それ以上でも以下でもない。それが私の正義。' },
+      { speaker: '主人公', text: 'ムールらしいな。' },
+      { speaker: 'ムール', text: 'あなたの延滞税はどんどん加算されてますけどね' },
+      { speaker: '主人公', text: '！？！？！？' },
+    ],
+    opponents: [
+      {
+        name: 'ムール',
+        color: 0x3949ab,
+        deckKey: 'roudouMuuru',
+        theme: { elements: [Element.WATER] },
+      },
+      {
+        name: 'ダンボール男',
+        color: 0x8d6e63,
+        deckKey: 'roudouDanball',
+        theme: { elements: [Element.NEUTRAL, Element.THUNDER, Element.FIRE] },
+      },
+    ],
+  },
 ];
 
 export function isStageUnlocked(character, index) {

@@ -3149,3 +3149,80 @@ test('⑰のダンボール男専用デッキ(roudouDanball)は40枚で、⑤の
   assert.deepEqual(elems(base), { neutral: 11, fire: 6, thunder: 6 });
   assert.deepEqual(elems(stage17), { neutral: 11, fire: 4, forest: 1, thunder: 7 });
 });
+
+test('⑰海底労働施設のステージ定義（仮実装）', () => {
+  const stage = STORY_STAGES.find((s) => s.key === 'roudou');
+  assert.ok(stage, '⑰がSTORY_STAGESに無い');
+  assert.equal(STORY_STAGES.indexOf(stage), 16, '⑯の次に並んでいること');
+  assert.equal(stage.format, '2vs2');
+  assert.equal(stage.goalCurrency, 24000, '同盟合算の目標（本編で現行最高）');
+  assert.equal(stage.heroAllianceId, 'red');
+  assert.equal(stage.enemyAllianceId, 'white');
+
+  // 味方＝川田（⑮のkawadaをそのまま流用）、敵＝ムール＋ダンボール男の⑰専用デッキ。
+  assert.equal(stage.ally.name, '川田');
+  assert.equal(stage.ally.deckKey, 'kawada');
+  assert.deepEqual(stage.opponents.map((o) => o.name), ['ムール', 'ダンボール男']);
+  assert.deepEqual(stage.opponents.map((o) => o.deckKey), ['roudouMuuru', 'roudouDanball']);
+  for (const key of ['kawada', 'roudouMuuru', 'roudouDanball']) {
+    assert.equal(buildCharacterCardList(key).length, 40, `${key}が40枚でない`);
+  }
+  // マダイは冒頭の会話に出るだけで対戦には絡まない（ユーザー指定）。
+  assert.ok(!stage.opponents.some((o) => /マダイ/.test(o.name)));
+  assert.ok(!/マダイ/.test(stage.ally.name));
+
+  // outroの川田の台詞は withHeroName が置換できるよう「主人公」を素で書く。
+  const kawadaLine = stage.outro.find((l) => l.speaker === '川田');
+  assert.match(kawadaLine.text, /主人公はチヌのもとに行くんだろう/);
+  assert.ok(!/（主人公）/.test(kawadaLine.text), '丸括弧付きだとwithHeroNameが置換できない');
+
+  // 仮実装なのでマップはwipのまま（対戦モードの選択肢へ出さない）。
+  const map = MAPS.find((m) => m.id === 'roudou');
+  assert.ok(map.wip, '仮実装のうちはwipを外さない');
+  assert.ok(map.hasOfuda, 'お札あり（ユーザー指定）');
+  assert.equal(map.checkpointBonus, 150);
+  assert.ok(map.requireAllCheckpoints);
+  assert.ok(map.background, '背景未指定だとCSSにundefinedが入る');
+});
+
+test('⑰の盤面は洞窟型39マス・CP3・4属性均等（連鎖は全属性3+3+1+1）', () => {
+  const tiles = createBoard('roudou');
+  assert.equal(tiles.length, 39, '土地35＋スタート1＋CP3');
+  assert.equal(tiles.filter((t) => t.type === TileType.START).length, 1);
+  const cps = tiles.filter((t) => t.type === TileType.EVENT);
+  assert.deepEqual(cps.map((t) => t.checkpointNumber), [1, 2, 3]);
+
+  // 全マスがスタートから到達できること。
+  const seen = new Set([0]);
+  const stack = [0];
+  while (stack.length) for (const n of tiles[stack.pop()].neighbors) if (!seen.has(n)) { seen.add(n); stack.push(n); }
+  assert.equal(seen.size, tiles.length, '孤立したマスがある');
+
+  // 行き止まりはスタートとCP①の2つだけ（どちらも_movePlayerの折り返しで成立）。
+  assert.deepEqual(tiles.filter((t) => t.neighbors.length === 1).map((t) => t.id), [0, 2]);
+
+  // 属性は4種各8マス＋無属性3マス。
+  const counts = {};
+  for (const t of tiles.filter((t) => t.type === TileType.LAND)) counts[t.element] = (counts[t.element] || 0) + 1;
+  assert.deepEqual(counts, { fire: 8, water: 8, forest: 8, thunder: 8, neutral: 3 });
+
+  // 連鎖の偏りが無いこと: 4属性とも「3マスの塊×2＋単独×2」。
+  for (const element of ['fire', 'water', 'thunder', 'forest']) {
+    const pts = new Set(tiles.filter((t) => t.element === element).map((t) => t.id));
+    const sizes = [];
+    const done = new Set();
+    for (const id of pts) {
+      if (done.has(id)) continue;
+      let size = 0;
+      const st = [id];
+      done.add(id);
+      while (st.length) {
+        const cur = st.pop();
+        size += 1;
+        for (const n of tiles[cur].neighbors) if (pts.has(n) && !done.has(n)) { done.add(n); st.push(n); }
+      }
+      sizes.push(size);
+    }
+    assert.deepEqual(sizes.sort((a, b) => b - a), [3, 3, 1, 1], `${element}の連鎖分布が崩れている`);
+  }
+});

@@ -337,6 +337,36 @@ const CHINU_ROWS = [
   'GFFWWMMTTNCMMWWTTFFC',
 ];
 
+// ⑰海底労働施設（ユーザーが枡目の絵で指定した洞窟型）。10列×10行、実マス39
+// （土地35＋スタート1＋CP3）。⚠️ `createBoard`は`rows[0].length`で幅を決めるので
+// **全行を10文字へ`.`で右詰めすること**（1行目を'G'だけにすると幅1に潰れる）。
+//
+// 成立確認済み（4方向隣接で実際に辿って検証、tests/newCards.test.mjs）:
+// ・全マスがスタートから到達可能。辺41・頂点39で独立閉路3＝周回ルートが3本。
+// ・分岐は6か所。行き止まりはスタート(0,0)とCP①(9,1)の2つだけで、どちらも
+//   `_movePlayer`の折り返し（forwardが空なら来た道へ戻る）で成立する。
+//   CP①が袋小路なのでrequireAllCheckpointsと合わせて「奥まで取りに行って
+//   引き返す」洞窟らしい寄り道になる。
+// ・CPの番号順（gz→gxの走査順）は ①(9,1)右上 → ②(7,8)右下 → ③(2,9)左下。
+//
+// 属性は「連続3マス1セットで4属性均等」＋「余った無属性8マスへ4属性を2つずつ
+// ランダム配置」（ユーザー指定）。結果は火/水/雷/森が各8マス、無属性3マス。
+// ⚠️ 連鎖の分布は4属性とも 3+3+1+1 で揃えてある。抽選直後は(0,4)の火が既存の
+// 火3セットと繋がって左端だけ4連鎖になっていたため、(0,4)を火→水、(6,3)を
+// 水→火へ入れ替えた（(0,4)の隣は火・雷・森なので単独で置ける属性は水だけ）。
+const ROUDOU_ROWS = [
+  'G.........',
+  'F........C',
+  'F........W',
+  'F.....FMWW',
+  'WTTTMMM...',
+  'M.....T...',
+  'M....NTT..',
+  'MTN..F.W..',
+  'T.F..FFC..',
+  'NMCWWW....',
+];
+
 /**
  * ⑬の島判定。上段は3列に分かれた周回島（gridXの帯で見分ける）、
  * gridZ 8以降がゴール島。ワープの飛び先候補（ゴール島⇔CP島の往復だけ。
@@ -406,6 +436,10 @@ export const MAPS = [
   // ⑯はストーリー専用。1行20マスの細長い盤面なので対戦モードへ出す前提が
   // 無く、wipは外さない想定。背景は専用の「王の間」（海中の玉座の間）。
   { id: 'chinu', name: '⑯ 魚群の王チヌ', wip: true, rows: CHINU_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/king-room.png'), spacing: 2.8 },
+  // ⑰はストーリー専用の仮実装。専用背景とBGMがまだ無いので、用意できるまで
+  // 背景は⑮の裏路地を流用している（getMapBackgroundはフォールバックを持たず
+  // undefinedをそのままCSSへ入れてしまうため、必ず何かを指定すること）。
+  { id: 'roudou', name: '⑰ 海底労働施設', wip: true, rows: ROUDOU_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage15-kawada-alley.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {
