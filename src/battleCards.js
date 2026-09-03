@@ -823,8 +823,12 @@ function buildRandomSpellSelection(count) {
   for (const c of pool) {
     if (byRarity[c.rarity]) byRarity[c.rarity].push(c);
   }
-  const picks = [];
-  for (let i = 0; i < count; i++) {
+  // 汎用CPUにも最低限の展開手段を確保する。残りは従来どおり
+  // レアリティ抽選にして、デッキごとの揺らぎと多様性は維持する。
+  const coreIds = ['sideIncome', 'diceSix', 'iCanFly', 'heal'];
+  const picks = coreIds.slice(0, Math.min(count, coreIds.length))
+    .map((id) => SPELL_CATALOG[id]).filter(Boolean);
+  for (let i = picks.length; i < count; i++) {
     const roll = Math.random();
     const rarity = roll < 0.1 ? Rarity.R : roll < 0.3 ? Rarity.S : Rarity.N;
     const tier = byRarity[rarity].length ? byRarity[rarity] : byRarity[Rarity.N];

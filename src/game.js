@@ -6443,7 +6443,12 @@ export class Game {
    *  自由に召喚でき、中盤以降は高くなり高コストカードでの散財を抑える。上限は
    *  召喚・レベルアップをある程度積極的に回せるよう500Gでキャップ。 */
   _cpuSummonReserve(player) {
-    return Math.min(this._cpuMaxEnemyToll(player), 500);
+    const tollReserve = Math.min(this._cpuMaxEnemyToll(player), 500);
+    // 召喚で現金を使い切ると、次の自分の土地レベルアップ（最低300G）を
+    // 逃し続けて盤面の資産差が広がる。通常CPUは最低300Gを投資用に残し、
+    // ばら撒き特化の塞ぎ込んだ男だけは展開を優先して120Gに抑える。
+    const levelUpReserve = player.aiProfile?.scatterSummons ? 120 : 300;
+    return Math.max(tollReserve, levelUpReserve);
   }
 
   /** 盤上で自分が払い得る最大の敵地（非同盟）通行料。CPUの各種「散財しすぎ防止」の基準。 */
