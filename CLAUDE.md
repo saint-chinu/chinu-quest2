@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v284`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v285`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ## チュートリアルの不自然さ修正（2026-08、ユーザー報告）
@@ -677,8 +677,66 @@ story.js`roudou` / board.js`ROUDOU_ROWS`(id:'roudou')。⑯で敗北した主人
   `TRACK_SRC.seaLabor` / `MAP_TRACK.roudou` / 対人戦のBGM選択に登録済み。
 - **マダイ係長の立ち絵**は②の`madai.png`を`npcArt.js`へ「マダイ係長」名義で
   登録して流用中（同一人物。②では「暴君マダイ」名義）。専用絵があれば差し替える。
-- AIプロファイル（opponents[].aiProfile）は未設定。
+- ✅ **AIプロファイルは設定済み**（下記）。
 - 決着後の進行（⑱へ繋ぐ演出）は未着手。
+
+### AIプロファイル（2026-09、2vs2シミュレータで計測して決定）
+**結論: ムール・ダンボール男の両方に`{ ofudaStyle: 'fixer' }`だけを載せる。**
+
+| 構成 | 敵側勝率 |
+|---|---|
+| 何も載せない（⑨/⑤の性格のまま） | 98/360 **27.2%** |
+| **両方に`ofudaStyle:'fixer'`（採用）** | 134/359 **37.3%** |
+
+差**+10.1pt**、差のSE 3.46pt＝**2.9σ**（seed 1-4の120戦で当たりを付け、
+独立なseed 5-12の240戦で追試して合算）。story.js経由の実測でも
+未使用のseed=21で36.7%と一致。
+
+⚠️ **効かなかったもの（全て誤差。各120戦）**——同じ道を二度通らないための記録:
+- 性格パラメータ4種はどれも動かない。ベースライン30.0%に対し、
+  ムールの属性緩和(`offElementSummonChance` 0→0.4)27.5%／攻め寄せ
+  (`minWinProbabilityToInvade` 0.5→0.35＋`highValueAvoidance` 0.45→0.25)28.3%／
+  両方28.3%／ダンボール男の`scatterSummons`28.3%／全部乗せ27.5%。SEは約4.2pt。
+  - 仮説としては`offElementSummonChance: 0`（ムールの属性厳守）が筋が良かった。
+    ⑰用デッキに森2・雷2を入れたのに属性厳守だと腐るため。**それでも動かない。**
+- `counterOfudaBuy`（対抗買い）30.8%、ダンボール男を`lapRacer`（周回役）に
+  30.8%——どちらもfixer単体より悪い。
+- ⚠️ **⑬のクエ型fixerをそのまま持ってくると逆効果（23.3%、-6.7pt）**。
+  `minWinProbabilityToInvade:0.95`/`itemGambleChance:0`/`highValueAvoidance:0.9`
+  で戦闘を徹底回避させる部分が⑰では足を引っ張る。⑬のクエは「相方のQが
+  土地を育てる」前提の役割分担だが、⑰のダンボール男は**くぐつの剣豪と
+  テンホウ3枚を持つ攻め札のデッキ**なので、戦闘を捨てさせると持ち味が死ぬ。
+  同じfixerでも**戦闘性は⑨/⑤の性格のまま、お札だけ買わせる**のが⑰の正解。
+- ⚠️ **片方だけでは効かない**（ムール単体33.3%／ダンボール男単体34.2%）。
+  どちらも誤差の範囲で、2人とも持たせて初めて有意になる。
+
+🔗 効く理由は「目標24,000Gの長期戦」。お札の含み益と周回利回りが積み上がる
+時間があるので、Gを盤面だけに使うより相場へ回した方が伸びる。⑮の川田で
+「性格パラメータでは勝率が動かず、効いたのは展開エンジンの非対称性だった」
+のと同じ構図で、**このゲームは性格の数値より経済エンジンの有無で決まる**。
+
+回帰テスト: `npm run test:cards`「⑰の敵AIは両方ともお札のfixer（片方だけでは
+効かない）」。2人とも`ofudaStyle:'fixer'`であることと、戦闘性の数値を
+上書きしていないこと（＝⑬のクエ型の失敗を繰り返さないこと）を見張る。
+
+#### 2vs2の計測方法
+`tools/simulate.mjs`を2vs2対応にしてある（2026-09）。
+```
+npm run simulate -- --map=roudou \
+  --deckA=@tools/decks/hinanjo-deck2.json --nameA=主人公 --allyA=kawada \
+  --deckB=roudouMuuru --allyB=roudouDanball \
+  --games=30 --seed=1 --maxTurns=400 --quiet
+```
+- `--allyA`/`--allyB`で相方を足すと同盟戦になる（座席 A→B→A2→B2、
+  allianceIdはred/white）。
+- `--aiA`/`--aiB`/`--aiA2`/`--aiB2`にJSONを渡すとAI性格を部分上書きできる。
+  story.jsの`opponents[].aiProfile`と同じ形なので、良い値が見つかったら
+  そのまま移せる。
+- ⚠️ **主人公役には実プレイヤーのデッキを使うこと**。最初`--deckA=kawada`
+  （川田を2枚）で測っていたが、くぐつの剣豪が盤面に6枚になって敵が土地を
+  1枚も保てず、まったく実態と違う結果になった。
+- ⚠️ **`--maxTurns=400`が要る**。既定の200だと目標24,000Gに届く前に
+  半分以上が打ち切りになり、決着した試合だけの偏った勝率になる。
 
 ### 実装の要点（回帰テスト付き）
 - `format:'2vs2'`、`heroAllianceId:'red'`/`enemyAllianceId:'white'`、

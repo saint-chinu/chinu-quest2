@@ -1327,12 +1327,23 @@ export const STORY_STAGES = [
         color: 0x3949ab,
         deckKey: 'roudouMuuru',
         theme: { elements: [Element.WATER] },
+        // ⚠️ **お札を買い集めさせるのが⑰で唯一効いた調整**（2026-09、
+        // 2vs2シミュレータで計測）。目標24,000Gの長期戦なので、お札の含み益と
+        // 周回利回りが積み上がる時間がある。ムール・ダンボール男の両方に
+        // 持たせた時だけ有意差が出た: 敵側勝率 98/360(27.2%) → 134/359(37.3%)、
+        // 差+10.1pt（SE 3.46pt＝2.9σ）。
+        // ⚠️ **⑬のクエ型（戦闘を徹底回避するfixer）をそのまま持ってくると逆効果**
+        // （23.3%、-6.7pt）。minWinProbabilityToInvade:0.95 等で戦闘を捨てさせる
+        // 部分が⑰では足を引っ張る。戦闘性は⑨/⑤の性格のまま、お札だけ買わせる。
+        aiProfile: { ofudaStyle: 'fixer' },
       },
       {
         name: 'ダンボール男',
         color: 0x8d6e63,
         deckKey: 'roudouDanball',
         theme: { elements: [Element.NEUTRAL, Element.THUNDER, Element.FIRE] },
+        // 同上。片方だけでは+3〜4ptで誤差に埋もれ、両方に持たせて初めて効く。
+        aiProfile: { ofudaStyle: 'fixer' },
       },
     ],
   },

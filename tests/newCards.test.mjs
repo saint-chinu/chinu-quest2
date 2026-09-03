@@ -3226,3 +3226,24 @@ test('⑰の盤面は洞窟型39マス・CP3・4属性均等（連鎖は全属�
     assert.deepEqual(sizes.sort((a, b) => b - a), [3, 3, 1, 1], `${element}の連鎖分布が崩れている`);
   }
 });
+
+test('⑰の敵AIは両方ともお札のfixer（片方だけでは効かない）', () => {
+  // 2vs2シミュレータでの計測（CLAUDE.md「⑰のAIプロファイル」参照）:
+  // 敵側勝率 98/360(27.2%) → 134/359(37.3%)、差+10.1pt（SE 3.46pt＝2.9σ）。
+  // ⚠️ 片方だけだと+3〜4ptで誤差に埋もれる。必ず2人とも持たせること。
+  const stage = STORY_STAGES.find((s) => s.key === 'roudou');
+  assert.deepEqual(
+    stage.opponents.map((o) => o.aiProfile?.ofudaStyle),
+    ['fixer', 'fixer'],
+  );
+  // ⚠️ ⑬のクエ型（戦闘を徹底回避するfixer）は⑰では逆効果だった（23.3%）。
+  // 戦闘性の数値は⑨/⑤の名前ベースの性格のまま＝ここで上書きしない。
+  for (const o of stage.opponents) {
+    for (const key of ['minWinProbabilityToInvade', 'itemGambleChance', 'highValueAvoidance']) {
+      assert.equal(o.aiProfile[key], undefined,
+        `${o.name}の${key}を上書きすると⑬のクエ型と同じ失敗を繰り返す`);
+    }
+  }
+  // お札マップでないと ofudaStyle が意味を持たない。
+  assert.ok(MAPS.find((m) => m.id === 'roudou').hasOfuda);
+});
