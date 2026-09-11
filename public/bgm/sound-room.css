@@ -1,0 +1,414 @@
+/* チヌクエスト サウンドルーム（/bgm/）。
+   ゲーム本体(src/style.css)とは独立した単体ページなので、ここだけで閉じている。
+   既定は「深海」、ライトテーマは「海図」に振ってある。 */
+
+:root {
+  --abyss:   #071318;
+  --surface: #0d2028;
+  --raised:  #122c35;
+  --line:    #1b3a44;
+  --ink:     #dbeef1;
+  --muted:   #7fa3ab;
+  --accent:  #3fe0c0;
+  --accent-dim: #3fe0c033;
+  --buoy:    #f0a03c;
+  --sel:     #3fe0c014;
+  --art-fade: 0.88;
+  --shadow:  0 18px 40px -24px #000c;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --abyss:   #e7eeee;
+    --surface: #fbfdfd;
+    --raised:  #f1f6f6;
+    --line:    #c6d6d8;
+    --ink:     #0d2730;
+    --muted:   #547079;
+    --accent:  #0d8a74;
+    --accent-dim: #0d8a7426;
+    --buoy:    #b56b0e;
+    --sel:     #0d8a7412;
+    --art-fade: 1;
+    --shadow:  0 16px 34px -26px #0d273066;
+    color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --abyss:   #e7eeee;
+  --surface: #fbfdfd;
+  --raised:  #f1f6f6;
+  --line:    #c6d6d8;
+  --ink:     #0d2730;
+  --muted:   #547079;
+  --accent:  #0d8a74;
+  --accent-dim: #0d8a7426;
+  --buoy:    #b56b0e;
+  --sel:     #0d8a7412;
+  --art-fade: 1;
+  --shadow:  0 16px 34px -26px #0d273066;
+  color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+img { max-width: 100%; }
+
+body {
+  margin: 0;
+  background: var(--abyss);
+  color: var(--ink);
+  font-family: "Zen Kaku Gothic New", "Hiragino Kaku Gothic ProN", "Yu Gothic", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.7;
+  -webkit-font-smoothing: antialiased;
+}
+
+.wrap {
+  max-width: 1020px;
+  margin: 0 auto;
+  padding-inline: 20px;
+  padding-block: 0 64px;
+}
+
+/* ── 見出し ───────────────────────────────── */
+.masthead { padding-block: 40px 22px; }
+.eyebrow {
+  font-family: "M PLUS 1 Code", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 0 0 10px;
+}
+h1 {
+  font-family: "Shippori Mincho B1", "Yu Mincho", serif;
+  font-weight: 800;
+  font-size: clamp(30px, 6vw, 46px);
+  line-height: 1.18;
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-wrap: balance;
+}
+.lede {
+  max-width: 60ch;
+  color: var(--muted);
+  margin: 14px 0 0;
+  font-size: 14px;
+}
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px 26px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--line);
+  font-family: "M PLUS 1 Code", ui-monospace, monospace;
+  font-size: 12.5px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.stats b { color: var(--ink); font-weight: 500; }
+.stats .back {
+  margin-left: auto;
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+}
+.stats .back:hover { border-bottom-color: var(--accent); }
+.stats .back:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* ── 卓（固定プレイヤー） ─────────────────── */
+.console {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin-inline: -20px;
+  padding: 16px 20px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  backdrop-filter: blur(14px);
+  border-bottom: 1px solid var(--line);
+  box-shadow: var(--shadow);
+}
+.console-grid {
+  max-width: 980px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 168px minmax(0, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+.art-window {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  background: var(--raised);
+  overflow: hidden;
+}
+.art-window img {
+  width: 100%; height: 100%;
+  object-fit: cover;
+  display: block;
+  opacity: var(--art-fade);
+  transition: opacity .5s ease;
+}
+.art-window::after {
+  content: "";
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(to bottom, #0000 0 3px, #0000000f 3px 4px);
+  pointer-events: none;
+}
+.art-stamp {
+  position: absolute; left: 0; bottom: 0;
+  font-family: "M PLUS 1 Code", ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: .12em;
+  padding: 3px 8px;
+  background: #071318cc;
+  color: #dbeef1;
+}
+
+.deck { display: flex; flex-direction: column; min-width: 0; gap: 10px; }
+.now-label {
+  font-family: "M PLUS 1 Code", ui-monospace, monospace;
+  font-size: 10.5px;
+  letter-spacing: .2em;
+  color: var(--accent);
+  margin: 0;
+}
+.now-title {
+  font-family: "Shippori Mincho B1", "Yu Mincho", serif;
+  font-weight: 600;
+  font-size: clamp(19px, 3.6vw, 25px);
+  line-height: 1.25;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.now-sub {
+  font-size: 12.5px;
+  color: var(--muted);
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.now-sub code {
+  font-family: "M PLUS 1 Code", ui-monospace, monospace;
+  font-size: 11.5px;
+}
+
+#scope {
+  width: 100%;
+  height: 46px;
+  display: block;
+  background: var(--raised);
+  border: 1px solid var(--line);
+}
+
+.seek-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-family: "M PLUS 1 Code", ui-monospace, monospace;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+.seek {
+  position: relative;
+  flex: 1;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  touch-action: none;
+  border: 0; padding: 0; background: none;
+}
+.seek::before {
+  content: ""; position: absolute; inset-inline: 0; height: 3px;
+  background: var(--line);
+}
+.seek-fill {
+  position: absolute; left: 0; height: 3px;
+  background: var(--accent);
+  width: 0%;
+}
+.seek-head {
+  position: absolute; top: 50%;
+  width: 9px; height: 9px; margin-left: -4.5px;
+  transform: translateY(-50%) rotate(45deg);
+  background: var(--accent);
+  left: 0%;
+}
+.seek:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.transport { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+button {
+  font: inherit;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid var(--line);
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 2px;
+  transition: border-color .15s, background .15s, color .15s;
+}
+button:hover { border-color: var(--accent); color: var(--accent); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn-play {
+  min-width: 92px;
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+  font-weight: 700;
+  letter-spacing: .08em;
+}
+.btn-icon { font-family: "M PLUS 1 Code", ui-monospace, monospace; padding: 6px 10px; }
+.btn-toggle[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); background: var(--accent-dim); }
+.vol {
+  display: flex; align-items: center; gap: 7px;
+  font-family: "M PLUS 1 Code", ui-monospace, monospace;
+  font-size: 11px; color: var(--muted);
+  margin-left: auto;
+}
+.vol input { width: 92px; accent-color: var(--accent); cursor: pointer; }
+
+/* ── 曲リスト ─────────────────────────────── */
+.group { margin-top: 46px; }
+.group-head {
+  display: flex; align-items: baseline; gap: 14px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 10px;
+}
+.group-head h2 {
+  font-family: "Shippori Mincho B1", "Yu Mincho", serif;
+  font-weight: 600;
+  font-size: 20px;
+  letter-spacing: .08em;
+  margin: 0;
+}
+.group-head .count {
+  font-family: "M PLUS 1 Code", ui-monospace, monospace;
+  font-size: 11.5px;
+  color: var(--muted);
+  letter-spacing: .1em;
+}
+.group-note {
+  color: var(--muted);
+  font-size: 12.5px;
+  margin: 12px 0 0;
+  max-width: 62ch;
+}
+
+.list { margin-top: 6px; }
+.row {
+  display: grid;
+  grid-template-columns: 2.5rem 66px minmax(0, 1fr) 3.6rem;
+  gap: 16px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 12px 10px 12px 8px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
+}
+.row:hover { background: var(--sel); border-color: var(--line); color: var(--ink); }
+.row.is-playing { background: var(--sel); box-shadow: inset 3px 0 0 var(--accent); }
+.row-no {
+  font-family: "Shippori Mincho B1", "Yu Mincho", serif;
+  font-size: 17px;
+  color: var(--muted);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.row.is-playing .row-no { color: var(--accent); }
+.row-art {
+  aspect-ratio: 16 / 10;
+  width: 100%;
+  object-fit: cover;
+  display: block;
+  border: 1px solid var(--line);
+  opacity: var(--art-fade);
+}
+.row-art.is-blank {
+  background:
+    radial-gradient(120% 140% at 20% 0%, var(--accent-dim), transparent 60%),
+    var(--raised);
+}
+.row-main { min-width: 0; }
+.row-title {
+  font-family: "Shippori Mincho B1", "Yu Mincho", serif;
+  font-weight: 600;
+  font-size: 17px;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.row.is-playing .row-title { color: var(--accent); }
+.row-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-top: 2px;
+  overflow-wrap: anywhere;
+}
+.row-sub code {
+  font-family: "M PLUS 1 Code", ui-monospace, monospace;
+  font-size: 11px;
+}
+.meter { height: 2px; background: var(--line); margin-top: 9px; }
+.meter i { display: block; height: 2px; background: var(--muted); }
+.row.is-playing .meter i { background: var(--accent); }
+.row-time {
+  font-family: "M PLUS 1 Code", ui-monospace, monospace;
+  font-size: 12.5px;
+  color: var(--muted);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.tag {
+  display: inline-block;
+  font-family: "M PLUS 1 Code", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .1em;
+  padding: 0 5px;
+  margin-left: 6px;
+  border: 1px solid currentColor;
+  color: var(--buoy);
+  vertical-align: 2px;
+  line-height: 1.5;
+}
+.tag.gain { color: var(--accent); }
+
+/* 再生中はトラック番号をイコライザへ差し替える */
+.eq { display: inline-flex; gap: 2px; align-items: flex-end; height: 15px; }
+.eq span {
+  width: 3px; background: var(--accent);
+  animation: eqbounce .9s ease-in-out infinite;
+}
+.eq span:nth-child(2) { animation-delay: .18s; }
+.eq span:nth-child(3) { animation-delay: .36s; }
+@keyframes eqbounce { 0%, 100% { height: 4px; } 50% { height: 15px; } }
+
+footer {
+  margin-top: 54px;
+  padding-top: 18px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+footer code { font-family: "M PLUS 1 Code", ui-monospace, monospace; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .001s !important; transition-duration: .001s !important; }
+  .eq span { height: 9px; }
+}
+
+@media (max-width: 700px) {
+  .console-grid { grid-template-columns: 1fr; gap: 12px; }
+  .art-window { aspect-ratio: 16 / 7; }
+  .row { grid-template-columns: 2rem 52px minmax(0, 1fr) 3.2rem; gap: 11px; }
+  .vol { display: none; }
+  .stats .back { margin-left: 0; }
+}

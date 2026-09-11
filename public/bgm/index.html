@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>チヌクエスト サウンドルーム</title>
+<meta name="description" content="チヌクエスト2の全BGM19曲を、ステージ絵・尺・ファイル名つきで聴けるサウンドテスト。">
+<meta property="og:type" content="website">
+<meta property="og:title" content="チヌクエスト サウンドルーム">
+<meta property="og:description" content="チヌクエスト2の全BGM19曲を、ステージ絵・尺・ファイル名つきで聴けるサウンドテスト。">
+<meta property="og:image" content="https://saint-chinu.github.io/chinu-quest2/images/stage/thumb/s16.jpg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho+B1:wght@600;800&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=M+PLUS+1+Code:wght@400;500&display=swap">
+<link rel="stylesheet" href="./sound-room.css">
+</head>
+<body>
+
+<div class="wrap">
+  <header class="masthead">
+    <p class="eyebrow">Chinu Quest 2 — Sound Room</p>
+    <h1>チヌクエスト<br>サウンドルーム</h1>
+    <p class="lede">
+      ボード×カードの海洋RPG「チヌクエスト2」で実際に鳴っている曲を、ゲーム内と同じ並びで全曲収録。
+      ステージ曲は①から⑰まで物語順、下に全マップ共通の2曲。曲名はゲーム内BGM選択画面の表記そのままです。
+    </p>
+    <div class="stats">
+      <span><b id="statCount">19</b> 曲</span>
+      <span>総再生時間 <b id="statTime">46:46</b></span>
+      <span>ステージ曲 <b>17</b> / 共通曲 <b>2</b></span>
+      <span>最長 <b id="statLongest">⑭ 4:46</b></span>
+      <a class="back" href="../">ゲームへ →</a>
+    </div>
+  </header>
+
+  <section class="console" aria-label="プレイヤー">
+    <div class="console-grid">
+      <div class="art-window">
+        <img id="nowArt" alt="" src="../images/stage/thumb/s01.jpg">
+        <span class="art-stamp" id="nowStamp">STAGE 01</span>
+      </div>
+      <div class="deck">
+        <p class="now-label" id="nowLabel">選択中 — 再生待機</p>
+        <h2 class="now-title" id="nowTitle">♪はじまりの潮騒</h2>
+        <p class="now-sub" id="nowSub">① ヒトデの縄張り　<code>stage1newbgm.mp3</code></p>
+        <canvas id="scope" width="900" height="92" aria-hidden="true"></canvas>
+        <div class="seek-row">
+          <span id="tCur">0:00</span>
+          <button class="seek" id="seek" aria-label="再生位置">
+            <span class="seek-fill" id="seekFill"></span>
+            <span class="seek-head" id="seekHead"></span>
+          </button>
+          <span id="tDur">4:19</span>
+        </div>
+        <div class="transport">
+          <button class="btn-play" id="btnPlay" aria-label="再生">▶ 再生</button>
+          <button class="btn-icon" id="btnPrev" aria-label="前の曲">|◀</button>
+          <button class="btn-icon" id="btnNext" aria-label="次の曲">▶|</button>
+          <button class="btn-icon btn-toggle" id="btnRepeat" aria-pressed="false" title="1曲リピート">↻ 1曲</button>
+          <label class="vol" for="vol">音量
+            <input id="vol" type="range" min="0" max="100" value="80">
+            <span id="volVal">80</span>
+          </label>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="group">
+    <div class="group-head">
+      <h2>ステージ曲</h2>
+      <span class="count">① — ⑰ ／ 物語順</span>
+    </div>
+    <p class="group-note">
+      尺のバーは実ファイルの長さ。②③④⑥が30秒ちょうどなのは初期の仮素材で、⑧以降はステージごとの書き下ろしに切り替わっています。
+    </p>
+    <div class="list" id="listStage"></div>
+  </section>
+
+  <section class="group">
+    <div class="group-head">
+      <h2>共通曲</h2>
+      <span class="count">ステージに紐づかない2曲</span>
+    </div>
+    <p class="group-note">
+      専用曲が無いマップの既定曲と、全マップで共通の戦闘シーン曲。
+    </p>
+    <div class="list" id="listCommon"></div>
+  </section>
+
+  <footer>
+    <p>
+      音源は <code>public/audio/</code> の実ファイルをそのまま再生しています。曲名とマップ対応は <code>src/audio.js</code> の <code>SELECTABLE_BGM</code> / <code>MAP_TRACK</code>、ステージ名と背景は <code>src/board.js</code> の <code>MAPS</code> に準拠。
+      <span class="tag">WIP</span> は <code>wip: true</code> の開発中ステージ、<span class="tag gain">×1.4</span> はゲーム内で音量補正が掛かる曲です。
+    </p>
+  </footer>
+</div>
+
+<audio id="au" preload="none"></audio>
+<script type="module" src="./sound-room.js"></script>
+</body>
+</html>
