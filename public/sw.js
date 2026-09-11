@@ -1,4 +1,4 @@
-const CACHE_NAME = 'chinuquest2-v286';
+const CACHE_NAME = 'chinuquest2-v287';
 const APP_SHELL = ['./', './manifest.webmanifest', './icons/danballman-icon-192.png', './icons/danballman-icon-512.png'];
 
 self.addEventListener('install', (event) => {
@@ -23,7 +23,11 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        if (response.ok) caches.open(CACHE_NAME).then((cache) => cache.put(event.request, response.clone()));
+        // status 206（音声のシークで飛んでくるRange応答）はcache.putが必ず投げる。
+        // 握らないとSWが未処理のPromise拒否を出し続けるので、保存は素直に諦める。
+        if (response.ok && response.status !== 206) {
+          caches.open(CACHE_NAME).then((cache) => cache.put(event.request, response.clone())).catch(() => {});
+        }
         return response;
       })
       .catch(() => caches.match(event.request).then((cached) => cached || (isApplicationCode ? caches.match('./') : undefined)))

@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v286`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v287`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ### BGMコレクション `/bgm/`（2026-09）
@@ -25,7 +25,10 @@ sound-room.js）に置いてあり、**Viteは`public/`を素通しでコピー�
 - 曲リスト`TRACKS`は`src/audio.js`の`SELECTABLE_BGM`/`MAP_TRACK`と
   `src/board.js`の`MAPS`を手で写したもの。**曲やステージを足したらここも足す**。
   尺(`dur`)は実測値で、曲数・総時間・最長曲の表示はそこから自動計算している。
-- ゲーム本体からは未リンク（URLを知っている人だけが開ける状態）。
+- タイトル（ログイン画面）の「チュートリアルのデモプレイはこちら」の下に
+  `<a class="tutorial-demo-link title-side-link" href="bgm/">` で導線がある。
+  **ここも相対パス必須**。Viteが書き換えるのはassetとして解決できる参照だけで、
+  `<a href>`は素通しなので`/bgm/`と書くとGitHub Pagesで404になる。
 
 ## チュートリアルの不自然さ修正（2026-08、ユーザー報告）
 報告: 「スペルカードが手札にたまっていく一方」「CPUの方が先に5000G突破した

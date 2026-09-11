@@ -751,6 +751,15 @@ html, body {
   cursor: pointer;
 }
 
+/* タイトルからサウンドルーム(/bgm/)へ出る導線。チュートリアルのデモ誘導と
+   同じ見た目に揃えるが、aタグなので下線を消して自分の行を確保する。 */
+.title-side-link {
+  display: block;
+  width: fit-content;
+  margin-top: 10px;
+  text-decoration: none;
+}
+
 #tutorial-guide {
   position: fixed;
   inset: 0;
