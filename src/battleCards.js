@@ -1841,7 +1841,14 @@ export const CHARACTER_DECKS = {
    * この構成だと撒くほど水地の連鎖が育つ＝放水／国士無双と噛み合う。
    *
    * 水単色なので水神の盾の絶対反射が全モンスターで乗る（⑮で追加した属性神の盾が
-   * 本来の働きをする初めての場）。固定40枚。
+   * 本来の働きをする初めての場）。
+   *
+   * 固定40枚（モンスター20／アイテム4／スペル16）、うちEX13枚。
+   * ⚠️⚠️ **このデッキは「王の国庫」＝初期資金13,000Gが前提**。story.jsのステージを
+   * 起こす時は必ず `opponents[0].startingCurrency: 13000` を付けること
+   * （main.jsの`opponent.startingCurrency ?? stage.startingCurrency`で座席別に効く）。
+   * 高価なEXで殴るデッキなので、既定の500Gだと1枚も撃てず**勝率0%**まで落ちる。
+   * 目標総資産18,000Gとの組で敵側勝率53.8%（n=80）。詳細はCLAUDE.md「⑱の数値調整」。
    */
   chinu: {
     composition: {
@@ -1851,27 +1858,29 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.bigMermaid, count: 1 },            // R 120G 55/55
         { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 2 },      // R 100G 50/50
         { def: MONSTER_CATALOG.kaikyouSekishoKurage, count: 2 },  // R 80G 永続強制停止＝王の関所
-        { def: MONSTER_CATALOG.islandWhale, count: 3 },           // S 40G 資本主義の権化の弾
         { def: MONSTER_CATALOG.yukiOnna, count: 2 },              // S 50G 先制・全水属性ATK+30
-        { def: MONSTER_CATALOG.tsurara, count: 1 },               // S 50G 10/60の壁
-        { def: MONSTER_CATALOG.uminoieTencho, count: 1 },         // R 50G 全所有地回復＋呪い解除
-        { def: MONSTER_CATALOG.hangyojin, count: 1 },             // 50G 先制
+        { def: MONSTER_CATALOG.islandWhale, count: 3 },           // S 40G
+        // ⚠️ **30G以下の安物3種7枚は飾りではなく生命線**。初版にはこれが無く、
+        // 「安いモンスターを引けない→土地が取れない→収入が無い→高いEXが撃てない」
+        // の死のスパイラルに入って**土地1.3枚・勝率0%**だった（CLAUDE.md
+        // 「⑱の数値調整」参照）。安物を足したら同条件で土地20枚まで回復した。
+        { def: MONSTER_CATALOG.hiyashiChuka, count: 2 },          // 30G 10/40
+        { def: MONSTER_CATALOG.baketsuRelayTai, count: 2 },       // 30G 15/35
+        { def: MONSTER_CATALOG.suikenKurage, count: 3 },          // 10G 20/20
       ],
       items: [
         { def: ITEM_CATALOG.peeStaff, count: 2 },                 // EX 20G 先制・ATK+25〜50
         { def: ITEM_CATALOG.suijinNoTate, count: 2 },             // 水単色なので全員で絶対反射
-        { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
       ],
       spells: [
         { def: SPELL_CATALOG.waterRelease, count: 4 },            // 盤面を王の海へ
         { def: SPELL_CATALOG.kokushiMusou, count: 3 },            // EX 連鎖数×4。放水とセット
         { def: SPELL_CATALOG.capitalismIncarnate, count: 3 },     // EX 魚群の一斉召喚
-        { def: SPELL_CATALOG.toughness, count: 2 },               // EX 召喚時の基礎HP+10
-        { def: SPELL_CATALOG.disclosureRequest, count: 2 },       // EX 相手の手札を徴収
+        { def: SPELL_CATALOG.toughness, count: 1 },               // EX 召喚時の基礎HP+10
+        { def: SPELL_CATALOG.disclosureRequest, count: 1 },       // EX 相手の手札を徴収
         { def: SPELL_CATALOG.forcedAscension, count: 1 },         // EX 自領を地価120%で換金
         { def: SPELL_CATALOG.divination, count: 2 },              // 放水・国士無双の引き当て
         { def: SPELL_CATALOG.fireball, count: 1 },
-        { def: SPELL_CATALOG.senbonZakura, count: 1 },
       ],
     },
   },

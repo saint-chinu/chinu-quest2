@@ -3300,7 +3300,7 @@ test('⑱の盤面は「王」の字・94マス・CP4・行き止まり0', () =>
   assert.ok(map.background, '背景未指定だとCSSにundefinedが入る');
 });
 
-test('⑱のチヌ専用デッキ(chinu)は40枚・水単色・EX15枚で、放水と国士無双が揃っている', () => {
+test('⑱のチヌ専用デッキ(chinu)は40枚・水単色・EX13枚で、放水と国士無双が揃っている', () => {
   const deck = buildCharacterCardList('chinu');
   assert.equal(deck.length, 40);
 
@@ -3313,11 +3313,15 @@ test('⑱のチヌ専用デッキ(chinu)は40枚・水単色・EX15枚で、放�
   // 300Gの酢を出し切るには安いモンスターの弾数も要る。
   assert.equal(countOf('酢'), 2);
   assert.equal(countOf('資本主義の権化'), 3);
-  assert.ok(deck.filter((c) => c.type === CardType.MONSTER && (c.cost || 0) <= 50).length >= 7,
+  // ⚠️ 30G以下の安物7枚が生命線。初版はここが無く、土地1.3枚・勝率0%だった
+  // （CLAUDE.md「⑱の数値調整」参照）。減らすと同じ死のスパイラルへ戻る。
+  assert.ok(deck.filter((c) => c.type === CardType.MONSTER && (c.cost || 0) <= 30).length >= 7,
+    '30G以下の安物が足りない。土地が取れず収入が立たなくなる');
+  assert.ok(deck.filter((c) => c.type === CardType.MONSTER && (c.cost || 0) <= 50).length >= 12,
     '資本主義の権化の弾になる安いモンスターが足りない');
 
   // ユーザー指定「EXふんだんに」。CPUが撃てるEXだけで構成してあること。
-  assert.equal(deck.filter((c) => c.rarity === 'EX').length, 15);
+  assert.equal(deck.filter((c) => c.rarity === 'EX').length, 13);
 
   // 水単色（水神の盾の絶対反射を全モンスターで乗せるための前提）。
   const elements = new Set(deck.filter((c) => c.type === CardType.MONSTER).map((c) => c.element));

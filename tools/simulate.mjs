@@ -83,6 +83,9 @@ if (flag('help') || flag('h')) {
   --games=<n>           試合数（既定 50）
   --goal=<n>            goalCurrency（省略時はmapと同名のストーリーステージの値）
   --start=<n>           startingCurrency（同上、最終フォールバックは500）
+  --startA/--startB/--startA2/--startB2=<n>
+                        座席ごとの初期資金の上書き（ボス補正の検証用）。
+                        story.js側の opponent.startingCurrency に対応する。
   --seed=<n>            乱数シード（既定 1）。同じシード＝同じ出目・同じ結果
   --maxTurns=<n>        1試合の手番数上限（両者合計、既定 200）。超えたら打ち切り
   --timeout=<ms>        1試合の実時間上限（既定 60000）。超えたら打ち切り
@@ -303,6 +306,11 @@ if (!MAPS.some((m) => m.id === mapId)) {
 const stage = STORY_STAGES.find((s) => s.key === mapId) ?? null;
 const goalCurrency = num('goal', stage?.goalCurrency ?? null);
 const startingCurrency = num('start', stage?.startingCurrency ?? 500);
+// 座席ごとの初期資金。story.js側は`opponent.startingCurrency ?? stage.startingCurrency`
+// （main.js）でボス補正を掛けられるので、その効きを測れるようにここも座席別で
+// 上書きできるようにしてある。省略した座席は--start（＝ステージ全体の値）のまま。
+const startingCurrencyBySeat = ['startA', 'startB', 'startA2', 'startB2']
+  .map((key) => (FLAGS[key] == null ? startingCurrency : Number(FLAGS[key])));
 const deckA = resolveDeck(FLAGS.deckA ?? 'kawada', 'A');
 const deckB = resolveDeck(FLAGS.deckB ?? 'fusagikonda', 'B');
 // 2vs2用の相方（省略すれば従来どおり1vs1）。A陣営=--allyA、B陣営=--allyB。
@@ -411,7 +419,7 @@ async function runOne(gameSeed, index) {
       deckList: deck.cards,
       elements: deck.elements,
       aiProfile: deck.aiProfile,
-      startingCurrency,
+      startingCurrency: startingCurrencyBySeat[seatIndex],
     }));
 
     const stub = (name) => async (...args) => {
