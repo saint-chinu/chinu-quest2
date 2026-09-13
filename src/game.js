@@ -123,6 +123,7 @@ const PLAYER_CURSE_FIELDS = {
   diceCurse: null,                     // 出目固定/反転/2倍
   hasteTurnsRemaining: 0,              // 高速化の呪い（ソニックムーヴ）
   hackingTurnsRemaining: 0,            // ハッキング
+  spellBanTurnsRemaining: 0,           // 言論封殺（スペル使用不可）
   toughnessTurnsRemaining: 0,          // タフネス
   allTilesAccessTurnsRemaining: 0,     // 不動産鑑〇士
   tollWaiverCharges: 0,                // 脱税
@@ -499,6 +500,8 @@ export class Game {
       // ハッキング: 対象本人の手札は種類だけの仮カード表示になり、スペルを
       // 使用できない。残り手番数は本人の手番終了時にだけ減らす。
       hackingTurnsRemaining: 0,
+      // 言論封殺: 対象本人がスペルを使えない。減算はハッキングと同じく本人の手番終了時。
+      spellBanTurnsRemaining: 0,
       // イカサマのサイコロ用: 直近で実際に振った（強制含む）サイコロの目。
       lastDiceSteps: 0,
       // CPUの意思決定に使う性格パラメータ（aiProfiles.js）。人間プレイヤーでも
@@ -633,6 +636,8 @@ export class Game {
       passedCheckpoints: new Set(),
       hasteTurnsRemaining: 0,
       hackingTurnsRemaining: 0,
+      // 言論封殺: 対象本人がスペルを使えない。減算はハッキングと同じく本人の手番終了時。
+      spellBanTurnsRemaining: 0,
       lastDiceSteps: 0,
       // ステージ側（story.jsのopponent/ally定義のaiProfile）から名前ベースの
       // プロファイルを部分上書きできる。同名キャラをステージごとに違う性格で
@@ -928,6 +933,10 @@ export class Game {
     const player = this.currentPlayer;
     if (player.hackingTurnsRemaining > 0) {
       this.onLog('ハッキング中はスペルを使えません');
+      return;
+    }
+    if (player.spellBanTurnsRemaining > 0) {
+      this.onLog('言論封殺中はスペルを使えません');
       return;
     }
     if (player.spellUsedThisTurn) return;
@@ -1511,6 +1520,13 @@ export class Game {
         if (!targetPlayer || !this._isAllyOf(targetPlayer, player)) return false;
         this._applyPlayerCurse(targetPlayer, 'toughnessTurnsRemaining', effect.turns);
         this.onLog(`${targetPlayer.name}は${effect.turns}ターンの間、空き地への召喚時に基礎HP+${effect.hpBonus}を得る`);
+        return false;
+
+      case 'spellBanCurse':
+        // 言論封殺（⑱チヌ専用EX）。相手プレイヤーのみ。同盟仲間や自分には撃てない。
+        if (!targetPlayer || targetPlayer.id === player.id || this._isAllyOf(targetPlayer, player)) return false;
+        this._applyPlayerCurse(targetPlayer, 'spellBanTurnsRemaining', effect.turns);
+        this.onLog(`${targetPlayer.name}は言論封殺され、${effect.turns}ターンの間スペルを使えない`);
         return false;
 
       case 'cashOutOwnLand':
@@ -8307,6 +8323,10 @@ export class Game {
       this.currentPlayer.hackingTurnsRemaining -= 1;
       if (this.currentPlayer.hackingTurnsRemaining === 0) this.onLog(`${this.currentPlayer.name}のハッキングが解除された`);
     }
+    if (this.currentPlayer.spellBanTurnsRemaining > 0) {
+      this.currentPlayer.spellBanTurnsRemaining -= 1;
+      if (this.currentPlayer.spellBanTurnsRemaining === 0) this.onLog(`${this.currentPlayer.name}の言論封殺が解けた`);
+    }
     do {
       this.currentPlayerIndex = (this.currentPlayerIndex + 1) % this.players.length;
     } while (this.players[this.currentPlayerIndex].defeated);
@@ -8639,7 +8659,7 @@ export class Game {
       this.rollDice(steps);
       return;
     }
-    const canUseSpells = this.currentPlayer.hackingTurnsRemaining <= 0;
+    const canUseSpells = this.currentPlayer.hackingTurnsRemaining <= 0 && this.currentPlayer.spellBanTurnsRemaining <= 0;
     if (canUseSpells && await this._cpuMaybeUseHomingInstinctSpell(this.currentPlayer)) {
       for (const player of this.players) await this._resolveNegativeCurrency(player);
       if (!this.storyEnded) {
@@ -8654,7 +8674,8 @@ export class Game {
     // 通行料を払い続けることになる。
     if (canUseSpells) await this._cpuMaybeCounterForcedStopWithSanctuary(this.currentPlayer);
     if (!canUseSpells) {
-      this.onLog(`${this.currentPlayer.name}はハッキング中のためスペルを使えない`);
+      const reason = this.currentPlayer.hackingTurnsRemaining > 0 ? 'ハッキング中' : '言論封殺中';
+      this.onLog(`${this.currentPlayer.name}は${reason}のためスペルを使えない`);
     }
     if (canUseSpells) {
     await this._cpuMaybeUseCapitalismIncarnateSpell(this.currentPlayer);
@@ -8700,6 +8721,7 @@ export class Game {
     await this._cpuMaybeUseSanctuarySpell(this.currentPlayer);
     await this._cpuMaybeUseAntlionSpell(this.currentPlayer);
     await this._cpuMaybeUsePhoenixCurseSpell(this.currentPlayer);
+    await this._cpuMaybeUseSpellBanSpell(this.currentPlayer);
     await this._cpuMaybeUseChainStatCurseSpell(this.currentPlayer);
     await this._cpuMaybeUseGuaranteedWinSpell(this.currentPlayer);
     await this._cpuMaybeUseReverseDiceSpell(this.currentPlayer);
@@ -9060,6 +9082,28 @@ export class Game {
    * コストの2倍以上ある時だけ使う（30%・コスト100Gなら手持ち667G以上）。
    * 序盤の小銭に撃って無駄遣いせず、目標達成間際の貯め込みを崩す用途に絞る。
    */
+  /**
+   * 言論封殺(spellBanCurse)のCPU使用判断: 手札にスペルを一番多く握っている敵
+   * （同盟仲間以外・未封殺）へ撃つ。相手がスペルを1枚も持っていなければ温存
+   * （3ターン何も封じられず100Gが無駄になる）。
+   */
+  async _cpuMaybeUseSpellBanSpell(player) {
+    if (player.spellUsedThisTurn) return;
+    const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'spellBanCurse');
+    // ⚠️ **相手がスペルを1枚でも握っていれば撃つ**（ユーザー指定、2026-09）。
+    // 「余裕資金300Gを残し、相手が2枚以上の時だけ」に絞った版も測ったが勝率は
+    // 変わらず（絞り無し15/60・絞り17/60、対等1,000G・目標22,000）。封殺そのものが
+    // 目的のカードなので、条件を付けずに撃つ。
+    if (!card || player.currency < (card.cost || 0)) return;
+    const target = this.players
+      .filter((p) => !p.defeated && p.id !== player.id && !this._isAllyOf(p, player) && !(p.spellBanTurnsRemaining > 0))
+      .map((p) => ({ p, spells: (p.hand || []).filter((c) => c.type === CardType.SPELL).length }))
+      .filter(({ spells }) => spells >= 1)
+      .sort((a, b) => b.spells - a.spells)[0];
+    if (!target) return;
+    await this._cpuCastSpell(player, card, { targetPlayerId: target.p.id });
+  }
+
   async _cpuMaybeUseStealGoldSpell(player) {
     if (player.spellUsedThisTurn) return;
     const card = player.hand.find((c) => c.type === CardType.SPELL && c.effect?.type === 'stealGoldRatio');
@@ -10238,6 +10282,8 @@ export class Game {
    * 直接渡す。
    */
   async _cpuCastSpell(player, card, cast) {
+    // 言論封殺中は撃てない。個別の_cpuMaybeUse*が見落としても、ここで必ず止める。
+    if (player.spellBanTurnsRemaining > 0) return false;
     const targetTile = cast?.targetTileId != null ? this.tiles[cast.targetTileId] : null;
     if (targetTile?.unit
       && ['enemyMonster', 'anyMonster', 'ownMonster'].includes(card.target)
@@ -10357,6 +10403,7 @@ export class Game {
       // 無しでゴールを通過しても消えない - _grantGoalBonus参照）。
       passedCheckpointNumbers: [...p.passedCheckpoints].map((id) => this.tiles[id].checkpointNumber),
       hackingTurnsRemaining: p.hackingTurnsRemaining || 0,
+      spellBanTurnsRemaining: p.spellBanTurnsRemaining || 0,
     }));
     this.onStateChange({
       turnText: `${this.currentPlayer.name}のターン`,

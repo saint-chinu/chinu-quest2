@@ -643,6 +643,26 @@ export const SPELL_CATALOG = {
     '対象のモンスターに「聖域」の呪いをかける。その土地は他プレイヤーが侵略できず通行料も発生せず、モンスターは単体で対象を選ぶスペル・特殊効果を受け付けない（全体スペルは受ける）。モンスターへの呪いなので、別の呪いをかけられると上書きされて消える',
   ),
   // ステージ⑤・段ボール男初回撃破のクリア報酬。EXレア。使うと手札に戻る（捨てたら消滅）。
+  /**
+   * 言論封殺（⑱チヌ専用EX、2026-09ユーザー指定）: 相手プレイヤーへの呪い。
+   * 3ターンの間スペルを使えなくする。効果本体はgame.jsの'spellBanCurse'
+   * （`_applyPlayerCurse(target,'spellBanTurnsRemaining',3)`＝プレイヤー呪いの1枠を
+   * 使うので、相手の有益な呪いも上書きして消す）。減算は対象本人の手番終了時
+   * （ハッキングと同じ）。rewardOnlyでショップに並ばない。画像は未用意。
+   */
+  genronFuusatsu: {
+    ...spell(
+      'genronFuusatsu',
+      '言論封殺',
+      Rarity.EX,
+      100,
+      'enemyPlayer',
+      { type: 'spellBanCurse', turns: 3 },
+      '相手プレイヤーへの呪い。3ターンの間、スペルを使えなくなる',
+    ),
+    imageDataUrl: null,
+    rewardOnly: true,
+  },
   encounterUnknown: {
     ...spell(
       'encounterUnknown',
@@ -1848,7 +1868,7 @@ export const CHARACTER_DECKS = {
    *   主人公側のエンジンに置いていかれない、という意味で長期戦に耐える。
    * - EXの追加は益なし（目標22,000・各60戦）: 現行28/60、ペーの杖2を足して26/60、
    *   ペー1＋酢1を足して18/60。**酢は300Gが手札で腐って-16.7pt**。
-   * 固定40枚（モンスター20／アイテム8／スペル12）。
+   * 固定40枚（モンスター20／アイテム8／スペル12）。EXは権化2・国士2・言論封殺2。
    */
   chinu: {
     composition: {
@@ -1871,8 +1891,9 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },   // EX 30G 手札の安物を一斉召喚
         { def: SPELL_CATALOG.kokushiMusou, count: 2 },          // EX 120G 連鎖数×4
         { def: SPELL_CATALOG.electrify, count: 2 },             // S 150G 雷地化＝雷お札の燃料
-        { def: SPELL_CATALOG.senbonZakura, count: 1 },
-        { def: SPELL_CATALOG.walletVacuum, count: 1 },
+        // チヌ専用EX（ユーザー指定で2枚）。相手のスペルを3ターン封じる。
+        // 枠は千本桜1・財布チューチュー1（100Gの状況札）から。
+        { def: SPELL_CATALOG.genronFuusatsu, count: 2 },
         { def: SPELL_CATALOG.homingInstinct, count: 2 },        // 94マスの周回を締める
         { def: SPELL_CATALOG.iCanFly, count: 2 },
       ],

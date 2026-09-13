@@ -2975,9 +2975,11 @@ test('呪い解除は高速化の呪いも外す', async () => {
     lotteryOnNextGoal: true, pierceNextInvasion: true, guaranteedNextInvasionWin: true,
     allTilesAccessTurnsRemaining: 2, toughnessTurnsRemaining: 2,
     hackingTurnsRemaining: 2, hasteTurnsRemaining: 2, landlessGoalBonus: 100,
+    spellBanTurnsRemaining: 2,
   };
   await g._applySpellEffect(player, { name: '呪い解除', effect: { type: 'cleanseCurses' }, target: 'ownMonster' }, {});
   assert.equal(player.hasteTurnsRemaining, 0, '高速化の呪いが残っている');
+  assert.equal(player.spellBanTurnsRemaining, 0, '言論封殺が残っている');
   // 取りこぼしが再発しないよう、他のプレイヤー呪いもまとめて確認する。
   assert.equal(player.diceCurse, null);
   assert.equal(player.hackingTurnsRemaining, 0);
@@ -3060,6 +3062,7 @@ test('プレイヤー呪いの付与は必ず_applyPlayerCurse経由（1枠ル�
 
   // 「かける」向きの直接代入が残っていないこと（空値への代入＝消費はOK）。
   const empties = { diceCurse: 'null', hasteTurnsRemaining: '0', hackingTurnsRemaining: '0',
+    spellBanTurnsRemaining: '0',
     toughnessTurnsRemaining: '0', allTilesAccessTurnsRemaining: '0', tollWaiverCharges: '0',
     lotteryOnNextGoal: 'false', pierceNextInvasion: 'false',
     guaranteedNextInvasionWin: 'false', landlessGoalBonus: '0' };
@@ -3323,7 +3326,8 @@ test('⑱のチヌ専用デッキ(chinu)は40枚の雷テンポ型で、安い�
   // ただし他のEXは計測で益が無かったので入れていない（目標22,000・対等500G・
   // 各60戦: 現行28/60、ペーの杖2追加26/60、ペー1＋酢1追加18/60）。EXは2種4枚。
   assert.equal(countOf('合体ロボ・ガシャーン'), 0, '合体系は禁止（ユーザー指定）');
-  assert.equal(deck.filter((c) => c.rarity === 'EX').length, 4);
+  assert.equal(countOf('言論封殺'), 2, 'チヌ専用EX（ユーザー指定で2枚）');
+  assert.equal(deck.filter((c) => c.rarity === 'EX').length, 6);
   assert.equal(countOf('酢'), 0, '酢は300Gが手札で腐り-16.7pt。入れるなら再計測');
 
   // 既存の⑯用デッキを壊していないこと（キー名がchinuで始まるので取り違えやすい）。
@@ -3338,8 +3342,9 @@ test('⑱はチヌとの1vs1・対等500G・お札あり・fixer付きで、会�
   assert.equal(STORY_STAGES.indexOf(stage), STORY_STAGES.findIndex((s) => s.key === 'roudou') + 1, '⑰の直後に並べる');
   assert.equal(stage.format, '1vs1');
   assert.equal(stage.goalCurrency, 22000);
-  // ⚠️ 対等スタート（ユーザー指定）。初期資金の補正は stage にも opponent にも置かない。
-  assert.equal(stage.startingCurrency, undefined);
+  // ⚠️ 対等スタート（ユーザー指定「1000スタートでよくね？」）。stageで両者1,000G、
+  // opponent側の片寄せ補正は置かない。
+  assert.equal(stage.startingCurrency, 1000);
   assert.equal(stage.opponents.length, 1);
   assert.equal(stage.opponents[0].name, 'チヌ');
   assert.equal(stage.opponents[0].deckKey, 'chinu');
@@ -3357,4 +3362,102 @@ test('⑱はチヌとの1vs1・対等500G・お札あり・fixer付きで、会�
   assert.ok(NPC_PORTRAIT_URL['チヌ']);
   assert.equal(NPC_PORTRAIT_URL['チヌ'], NPC_PORTRAIT_URL['魚群の王']);
   assert.ok(NPC_TOKEN_URL['チヌ']);
+});
+
+test('言論封殺はチヌ専用EX: 相手だけに3ターンのスペル禁止をかけ、呪い1枠を使う', async () => {
+  const card = SPELL_CATALOG.genronFuusatsu;
+  assert.equal(card.name, '言論封殺');
+  assert.equal(card.rarity, 'EX');
+  assert.equal(card.target, 'enemyPlayer');
+  assert.deepEqual(card.effect, { type: 'spellBanCurse', turns: 3 });
+  assert.equal(isRewardOnlyCard(card), true, 'ショップに並べない');
+
+  const g = Object.create(Game.prototype);
+  const fresh = (id, allianceId = null) => ({
+    id, name: `P${id}`, allianceId, defeated: false, hand: [], currency: 1000,
+    diceCurse: null, hasteTurnsRemaining: 0, hackingTurnsRemaining: 0, spellBanTurnsRemaining: 0,
+    toughnessTurnsRemaining: 0, allTilesAccessTurnsRemaining: 0, tollWaiverCharges: 0,
+    lotteryOnNextGoal: false, pierceNextInvasion: false, guaranteedNextInvasionWin: false, landlessGoalBonus: 0,
+  });
+  const logs = [];
+  const chinu = fresh(0);
+  const hero = fresh(1);
+  Object.assign(g, { tiles: [], players: [chinu, hero], onLog: (m) => logs.push(m), _notifyState: () => {} });
+
+  // 相手の有益な呪い（脱税）を上書きして消す＝プレイヤー呪いの1枠ルール。
+  g._applyPlayerCurse(hero, 'tollWaiverCharges', 1);
+  await g._applySpellEffect(chinu, card, { targetPlayerId: 1 });
+  assert.equal(hero.spellBanTurnsRemaining, 3);
+  assert.equal(hero.tollWaiverCharges, 0, '後から撃った言論封殺が脱税を消す');
+  assert.ok(logs.some((m) => m.includes('言論封殺')));
+
+  // 自分や同盟仲間には効かない。
+  const ally = fresh(2, 'red');
+  const allyCaster = fresh(3, 'red');
+  g.players = [allyCaster, ally];
+  await g._applySpellEffect(allyCaster, card, { targetPlayerId: 2 });
+  assert.equal(ally.spellBanTurnsRemaining, 0, '同盟仲間へは撃てない');
+  await g._applySpellEffect(allyCaster, card, { targetPlayerId: 3 });
+  assert.equal(allyCaster.spellBanTurnsRemaining, 0, '自分へは撃てない');
+});
+
+test('言論封殺中は人間もCPUもスペルを撃てず、本人の手番終了時に1ずつ解ける', async () => {
+  const g = Object.create(Game.prototype);
+  const logs = [];
+  const spell = { id: 's1', type: CardType.SPELL, name: '占術', cost: 40, target: 'cardTypeChoice', effect: { type: 'divination' } };
+  const human = { id: 0, name: '主人公', isCPU: false, defeated: false, hand: [spell], currency: 1000,
+    spellUsedThisTurn: false, hackingTurnsRemaining: 0, spellBanTurnsRemaining: 2, tileId: 0 };
+  const cpu = { id: 1, name: 'チヌ', isCPU: true, defeated: false, hand: [{ ...spell, id: 's2' }], currency: 1000,
+    spellUsedThisTurn: false, hackingTurnsRemaining: 0, spellBanTurnsRemaining: 1, tileId: 0 };
+  Object.assign(g, {
+    tiles: [{ id: 0, position: { x: 0, z: 0 } }], players: [human, cpu], currentPlayerIndex: 0,
+    isBusy: false, awaitingRoll: true, onLog: (m) => logs.push(m), _notifyState: () => {},
+    _discardUsedCard: () => { throw new Error('捨札へ送られた＝詠唱が通ってしまった'); },
+  });
+  Object.defineProperty(g, 'currentPlayer', { get() { return g.players[g.currentPlayerIndex]; } });
+
+  // 人間: useSpellが手札もGも消費せずに止まる。
+  await g.useSpell(spell);
+  assert.equal(human.hand.length, 1);
+  assert.equal(human.currency, 1000);
+  assert.equal(human.spellUsedThisTurn, false);
+  assert.ok(logs.some((m) => m.includes('言論封殺中')));
+
+  // CPU: 唯一の詠唱経路 _cpuCastSpell が false で止まる。
+  const ended = await g._cpuCastSpell(cpu, cpu.hand[0], {});
+  assert.equal(ended, false);
+  assert.equal(cpu.hand.length, 1);
+  assert.equal(cpu.currency, 1000);
+
+  // 減算は本人の手番終了時にだけ。人間の手番が終わると人間だけ1減る。
+  human.toughnessTurnsRemaining = 0; cpu.toughnessTurnsRemaining = 0;
+  g._nextTurn();
+  assert.equal(human.spellBanTurnsRemaining, 1);
+  assert.equal(cpu.spellBanTurnsRemaining, 1, '相手の手番終了では減らない');
+  g._nextTurn();
+  assert.equal(cpu.spellBanTurnsRemaining, 0);
+  assert.ok(logs.some((m) => m.includes('言論封殺が解けた')));
+});
+
+test('CPUの言論封殺はスペルを一番多く握る敵へ撃ち、スペルの無い相手には温存する', async () => {
+  const g = Object.create(Game.prototype);
+  const card = { id: 'g1', type: CardType.SPELL, name: '言論封殺', cost: 100, target: 'enemyPlayer', effect: { type: 'spellBanCurse', turns: 3 } };
+  const sp = (id) => ({ id, type: CardType.SPELL, name: 'x', cost: 0 });
+  const mon = (id) => ({ id, type: CardType.MONSTER, name: 'm', cost: 0 });
+  const me = { id: 0, name: 'チヌ', allianceId: 'w', defeated: false, hand: [card], currency: 1000, spellUsedThisTurn: false, spellBanTurnsRemaining: 0 };
+  const ally = { id: 1, name: '仲間', allianceId: 'w', defeated: false, hand: [sp('a1'), sp('a2'), sp('a3')], spellBanTurnsRemaining: 0 };
+  const few = { id: 2, name: '敵1', allianceId: 'r', defeated: false, hand: [sp('b1'), mon('b2')], spellBanTurnsRemaining: 0 };
+  const many = { id: 3, name: '敵2', allianceId: 'r', defeated: false, hand: [sp('c1'), sp('c2'), mon('c3')], spellBanTurnsRemaining: 0 };
+  const casts = [];
+  Object.assign(g, { tiles: [], players: [me, ally, few, many], onLog: () => {}, _notifyState: () => {},
+    _cpuCastSpell: async (player, c, cast) => { casts.push(cast.targetPlayerId); return false; } });
+  await g._cpuMaybeUseSpellBanSpell(me);
+  assert.deepEqual(casts, [3], '同盟仲間は除外し、スペルが最多の敵を選ぶ');
+
+  // 既に封殺済みの敵と、スペルを持たない敵しか居なければ温存。
+  casts.length = 0;
+  many.spellBanTurnsRemaining = 2;
+  few.hand = [mon('b2')];
+  await g._cpuMaybeUseSpellBanSpell(me);
+  assert.deepEqual(casts, [], 'スペルの無い相手に撃って100Gを捨てない');
 });

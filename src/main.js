@@ -3447,7 +3447,9 @@ function startBattle(character, storyOptions = {}) {
       diceButton.disabled = !canRoll || !isLocalTurn;
       renderPlayerPanels(players, checkpointNumbers, game?.goalCurrency);
       ofudaMarketButton.classList.toggle('hidden', !game?._ofudaMarketSummary?.()?.length);
-      renderHand(hand, isLocalTurn && showCenter && !spellUsedThisTurn);
+      // 言論封殺中はスペルを選べない（game.useSpellでも弾くが、UIでも押せなくする）。
+      const localPublic = players.find((p) => p.id === localPlayerId);
+      renderHand(hand, isLocalTurn && showCenter && !spellUsedThisTurn && !(localPublic?.spellBanTurnsRemaining > 0));
 
       const enteringShowCenter = showCenter && !showCenterState;
       showCenterState = showCenter;
@@ -9619,9 +9621,10 @@ function applyPvpPublicState(publicState) {
         hiddenByHacking: true,
       }))
     : (pvpMatch.myHand || []);
-  const handSignature = `${isMyTurn && showCenter && !publicState.spellUsedThisTurn ? 1 : 0}|${me?.hackingTurnsRemaining || 0}|${displayedHand.map((card) => card.id).join(',')}`;
+  const handSignature = `${isMyTurn && showCenter && !publicState.spellUsedThisTurn ? 1 : 0}|${me?.hackingTurnsRemaining || 0}|${me?.spellBanTurnsRemaining || 0}|${displayedHand.map((card) => card.id).join(',')}`;
   if (handSignature !== lastPvpHandSignature) {
-    renderHand(displayedHand, isMyTurn && showCenter && !publicState.spellUsedThisTurn && !(me?.hackingTurnsRemaining > 0));
+    // 言論封殺中はスペルを選べない（ホスト側のuseSpellでも弾くが、UIでも押せなくする）。
+    renderHand(displayedHand, isMyTurn && showCenter && !publicState.spellUsedThisTurn && !(me?.hackingTurnsRemaining > 0) && !(me?.spellBanTurnsRemaining > 0));
     lastPvpHandSignature = handSignature;
   }
   if (me) {
