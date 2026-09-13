@@ -900,9 +900,14 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.harinezumiNoFuku, count: 1 }, { def: ITEM_CATALOG.zangokuKen, count: 1 },
       ],
       spells: [
-        // 不動産鑑〇士(realEstateAppraiser)はCPUに詠唱ハンドラが無い死に札
+        // 不動産鑑〇士(realEstateAppraiser)は当時CPUに詠唱ハンドラが無い死に札
         // だったため、財布チューチュー（手持ちG30%強奪 -
-        // _cpuMaybeUseStealGoldSpell参照）へ2枚差し替え。
+        // _cpuMaybeUseStealGoldSpell参照）へ2枚差し替えた。
+        // ⚠️ **その後ハンドラは実装済み**（game.jsの`_cpuMaybeUseAppraiserSpell`と
+        // `_cpuMaybeUseLandSpell`内の`enableAllOwnTileAbilities`分岐の2経路。
+        // 2026-09に実戦ログで詠唱を確認済み）。**このコメントを根拠に
+        // 「不動産鑑〇士はCPUが使えない」と判断しないこと。**
+        // この差し替え自体は当時の判断としてそのまま残している。
         // アイキャンフライは罠用途以外でCPUが使わないため1枚に減らし、
         // 追徴課税（自分の高額地に1.5倍通行料 - _cpuMaybeUseTollBonusSpell）
         // を追加。1vs1の通行料プレッシャーを強める。
