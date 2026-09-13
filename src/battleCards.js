@@ -1823,69 +1823,56 @@ export const CHARACTER_DECKS = {
     },
   },
   /**
-   * ⑱（board.js`ou`）の魚群の王チヌ。⑯では盤面に出ないので、ここが本人の初出。
+   * ⑱（story.js`ou`）の魚群の王チヌ。⑯では盤面に出ないので、ここが本人の初出。
+   * ⑲チヌ＆クエ戦（同じ盤面）でもこのデッキをそのまま使う想定。
    *
-   * コンセプトは「王は戦わない。海を塗り替える」（ユーザー指定「EXカード、
-   * ふんだんに使っていいよ。王だから」を受けてEX15枚）。素の水地は94マス中
-   * 21マスしかないので、**放水4枚で盤面を水地へ塗り替えて連鎖を伸ばし、
-   * 国士無双！！(連鎖数×4だけATK/HP上昇)で一気に跳ねさせる**のが本筋。
-   * ⚠️ この2枚は必ずセット。放水を削ると国士無双が発動条件（CPU側は
-   * `_cpuMaybeUseChainStatCurseSpell`が上げ幅10未満＝連鎖3未満なら温存）に
-   * 届かなくなり、EXが丸ごと死に札になる。
+   * 制約はユーザー指定: **両者500Gの対等スタート**（初期資金の補正は無し。
+   * 「国庫」案は「対等の条件でスタートしないとゲームとしておかしい」で却下）、
+   * お札ありの長期戦、ロボ等の特殊EXは禁止、属性は自由。
    *
-   * ⚠️ **採用したEXはすべてCPUの使用判断が実装済みであることを確認済み**
-   * （game.jsの`_cpuMaybeUseChainStatCurseSpell`／`capitalismIncarnate`／
-   * `disclosureRequest`／`summonBaseHpBoostCurse`／`cashOutOwnLand`）。
-   * ここへEXを足す時は、CPUがそれを撃つ経路があるか必ず先に確認すること。
+   * 中身は**雷の30〜50G先制トリオ（エレキ輝・サンダーバード・テンホウ）で94マスの
+   * 盤面を数で取り、fixer型のお札運用（aiProfile.ofudaStyle:'fixer'）で雷お札を
+   * 買い集め、放電と土地レベルアップで雷の相場を自分で吊り上げる**テンポ型。
+   * くぐつの剣豪3枚の自動侵略（⑮川田で実証済み）で盤面を広げ続け、伸びた雷連鎖に
+   * 国士無双！！（連鎖数×4）を乗せる。EXは資本主義の権化2・国士無双2の4枚だけ。
    *
-   * 酢(EX 300G 60/60 貫通)はユーザー指定で採用（「資本主義の権化でばらまこう」）。
-   * ⚠️ `_spellCapitalismIncarnate`は**コストの安い順**に手持ちGが続く限り撒くので、
-   * 300Gの酢が出るのは安い順に払い終えてなお300G残っている時だけ。安いモンスター
-   * （アイランドホエール40G・50G帯）を厚めにしてあるのは弾を絞らないため。
-   * なお撒き先は**そのモンスターの属性と一致する空き地を優先**するので、水単色の
-   * この構成だと撒くほど水地の連鎖が育つ＝放水／国士無双と噛み合う。
-   *
-   * 水単色なので水神の盾の絶対反射が全モンスターで乗る（⑮で追加した属性神の盾が
-   * 本来の働きをする初めての場）。
-   *
-   * 固定40枚（モンスター20／アイテム4／スペル16）、うちEX13枚。
-   * ⚠️⚠️ **このデッキは「王の国庫」＝初期資金13,000Gが前提**。story.jsのステージを
-   * 起こす時は必ず `opponents[0].startingCurrency: 13000` を付けること
-   * （main.jsの`opponent.startingCurrency ?? stage.startingCurrency`で座席別に効く）。
-   * 高価なEXで殴るデッキなので、既定の500Gだと1枚も撃てず**勝率0%**まで落ちる。
-   * 目標総資産18,000Gとの組で敵側勝率53.8%（n=80）。詳細はCLAUDE.md「⑱の数値調整」。
+   * ⚠️ 2026-09の計測（CLAUDE.md「⑱の数値調整」）:
+   * - 水単色で放水4・酢2・EX13枚の初版は、対等500Gだと**0/20**。放水150G・
+   *   国士無双120G・酢300Gが500Gスタートでは一枚も撃てず、土地が取れない。
+   * - 無属性くぐつ型(0/20)・水テンポ型(1/20)も壊滅。**30〜50Gの先制持ちを
+   *   12枚積んだ雷型だけが立ち上がった**（同seedで10/20）。
+   * - fixerの有無で25%→50%（同seed）。**aiProfileのofudaStyle:'fixer'は必須**。
+   * - 放電3・国士3へ寄せてアイキャンフライを抜いた版は悪化（35%）。
+   *   安い先制と出目操作を削ると序盤の土地取りが鈍る。
+   * - 目標総資産は18,000でも22,000でも約40%（各100戦）。長期戦にしても
+   *   主人公側のエンジンに置いていかれない、という意味で長期戦に耐える。
+   * 固定40枚（モンスター20／アイテム8／スペル12）。
    */
   chinu: {
     composition: {
       monsters: [
-        { def: MONSTER_CATALOG.su, count: 2 },                    // EX 300G 60/60 貫通・2歩移動
-        { def: MONSTER_CATALOG.suijin, count: 1 },                // R 150G
-        { def: MONSTER_CATALOG.bigMermaid, count: 1 },            // R 120G 55/55
-        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 2 },      // R 100G 50/50
-        { def: MONSTER_CATALOG.kaikyouSekishoKurage, count: 2 },  // R 80G 永続強制停止＝王の関所
-        { def: MONSTER_CATALOG.yukiOnna, count: 2 },              // S 50G 先制・全水属性ATK+30
-        { def: MONSTER_CATALOG.islandWhale, count: 3 },           // S 40G
-        // ⚠️ **30G以下の安物3種7枚は飾りではなく生命線**。初版にはこれが無く、
-        // 「安いモンスターを引けない→土地が取れない→収入が無い→高いEXが撃てない」
-        // の死のスパイラルに入って**土地1.3枚・勝率0%**だった（CLAUDE.md
-        // 「⑱の数値調整」参照）。安物を足したら同条件で土地20枚まで回復した。
-        { def: MONSTER_CATALOG.hiyashiChuka, count: 2 },          // 30G 10/40
-        { def: MONSTER_CATALOG.baketsuRelayTai, count: 2 },       // 30G 15/35
-        { def: MONSTER_CATALOG.suikenKurage, count: 3 },          // 10G 20/20
+        // ⚠️ 30〜50Gの先制持ち12枚が土台。ここを削ると500Gから立ち上がらない。
+        { def: MONSTER_CATALOG.tenhou, count: 4 },              // R 50G 30/30 先制・与ダメ×3G強奪
+        { def: MONSTER_CATALOG.erekiKagayaki, count: 4 },       // S 30G 30/30 先制
+        { def: MONSTER_CATALOG.thunderbird, count: 4 },         // S 50G 30/30 先制
+        { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 },   // S 50G 身代わり（生贄1が要る）
+        { def: MONSTER_CATALOG.rakuraiYohoushi, count: 2 },     // R 90G 40/35
+        { def: MONSTER_CATALOG.kugutsuNoKengou, count: 3 },     // R 120G 50/50 毎手番の自動侵略
+        { def: MONSTER_CATALOG.ninja, count: 1 },               // S 50G 40/40 先制（無属性）
       ],
       items: [
-        { def: ITEM_CATALOG.peeStaff, count: 2 },                 // EX 20G 先制・ATK+25〜50
-        { def: ITEM_CATALOG.suijinNoTate, count: 2 },             // 水単色なので全員で絶対反射
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 4 },       // 40G ATK+出目×5・貫通
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 3 },         // 45G ダメージ1回無効化
+        { def: ITEM_CATALOG.raijinNoTate, count: 1 },           // 80G 雷なら絶対反射
       ],
       spells: [
-        { def: SPELL_CATALOG.waterRelease, count: 4 },            // 盤面を王の海へ
-        { def: SPELL_CATALOG.kokushiMusou, count: 3 },            // EX 連鎖数×4。放水とセット
-        { def: SPELL_CATALOG.capitalismIncarnate, count: 3 },     // EX 魚群の一斉召喚
-        { def: SPELL_CATALOG.toughness, count: 1 },               // EX 召喚時の基礎HP+10
-        { def: SPELL_CATALOG.disclosureRequest, count: 1 },       // EX 相手の手札を徴収
-        { def: SPELL_CATALOG.forcedAscension, count: 1 },         // EX 自領を地価120%で換金
-        { def: SPELL_CATALOG.divination, count: 2 },              // 放水・国士無双の引き当て
-        { def: SPELL_CATALOG.fireball, count: 1 },
+        { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },   // EX 30G 手札の安物を一斉召喚
+        { def: SPELL_CATALOG.kokushiMusou, count: 2 },          // EX 120G 連鎖数×4
+        { def: SPELL_CATALOG.electrify, count: 2 },             // S 150G 雷地化＝雷お札の燃料
+        { def: SPELL_CATALOG.senbonZakura, count: 1 },
+        { def: SPELL_CATALOG.walletVacuum, count: 1 },
+        { def: SPELL_CATALOG.homingInstinct, count: 2 },        // 94マスの周回を締める
+        { def: SPELL_CATALOG.iCanFly, count: 2 },
       ],
     },
   },

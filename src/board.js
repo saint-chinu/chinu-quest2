@@ -480,7 +480,9 @@ export const MAPS = [
   // ⑱はストーリー専用。**ステージ名は仮題**（ユーザー確定待ち）。
   // ⚠️ 背景は⑯の「王の間」を流用中。`getMapBackground`はフォールバックを持たず
   // undefinedをそのままCSSへ入れるので、専用絵ができるまでここを空にしないこと。
-  { id: 'ou', name: '⑱ 王の間（仮題）', wip: true, rows: OU_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/king-room.png'), spacing: 2.8 },
+  // ⚠️ お札あり（ユーザー指定「お札ありの長期戦想定」）。⑲チヌ＆クエ戦も**この盤面を
+  // そのまま使う**（ユーザー指定「クリアしたら同じステージでチヌ＆クエのコンビがラスボス」）。
+  { id: 'ou', name: '⑱ 王の間（仮題）', wip: true, rows: OU_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/king-room.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {

@@ -30,6 +30,8 @@ export const NPC_PORTRAIT_URL = {
   // ⑯の魚群の王チヌ。盤面には出ない（高みの見物）ので立ち絵だけで、
   // NPC_TOKEN_URL側は不要。
   '魚群の王': assetUrl('/images/npc-portraits/chinu-king.png'),
+  // ⑱以降は「チヌ」名義で盤面に出る（⑯の「魚群の王」と同一人物、同じ立ち絵）。
+  チヌ: assetUrl('/images/npc-portraits/chinu-king.png'),
   'ウサギン': assetUrl('/images/npc-portraits/usagin.webp'),
   'ヒトデ': assetUrl('/images/npc-portraits/hitode.webp'),
 };
@@ -70,6 +72,8 @@ export const NPC_TOKEN_URL = {
   '闇・ホフク': assetUrl('/images/npc-tokens/dark-hofuku.png'),
   '暗・少女A': assetUrl('/images/npc-tokens/dark-shoujo-a.png'),
   サーティー: assetUrl('/images/npc-tokens/thirty.png'),
+  // チヌの盤面駒は専用絵が無いので、朕と同じく立ち絵をそのまま駒に使う。
+  チヌ: assetUrl('/images/npc-portraits/chinu-king.png'),
   クエ: assetUrl('/images/npc-tokens/que.png?v=2'),
   '塞ぎ込んだ男': assetUrl('/images/npc-tokens/fusagikonda-otoko.png'),
   川田: assetUrl('/images/npc-tokens/kawada.png'),

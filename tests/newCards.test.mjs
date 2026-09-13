@@ -3300,36 +3300,60 @@ test('⑱の盤面は「王」の字・94マス・CP4・行き止まり0', () =>
   assert.ok(map.background, '背景未指定だとCSSにundefinedが入る');
 });
 
-test('⑱のチヌ専用デッキ(chinu)は40枚・水単色・EX13枚で、放水と国士無双が揃っている', () => {
+test('⑱のチヌ専用デッキ(chinu)は40枚の雷テンポ型で、安い先制持ちとfixerの燃料が揃っている', () => {
   const deck = buildCharacterCardList('chinu');
   assert.equal(deck.length, 40);
-
   const countOf = (name) => deck.filter((c) => c.name === name).length;
-  // ⚠️ 放水と国士無双！！はセット。CPUの_cpuMaybeUseChainStatCurseSpellは
-  // 上げ幅10未満（＝連鎖3未満）だと温存するので、放水を削るとEXが死に札になる。
-  assert.equal(countOf('放水'), 4);
-  assert.equal(countOf('国士無双！！'), 3);
-  // 酢はユーザー指定で採用。資本主義の権化は「コストの安い順」に撒くので、
-  // 300Gの酢を出し切るには安いモンスターの弾数も要る。
-  assert.equal(countOf('酢'), 2);
-  assert.equal(countOf('資本主義の権化'), 3);
-  // ⚠️ 30G以下の安物7枚が生命線。初版はここが無く、土地1.3枚・勝率0%だった
-  // （CLAUDE.md「⑱の数値調整」参照）。減らすと同じ死のスパイラルへ戻る。
-  assert.ok(deck.filter((c) => c.type === CardType.MONSTER && (c.cost || 0) <= 30).length >= 7,
-    '30G以下の安物が足りない。土地が取れず収入が立たなくなる');
-  assert.ok(deck.filter((c) => c.type === CardType.MONSTER && (c.cost || 0) <= 50).length >= 12,
-    '資本主義の権化の弾になる安いモンスターが足りない');
 
-  // ユーザー指定「EXふんだんに」。CPUが撃てるEXだけで構成してあること。
-  assert.equal(deck.filter((c) => c.rarity === 'EX').length, 13);
+  // ⚠️ 30〜50Gの先制持ち12枚が土台。対等500Gスタートで唯一立ち上がった構成
+  // （CLAUDE.md「⑱の数値調整」: 水単色EX13枚版は0/20、無属性型0/20、水テンポ1/20）。
+  assert.equal(countOf('エレキ輝'), 4);
+  assert.equal(countOf('サンダーバード'), 4);
+  assert.equal(countOf('テンホウ'), 4);
+  assert.ok(deck.filter((c) => c.type === CardType.MONSTER && (c.cost || 0) <= 50).length >= 14,
+    '50G以下のモンスターが足りない。500Gから土地を取れなくなる');
 
-  // 水単色（水神の盾の絶対反射を全モンスターで乗せるための前提）。
-  const elements = new Set(deck.filter((c) => c.type === CardType.MONSTER).map((c) => c.element));
-  assert.deepEqual([...elements], ['water'], 'モンスターは水単色を崩さない');
-  assert.equal(countOf('水神の盾'), 2);
+  // 自動侵略のエンジンと、雷お札を吊り上げる燃料。
+  assert.equal(countOf('くぐつの剣豪'), 3);
+  assert.equal(countOf('放電'), 2);
+  assert.equal(countOf('国士無双！！'), 2);
+  assert.equal(countOf('資本主義の権化'), 2);
+
+  // ユーザー指定「ロボとかの特殊EXは入れたらだめ」。EXは上の2種4枚だけ。
+  assert.equal(deck.filter((c) => c.rarity === 'EX').length, 4);
+  for (const banned of ['合体ロボ・ガシャーン', 'ペーの杖', '開示請求', '灰塵', '未知との遭遇', '強制成仏', '酢']) {
+    assert.equal(countOf(banned), 0, `${banned}は入れない`);
+  }
 
   // 既存の⑯用デッキを壊していないこと（キー名がchinuで始まるので取り違えやすい）。
   for (const key of ['chinuUsagin', 'chinuMuuru', 'chinuHitodemaso']) {
     assert.equal(buildCharacterCardList(key).length, 40, `${key}が壊れている`);
   }
+});
+
+test('⑱はチヌとの1vs1・対等500G・お札あり・fixer付きで、会話はユーザー指定の全文', () => {
+  const stage = STORY_STAGES.find((s) => s.key === 'ou');
+  assert.ok(stage, 'story.jsに⑱が無い');
+  assert.equal(STORY_STAGES.indexOf(stage), STORY_STAGES.findIndex((s) => s.key === 'roudou') + 1, '⑰の直後に並べる');
+  assert.equal(stage.format, '1vs1');
+  assert.equal(stage.goalCurrency, 22000);
+  // ⚠️ 対等スタート（ユーザー指定）。初期資金の補正は stage にも opponent にも置かない。
+  assert.equal(stage.startingCurrency, undefined);
+  assert.equal(stage.opponents.length, 1);
+  assert.equal(stage.opponents[0].name, 'チヌ');
+  assert.equal(stage.opponents[0].deckKey, 'chinu');
+  assert.equal(stage.opponents[0].startingCurrency, undefined);
+  assert.deepEqual(stage.opponents[0].aiProfile, { ofudaStyle: 'fixer' }, 'fixerが無いと同seedで50%→25%');
+  assert.ok(MAPS.find((m) => m.id === 'ou').hasOfuda, 'お札あり（ユーザー指定）');
+  // 会話（ユーザー指定の全文）。
+  assert.equal(stage.intro.length, 6);
+  assert.equal(stage.intro[0].text, 'はぁ、はぁ、はぁ。追手をくぐりぬけてやっとたどりついた...チヌの野郎、こんどこそ！！');
+  assert.equal(stage.intro[4].text, '『生まれの差』というものを知るがいい。貴様のような下賤の者は、いくら努力しようと無駄なのだ。');
+  assert.equal(stage.outro.length, 5);
+  assert.equal(stage.outro[3].text, '...お前には、真の恐怖を教えてやる必要があるな。ワイの真の姿をお見せしよう');
+  assert.equal(stage.outro[4].text, '！？！？');
+  // 立ち絵と盤面駒。「チヌ」名義で引けること（⑯の「魚群の王」と同じ絵）。
+  assert.ok(NPC_PORTRAIT_URL['チヌ']);
+  assert.equal(NPC_PORTRAIT_URL['チヌ'], NPC_PORTRAIT_URL['魚群の王']);
+  assert.ok(NPC_TOKEN_URL['チヌ']);
 });
