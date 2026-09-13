@@ -1818,6 +1818,64 @@ export const CHARACTER_DECKS = {
     },
   },
   /**
+   * ⑱（board.js`ou`）の魚群の王チヌ。⑯では盤面に出ないので、ここが本人の初出。
+   *
+   * コンセプトは「王は戦わない。海を塗り替える」（ユーザー指定「EXカード、
+   * ふんだんに使っていいよ。王だから」を受けてEX15枚）。素の水地は94マス中
+   * 21マスしかないので、**放水4枚で盤面を水地へ塗り替えて連鎖を伸ばし、
+   * 国士無双！！(連鎖数×4だけATK/HP上昇)で一気に跳ねさせる**のが本筋。
+   * ⚠️ この2枚は必ずセット。放水を削ると国士無双が発動条件（CPU側は
+   * `_cpuMaybeUseChainStatCurseSpell`が上げ幅10未満＝連鎖3未満なら温存）に
+   * 届かなくなり、EXが丸ごと死に札になる。
+   *
+   * ⚠️ **採用したEXはすべてCPUの使用判断が実装済みであることを確認済み**
+   * （game.jsの`_cpuMaybeUseChainStatCurseSpell`／`capitalismIncarnate`／
+   * `disclosureRequest`／`summonBaseHpBoostCurse`／`cashOutOwnLand`）。
+   * ここへEXを足す時は、CPUがそれを撃つ経路があるか必ず先に確認すること。
+   *
+   * 酢(EX 300G 60/60 貫通)はユーザー指定で採用（「資本主義の権化でばらまこう」）。
+   * ⚠️ `_spellCapitalismIncarnate`は**コストの安い順**に手持ちGが続く限り撒くので、
+   * 300Gの酢が出るのは安い順に払い終えてなお300G残っている時だけ。安いモンスター
+   * （アイランドホエール40G・50G帯）を厚めにしてあるのは弾を絞らないため。
+   * なお撒き先は**そのモンスターの属性と一致する空き地を優先**するので、水単色の
+   * この構成だと撒くほど水地の連鎖が育つ＝放水／国士無双と噛み合う。
+   *
+   * 水単色なので水神の盾の絶対反射が全モンスターで乗る（⑮で追加した属性神の盾が
+   * 本来の働きをする初めての場）。固定40枚。
+   */
+  chinu: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.su, count: 2 },                    // EX 300G 60/60 貫通・2歩移動
+        { def: MONSTER_CATALOG.suijin, count: 1 },                // R 150G
+        { def: MONSTER_CATALOG.bigMermaid, count: 1 },            // R 120G 55/55
+        { def: MONSTER_CATALOG.arashiwoyobuOnna, count: 2 },      // R 100G 50/50
+        { def: MONSTER_CATALOG.kaikyouSekishoKurage, count: 2 },  // R 80G 永続強制停止＝王の関所
+        { def: MONSTER_CATALOG.islandWhale, count: 3 },           // S 40G 資本主義の権化の弾
+        { def: MONSTER_CATALOG.yukiOnna, count: 2 },              // S 50G 先制・全水属性ATK+30
+        { def: MONSTER_CATALOG.tsurara, count: 1 },               // S 50G 10/60の壁
+        { def: MONSTER_CATALOG.uminoieTencho, count: 1 },         // R 50G 全所有地回復＋呪い解除
+        { def: MONSTER_CATALOG.hangyojin, count: 1 },             // 50G 先制
+      ],
+      items: [
+        { def: ITEM_CATALOG.peeStaff, count: 2 },                 // EX 20G 先制・ATK+25〜50
+        { def: ITEM_CATALOG.suijinNoTate, count: 2 },             // 水単色なので全員で絶対反射
+        { def: ITEM_CATALOG.shinkenShirahadori, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.waterRelease, count: 4 },            // 盤面を王の海へ
+        { def: SPELL_CATALOG.kokushiMusou, count: 3 },            // EX 連鎖数×4。放水とセット
+        { def: SPELL_CATALOG.capitalismIncarnate, count: 3 },     // EX 魚群の一斉召喚
+        { def: SPELL_CATALOG.toughness, count: 2 },               // EX 召喚時の基礎HP+10
+        { def: SPELL_CATALOG.disclosureRequest, count: 2 },       // EX 相手の手札を徴収
+        { def: SPELL_CATALOG.forcedAscension, count: 1 },         // EX 自領を地価120%で換金
+        { def: SPELL_CATALOG.divination, count: 2 },              // 放水・国士無双の引き当て
+        { def: SPELL_CATALOG.fireball, count: 1 },
+        { def: SPELL_CATALOG.senbonZakura, count: 1 },
+      ],
+    },
+  },
+  /**
    * ⑮（story.js`kawada`、CLAUDE.md「新ストーリー『川田』」参照）の川田。
    * ビーバーだが本人はマーモットだと思い込んでいる王都のレジスタンス。
    * 「純粋な殴り合い」というユーザー要望どおり、専用モンスターや妨害トリック

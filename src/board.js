@@ -367,6 +367,45 @@ const ROUDOU_ROWS = [
   'NMCWWW....',
 ];
 
+// ⑱チヌ単体との決戦（ユーザー指定「盤面は『王』の字」「CPは4つまで」）。
+// 15列×14行、実マス94。本編最大（これまでの最大は⑤ダンボール男の85）。
+// 横棒3本（上=cols2-12 / 中=cols3-11 / 下=cols0-14）と縦棒（cols6-8）で
+// 「王」を描く。
+//
+// ⚠️ **棒を1マス幅にしないこと**。横棒3本の端6か所が全部行き止まりになり、
+// `_movePlayer`の折り返しだけで進む往復専用の盤面になってしまう。横棒を2行厚・
+// 縦棒を3列厚にしてあるので、棒の端がUターンの小ループになり**行き止まりが0**。
+//
+// 成立確認済み（4方向隣接で実際に辿って検証、tests/newCards.test.mjs）:
+// ・全94マスがスタートから到達可能。行き止まり0、分岐点82。
+// ・CPは4つ。上の横棒の左端(0,2)・右端(0,12)、中央の玉座(7,7)、下の横棒の
+//   右端(13,14)。スタートは下の横棒の左端(13,0)。requireAllCheckpointsと
+//   合わせて「王の字を端から端までなぞらないとゴールできない」形にしてある。
+// ・CPの番号順（gz→gxの走査順）は ①(0,2) → ②(0,12) → ③玉座(7,7) → ④(13,14)。
+//
+// 属性は火水雷森が各21マス＋無属性5マス、**最大連鎖3**（棒に沿って3マスずつ
+// 並べ、2行厚の上下で位相をずらして縦に繋がらないようにしてある）。
+// 無属性5マスは縦棒の芯(2,7)(4,7)(6,7)(9,7)(11,7)に互いに隣接しないよう点在
+// させてあるので、無属性の連鎖は起きない。
+// ⚠️ チヌのデッキは放水4枚で土地を水地化して連鎖を伸ばす構成なので、**素の
+// 連鎖を3で抑えてあるのは前提**。ここを緩めると国士無双！！(連鎖×4)が跳ねる。
+const OU_ROWS = [
+  '..CFFFWFMTTMC..',
+  '..FTTMMMFFFWW..',
+  '......FNT......',
+  '......FWF......',
+  '......FNT......',
+  '......WTM......',
+  '...WWWTNTMMM...',
+  '...MMMFCFWWW...',
+  '......WTM......',
+  '......WNM......',
+  '......WTM......',
+  '......TNW......',
+  'TTTMMMFFFWWWTTT',
+  'GFFWWWTTTMMMFFC',
+];
+
 /**
  * ⑬の島判定。上段は3列に分かれた周回島（gridXの帯で見分ける）、
  * gridZ 8以降がゴール島。ワープの飛び先候補（ゴール島⇔CP島の往復だけ。
@@ -438,6 +477,10 @@ export const MAPS = [
   { id: 'chinu', name: '⑯ 魚群の王チヌ', wip: true, rows: CHINU_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/king-room.png'), spacing: 2.8 },
   // ⑰はストーリー専用。海底収容所の専用背景を使用する。
   { id: 'roudou', name: '⑰ 海底労働施設', wip: true, rows: ROUDOU_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage17-underwater-prison.png'), spacing: 2.8 },
+  // ⑱はストーリー専用。**ステージ名は仮題**（ユーザー確定待ち）。
+  // ⚠️ 背景は⑯の「王の間」を流用中。`getMapBackground`はフォールバックを持たず
+  // undefinedをそのままCSSへ入れるので、専用絵ができるまでここを空にしないこと。
+  { id: 'ou', name: '⑱ 王の間（仮題）', wip: true, rows: OU_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/king-room.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {

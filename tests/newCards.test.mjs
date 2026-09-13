@@ -3247,3 +3247,85 @@ test('⑰の敵AIは両方ともお札のfixer（片方だけでは効かない�
   // お札マップでないと ofudaStyle が意味を持たない。
   assert.ok(MAPS.find((m) => m.id === 'roudou').hasOfuda);
 });
+
+test('⑱の盤面は「王」の字・94マス・CP4・行き止まり0', () => {
+  const tiles = createBoard('ou');
+  assert.equal(tiles.length, 94, '土地85＋スタート1＋CP4＋…現行最大（⑤の85マス超え）');
+
+  // スタートは下の横棒の左端、CPは上の横棒の両端・中央の玉座・下の横棒の右端。
+  const start = tiles.filter((t) => t.type === TileType.START);
+  assert.equal(start.length, 1);
+  assert.deepEqual([start[0].gridZ, start[0].gridX], [13, 0]);
+  const cps = tiles.filter((t) => t.type === TileType.EVENT);
+  assert.deepEqual(cps.map((t) => t.checkpointNumber), [1, 2, 3, 4], 'ユーザー指定「CPは4つまで」');
+  assert.deepEqual(cps.map((t) => [t.gridZ, t.gridX]), [[0, 2], [0, 12], [7, 7], [13, 14]]);
+
+  // 全マスがスタートから到達できること。
+  const seen = new Set([start[0].id]);
+  const stack = [start[0].id];
+  while (stack.length) for (const n of tiles[stack.pop()].neighbors) if (!seen.has(n)) { seen.add(n); stack.push(n); }
+  assert.equal(seen.size, tiles.length, '孤立したマスがある');
+
+  // ⚠️ ここが「王」の字を成立させている条件。横棒を1マス幅にすると端6か所が
+  // 行き止まりになり、往復専用の盤面へ退化する。2行厚・3列厚を崩さないこと。
+  assert.deepEqual(tiles.filter((t) => t.neighbors.length === 1).map((t) => t.id), [], '行き止まりを作らない');
+
+  // 属性は4種各21マス＋無属性5マス。
+  const counts = {};
+  for (const t of tiles.filter((t) => t.type === TileType.LAND)) counts[t.element] = (counts[t.element] || 0) + 1;
+  assert.deepEqual(counts, { fire: 21, water: 21, forest: 21, thunder: 21, neutral: 5 });
+
+  // ⚠️ 最大連鎖3。チヌの国士無双！！は「連鎖数×4」なので、素の盤面で連鎖が
+  // 伸びていると初手から跳ねてしまう。放水で塗って初めて伸びる前提を守る。
+  for (const element of ['fire', 'water', 'thunder', 'forest', 'neutral']) {
+    const pts = new Set(tiles.filter((t) => t.element === element).map((t) => t.id));
+    const done = new Set();
+    for (const id of pts) {
+      if (done.has(id)) continue;
+      let size = 0;
+      const st = [id];
+      done.add(id);
+      while (st.length) {
+        const cur = st.pop();
+        size += 1;
+        for (const n of tiles[cur].neighbors) if (pts.has(n) && !done.has(n)) { done.add(n); st.push(n); }
+      }
+      assert.ok(size <= 3, `${element}に${size}連鎖がある（最大3まで）`);
+    }
+  }
+
+  const map = MAPS.find((m) => m.id === 'ou');
+  assert.ok(map.wip, 'ストーリー専用。対戦モードのマップ選択には出さない');
+  assert.ok(map.requireAllCheckpoints, '「王」の字を端から端までなぞらせる前提');
+  assert.ok(map.background, '背景未指定だとCSSにundefinedが入る');
+});
+
+test('⑱のチヌ専用デッキ(chinu)は40枚・水単色・EX15枚で、放水と国士無双が揃っている', () => {
+  const deck = buildCharacterCardList('chinu');
+  assert.equal(deck.length, 40);
+
+  const countOf = (name) => deck.filter((c) => c.name === name).length;
+  // ⚠️ 放水と国士無双！！はセット。CPUの_cpuMaybeUseChainStatCurseSpellは
+  // 上げ幅10未満（＝連鎖3未満）だと温存するので、放水を削るとEXが死に札になる。
+  assert.equal(countOf('放水'), 4);
+  assert.equal(countOf('国士無双！！'), 3);
+  // 酢はユーザー指定で採用。資本主義の権化は「コストの安い順」に撒くので、
+  // 300Gの酢を出し切るには安いモンスターの弾数も要る。
+  assert.equal(countOf('酢'), 2);
+  assert.equal(countOf('資本主義の権化'), 3);
+  assert.ok(deck.filter((c) => c.type === CardType.MONSTER && (c.cost || 0) <= 50).length >= 7,
+    '資本主義の権化の弾になる安いモンスターが足りない');
+
+  // ユーザー指定「EXふんだんに」。CPUが撃てるEXだけで構成してあること。
+  assert.equal(deck.filter((c) => c.rarity === 'EX').length, 15);
+
+  // 水単色（水神の盾の絶対反射を全モンスターで乗せるための前提）。
+  const elements = new Set(deck.filter((c) => c.type === CardType.MONSTER).map((c) => c.element));
+  assert.deepEqual([...elements], ['water'], 'モンスターは水単色を崩さない');
+  assert.equal(countOf('水神の盾'), 2);
+
+  // 既存の⑯用デッキを壊していないこと（キー名がchinuで始まるので取り違えやすい）。
+  for (const key of ['chinuUsagin', 'chinuMuuru', 'chinuHitodemaso']) {
+    assert.equal(buildCharacterCardList(key).length, 40, `${key}が壊れている`);
+  }
+});
