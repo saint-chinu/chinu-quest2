@@ -1868,33 +1868,39 @@ export const CHARACTER_DECKS = {
    *   主人公側のエンジンに置いていかれない、という意味で長期戦に耐える。
    * - EXの追加は益なし（目標22,000・各60戦）: 現行28/60、ペーの杖2を足して26/60、
    *   ペー1＋酢1を足して18/60。**酢は300Gが手札で腐って-16.7pt**。
-   * 固定40枚（モンスター20／アイテム8／スペル12）。EXは権化2・国士2・言論封殺2。
+   * 固定40枚（モンスター21／アイテム12／スペル7）。EXは言論封殺1・権化1・ペーの杖1。
    */
   chinu: {
     composition: {
+      // ⚠️ 2026-09 計測で決めた「合法ミラー」構成（CLAUDE.md「⑱の数値調整」⑨）。
+      // 主人公役デッキ(@tools/decks/hinanjo-deck2.json)をそのまま持たせると同seedで
+      // 65%まで出た。それをカタログ札だけで再現し（ブリモン→くぐつの剣豪1）、
+      // 千本桜→言論封殺1にしたもの。くぐつ3・放電2・国士2の「エンジン」型(A3)は
+      // これより弱かった（43%）。素直な戦闘力（Ninja4・イカサマ4・ナンカ4・真剣白刃取り2）
+      // の方が94マスの取り合いでは効く。
       monsters: [
-        // ⚠️ 30〜50Gの先制持ち12枚が土台。ここを削ると500Gから立ち上がらない。
         { def: MONSTER_CATALOG.tenhou, count: 4 },              // R 50G 30/30 先制・与ダメ×3G強奪
         { def: MONSTER_CATALOG.erekiKagayaki, count: 4 },       // S 30G 30/30 先制
         { def: MONSTER_CATALOG.thunderbird, count: 4 },         // S 50G 30/30 先制
-        { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 },   // S 50G 身代わり（生贄1が要る）
-        { def: MONSTER_CATALOG.rakuraiYohoushi, count: 2 },     // R 90G 40/35
-        { def: MONSTER_CATALOG.kugutsuNoKengou, count: 3 },     // R 120G 50/50 毎手番の自動侵略
-        { def: MONSTER_CATALOG.ninja, count: 1 },               // S 50G 40/40 先制（無属性）
+        { def: MONSTER_CATALOG.ninja, count: 4 },               // S 50G 40/40 先制・アイテム効果2倍
+        { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 },   // S 50G 身代わり（生贄1）
+        { def: MONSTER_CATALOG.kugutsuNoKengou, count: 1 },     // R 120G 50/50 自動侵略（ブリモンの代役）
+        { def: MONSTER_CATALOG.kunekune, count: 1 },            // R 50G 0/10 反射
+        { def: MONSTER_CATALOG.metaOn, count: 1 },              // S 50G 召喚時コピー
       ],
       items: [
         { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 4 },       // 40G ATK+出目×5・貫通
-        { def: ITEM_CATALOG.nankaNoOmamori, count: 3 },         // 45G ダメージ1回無効化
-        { def: ITEM_CATALOG.raijinNoTate, count: 1 },           // 80G 雷なら絶対反射
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 4 },         // 45G ダメージ1回無効化
+        { def: ITEM_CATALOG.shinkenShirahadori, count: 2 },     // 110G 相手のアイテムを奪う
+        { def: ITEM_CATALOG.peeStaff, count: 1 },               // EX 20G 先制・ATK+25〜50
+        { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
       ],
       spells: [
-        { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },   // EX 30G 手札の安物を一斉召喚
-        { def: SPELL_CATALOG.kokushiMusou, count: 2 },          // EX 120G 連鎖数×4
-        { def: SPELL_CATALOG.electrify, count: 2 },             // S 150G 雷地化＝雷お札の燃料
-        // チヌ専用EX（ユーザー指定で2枚）。相手のスペルを3ターン封じる。
-        // 枠は千本桜1・財布チューチュー1（100Gの状況札）から。
-        { def: SPELL_CATALOG.genronFuusatsu, count: 2 },
-        { def: SPELL_CATALOG.homingInstinct, count: 2 },        // 94マスの周回を締める
+        { def: SPELL_CATALOG.genronFuusatsu, count: 1 },        // チヌ専用EX（ユーザー指定で1枚）
+        { def: SPELL_CATALOG.capitalismIncarnate, count: 1 },   // EX 30G
+        { def: SPELL_CATALOG.horizon, count: 1 },
+        { def: SPELL_CATALOG.walletVacuum, count: 1 },
+        { def: SPELL_CATALOG.cancelCulture, count: 1 },
         { def: SPELL_CATALOG.iCanFly, count: 2 },
       ],
     },

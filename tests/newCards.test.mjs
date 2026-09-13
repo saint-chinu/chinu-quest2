@@ -3303,33 +3303,24 @@ test('⑱の盤面は「王」の字・94マス・CP4・行き止まり0', () =>
   assert.ok(map.background, '背景未指定だとCSSにundefinedが入る');
 });
 
-test('⑱のチヌ専用デッキ(chinu)は40枚の雷テンポ型で、安い先制持ちとfixerの燃料が揃っている', () => {
+test('⑱のチヌ専用デッキ(chinu)は主人公役デッキの合法ミラー40枚で、言論封殺1枚を含む', () => {
   const deck = buildCharacterCardList('chinu');
   assert.equal(deck.length, 40);
   const countOf = (name) => deck.filter((c) => c.name === name).length;
-
-  // ⚠️ 30〜50Gの先制持ち12枚が土台。対等500Gスタートで唯一立ち上がった構成
-  // （CLAUDE.md「⑱の数値調整」: 水単色EX13枚版は0/20、無属性型0/20、水テンポ1/20）。
-  assert.equal(countOf('エレキ輝'), 4);
-  assert.equal(countOf('サンダーバード'), 4);
-  assert.equal(countOf('テンホウ'), 4);
-  assert.ok(deck.filter((c) => c.type === CardType.MONSTER && (c.cost || 0) <= 50).length >= 14,
-    '50G以下のモンスターが足りない。500Gから土地を取れなくなる');
-
-  // 自動侵略のエンジンと、雷お札を吊り上げる燃料。
-  assert.equal(countOf('くぐつの剣豪'), 3);
-  assert.equal(countOf('放電'), 2);
-  assert.equal(countOf('国士無双！！'), 2);
-  assert.equal(countOf('資本主義の権化'), 2);
-
-  // ユーザー指定は「合体系（ガシャーン）だけ禁止、単にEXなだけなら可」。
-  // ただし他のEXは計測で益が無かったので入れていない（目標22,000・対等500G・
-  // 各60戦: 現行28/60、ペーの杖2追加26/60、ペー1＋酢1追加18/60）。EXは2種4枚。
+  // ⚠️ 計測で決めた骨格（CLAUDE.md「⑱の数値調整」⑨）。主人公役デッキと同じ
+  // 先制トリオ＋Ninja4＋アイテム12枚。エンジン型(くぐつ3・放電2・国士2)より強かった。
+  for (const [name, n] of [['テンホウ', 4], ['エレキ輝', 4], ['サンダーバード', 4], ['Ninja', 4],
+    ['イカサマのサイコロ', 4], ['ナンカのお守り', 4], ['真剣白刃取り', 2]]) {
+    assert.equal(countOf(name), n, `${name}は${n}枚`);
+  }
+  assert.ok(deck.filter((c) => c.type === CardType.MONSTER && (c.cost || 0) <= 50).length >= 18,
+    '50G以下のモンスターが足りない。1,000Gから土地を取れなくなる');
+  // ユーザー指定: 言論封殺は1枚。合体系（ガシャーン）は禁止。ブリモンは
+  // カタログに無いのでくぐつの剣豪1で代用。
+  assert.equal(countOf('言論封殺'), 1);
   assert.equal(countOf('合体ロボ・ガシャーン'), 0, '合体系は禁止（ユーザー指定）');
-  assert.equal(countOf('言論封殺'), 2, 'チヌ専用EX（ユーザー指定で2枚）');
-  assert.equal(deck.filter((c) => c.rarity === 'EX').length, 6);
+  assert.equal(countOf('くぐつの剣豪'), 1);
   assert.equal(countOf('酢'), 0, '酢は300Gが手札で腐り-16.7pt。入れるなら再計測');
-
   // 既存の⑯用デッキを壊していないこと（キー名がchinuで始まるので取り違えやすい）。
   for (const key of ['chinuUsagin', 'chinuMuuru', 'chinuHitodemaso']) {
     assert.equal(buildCharacterCardList(key).length, 40, `${key}が壊れている`);
