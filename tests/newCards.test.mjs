@@ -3319,11 +3319,12 @@ test('⑱のチヌ専用デッキ(chinu)は40枚の雷テンポ型で、安い�
   assert.equal(countOf('国士無双！！'), 2);
   assert.equal(countOf('資本主義の権化'), 2);
 
-  // ユーザー指定「ロボとかの特殊EXは入れたらだめ」。EXは上の2種4枚だけ。
+  // ユーザー指定は「合体系（ガシャーン）だけ禁止、単にEXなだけなら可」。
+  // ただし他のEXは計測で益が無かったので入れていない（目標22,000・対等500G・
+  // 各60戦: 現行28/60、ペーの杖2追加26/60、ペー1＋酢1追加18/60）。EXは2種4枚。
+  assert.equal(countOf('合体ロボ・ガシャーン'), 0, '合体系は禁止（ユーザー指定）');
   assert.equal(deck.filter((c) => c.rarity === 'EX').length, 4);
-  for (const banned of ['合体ロボ・ガシャーン', 'ペーの杖', '開示請求', '灰塵', '未知との遭遇', '強制成仏', '酢']) {
-    assert.equal(countOf(banned), 0, `${banned}は入れない`);
-  }
+  assert.equal(countOf('酢'), 0, '酢は300Gが手札で腐り-16.7pt。入れるなら再計測');
 
   // 既存の⑯用デッキを壊していないこと（キー名がchinuで始まるので取り違えやすい）。
   for (const key of ['chinuUsagin', 'chinuMuuru', 'chinuHitodemaso']) {
