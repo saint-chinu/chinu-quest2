@@ -3535,13 +3535,14 @@ test('⑲は⑱と同じ盤面で主人公 vs チヌ＆クエ、3,000G差でサ�
   assert.equal(stage.trueEndReward, 'onnenNoShuugoutai');
   assert.ok(MONSTER_CATALOG[stage.trueEndReward]);
   // 結末の2本はユーザー指定の確定稿。
+  // 「屍の上」→小咄で締める（ユーザー指定「小話が最後」）。
   assert.deepEqual(stage.outro, [
+    { speaker: 'チヌ', text: 'お前がたどり着いた場所は、多数の魚達の屍の上ということをゆめゆめ忘れるな' },
     { speaker: 'チヌ', text: 'このゲームの名前...なぜこの名前かわかるか？' },
     { speaker: '主人公', text: '急にメタ的な話はやめて！！' },
     { speaker: 'チヌ', text: 'チヌ（と）クエ（が）す（ごい）つ（よい）' },
     { speaker: 'チヌ', text: 'Chinu Que Sugoku Tsuyoi' },
     { speaker: 'チヌ', text: 'ChinuQueST...' },
-    { speaker: 'チヌ', text: 'お前がたどり着いた場所は、多数の魚達の屍の上ということをゆめゆめ忘れるな' },
   ]);
   assert.deepEqual(stage.assistOutro, [{ speaker: 'チヌ', text: '...クク、ククク...怨念の連鎖は...終わらない...お前には...真の強さを...見せてもらいたかった...' }]);
   assert.equal(stage.endingRoll, true, '結末の後にエンディングロールを流す');
