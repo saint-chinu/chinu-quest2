@@ -1868,7 +1868,7 @@ export const CHARACTER_DECKS = {
    *   主人公側のエンジンに置いていかれない、という意味で長期戦に耐える。
    * - EXの追加は益なし（目標22,000・各60戦）: 現行28/60、ペーの杖2を足して26/60、
    *   ペー1＋酢1を足して18/60。**酢は300Gが手札で腐って-16.7pt**。
-   * 固定40枚（モンスター21／アイテム12／スペル7）。専用札は言論封殺1・王の親衛隊2。
+   * 固定40枚（モンスター21／アイテム12／スペル7）。専用札は言論封殺1・怨念の集合体2。
    */
   chinu: {
     composition: {
@@ -1886,7 +1886,7 @@ export const CHARACTER_DECKS = {
         { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 },   // S 50G 身代わり（生贄1）
         // チヌ専用の成長型（ユーザー指定で2体）。40/40先制貫通、撃破ごとに+100G・+5/+5、
         // 土地コマンドで任意の空き地へ。くぐつの剣豪1・くねくね1の枠。
-        { def: MONSTER_CATALOG.ouNoShineitai, count: 2 },
+        { def: MONSTER_CATALOG.onnenNoShuugoutai, count: 2 },
         { def: MONSTER_CATALOG.metaOn, count: 1 },              // S 50G 召喚時コピー
       ],
       items: [

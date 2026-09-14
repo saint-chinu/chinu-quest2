@@ -168,7 +168,8 @@ export const THUNDER_MONSTER_CATALOG = {
     effectDescription: '先制。攻撃成功時、水属性モンスターを66%の確率で即死させる',
   }),
   /**
-   * 王の親衛隊（⑱チヌ専用、2026-09ユーザー指定。**名前は仮称**）。
+   * 怨念の集合体（⑱チヌ専用、2026-09ユーザー指定。名前もユーザー指定:
+   * 「殺された幾つもの骨の魚達が蠢く」怨念の塊。倒した相手を取り込んで育つ）。
    * 「相手を倒すたびに成長する成長型」: 40/40・貫通・先制で始まり、相手モンスターを
    * 倒すたびに持ち主が+100G、ATK/HPが+5ずつ恒久上昇（battle.jsのperformStrikeの
    * 'killGrowth'分岐。恒久値は周回成長型と同じlapGrowthAtkBonus/HpBonusに積むので、
@@ -179,14 +180,14 @@ export const THUNDER_MONSTER_CATALOG = {
    * ⚠️ 撃破判定はCPUの戦闘シミュレーション(_simulateBattleOnce)でも通るが、
    * そちらは_cloneFieldUnitForSimの複製とGoldLedgerの使い捨て台帳なので実体は育たない。
    */
-  ouNoShineitai: {
-    ...thunderMonster('ouNoShineitai', '王の親衛隊', Rarity.EX, 40, 40, {
+  onnenNoShuugoutai: {
+    ...thunderMonster('onnenNoShuugoutai', '怨念の集合体', Rarity.EX, 40, 40, {
       cost: 100,
       traits: ['firstStrike', 'pierce'],
       commandCost: 30,
       ability: { type: 'warpToAnyEmptyLand' },
       effect: { type: 'killGrowth', gold: 100, atk: 5, hp: 5 },
-      effectDescription: '先制・貫通。相手モンスターを倒すたびに+100Gを得て、ATK/HPが+5ずつ恒久上昇する。土地コマンド（30G）: 任意の空き地へ移動する',
+      effectDescription: '殺された魚たちの骨が蠢く怨念の塊。先制・貫通。相手モンスターを倒すたびに骨を取り込み、+100Gを得てATK/HPが+5ずつ恒久上昇する。土地コマンド（30G）: 任意の空き地へ移動する',
       imageDataUrl: null,
     }),
     rewardOnly: true,

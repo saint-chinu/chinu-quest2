@@ -3316,9 +3316,9 @@ test('⑱のチヌ専用デッキ(chinu)は主人公役デッキの合法ミラ�
   assert.ok(deck.filter((c) => c.type === CardType.MONSTER && (c.cost || 0) <= 50).length >= 18,
     '50G以下のモンスターが足りない。1,000Gから土地を取れなくなる');
   // ユーザー指定: 言論封殺は1枚。合体系（ガシャーン）は禁止。ブリモンは
-  // カタログに無いので王の親衛隊2で代用。
+  // カタログに無いので怨念の集合体2で代用。
   assert.equal(countOf('言論封殺'), 1);
-  assert.equal(countOf('王の親衛隊'), 2, 'チヌ専用の成長型（ユーザー指定で2体）');
+  assert.equal(countOf('怨念の集合体'), 2, 'チヌ専用の成長型（ユーザー指定で2体）');
   assert.equal(countOf('合体ロボ・ガシャーン'), 0, '合体系は禁止（ユーザー指定）');
   assert.equal(countOf('酢'), 0, '酢は300Gが手札で腐り-16.7pt。入れるなら再計測');
   // 既存の⑯用デッキを壊していないこと（キー名がchinuで始まるので取り違えやすい）。
@@ -3454,9 +3454,9 @@ test('CPUの言論封殺はスペルを一番多く握る敵へ撃ち、スペ�
   assert.deepEqual(casts, [], 'スペルの無い相手に撃って100Gを捨てない');
 });
 
-test('王の親衛隊は40/40先制貫通で、相手を倒すたびに+100G・ATK/HP+5が恒久で積み上がる', () => {
-  const def = MONSTER_CATALOG.ouNoShineitai;
-  assert.equal(def.name, '王の親衛隊');
+test('怨念の集合体は40/40先制貫通で、相手を倒すたびに+100G・ATK/HP+5が恒久で積み上がる', () => {
+  const def = MONSTER_CATALOG.onnenNoShuugoutai;
+  assert.equal(def.name, '怨念の集合体');
   assert.equal(def.atk, 40); assert.equal(def.hp, 40);
   assert.deepEqual(def.traits, ['firstStrike', 'pierce']);
   assert.deepEqual(def.ability, { type: 'warpToAnyEmptyLand' }, '土地コマンドで任意の空き地へ');
@@ -3489,7 +3489,7 @@ test('王の親衛隊は40/40先制貫通で、相手を倒すたびに+100G・A
   assert.equal(d.lapGrowthAtkBonus, 5);
 });
 
-test('王の親衛隊の狩りAIは毎手番サイコロ前に発火し、対象レベル等をaiProfileで絞れる', () => {
+test('怨念の集合体の狩りAIは毎手番サイコロ前に発火し、対象レベル等をaiProfileで絞れる', () => {
   // 実戦の効きはシミュレータで計測済み（CLAUDE.md「⑱の数値調整」⑩）。ここでは
   // 配線が外れていないことと、絞りのダイヤルがaiProfileから読まれることを見張る。
   const src = readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');

@@ -6290,7 +6290,7 @@ export class Game {
    */
   /**
    * CPUの配置ユニットを空き地へワープさせる共通処理（高額空き地の確保と、
-   * 王の親衛隊の狩り（_runKillGrowthHunters）で共用）。costは呼び出し側が
+   * 怨念の集合体の狩り（_runKillGrowthHunters）で共用）。costは呼び出し側が
    * 払える前提で、ここで引く。
    */
   async _cpuWarpUnitToEmptyLand(player, tile, target, cost, { log, effect }) {
@@ -6320,7 +6320,7 @@ export class Game {
   }
 
   /**
-   * 王の親衛隊（effect.type==='killGrowth'）の狩り。くぐつの剣豪の自動侵略と同じく
+   * 怨念の集合体（effect.type==='killGrowth'）の狩り。くぐつの剣豪の自動侵略と同じく
    * 持ち主の手番開始時・サイコロ前に発火し、土地コマンド・召喚の権利は消費しない。
    *  ① 隣接に「勝率HUNT_MIN_WIN以上」の敵モンスターがいれば移動侵略する。
    *  ② いなければ、任意空き地ワープ（土地コマンド30G）で「勝率が足りる敵の隣の

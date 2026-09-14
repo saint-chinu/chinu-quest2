@@ -689,7 +689,7 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
   }
 
   if (defenderUnit.currentHp <= 0) {
-    // 王の親衛隊(killGrowth): 撃破ごとに持ち主が+gold、個体のATK/HPが恒久で+atk/+hp。
+    // 怨念の集合体(killGrowth): 撃破ごとに持ち主が+gold、個体のATK/HPが恒久で+atk/+hp。
     // 恒久値は周回成長型と同じlapGrowth*に積む（表示・戦闘計算の全経路が既に足している）。
     // 戦闘中に最大HPが伸びるので、現在HPと盤面持ち越しHP(_boardHpBeforeBattle)も
     // 同じだけ引き上げる（healUnitと同じ考え方）。
