@@ -3446,6 +3446,12 @@ test('CPUの言論封殺はスペルを一番多く握る敵へ撃ち、スペ�
   await g._cpuMaybeUseSpellBanSpell(me);
   assert.deepEqual(casts, [3], '同盟仲間は除外し、スペルが最多の敵を選ぶ');
 
+  // パンデミックを握っている相手は、スペルの枚数より優先して封じる。
+  casts.length = 0;
+  few.hand = [{ id: 'p1', type: CardType.SPELL, name: 'パンデミック', cost: 100, catalogId: 'pandemic' }];
+  await g._cpuMaybeUseSpellBanSpell(me);
+  assert.deepEqual(casts, [2], 'パンデミック保持者（1枚）を、素のスペル2枚の相手より先に封じる');
+
   // 既に封殺済みの敵と、スペルを持たない敵しか居なければ温存。
   casts.length = 0;
   many.spellBanTurnsRemaining = 2;
@@ -3515,7 +3521,7 @@ test('⑲は⑱と同じ盤面で主人公 vs チヌ＆クエ、3,000G差でサ�
   assert.equal(stage.enemyAllianceId, 'white');
   assert.equal(stage.startingCurrency, 1000);
   assert.deepEqual(stage.opponents.map((o) => o.name), ['チヌ', 'クエ']);
-  assert.equal(stage.opponents[0].deckKey, 'chinu');
+  assert.equal(stage.opponents[0].deckKey, 'chinuFinal', '⑲はパンデミック封じの決戦版');
   assert.deepEqual(stage.opponents[0].aiProfile, { ofudaStyle: 'fixer', huntMinLandLevel: 3 },
     '⑲は2vs1なので狩りをLv3以上に絞る（Lv2だと真エンド経路5%・2vs2でも15%）');
   for (const o of stage.opponents) assert.equal(o.startingCurrency, undefined, '片寄せの初期資金補正は置かない');
@@ -3600,4 +3606,23 @@ test('エンディングロールは⑲の結末の後に流れ、全ステー�
   // 結末の会話の後、ストーリー画面へ戻る前に流す（真エンド・バッドエンドの両経路）。
   const end = src.slice(src.indexOf('async function handleStoryBattleEnd('), src.indexOf('function confirmLandscapeReady'));
   assert.equal((end.match(/if \(stage\.endingRoll\) await playEndingRoll\(\);/g) || []).length, 2, '勝利の2経路（盤面オーバーレイ／全画面会話）の両方で流す');
+});
+
+test('⑲のチヌ決戦デッキ(chinuFinal)は⑱と同じ骨格でパンデミック封じ（言論封殺2・キャンセルカルチャー4）', () => {
+  const deck = buildCharacterCardList('chinuFinal');
+  assert.equal(deck.length, 40);
+  const countOf = (name) => deck.filter((c) => c.name === name).length;
+  assert.equal(countOf('言論封殺'), 2);
+  assert.equal(countOf('キャンセルカルチャー'), 4);
+  assert.equal(countOf('怨念の集合体'), 2);
+  assert.equal(countOf('合体ロボ・ガシャーン'), 0, '合体系は禁止');
+  // モンスター・アイテムは⑱のchinuと同一（差はスペルだけ）。
+  const key = (c) => c.name;
+  const base = buildCharacterCardList('chinu');
+  for (const type of [CardType.MONSTER, CardType.GEAR]) {
+    assert.deepEqual(deck.filter((c) => c.type === type).map(key).sort(), base.filter((c) => c.type === type).map(key).sort(), `${type}が⑱と違う`);
+  }
+  // ターン内はキャンセルカルチャー（破壊）→言論封殺（封じ）の順で判定される。
+  const src = readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');
+  assert.ok(src.indexOf('await this._cpuMaybeUseCancelCultureSpell(this.currentPlayer);') < src.indexOf('await this._cpuMaybeUseSpellBanSpell(this.currentPlayer);'), '破壊より先に封じてしまう');
 });

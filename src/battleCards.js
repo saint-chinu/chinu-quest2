@@ -1907,6 +1907,42 @@ export const CHARACTER_DECKS = {
     },
   },
   /**
+   * ⑲（story.js`ou-final`）のチヌ。⑱の`chinu`を土台に**パンデミック封じ**へ寄せた
+   * 決戦版（ユーザー指定 2026-09「人間プレイヤーがやってくるとしたらパンデミック。
+   * 言論封殺でスペルを使わせず、キャンセルカルチャーでスペルを破壊」）。
+   * - キャンセルカルチャー4: CPU判断(`_cpuMaybeUseCancelCultureSpell`)はパンデミックを
+   *   最優先で破壊し、対象プレイヤーもパンデミック保持者を先に見る。
+   * - 言論封殺2: `_cpuMaybeUseSpellBanSpell`はパンデミック保持者を優先して3ターン封じる。
+   *   ターン内の呼び出し順は破壊→封殺なので、手札に両方あれば先に破壊する。
+   * 枠はアイキャンフライ2・財布チューチュー1・ホライズン1から。モンスター・アイテムは⑱と同一。
+   * 真エンドは「激ムズでいい」（ユーザー指定）ので難度は絞らない。固定40枚。
+   */
+  chinuFinal: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.tenhou, count: 4 },
+        { def: MONSTER_CATALOG.erekiKagayaki, count: 4 },
+        { def: MONSTER_CATALOG.thunderbird, count: 4 },
+        { def: MONSTER_CATALOG.ninja, count: 4 },
+        { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 },
+        { def: MONSTER_CATALOG.onnenNoShuugoutai, count: 2 },
+        { def: MONSTER_CATALOG.metaOn, count: 1 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 4 },
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 4 },
+        { def: ITEM_CATALOG.shinkenShirahadori, count: 2 },
+        { def: ITEM_CATALOG.peeStaff, count: 1 },
+        { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.genronFuusatsu, count: 2 },        // チヌ専用EX。パンデミック保持者を優先して封じる
+        { def: SPELL_CATALOG.cancelCulture, count: 4 },         // 40G。パンデミックを最優先で破壊
+        { def: SPELL_CATALOG.capitalismIncarnate, count: 1 },
+      ],
+    },
+  },
+  /**
    * ⑮（story.js`kawada`、CLAUDE.md「新ストーリー『川田』」参照）の川田。
    * ビーバーだが本人はマーモットだと思い込んでいる王都のレジスタンス。
    * 「純粋な殴り合い」というユーザー要望どおり、専用モンスターや妨害トリック

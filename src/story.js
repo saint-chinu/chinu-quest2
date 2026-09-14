@@ -1461,7 +1461,8 @@ export const STORY_STAGES = [
       {
         name: 'チヌ',
         color: 0x1a237e,
-        deckKey: 'chinu',
+        // ⑲はパンデミック封じの決戦版（言論封殺2・キャンセルカルチャー4）。
+        deckKey: 'chinuFinal',
         theme: { elements: [Element.THUNDER] },
         // ⑱はLv2だが⑲は2vs1なので狩りをLv3以上に絞る（仮）。Lv2のままだと真エンド
         // 経路（1vs2）が主人公5%・サーティー参戦後の2vs2でも15%で両経路とも

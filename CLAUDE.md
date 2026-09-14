@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v296`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v297`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ### BGMコレクション `/bgm/`（2026-09）
@@ -1100,6 +1100,12 @@ main.jsは`stage.mapId ?? stage.key`で盤面と背景を引く。他所で`stag
     （EX「怨念の集合体」を1枚付与。`receivedTrueEndReward[stage.key]`で一度きり）。
   - 敗北 → 通常の敗北（再挑戦）。
   - どちらの勝利でも⑱⑲の専用札（言論封殺・怨念の集合体）を図鑑登録する。
+- **真エンドは「激ムズでいい」（ユーザー指定）。** 人間の攻め筋はパンデミックなので、
+  ⑲のチヌは決戦版デッキ`chinuFinal`（`chinu`と同じモンスター・アイテムに
+  **言論封殺2・キャンセルカルチャー4**。アイキャンフライ2・財布1・ホライズン1が枠）。
+  AIは`_cpuMaybeUseCancelCultureSpell`がパンデミックを最優先で破壊（既存）、
+  `_cpuMaybeUseSpellBanSpell`は**パンデミック保持者を優先して3ターン封じる**（追加）。
+  呼び出し順は破壊→封殺（`_runCPUTurn`内、回帰テストで固定）。
 - **結末のセリフ（ユーザー指定・確定稿）**: 真エンドはチヌ「お前がたどり着いた場所は、
   多数の魚達の屍の上ということをゆめゆめ忘れるな」と共にEXを入手。バッドエンドは
   チヌ「...クク、ククク...怨念の連鎖は...終わらない...お前には...真の強さを...

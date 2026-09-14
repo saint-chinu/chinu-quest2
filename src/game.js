@@ -9188,11 +9188,16 @@ export class Game {
     // 変わらず（絞り無し15/60・絞り17/60、対等1,000G・目標22,000）。封殺そのものが
     // 目的のカードなので、条件を付けずに撃つ。
     if (!card || player.currency < (card.cost || 0)) return;
+    // ⚠️ パンデミック（CANCEL_CULTURE_PRIORITY_IDS）を握っている相手を最優先で封じる
+    // （ユーザー指定 2026-09「パンデミック封じで言論封殺」）。破壊できる
+    // キャンセルカルチャーはターン内でこの前に判定されるので、手札に両方あれば
+    // 先に破壊し、無ければここで撃たせない。
+    const holdsPriority = (p) => (p.hand || []).some((c) => c.type === CardType.SPELL && CANCEL_CULTURE_PRIORITY_IDS.has(catalogIdOf(c)));
     const target = this.players
       .filter((p) => !p.defeated && p.id !== player.id && !this._isAllyOf(p, player) && !(p.spellBanTurnsRemaining > 0))
-      .map((p) => ({ p, spells: (p.hand || []).filter((c) => c.type === CardType.SPELL).length }))
+      .map((p) => ({ p, spells: (p.hand || []).filter((c) => c.type === CardType.SPELL).length, priority: holdsPriority(p) }))
       .filter(({ spells }) => spells >= 1)
-      .sort((a, b) => b.spells - a.spells)[0];
+      .sort((a, b) => (b.priority ? 1 : 0) - (a.priority ? 1 : 0) || b.spells - a.spells)[0];
     if (!target) return;
     await this._cpuCastSpell(player, card, { targetPlayerId: target.p.id });
   }
