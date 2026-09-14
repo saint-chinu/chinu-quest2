@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v295`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v296`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ### BGMコレクション `/bgm/`（2026-09）
@@ -1100,6 +1100,21 @@ main.jsは`stage.mapId ?? stage.key`で盤面と背景を引く。他所で`stag
     （EX「怨念の集合体」を1枚付与。`receivedTrueEndReward[stage.key]`で一度きり）。
   - 敗北 → 通常の敗北（再挑戦）。
   - どちらの勝利でも⑱⑲の専用札（言論封殺・怨念の集合体）を図鑑登録する。
+- **結末のセリフ（ユーザー指定・確定稿）**: 真エンドはチヌ「お前がたどり着いた場所は、
+  多数の魚達の屍の上ということをゆめゆめ忘れるな」と共にEXを入手。バッドエンドは
+  チヌ「...クク、ククク...怨念の連鎖は...終わらない...お前には...真の強さを...
+  見せてもらいたかった...」で終わる。introとサーティー参戦時の会話はまだ（仮）。
+- **エンディングロール**（`stage.endingRoll:true`、main.jsの`playEndingRoll`）: 結末の
+  会話の後・ストーリー画面へ戻る前に、真エンド／バッドエンドどちらでも流す。
+  黒地の全画面に、①〜⑲の背景（`getMapBackground(stage.mapId ?? stage.key)`）と
+  登場NPCの立ち絵（opponents/ally/midBattleAssist.allyを`npcPortraitUrl`で、最大3人）
+  ＋主人公アイコン＋ステージ名が3.2秒ずつ浮かんで消える→クレジット
+  「企画 クエ（チヌ）」「制作 クエ（チヌ）」「デバッグ 29ch3様 避難所様 良い鯛様 葡萄様」
+  →「チヌクエスト2 Fin」。クリック/タップで次へ、「スキップ」で全部飛ばす。
+  BGMは⑯「玉座の重み」（`setBgmOverride('chinu')`）で、終了時に`blockMusicPlayback`。
+  例外が出ても`finally`でオーバーレイを外す。スタイルは`style.css`末尾の`.ending-roll*`。
+  ⚠️ **ブラウザでの目視確認は未実施**（DOM演出なのでテストは配線とクレジット文言の
+  監視のみ）。⑲を勝ってから通しで見ること。
 - シミュレータは`--allyA=none`でA陣営1人の1vs2を回せる（サーティー参戦は再現しない
   ＝真エンド経路の難度だけ測れる）。勝敗の集計は席番号の偶奇ではなく`allianceId`で
   引く（3席の1vs2で席2=B陣営になるため。修正前はクエの勝ちが主人公側に載っていた）。

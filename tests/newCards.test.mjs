@@ -3528,8 +3528,10 @@ test('⑲は⑱と同じ盤面で主人公 vs チヌ＆クエ、3,000G差でサ�
   // マルチエンド: 真エンド報酬とバッドエンドの会話が分かれている。
   assert.equal(stage.trueEndReward, 'onnenNoShuugoutai');
   assert.ok(MONSTER_CATALOG[stage.trueEndReward]);
-  assert.ok(Array.isArray(stage.assistOutro) && stage.assistOutro.length > 0, 'バッドエンドの会話');
-  assert.ok(Array.isArray(stage.outro) && stage.outro.length > 0, '真エンドの会話');
+  // 結末の2本はユーザー指定の確定稿。
+  assert.deepEqual(stage.outro, [{ speaker: 'チヌ', text: 'お前がたどり着いた場所は、多数の魚達の屍の上ということをゆめゆめ忘れるな' }]);
+  assert.deepEqual(stage.assistOutro, [{ speaker: 'チヌ', text: '...クク、ククク...怨念の連鎖は...終わらない...お前には...真の強さを...見せてもらいたかった...' }]);
+  assert.equal(stage.endingRoll, true, '結末の後にエンディングロールを流す');
   assert.ok(NPC_PORTRAIT_URL['クエ'] && NPC_TOKEN_URL['サーティー']);
 });
 
@@ -3579,4 +3581,23 @@ test('⑲のマルチエンドはmain.jsで「参戦あり→assistOutro／参�
   // game側は終了payloadに assisted を載せる。
   const game = readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');
   assert.equal((game.match(/assisted: this\.storyAssistTriggered/g) || []).length, 2, '勝敗2経路とも assisted を載せる');
+});
+
+test('エンディングロールは⑲の結末の後に流れ、全ステージの背景と立ち絵、指定のクレジットを持つ', () => {
+  const src = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  assert.match(src, /async function playEndingRoll\(/, 'playEndingRollが無い');
+  const fn = src.slice(src.indexOf('async function playEndingRoll('), src.indexOf('async function playEndingRoll(') + 6000);
+  // 各ステージの背景と登場NPCの立ち絵を順に見せる。
+  assert.ok(fn.includes('STORY_STAGES'), '全ステージを回していない');
+  assert.ok(fn.includes('getMapBackground(stage.mapId ?? stage.key)'), '背景はmapId優先で引く');
+  assert.ok(fn.includes('npcPortraitUrl('), '立ち絵を出していない');
+  // クレジット（ユーザー指定の全文）。
+  for (const text of ['企画', '制作', 'デバッグ', 'クエ（チヌ）', '29ch3様', '避難所様', '良い鯛様', '葡萄様']) {
+    assert.ok(fn.includes(text), `クレジットに「${text}」が無い`);
+  }
+  // スキップできる（動画的な演出なので閉じ込めない）。
+  assert.ok(fn.includes('スキップ'), 'スキップ手段が無い');
+  // 結末の会話の後、ストーリー画面へ戻る前に流す（真エンド・バッドエンドの両経路）。
+  const end = src.slice(src.indexOf('async function handleStoryBattleEnd('), src.indexOf('function confirmLandscapeReady'));
+  assert.equal((end.match(/if \(stage\.endingRoll\) await playEndingRoll\(\);/g) || []).length, 2, '勝利の2経路（盤面オーバーレイ／全画面会話）の両方で流す');
 });

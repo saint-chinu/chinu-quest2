@@ -5121,3 +5121,137 @@ html, body {
 .hidden {
   display: none;
 }
+
+/* ── エンディングロール（⑲の結末の後。main.jsのplayEndingRoll） ──
+   黒地の全画面に、各ステージの背景と立ち絵が浮かんでは消えていく。
+   .story-blackout と同じく最前面だが、こちらはクリックで送るので
+   pointer-events は生かす。 */
+.ending-roll {
+  position: fixed;
+  inset: 0;
+  z-index: 9100;
+  background: #000;
+  color: #f2f2f2;
+  opacity: 0;
+  transition: opacity 700ms ease;
+  overflow: hidden;
+  cursor: pointer;
+  user-select: none;
+}
+.ending-roll.show { opacity: 1; }
+
+.ending-roll-scene {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0;
+  transform: scale(1.04);
+  transition: opacity 900ms ease, transform 4000ms ease-out;
+}
+.ending-roll-scene::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.75), rgba(0, 0, 0, 0.15) 45%, rgba(0, 0, 0, 0.35));
+}
+.ending-roll-scene.visible { opacity: 1; transform: scale(1); }
+
+.ending-roll-portraits {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 14vh;
+  display: flex;
+  justify-content: center;
+  align-items: flex-end;
+  gap: 2vw;
+  padding-inline: 4vw;
+  opacity: 0;
+  transform: translateY(12px);
+  transition: opacity 900ms ease 200ms, transform 900ms ease 200ms;
+  pointer-events: none;
+}
+.ending-roll-portraits.visible { opacity: 1; transform: translateY(0); }
+.ending-roll-portraits img {
+  max-height: 52vh;
+  max-width: 28vw;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.6));
+}
+.ending-roll-portraits img.ending-roll-hero {
+  max-height: 22vh;
+  max-width: 22vh;
+  border-radius: 50%;
+  align-self: center;
+}
+
+.ending-roll-caption {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 5vh;
+  margin: 0;
+  text-align: center;
+  font-size: clamp(16px, 2.6vw, 26px);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  color: #ffd166;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8);
+  opacity: 0;
+  transition: opacity 900ms ease 400ms;
+  pointer-events: none;
+}
+.ending-roll-caption.visible { opacity: 1; }
+
+.ending-roll-credits {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  gap: 10px;
+  text-align: center;
+  opacity: 0;
+  transition: opacity 900ms ease;
+  pointer-events: none;
+}
+.ending-roll-credits.visible { opacity: 1; }
+.ending-roll-role {
+  margin: 0;
+  font-size: clamp(13px, 1.8vw, 18px);
+  letter-spacing: 0.3em;
+  color: #9fb3c8;
+}
+.ending-roll-name {
+  margin: 0;
+  font-size: clamp(20px, 3.4vw, 34px);
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  line-height: 1.6;
+  max-width: 90vw;
+}
+.ending-roll-title {
+  margin: 0;
+  font-size: clamp(26px, 5vw, 48px);
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  color: #ffd166;
+}
+.ending-roll-fin {
+  margin: 0;
+  font-size: clamp(18px, 3vw, 28px);
+  letter-spacing: 0.4em;
+  color: #9fb3c8;
+}
+.ending-roll .story-skip-button {
+  position: absolute;
+  top: max(14px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  z-index: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ending-roll-scene { transform: none; transition: opacity 300ms ease; }
+}

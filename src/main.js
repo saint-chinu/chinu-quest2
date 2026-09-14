@@ -6136,6 +6136,7 @@ async function handleStoryBattleEnd(index, result = {}) {
     blockMusicPlayback();
     appEl.classList.add('hidden');
     preGame.classList.remove('hidden');
+    if (stage.endingRoll) await playEndingRoll();
     showStoryScreen();
     showToast(`ストーリー報酬として${mReward.earnedM}M獲得しました`, 2400);
     return;
@@ -6143,8 +6144,133 @@ async function handleStoryBattleEnd(index, result = {}) {
 
   showScreen(storyDialogueScreen);
   await playDialogueLines(outroLines, { background: getMapBackground(stage.mapId ?? stage.key), stageBadgeText: `STORY${stage.title}` });
+  if (stage.endingRoll) await playEndingRoll();
   showStoryScreen();
   showToast(`ストーリー報酬として${mReward.earnedM}M獲得しました`, 2400);
+}
+
+/**
+ * エンディングロール（⑲の結末の後、ユーザー指定 2026-09）。
+ * 各ステージの背景と登場NPCの立ち絵が浮かんでは消えていくムービー風の
+ * シーン送り→クレジット→「チヌクエスト2 Fin」。クリック/タップで次のシーンへ、
+ * 「スキップ」で全部飛ばせる。BGMは⑯「玉座の重み」（王のテーマ）。
+ * 演出中に例外が出ても必ずオーバーレイを外して戻る（盤面に取り残さない）。
+ */
+async function playEndingRoll() {
+  const overlay = document.createElement('div');
+  overlay.className = 'ending-roll';
+  const scene = document.createElement('div');
+  scene.className = 'ending-roll-scene';
+  const portraits = document.createElement('div');
+  portraits.className = 'ending-roll-portraits';
+  const caption = document.createElement('p');
+  caption.className = 'ending-roll-caption';
+  const credits = document.createElement('div');
+  credits.className = 'ending-roll-credits';
+  const skip = document.createElement('button');
+  skip.className = 'story-skip-button';
+  skip.textContent = 'スキップ';
+  overlay.append(scene, portraits, caption, credits, skip);
+  document.body.appendChild(overlay);
+
+  let skipped = false;
+  let advance = null;
+  skip.addEventListener('click', () => { skipped = true; advance?.(); });
+  overlay.addEventListener('click', (e) => { if (e.target !== skip) advance?.(); });
+  const wait = (ms) => new Promise((resolve) => {
+    const timer = setTimeout(() => { advance = null; resolve(); }, ms);
+    advance = () => { clearTimeout(timer); advance = null; resolve(); };
+  });
+  const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+  try {
+    allowMusicPlayback();
+    setBgmOverride('chinu');
+    playMapTheme('ou');
+    await nextFrame();
+    overlay.classList.add('show');
+    await wait(900);
+
+    // ── 各ステージの回想 ──
+    const heroIcon = currentCharacter ? await resolveCharacterIcon(currentCharacter) : null;
+    for (const stage of STORY_STAGES) {
+      if (skipped) break;
+      const names = [
+        ...(stage.opponents || []).map((o) => o.name),
+        stage.ally?.name,
+        stage.midBattleAssist?.ally?.name,
+      ].filter(Boolean);
+      const urls = [...new Set(names.map((name) => npcPortraitUrl(name)).filter(Boolean))].slice(0, 3);
+      scene.style.backgroundImage = `url('${getMapBackground(stage.mapId ?? stage.key)}')`;
+      portraits.replaceChildren(...urls.map((url) => {
+        const img = document.createElement('img');
+        img.src = url;
+        img.alt = '';
+        return img;
+      }));
+      if (heroIcon?.dataUrl) {
+        const img = document.createElement('img');
+        img.src = heroIcon.dataUrl;
+        img.alt = '';
+        img.className = 'ending-roll-hero';
+        portraits.prepend(img);
+      }
+      caption.textContent = stage.title;
+      scene.classList.add('visible');
+      portraits.classList.add('visible');
+      caption.classList.add('visible');
+      await wait(3200);
+      scene.classList.remove('visible');
+      portraits.classList.remove('visible');
+      caption.classList.remove('visible');
+      await wait(900);
+    }
+
+    // ── クレジット（ユーザー指定） ──
+    const CREDITS = [
+      ['企画', 'クエ（チヌ）'],
+      ['制作', 'クエ（チヌ）'],
+      ['デバッグ', '29ch3様　避難所様　良い鯛様　葡萄様'],
+    ];
+    portraits.replaceChildren();
+    caption.textContent = '';
+    scene.style.backgroundImage = '';
+    for (const [role, name] of CREDITS) {
+      if (skipped) break;
+      credits.replaceChildren();
+      const roleEl = document.createElement('p');
+      roleEl.className = 'ending-roll-role';
+      roleEl.textContent = role;
+      const nameEl = document.createElement('p');
+      nameEl.className = 'ending-roll-name';
+      nameEl.textContent = name;
+      credits.append(roleEl, nameEl);
+      credits.classList.add('visible');
+      await wait(3000);
+      credits.classList.remove('visible');
+      await wait(700);
+    }
+    credits.replaceChildren();
+    const title = document.createElement('p');
+    title.className = 'ending-roll-title';
+    title.textContent = 'チヌクエスト2';
+    const fin = document.createElement('p');
+    fin.className = 'ending-roll-fin';
+    fin.textContent = 'Fin';
+    credits.append(title, fin);
+    credits.classList.add('visible');
+    skipped = false;
+    await wait(4000);
+    credits.classList.remove('visible');
+    await wait(800);
+  } catch (error) {
+    console.error('エンディングロールに失敗しました', error);
+  } finally {
+    blockMusicPlayback();
+    overlay.classList.remove('show');
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    overlay.remove();
+  }
 }
 
 /** スマートフォンでは盤面生成前に横持ちを促し、完了操作まで開始しない。 */
