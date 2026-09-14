@@ -892,6 +892,7 @@ export class Game {
     // 土地コマンド・召喚の権利を一切消費しない（isBusyはまだtrueのまま＝
     // 侵略中にサイコロを振られない）。
     await this._runAutoInvaders(this.currentPlayer);
+    await this._runKillGrowthHunters(this.currentPlayer);
     if (this._isCancelled || this.storyEnded) return;
 
     this.isBusy = false;
@@ -6287,6 +6288,110 @@ export class Game {
    * CPUが現在地のモンスター能力で高額空き地を確保する。属性ワープは
    * 対応属性内の最高額へ移動し、空き地召喚能力は全候補中の最高額へ置く。
    */
+  /**
+   * CPUの配置ユニットを空き地へワープさせる共通処理（高額空き地の確保と、
+   * 王の親衛隊の狩り（_runKillGrowthHunters）で共用）。costは呼び出し側が
+   * 払える前提で、ここで引く。
+   */
+  async _cpuWarpUnitToEmptyLand(player, tile, target, cost, { log, effect }) {
+    player.currency -= cost;
+    const unit = tile.unit;
+    // 他のワープ/移動処理と同じくアイコンも付け替える。付け替えないと元の
+    // マスに置き去りのアイコンが残り、_syncUnitIconsが破棄→再生成するため
+    // ホップ演出が出ずに瞬間移動して見える。
+    const mesh = tile.unitMesh;
+    const sourceLandLoss = this._captureLandLoss(player, tile);
+    const destinationLandGain = this._captureLandGain(player, target, { showAnyChange: true });
+    tile.unitMesh = null;
+    target.unit = unit;
+    target.owner = player.id;
+    target.unitMesh = mesh;
+    this._paintTile(target, player.color);
+    tile.unit = null;
+    tile.owner = null;
+    tile.transparentCursed = false;
+    this._repaintTileToElement(tile);
+    this.onLog(log);
+    await this._hopUnitIcon(mesh, tile.position, target.position);
+    this._notifyState();
+    await this.onTargetEffect?.({ tileId: target.id, position: target.position, message: effect });
+    await this._presentLandLoss(sourceLandLoss);
+    await this._presentLandGain(destinationLandGain);
+  }
+
+  /**
+   * 王の親衛隊（effect.type==='killGrowth'）の狩り。くぐつの剣豪の自動侵略と同じく
+   * 持ち主の手番開始時・サイコロ前に発火し、土地コマンド・召喚の権利は消費しない。
+   *  ① 隣接に「勝率HUNT_MIN_WIN以上」の敵モンスターがいれば移動侵略する。
+   *  ② いなければ、任意空き地ワープ（土地コマンド30G）で「勝率が足りる敵の隣の
+   *     空き地」へ飛び、そのまま移動侵略する（ワープ代＋100Gを残せる時だけ）。
+   * 勝てる相手がいなければ何もしない（無理な侵略で成長型を失わない）。
+   * 侵略可否（聖域・同盟・特殊マス）は移動コマンドの候補列挙と同じルール。
+   */
+  async _runKillGrowthHunters(player) {
+    // 絞りのダイヤル（story.jsのaiProfileで上書き可。⑱の難度調整用）:
+    //  huntMinWin      : 襲いかかる最低勝率（既定0.6）
+    //  huntMinLandLevel: 狩りの対象にする敵地の最低レベル（隣接・ワープ共通。既定1＝どこでも）
+    //  huntReserve     : ワープ狩りの後に残す軍資金（既定100）
+    const HUNT_MIN_WIN = player.aiProfile?.huntMinWin ?? 0.6;
+    const HUNT_MIN_LAND_LEVEL = player.aiProfile?.huntMinLandLevel ?? 1;
+    const HUNT_RESERVE = player.aiProfile?.huntReserve ?? 100;
+    //  huntsPerTurn    : 1手番に狩りへ出る親衛隊の数（既定は無制限）
+    const HUNTS_PER_TURN = player.aiProfile?.huntsPerTurn ?? Infinity;
+    let hunts = 0;
+    const hunters = this.tiles
+      .filter((tile) => tile.type === TileType.LAND
+        && tile.owner === player.id
+        && tile.unit?.ownerId === player.id
+        && tile.unit.def.effect?.type === 'killGrowth')
+      .map((tile) => tile.unit);
+    for (const unit of hunters) {
+      if (this._isCancelled || this.storyEnded) return;
+      let source = this.tiles.find((tile) => tile.unit === unit);
+      if (!source) continue; // 直前の戦闘で倒された
+      const bestAdjacent = () => {
+        const adjacent = this._moveCommandCandidates(source, player)
+          .map(({ tile }) => tile)
+          .filter((tile) => tile.unit && tile.owner != null && tile.owner !== player.id
+            && tile.level >= HUNT_MIN_LAND_LEVEL);
+        const ranked = this._rankAutoInvadeTargets(source, player, adjacent);
+        const best = ranked[0];
+        if (!best) return null;
+        return this._estimateUnitBattleWinProbability(unit, null, best) >= HUNT_MIN_WIN ? best : null;
+      };
+      let target = bestAdjacent();
+      if (!target) {
+        const cost = unit.def.commandCost ?? 0;
+        if (unit.def.ability?.type !== 'warpToAnyEmptyLand' || player.currency < cost + HUNT_RESERVE) continue;
+        // 敵モンスターのうち「隣に空き地があり、勝率が足りる」相手を探す。
+        const isEmptyLand = (t) => t?.type === TileType.LAND && t.owner == null && !t.unit;
+        const prey = this.tiles
+          .filter((t) => t.type === TileType.LAND && t.unit && t.owner != null && t.owner !== player.id
+            && t.level >= HUNT_MIN_LAND_LEVEL
+            && !this._isTransparentTile(t)
+            && !this._isAllyOf(this.players.find((p) => p.id === t.owner), player)
+            && (t.neighbors || []).some((id) => isEmptyLand(this.tiles[id]) && this.tiles[id].id !== source.id))
+          .map((t) => ({ t, win: this._estimateUnitBattleWinProbability(unit, null, t) }))
+          .filter(({ win }) => win >= HUNT_MIN_WIN)
+          .sort((a, b) => b.win - a.win || b.t.level - a.t.level || a.t.id - b.t.id)[0];
+        if (!prey) continue;
+        const landing = (prey.t.neighbors || []).map((id) => this.tiles[id]).find((t) => isEmptyLand(t) && t.id !== source.id);
+        if (!landing) continue;
+        await this._cpuWarpUnitToEmptyLand(player, source, landing, cost, {
+          log: `${player.name}の${unit.def.name}が${prey.t.unit.def.name}の隣へワープした (-${cost}G)`,
+          effect: `${unit.def.name}が獲物を捕捉！`,
+        });
+        source = landing;
+        target = bestAdjacent();
+        if (!target) continue; // ワープ後の候補列挙で弾かれた（聖域等）
+      }
+      this.onLog(`${player.name}の${unit.def.name}が${target.unit.def.name}へ襲いかかる！`);
+      await this._cpuMoveOwnedUnit(player, source, target, {});
+      hunts += 1;
+      if (hunts >= HUNTS_PER_TURN) return;
+    }
+  }
+
   async _cpuMaybeAcquireHighValueLandByAbility(player, tile) {
     const unitDef = tile.unit?.def;
     const ability = unitDef?.ability;
@@ -6297,29 +6402,10 @@ export class Game {
       const target = this._cpuHighValueEmptyLands().find((land) =>
         land.id !== tile.id && (ability.type === 'warpToAnyEmptyLand' || land.element === ability.element));
       if (!target) return false;
-      player.currency -= cost;
-      const unit = tile.unit;
-      // 他のワープ/移動処理と同じくアイコンも付け替える。付け替えないと元の
-      // マスに置き去りのアイコンが残り、_syncUnitIconsが破棄→再生成するため
-      // ホップ演出が出ずに瞬間移動して見える。
-      const mesh = tile.unitMesh;
-      const sourceLandLoss = this._captureLandLoss(player, tile);
-      const destinationLandGain = this._captureLandGain(player, target, { showAnyChange: true });
-      tile.unitMesh = null;
-      target.unit = unit;
-      target.owner = player.id;
-      target.unitMesh = mesh;
-      this._paintTile(target, player.color);
-      tile.unit = null;
-      tile.owner = null;
-      tile.transparentCursed = false;
-      this._repaintTileToElement(tile);
-      this.onLog(`${player.name}の${unitDef.name}が高額な空き地へワープした (-${cost}G)`);
-      await this._hopUnitIcon(mesh, tile.position, target.position);
-      this._notifyState();
-      await this.onTargetEffect?.({ tileId: target.id, position: target.position, message: `${unitDef.name}が高額空き地を確保！` });
-      await this._presentLandLoss(sourceLandLoss);
-      await this._presentLandGain(destinationLandGain);
+      await this._cpuWarpUnitToEmptyLand(player, tile, target, cost, {
+        log: `${player.name}の${unitDef.name}が高額な空き地へワープした (-${cost}G)`,
+        effect: `${unitDef.name}が高額空き地を確保！`,
+      });
       return true;
     }
 

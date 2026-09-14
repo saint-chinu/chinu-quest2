@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v292`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v293`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ### BGMコレクション `/bgm/`（2026-09）
@@ -1189,6 +1189,31 @@ story.jsの`ou`に会話（ユーザー指定全文）・目標22,000G・チヌ(
   判断で条件を付けずに撃つ仕様を採っている**ので、これを理由に外したり絞ったり
   しないこと。⑲（チヌ＆クエ）の調整で必要ならクエ側で補う。
 
+### チヌ専用モンスター「王の親衛隊」（2026-09 ユーザー指定・実装済み・**名前は仮称**）
+`thunderMonsters.js`の`ouNoShineitai`。雷・EX・100G・**40/40・先制・貫通**、
+`effect:{type:'killGrowth', gold:100, atk:5, hp:5}`＝**相手モンスターを倒すたびに持ち主が
++100G、ATK/HPが+5ずつ恒久上昇**。土地コマンド（30G）で任意の空き地へ移動
+（未知の侵略者と同じ`warpToAnyEmptyLand`）。チヌのデッキに2体。`rewardOnly`。画像未用意。
+- 撃破判定は`battle.js`の`performStrike`の`defenderUnit.currentHp <= 0`分岐（賠償金
+  `payOnKill`の隣）。攻守対称に呼ばれるので**守る側で返り討ちにしても育つ**。
+- 恒久値は周回成長型と同じ`lapGrowthAtkBonus/HpBonus`へ積む（`_baseStats`と
+  battle.jsの計算式が既に全経路で足している）。戦闘中に最大HPが伸びるので
+  現在HPと`_boardHpBeforeBattle`も同額引き上げる。
+- CPUの戦闘シミュレーション(`_simulateBattleOnce`)でも同じ分岐を通るが、
+  `_cloneFieldUnitForSim`の複製＋使い捨て`GoldLedger`なので実体は育たない。
+- **狩りAI `_runKillGrowthHunters`（game.js）**: 置いただけでは戦闘が起きず育たない
+  （初版は18/60=30%で、外したくぐつの自動侵略より弱かった）ので、くぐつの
+  `_runAutoInvaders`の直後・サイコロ前に毎手番発火する専用ルーチンを足した。
+  ①隣接に勝率0.6以上の敵モンスターがいれば移動侵略、②いなければ「勝率が足りる敵の
+  隣の空き地」へ任意空き地ワープ（30G）してそのまま移動侵略。侵略可否は
+  `_moveCommandCandidates`（聖域・同盟・特殊マス）に従い、勝率は
+  `_estimateUnitBattleWinProbability`。ワープ処理は`_cpuWarpUnitToEmptyLand`へ切り出し、
+  高額空き地確保（`_cpuMaybeAcquireHighValueLandByAbility`）と共用。
+- **絞りのダイヤル（aiProfile）**: `huntMinWin`（既定0.6）／`huntMinLandLevel`（狩る敵地の
+  最低Lv、隣接・ワープ共通、既定1）／`huntReserve`（ワープ後に残す軍資金、既定100）／
+  `huntsPerTurn`（1手番に狩る数、既定無制限）。**⑱は`huntMinLandLevel:2`**。
+- 名前・コスト・画像はユーザー確定待ち。
+
 ### ⑱の数値調整（2026-09、シミュレータで計測）
 **結論: 目標総資産22,000G・両者1,000Gの対等スタート（ユーザー指定）・チヌは
 `ofudaStyle:'fixer'`。** 500Gスタートでの計測値は目標18,000で41/100、22,000で38/100
@@ -1248,6 +1273,22 @@ stageにもopponentにも置かない（回帰テストが`startingCurrency`の�
 届かせるなら (a) ⑲の2vs1（同盟合算）で作る、(b) 言論封殺のようなチヌ専用の強い
 モンスター/EXを起こす（ブリモン相当の70/60先制貫通1体で同seed+10pt）、
 (c) 目標総資産や手番順など対等でない要素を入れる、のどれか。ユーザー判断待ち。
+
+**⑩ 王の親衛隊＋狩りAIの調整（対等1,000G・目標22,000・fixer）**:
+
+| 設定 | チヌ勝率 | 主人公の土地 |
+|---|---|---|
+| 親衛隊2体・狩りAI無し | 18/60 = 30% | — |
+| 狩りAI（絞り無し） | 78/80 = **97.5%** | 1.1枚（刈り尽くし） |
+| huntMinWin 0.8 / huntReserve 500 | 20/20（seed41） | 効かない（親衛隊はほぼ必勝で閾値が縛らない） |
+| huntMinLandLevel 3 | 7/20（seed41） | 34枚（Lv3の敵地が稀で狩りが起きない） |
+| huntMinLandLevel 2（ワープ狩りのみ） | 18/20（seed41） | 9.8枚 |
+| **huntMinLandLevel 2（隣接も、採用）** | **85/100 = 85%**（seed21/41/51/61/71） | 11〜18枚 |
+| 上記＋huntsPerTurn 1 | 17/20（seed41） | 差なし |
+
+「プレイヤー勝率20%」はCPU同士で85%。実プレイヤーは主人公役のCPUより上手いので
+体感はもう少し勝てる側に寄る。上げ下げは`huntMinLandLevel`（1で97%、3で35%）が粗い
+ダイヤル、細かく詰めるなら`huntsPerTurn`や親衛隊のコスト。
 
 **⑥ 副業収入は無価値**（0Gだが周回2.5〜4.5周では伸びない。独立seedで同数）。
 **⑦ 不動産鑑〇士は死に札ではない**（前の記述は誤り。game.jsに

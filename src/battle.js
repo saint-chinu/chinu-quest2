@@ -689,6 +689,18 @@ function performStrike(attackerUnit, defenderUnit, bonus, log, gold) {
   }
 
   if (defenderUnit.currentHp <= 0) {
+    // 王の親衛隊(killGrowth): 撃破ごとに持ち主が+gold、個体のATK/HPが恒久で+atk/+hp。
+    // 恒久値は周回成長型と同じlapGrowth*に積む（表示・戦闘計算の全経路が既に足している）。
+    // 戦闘中に最大HPが伸びるので、現在HPと盤面持ち越しHP(_boardHpBeforeBattle)も
+    // 同じだけ引き上げる（healUnitと同じ考え方）。
+    if (attackerEffect?.type === 'killGrowth') {
+      gold.add(attackerUnit.ownerId, attackerEffect.gold || 0);
+      attackerUnit.lapGrowthAtkBonus = (attackerUnit.lapGrowthAtkBonus || 0) + (attackerEffect.atk || 0);
+      attackerUnit.lapGrowthHpBonus = (attackerUnit.lapGrowthHpBonus || 0) + (attackerEffect.hp || 0);
+      attackerUnit.currentHp += attackerEffect.hp || 0;
+      attackerUnit._boardHpBeforeBattle = (attackerUnit._boardHpBeforeBattle ?? attackerUnit.currentHp) + (attackerEffect.hp || 0);
+      log.push(`${attackerUnit.def.name}は${defenderUnit.def.name}を倒して${attackerEffect.gold || 0}Gを得た！ ATK+${attackerEffect.atk || 0} HP+${attackerEffect.hp || 0}`);
+    }
     if (attackerEffect?.type === 'payOnKill') {
       gold.transfer(attackerUnit.ownerId, defenderUnit.ownerId, attackerEffect.amount);
       log.push(`${attackerUnit.def.name}は${defenderUnit.def.name}を倒したが賠償金${attackerEffect.amount}Gを支払った`);

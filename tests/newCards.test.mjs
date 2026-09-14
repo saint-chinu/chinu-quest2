@@ -3316,10 +3316,10 @@ test('⑱のチヌ専用デッキ(chinu)は主人公役デッキの合法ミラ�
   assert.ok(deck.filter((c) => c.type === CardType.MONSTER && (c.cost || 0) <= 50).length >= 18,
     '50G以下のモンスターが足りない。1,000Gから土地を取れなくなる');
   // ユーザー指定: 言論封殺は1枚。合体系（ガシャーン）は禁止。ブリモンは
-  // カタログに無いのでくぐつの剣豪1で代用。
+  // カタログに無いので王の親衛隊2で代用。
   assert.equal(countOf('言論封殺'), 1);
+  assert.equal(countOf('王の親衛隊'), 2, 'チヌ専用の成長型（ユーザー指定で2体）');
   assert.equal(countOf('合体ロボ・ガシャーン'), 0, '合体系は禁止（ユーザー指定）');
-  assert.equal(countOf('くぐつの剣豪'), 1);
   assert.equal(countOf('酢'), 0, '酢は300Gが手札で腐り-16.7pt。入れるなら再計測');
   // 既存の⑯用デッキを壊していないこと（キー名がchinuで始まるので取り違えやすい）。
   for (const key of ['chinuUsagin', 'chinuMuuru', 'chinuHitodemaso']) {
@@ -3340,7 +3340,8 @@ test('⑱はチヌとの1vs1・対等500G・お札あり・fixer付きで、会�
   assert.equal(stage.opponents[0].name, 'チヌ');
   assert.equal(stage.opponents[0].deckKey, 'chinu');
   assert.equal(stage.opponents[0].startingCurrency, undefined);
-  assert.deepEqual(stage.opponents[0].aiProfile, { ofudaStyle: 'fixer' }, 'fixerが無いと同seedで50%→25%');
+  assert.deepEqual(stage.opponents[0].aiProfile, { ofudaStyle: 'fixer', huntMinLandLevel: 2 },
+    'fixerが無いと50%→25%。huntMinLandLevel:2が無いと親衛隊がLv1まで刈って97.5%になる');
   assert.ok(MAPS.find((m) => m.id === 'ou').hasOfuda, 'お札あり（ユーザー指定）');
   // 会話（ユーザー指定の全文）。
   assert.equal(stage.intro.length, 6);
@@ -3451,4 +3452,55 @@ test('CPUの言論封殺はスペルを一番多く握る敵へ撃ち、スペ�
   few.hand = [mon('b2')];
   await g._cpuMaybeUseSpellBanSpell(me);
   assert.deepEqual(casts, [], 'スペルの無い相手に撃って100Gを捨てない');
+});
+
+test('王の親衛隊は40/40先制貫通で、相手を倒すたびに+100G・ATK/HP+5が恒久で積み上がる', () => {
+  const def = MONSTER_CATALOG.ouNoShineitai;
+  assert.equal(def.name, '王の親衛隊');
+  assert.equal(def.atk, 40); assert.equal(def.hp, 40);
+  assert.deepEqual(def.traits, ['firstStrike', 'pierce']);
+  assert.deepEqual(def.ability, { type: 'warpToAnyEmptyLand' }, '土地コマンドで任意の空き地へ');
+  assert.deepEqual(def.effect, { type: 'killGrowth', gold: 100, atk: 5, hp: 5 });
+  assert.equal(isRewardOnlyCard(def), true, 'ショップに並べない');
+
+  const mk = (d, ownerId, tileId) => ({ def: d, ownerId, tileId, currentHp: d.hp, items: [], curses: [] });
+  const weak = { id: 'w', type: CardType.MONSTER, name: '雑魚', element: 'fire', atk: 10, hp: 10, cost: 10 };
+
+  // 攻める側で倒す。
+  const a = mk(def, 0, 1);
+  const ledger = new battle.GoldLedger();
+  const r1 = battle.resolveBattle(a, mk(weak, 1, 2), ledger);
+  assert.equal(r1.attackerSurvived, true); assert.equal(r1.defenderSurvived, false);
+  assert.equal(ledger.balances[0], 100, '撃破で持ち主が+100G');
+  assert.equal(a.lapGrowthAtkBonus, 5); assert.equal(a.lapGrowthHpBonus, 5);
+  assert.equal(battle.effectiveAtk ? battle.effectiveAtk(a) : 45, 45);
+
+  // 2体目も倒すと積み上がる（恒久）。
+  battle.resolveBattle(a, mk(weak, 1, 3), ledger);
+  assert.equal(ledger.balances[0], 200);
+  assert.equal(a.lapGrowthAtkBonus, 10); assert.equal(a.lapGrowthHpBonus, 10);
+
+  // 守る側で相手を返り討ちにしても育つ（performStrikeは攻守対称）。
+  const d = mk(def, 0, 5);
+  const ledger2 = new battle.GoldLedger();
+  const r2 = battle.resolveBattle(mk(weak, 1, 6), d, ledger2);
+  assert.equal(r2.defenderSurvived, true); assert.equal(r2.attackerSurvived, false);
+  assert.equal(ledger2.balances[0], 100);
+  assert.equal(d.lapGrowthAtkBonus, 5);
+});
+
+test('王の親衛隊の狩りAIは毎手番サイコロ前に発火し、対象レベル等をaiProfileで絞れる', () => {
+  // 実戦の効きはシミュレータで計測済み（CLAUDE.md「⑱の数値調整」⑩）。ここでは
+  // 配線が外れていないことと、絞りのダイヤルがaiProfileから読まれることを見張る。
+  const src = readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');
+  assert.match(src, /await this\._runAutoInvaders\(this\.currentPlayer\);\s*\n\s*await this\._runKillGrowthHunters\(this\.currentPlayer\);/,
+    'くぐつの自動侵略の直後に親衛隊の狩りを呼ぶ');
+  const body = src.slice(src.indexOf('async _runKillGrowthHunters(player) {'));
+  for (const dial of ['huntMinWin', 'huntMinLandLevel', 'huntReserve', 'huntsPerTurn']) {
+    assert.ok(body.includes(`player.aiProfile?.${dial}`), `${dial}がaiProfileから読まれていない`);
+  }
+  // 狩りの対象は「勝率が足りる敵」だけ。無理な侵略で成長型を失わない。
+  assert.ok(body.includes('_estimateUnitBattleWinProbability(unit, null'), '勝率見積もりを通していない');
+  // 対象レベルの絞りは隣接・ワープの両方に掛かること（隣接だけ無条件だとLv1を刈り尽くす）。
+  assert.equal((body.split('tile.level >= HUNT_MIN_LAND_LEVEL').length - 1) + (body.split('t.level >= HUNT_MIN_LAND_LEVEL').length - 1), 2);
 });

@@ -1390,9 +1390,11 @@ export const STORY_STAGES = [
         color: 0x1a237e,
         deckKey: 'chinu',
         theme: { elements: [Element.THUNDER] },
-        // ⚠️ 必須。fixer型のお札運用が無いと同seedで50%→25%まで落ちる
-        // （CLAUDE.md「⑱の数値調整」）。⑰と同じく、効くAI設定はこれだけ。
-        aiProfile: { ofudaStyle: 'fixer' },
+        // ⚠️ fixerは必須（無いと同seedで50%→25%）。huntMinLandLevelは王の親衛隊の
+        // 狩り（game.jsの_runKillGrowthHunters）の絞り: Lv1の敵地まで狩ると主人公が
+        // 土地1枚まで刈られて97.5%になるので、Lv2以上に限定して85%（n=100）へ落とした。
+        // 難度を動かす時はこの2つだけ触る（CLAUDE.md「⑱の数値調整」⑩）。
+        aiProfile: { ofudaStyle: 'fixer', huntMinLandLevel: 2 },
       },
     ],
   },

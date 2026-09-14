@@ -167,6 +167,30 @@ export const THUNDER_MONSTER_CATALOG = {
     effect: { type: 'instantKillOnHit', chance: 0.66, targetElement: Element.WATER },
     effectDescription: '先制。攻撃成功時、水属性モンスターを66%の確率で即死させる',
   }),
+  /**
+   * 王の親衛隊（⑱チヌ専用、2026-09ユーザー指定。**名前は仮称**）。
+   * 「相手を倒すたびに成長する成長型」: 40/40・貫通・先制で始まり、相手モンスターを
+   * 倒すたびに持ち主が+100G、ATK/HPが+5ずつ恒久上昇（battle.jsのperformStrikeの
+   * 'killGrowth'分岐。恒久値は周回成長型と同じlapGrowthAtkBonus/HpBonusに積むので、
+   * 盤面のステータス表示・戦闘計算にそのまま乗る）。土地コマンド（30G）で任意の
+   * 空き地へ移動（未知の侵略者と同じ'warpToAnyEmptyLand'。CPUは
+   * _cpuMaybeAcquireHighValueLandByAbilityで高額な空き地へ飛ぶ）。
+   * rewardOnly＝ショップに並ばない。画像は未用意（共通絵へフォールバック）。
+   * ⚠️ 撃破判定はCPUの戦闘シミュレーション(_simulateBattleOnce)でも通るが、
+   * そちらは_cloneFieldUnitForSimの複製とGoldLedgerの使い捨て台帳なので実体は育たない。
+   */
+  ouNoShineitai: {
+    ...thunderMonster('ouNoShineitai', '王の親衛隊', Rarity.EX, 40, 40, {
+      cost: 100,
+      traits: ['firstStrike', 'pierce'],
+      commandCost: 30,
+      ability: { type: 'warpToAnyEmptyLand' },
+      effect: { type: 'killGrowth', gold: 100, atk: 5, hp: 5 },
+      effectDescription: '先制・貫通。相手モンスターを倒すたびに+100Gを得て、ATK/HPが+5ずつ恒久上昇する。土地コマンド（30G）: 任意の空き地へ移動する',
+      imageDataUrl: null,
+    }),
+    rewardOnly: true,
+  },
   tenhou: thunderMonster('tenhou', 'テンホウ', Rarity.R, 30, 30, {
     traits: ['firstStrike'],
     // 2026-09、ユーザー指定で ×5G → ×3G へ引き下げ。
