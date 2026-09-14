@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v300`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v301`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ### BGMコレクション `/bgm/`（2026-09）
@@ -1076,7 +1076,7 @@ z9  無森Ｃ水水水               *
 story.jsの`ou`に会話（ユーザー指定全文）・目標22,000G・チヌ(deckKey`chinu`、
 `aiProfile:{ofudaStyle:'fixer'}`)まで入っている。**⑲は未着手／仕様のみ。**
 ⑲は**⑱と同じ盤面`ou`でチヌ＆クエの2vs1**（ユーザー指定）。**⑲も仮実装済み**
-（下の「⑲ マルチエンド」参照。会話は全て（仮）でユーザー待ち、目標総資産は未計測）。
+（下の「⑲ マルチエンド」参照。会話は補完済み、目標総資産は仮置き24,000）。
 
 ### ⑲ マルチエンド（2026-09 ユーザー指定・仮実装済み）
 story.js `ou-final`（`mapId:'ou'`で⑱と同じ盤面。**keyと盤面idが違う初のステージ**なので、
@@ -1113,7 +1113,7 @@ main.jsは`stage.mapId ?? stage.key`で盤面と背景を引く。他所で`stag
   「ChinuQueST...」。**小咄が最後**、ユーザー指定）。主人公の「急に」は原文「旧に」を変換ミスと
   見て直してある。バッドエンドは
   チヌ「...クク、ククク...怨念の連鎖は...終わらない...お前には...真の強さを...
-  見せてもらいたかった...」で終わる。introとサーティー参戦時の会話はまだ（仮）。
+  見せてもらいたかった...」で終わる。intro・サーティー参戦・両結末の前後は2026-09に補完済み（仮のセリフは無し）。
 - **エンディングロール**（`stage.endingRoll:true`、main.jsの`playEndingRoll`）: 結末の
   会話の後・ストーリー画面へ戻る前に、真エンド／バッドエンドどちらでも流す。
   黒地の全画面に、①〜⑲の背景（`getMapBackground(stage.mapId ?? stage.key)`）と

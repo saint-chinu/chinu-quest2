@@ -3534,17 +3534,27 @@ test('⑲は⑱と同じ盤面で主人公 vs チヌ＆クエ、3,000G差でサ�
   // マルチエンド: 真エンド報酬とバッドエンドの会話が分かれている。
   assert.equal(stage.trueEndReward, 'onnenNoShuugoutai');
   assert.ok(MONSTER_CATALOG[stage.trueEndReward]);
-  // 結末の2本はユーザー指定の確定稿。
-  // 「屍の上」→小咄で締める（ユーザー指定「小話が最後」）。
-  assert.deepEqual(stage.outro, [
-    { speaker: 'チヌ', text: 'お前がたどり着いた場所は、多数の魚達の屍の上ということをゆめゆめ忘れるな' },
-    { speaker: 'チヌ', text: 'このゲームの名前...なぜこの名前かわかるか？' },
-    { speaker: '主人公', text: '急にメタ的な話はやめて！！' },
-    { speaker: 'チヌ', text: 'チヌ（と）クエ（が）す（ごい）つ（よい）' },
-    { speaker: 'チヌ', text: 'Chinu Que Sugoi Tsuyoi' },
-    { speaker: 'チヌ', text: 'ChinuQueST...' },
-  ]);
-  assert.deepEqual(stage.assistOutro, [{ speaker: 'チヌ', text: '...クク、ククク...怨念の連鎖は...終わらない...お前には...真の強さを...見せてもらいたかった...' }]);
+  // 結末の芯はユーザー指定の確定稿。前後を補完しても、この順序と末尾は動かさない。
+  const texts = (lines) => lines.map((l) => l.text);
+  const outro = texts(stage.outro);
+  const iShikabane = outro.indexOf('お前がたどり着いた場所は、多数の魚達の屍の上ということをゆめゆめ忘れるな');
+  assert.ok(iShikabane >= 0, '「屍の上」が無い');
+  const tail = outro.slice(-5);
+  assert.deepEqual(tail, [
+    'このゲームの名前...なぜこの名前かわかるか？',
+    '急にメタ的な話はやめて！！',
+    'チヌ（と）クエ（が）す（ごい）つ（よい）',
+    'Chinu Que Sugoi Tsuyoi',
+    'ChinuQueST...',
+  ], '小咄が最後（ユーザー指定）');
+  assert.ok(iShikabane < outro.length - 5, '「屍の上」は小咄より前');
+  assert.equal(stage.outro.at(-1).speaker, 'チヌ');
+  assert.equal(stage.assistOutro.at(-1).text, '...クク、ククク...怨念の連鎖は...終わらない...お前には...真の強さを...見せてもらいたかった...', 'バッドエンドはチヌの呟きで終わる');
+  assert.ok(stage.intro.length >= 8 && stage.midBattleAssist.lines.length >= 5 && stage.assistOutro.length >= 5, 'ラストバトルの会話が短すぎる');
+  for (const l of [...stage.intro, ...stage.outro, ...stage.assistOutro, ...stage.midBattleAssist.lines]) {
+    assert.ok(!l.text.includes('（仮'), `仮のセリフが残っている: ${l.text}`);
+    assert.ok(['主人公', 'チヌ', 'クエ', 'サーティー', '???'].includes(l.speaker), `想定外の話者: ${l.speaker}`);
+  }
   assert.equal(stage.endingRoll, true, '結末の後にエンディングロールを流す');
   assert.ok(NPC_PORTRAIT_URL['クエ'] && NPC_TOKEN_URL['サーティー']);
 });
