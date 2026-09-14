@@ -3551,6 +3551,8 @@ test('⑲は⑱と同じ盤面で主人公 vs チヌ＆クエ、3,000G差でサ�
   assert.equal(stage.outro.at(-1).speaker, 'チヌ');
   assert.equal(stage.assistOutro.at(-1).text, '...クク、ククク...怨念の連鎖は...終わらない...お前には...真の強さを...見せてもらいたかった...', 'バッドエンドはチヌの呟きで終わる');
   assert.ok(stage.intro.length >= 8 && stage.midBattleAssist.lines.length >= 5 && stage.assistOutro.length >= 5, 'ラストバトルの会話が短すぎる');
+  // 設定: クエはチヌの表の姿（ユーザー指定）。主人公のツッコミで明示する。
+  assert.ok(texts(stage.intro).includes('表の顔が既にフィクサーかよ！！'), 'クエ＝チヌの表の姿のくだりが無い');
   for (const l of [...stage.intro, ...stage.outro, ...stage.assistOutro, ...stage.midBattleAssist.lines]) {
     assert.ok(!l.text.includes('（仮'), `仮のセリフが残っている: ${l.text}`);
     assert.ok(['主人公', 'チヌ', 'クエ', 'サーティー', '???'].includes(l.speaker), `想定外の話者: ${l.speaker}`);
