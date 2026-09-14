@@ -3541,7 +3541,7 @@ test('⑲は⑱と同じ盤面で主人公 vs チヌ＆クエ、3,000G差でサ�
     { speaker: 'チヌ', text: 'このゲームの名前...なぜこの名前かわかるか？' },
     { speaker: '主人公', text: '急にメタ的な話はやめて！！' },
     { speaker: 'チヌ', text: 'チヌ（と）クエ（が）す（ごい）つ（よい）' },
-    { speaker: 'チヌ', text: 'Chinu Que Sugoku Tsuyoi' },
+    { speaker: 'チヌ', text: 'Chinu Que Sugoi Tsuyoi' },
     { speaker: 'チヌ', text: 'ChinuQueST...' },
   ]);
   assert.deepEqual(stage.assistOutro, [{ speaker: 'チヌ', text: '...クク、ククク...怨念の連鎖は...終わらない...お前には...真の強さを...見せてもらいたかった...' }]);

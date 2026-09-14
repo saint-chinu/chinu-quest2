@@ -1437,7 +1437,7 @@ export const STORY_STAGES = [
       { speaker: 'チヌ', text: 'このゲームの名前...なぜこの名前かわかるか？' },
       { speaker: '主人公', text: '急にメタ的な話はやめて！！' },
       { speaker: 'チヌ', text: 'チヌ（と）クエ（が）す（ごい）つ（よい）' },
-      { speaker: 'チヌ', text: 'Chinu Que Sugoku Tsuyoi' },
+      { speaker: 'チヌ', text: 'Chinu Que Sugoi Tsuyoi' },
       { speaker: 'チヌ', text: 'ChinuQueST...' },
     ],
     // バッドエンド（サーティーの助けあり）。主人公がチヌの瘴気に当てられて闇堕ちし

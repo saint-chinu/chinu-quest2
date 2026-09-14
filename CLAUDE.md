@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v299`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v300`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ### BGMコレクション `/bgm/`（2026-09）
@@ -1109,7 +1109,7 @@ main.jsは`stage.mapId ?? stage.key`で盤面と背景を引く。他所で`stag
 - **結末のセリフ（ユーザー指定・確定稿）**: 真エンドはチヌ「お前がたどり着いた場所は、
   多数の魚達の屍の上ということをゆめゆめ忘れるな」（EX入手）の後、タイトル回収の
   小咄で締める（チヌ「このゲームの名前...なぜこの名前かわかるか？」→主人公「急にメタ的な
-  話はやめて！！」→「チヌ（と）クエ（が）す（ごい）つ（よい）」→「Chinu Que Sugoku Tsuyoi」→
+  話はやめて！！」→「チヌ（と）クエ（が）す（ごい）つ（よい）」→「Chinu Que Sugoi Tsuyoi」→
   「ChinuQueST...」。**小咄が最後**、ユーザー指定）。主人公の「急に」は原文「旧に」を変換ミスと
   見て直してある。バッドエンドは
   チヌ「...クク、ククク...怨念の連鎖は...終わらない...お前には...真の強さを...
