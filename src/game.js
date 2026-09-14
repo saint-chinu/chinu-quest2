@@ -684,6 +684,8 @@ export class Game {
    * - `ratio`（⑪のmidBattleAssist）: 敵の総資産が主人公の`ratio`倍以上に開いた時。
    * - `enemyAssetsAtLeast`（⑯のmidBattleEvent）: 敵の**誰か1人**の総資産が
    *   その絶対値に届いた時。⑯は目標5,000Gに対して4,000Gで発火する。
+   * - `enemyAssetsLeadAtLeast`（⑲のmidBattleAssist）: 敵陣営の総資産（同盟合算）が
+   *   主人公の総資産を**その絶対差以上**上回った時。⑲は3,000G差でサーティーが来る。
    * `allyConfig`が無いイベントは会話だけで終わる（味方は参戦しない）。
    */
   async _maybeTriggerStoryAssistEvent() {
@@ -698,6 +700,9 @@ export class Game {
     if (!enemies.length) return;
     if (event.enemyAssetsAtLeast != null) {
       if (!enemies.some((enemy) => this._totalAssetsOf(enemy) >= event.enemyAssetsAtLeast)) return;
+    } else if (event.enemyAssetsLeadAtLeast != null) {
+      // _totalAssetsOfは同盟合算を返すので、敵の誰か1人で敵陣営全体の値になる。
+      if (this._totalAssetsOf(enemies[0]) - this._totalAssetsOf(human) < event.enemyAssetsLeadAtLeast) return;
     } else {
       const heroAssets = Math.max(1, this._totalAssetsOf(human));
       if (this._totalAssetsOf(enemies[0]) < heroAssets * (event.ratio || 2.5)) return;
@@ -2418,7 +2423,7 @@ export class Game {
     this.storyEnded = true;
     const won = alive.some((p) => !p.isCPU);
     this.onLog(won ? '勝利した！' : '敗北した…');
-    this.onStoryBattleEnd?.({ won, alivePlayerIds: alive.map((p) => p.id) });
+    this.onStoryBattleEnd?.({ won, alivePlayerIds: alive.map((p) => p.id), assisted: this.storyAssistTriggered });
   }
 
   /** この盤面でドローしたカードのcatalogIdを記録する（「未知との遭遇」の未ドロー判定用）。 */
@@ -3128,6 +3133,8 @@ export class Game {
         won: winnerSideHasHuman,
         winnerPlayerId: player.id,
         alivePlayerIds: this.players.filter((candidate) => !candidate.defeated).map((candidate) => candidate.id),
+        // ⑲のマルチエンド用: 途中参戦（サーティー）が発火していたか。
+        assisted: this.storyAssistTriggered,
       });
     }
     return true;

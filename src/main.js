@@ -5600,7 +5600,7 @@ async function playStoryStage(index) {
     return;
   }
   showScreen(storyDialogueScreen);
-  await playDialogueLines(stage.intro, { background: getMapBackground(stage.key), stageBadgeText: `STORY${stage.title}` });
+  await playDialogueLines(stage.intro, { background: getMapBackground(stage.mapId ?? stage.key), stageBadgeText: `STORY${stage.title}` });
   const chosenDeck = await promptDeckSelection({ onCancel: showStoryScreen });
   if (!chosenDeck) return;
   await startStoryBattle(index, chosenDeck.deckList, false);
@@ -5619,7 +5619,7 @@ async function playStoryReplay(index) {
   if (!stage.replay) return;
   const replay = storyReplayVariant(index);
   showScreen(storyDialogueScreen);
-  await playDialogueLines(replay.intro, { background: getMapBackground(stage.key), stageBadgeText: `STORY${stage.title}（再戦）` });
+  await playDialogueLines(replay.intro, { background: getMapBackground(stage.mapId ?? stage.key), stageBadgeText: `STORY${stage.title}（再戦）` });
   const chosenDeck = await promptDeckSelection({ onCancel: showStoryScreen });
   if (!chosenDeck) return;
   await startStoryBattle(index, chosenDeck.deckList, true, replay);
@@ -5726,6 +5726,8 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
     } else {
       storyAssistEvent = {
         ratio: stage.midBattleAssist.ratio,
+        // ⑲: 敵陣営の総資産が主人公をこの差以上上回ったらサーティーが来る。
+        enemyAssetsLeadAtLeast: stage.midBattleAssist.enemyAssetsLeadAtLeast,
         allyConfig: assistConfig,
         lines: stage.midBattleAssist.lines || [],
       };
@@ -5748,7 +5750,8 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
   const startedGame = startBattle(currentCharacter, {
     storyMode: true,
     // ヒトデ初戦だけ短い導入用マップ。再戦は従来の長いhitodeマップを使う。
-    mapId: !isReplay && stage.key === 'hitode' ? 'hitode-first' : stage.key,
+    // ⑲(ou-final)のように別ステージが同じ盤面を使う場合はstage.mapIdで指定する。
+    mapId: !isReplay && stage.key === 'hitode' ? 'hitode-first' : (stage.mapId ?? stage.key),
     // replay/secretReplayが独自のgoalCurrencyを持つ場合はそちらを優先する
     // （現状の再戦データは全て本編を継承しているが、将来の再戦調整用）。
     goalCurrency: variant.goalCurrency ?? stage.goalCurrency,
@@ -5877,7 +5880,7 @@ async function handleStoryReplayEnd(index, result = {}, replayVariant) {
   latestStoryCheckpoint = null;
 
   showScreen(storyDialogueScreen);
-  const dialogueOptions = { background: getMapBackground(stage.key), stageBadgeText: `STORY${stage.title}（再戦）` };
+  const dialogueOptions = { background: getMapBackground(stage.mapId ?? stage.key), stageBadgeText: `STORY${stage.title}（再戦）` };
   if (won) {
     await playDialogueLines(
       queBankruptcy?.lines || replayVariant.outro || [{ speaker: '???', text: 'また挑みに来てくれ！' }],
@@ -5981,6 +5984,12 @@ async function recordStoryBattleLog(stage, index, won, isReplay) {
 async function handleStoryBattleEnd(index, result = {}) {
   const { won } = result;
   const stage = STORY_STAGES[index];
+  // ⑲のマルチエンド判定: 途中参戦（サーティー）があったか。game側のフラグに加え、
+  // 参戦後にセーブ→再開した盤面（フラグは復元されない）でも味方の在席で拾う。
+  // ⚠️ この後すぐ game=undefined になるので、ここで先に確定させる。
+  const assistAllyName = stage.midBattleAssist?.ally?.name;
+  const assisted = !!result.assisted
+    || (!!assistAllyName && !!game?.players?.some((p) => p.isCPU && p.name === assistAllyName));
   clearStoryResume();
   // 管理ダッシュボードからのテストプレイは記録を一切残さない。報酬・進行度・
   // 図鑑登録・終幕演出をまとめて飛ばし、盤面を閉じて管理画面へ戻る。
@@ -6026,7 +6035,7 @@ async function handleStoryBattleEnd(index, result = {}) {
     if (stage.clearOnDefeat) {
       showScreen(storyDialogueScreen);
       await playDialogueLines(stage.defeatOutro || [], {
-        background: getMapBackground(stage.key),
+        background: getMapBackground(stage.mapId ?? stage.key),
         stageBadgeText: `STORY${stage.title}`,
       });
       const blackout = await playBlackoutTransition();
@@ -6042,7 +6051,7 @@ async function handleStoryBattleEnd(index, result = {}) {
     showScreen(storyDialogueScreen);
     await playDialogueLines(
       [{ speaker: '???', text: '力及ばず、敗れてしまった……もう一度挑もう。' }],
-      { background: getMapBackground(stage.key), stageBadgeText: `STORY${stage.title}` },
+      { background: getMapBackground(stage.mapId ?? stage.key), stageBadgeText: `STORY${stage.title}` },
     );
     showStoryScreen();
     showToast(`ストーリー報酬として${mReward.earnedM}M獲得しました`, 2400);
@@ -6055,6 +6064,22 @@ async function handleStoryBattleEnd(index, result = {}) {
       const key = cardKey(rewardDef);
       currentCharacter.ownedCards[key] = (currentCharacter.ownedCards[key] || 0) + 1;
     }
+  }
+  // ⑲の真エンド報酬（サーティーの助け無しでクリアした時だけ）。一度きり。
+  // バッドエンド（途中参戦あり）ではクリア扱いにはするが渡さない。
+  if (stage.trueEndReward && !assisted && !currentCharacter.receivedTrueEndReward?.[stage.key]) {
+    const rewardDef = ITEM_CATALOG[stage.trueEndReward] || SPELL_CATALOG[stage.trueEndReward] || MONSTER_CATALOG[stage.trueEndReward];
+    if (rewardDef) {
+      const key = cardKey(rewardDef);
+      currentCharacter.ownedCards[key] = (currentCharacter.ownedCards[key] || 0) + 1;
+      currentCharacter.receivedTrueEndReward = { ...(currentCharacter.receivedTrueEndReward || {}), [stage.key]: true };
+      markCatalogSeen(rewardDef);
+    }
+  }
+  // チヌ（⑱⑲）を撃破したら、専用札を図鑑に登録する（理由は強制成仏と同じ）。
+  if (stage.key === 'ou' || stage.key === 'ou-final') {
+    markCatalogSeen(SPELL_CATALOG.genronFuusatsu);
+    markCatalogSeen(MONSTER_CATALOG.onnenNoShuugoutai);
   }
   if (stage.breedPartReward) {
     if (!Array.isArray(currentCharacter.ownedPartIds)) currentCharacter.ownedPartIds = [];
@@ -6090,7 +6115,8 @@ async function handleStoryBattleEnd(index, result = {}) {
     markCatalogSeen(SPELL_CATALOG.kokushiMusou);
   }
   const queBankruptcy = claimQueBankruptcyReward(stage, result);
-  const outroLines = queBankruptcy?.lines || stage.outro || [];
+  // ⑲: サーティーの助けを借りて勝った場合はバッドエンドの会話（assistOutro）。
+  const outroLines = queBankruptcy?.lines || (assisted && stage.assistOutro) || stage.outro || [];
   if (index + 1 > (currentCharacter.storyProgress || 0)) {
     currentCharacter.storyProgress = index + 1;
   }
@@ -6116,7 +6142,7 @@ async function handleStoryBattleEnd(index, result = {}) {
   }
 
   showScreen(storyDialogueScreen);
-  await playDialogueLines(outroLines, { background: getMapBackground(stage.key), stageBadgeText: `STORY${stage.title}` });
+  await playDialogueLines(outroLines, { background: getMapBackground(stage.mapId ?? stage.key), stageBadgeText: `STORY${stage.title}` });
   showStoryScreen();
   showToast(`ストーリー報酬として${mReward.earnedM}M獲得しました`, 2400);
 }

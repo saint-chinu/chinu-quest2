@@ -3504,3 +3504,79 @@ test('怨念の集合体の狩りAIは毎手番サイコロ前に発火し、対
   // 対象レベルの絞りは隣接・ワープの両方に掛かること（隣接だけ無条件だとLv1を刈り尽くす）。
   assert.equal((body.split('tile.level >= HUNT_MIN_LAND_LEVEL').length - 1) + (body.split('t.level >= HUNT_MIN_LAND_LEVEL').length - 1), 2);
 });
+
+test('⑲は⑱と同じ盤面で主人公 vs チヌ＆クエ、3,000G差でサーティー参戦、真エンドだけ怨念の集合体', () => {
+  const stage = STORY_STAGES.find((s) => s.key === 'ou-final');
+  assert.ok(stage, 'story.jsに⑲が無い');
+  assert.equal(STORY_STAGES.indexOf(stage), STORY_STAGES.findIndex((s) => s.key === 'ou') + 1, '⑱の直後に並べる');
+  assert.equal(stage.mapId, 'ou', '⑱と同じ盤面を使う（ユーザー指定）');
+  assert.ok(MAPS.find((m) => m.id === stage.mapId));
+  assert.equal(stage.heroAllianceId, 'red');
+  assert.equal(stage.enemyAllianceId, 'white');
+  assert.equal(stage.startingCurrency, 1000);
+  assert.deepEqual(stage.opponents.map((o) => o.name), ['チヌ', 'クエ']);
+  assert.equal(stage.opponents[0].deckKey, 'chinu');
+  assert.deepEqual(stage.opponents[0].aiProfile, { ofudaStyle: 'fixer', huntMinLandLevel: 3 },
+    '⑲は2vs1なので狩りをLv3以上に絞る（Lv2だと真エンド経路5%・2vs2でも15%）');
+  for (const o of stage.opponents) assert.equal(o.startingCurrency, undefined, '片寄せの初期資金補正は置かない');
+  // サーティー参戦は「絶対差」で発火する（⑪のratioとは別条件）。
+  assert.equal(stage.midBattleAssist.enemyAssetsLeadAtLeast, 3000);
+  assert.equal(stage.midBattleAssist.ratio, undefined);
+  assert.equal(stage.midBattleAssist.ally.name, 'サーティー');
+  assert.equal(stage.midBattleAssist.ally.deckKey, 'thirty');
+  assert.equal(buildCharacterCardList('thirty').length, 40);
+  // マルチエンド: 真エンド報酬とバッドエンドの会話が分かれている。
+  assert.equal(stage.trueEndReward, 'onnenNoShuugoutai');
+  assert.ok(MONSTER_CATALOG[stage.trueEndReward]);
+  assert.ok(Array.isArray(stage.assistOutro) && stage.assistOutro.length > 0, 'バッドエンドの会話');
+  assert.ok(Array.isArray(stage.outro) && stage.outro.length > 0, '真エンドの会話');
+  assert.ok(NPC_PORTRAIT_URL['クエ'] && NPC_TOKEN_URL['サーティー']);
+});
+
+test('途中参戦の絶対差トリガー(enemyAssetsLeadAtLeast)は敵陣営合算−主人公が差以上の時だけ発火する', async () => {
+  const g = Object.create(Game.prototype);
+  const human = { id: 0, isCPU: false, defeated: false, allianceId: 'red', name: '主人公' };
+  const chinu = { id: 1, isCPU: true, defeated: false, allianceId: 'white', name: 'チヌ' };
+  const que = { id: 2, isCPU: true, defeated: false, allianceId: 'white', name: 'クエ' };
+  const assets = { 0: 5000, 1: 0, 2: 0 };
+  let joined = 0;
+  const fired = [];
+  Object.assign(g, {
+    players: [human, chinu, que], storyAssistTriggered: false, storyEnded: false, _isCancelled: false,
+    storyAssistEvent: { enemyAssetsLeadAtLeast: 3000, allyConfig: { name: 'サーティー' }, lines: [] },
+    // _totalAssetsOfは同盟合算（本物と同じ契約）。
+    _totalAssetsOf: (p) => (p.allianceId === 'white' ? assets[1] + assets[2] : assets[p.id]),
+    onStoryAssistEvent: async (e) => { fired.push(e); },
+    _addStoryAssistPlayer: () => { joined += 1; return { name: 'サーティー' }; },
+    onLog: () => {},
+  });
+  assets[1] = 4000; assets[2] = 3999; // 合算7999、差2999 → まだ
+  await g._maybeTriggerStoryAssistEvent();
+  assert.equal(joined, 0);
+  assert.equal(g.storyAssistTriggered, false);
+  assets[2] = 4000; // 合算8000、差3000 → 発火
+  await g._maybeTriggerStoryAssistEvent();
+  assert.equal(joined, 1);
+  assert.equal(fired.length, 1);
+  assert.equal(g.storyAssistTriggered, true);
+  // 一度きり。
+  await g._maybeTriggerStoryAssistEvent();
+  assert.equal(joined, 1);
+});
+
+test('⑲のマルチエンドはmain.jsで「参戦あり→assistOutro／参戦なし→真エンド報酬」に分岐する', () => {
+  const src = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const fn = src.slice(src.indexOf('async function handleStoryBattleEnd('), src.indexOf('function confirmLandscapeReady'));
+  // assistedは game=undefined より前に確定させる（後だと在席判定ができない）。
+  assert.ok(fn.indexOf('const assisted =') < fn.indexOf('game = undefined;'), 'assistedの確定がgame破棄より後');
+  assert.ok(fn.includes('result.assisted'), 'game側のstoryAssistTriggeredを見ていない');
+  assert.match(fn, /stage\.trueEndReward && !assisted/, '真エンド報酬が参戦なし限定になっていない');
+  assert.match(fn, /receivedTrueEndReward/, '真エンド報酬が一度きりになっていない');
+  assert.match(fn, /\(assisted && stage\.assistOutro\) \|\| stage\.outro/, 'バッドエンドの会話に分岐していない');
+  // ⑲は⑱と同じ盤面: 盤面idはstage.mapIdを優先する。
+  assert.match(src, /mapId: !isReplay && stage\.key === 'hitode' \? 'hitode-first' : \(stage\.mapId \?\? stage\.key\)/);
+  assert.ok(!src.includes('getMapBackground(stage.key)'), '背景の参照がstage.keyのまま残っている');
+  // game側は終了payloadに assisted を載せる。
+  const game = readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');
+  assert.equal((game.match(/assisted: this\.storyAssistTriggered/g) || []).length, 2, '勝敗2経路とも assisted を載せる');
+});

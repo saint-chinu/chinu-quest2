@@ -1398,6 +1398,82 @@ export const STORY_STAGES = [
       },
     ],
   },
+  {
+    key: 'ou-final',
+    // ⑱と同じ盤面（ユーザー指定「クリアしたら同じステージでチヌ＆クエのコンビが
+    // ラスボス」）。keyは盤面idと別なので、main.jsはmapIdで盤面を引く。
+    mapId: 'ou',
+    // ⚠️ ステージ名は仮題（ユーザー確定待ち）。
+    title: '⑲ 王の真の姿（仮題）',
+    // 主人公1人 vs チヌ＆クエ（同盟）。3,000G以上引き離されるとサーティーが
+    // 味方に来て2vs2になる（midBattleAssist）。
+    format: '1vs2→2vs2',
+    // ⚠️ 目標は仮置き。敵側は同盟合算なので⑱の22,000より高めが要る。
+    // シミュレータで詰める（CLAUDE.md「⑲」）。
+    goalCurrency: 24000,
+    startingCurrency: 1000,
+    heroAllianceId: 'red',
+    enemyAllianceId: 'white',
+    // ── マルチエンド（ユーザー指定 2026-09）──
+    // ・サーティーの助け無しでクリア → 真エンド（outro）＋EX「怨念の集合体」を入手
+    // ・サーティーが来てからクリア → バッドエンド（assistOutro）。主人公はチヌの瘴気に
+    //   当てられて闇堕ちし独裁者になる。真エンドの存在を匂わせる。報酬は無し。
+    // ・負け → 通常の敗北（再挑戦）。
+    trueEndReward: 'onnenNoShuugoutai',
+    // ⚠️ 以下の会話は**全て仮**。ユーザーが書く（⑱と同じ運用）。
+    intro: [
+      { speaker: 'チヌ', text: '（仮）……見せてやろう。これがワイの真の姿だ。' },
+      { speaker: 'クエ', text: '（仮）ワイはハタ類の王、クエや。王にはもう一人の王が要る。金の流れはワイが握る。' },
+      { speaker: '主人公', text: '（仮）二人がかりか……上等だ！' },
+    ],
+    outro: [
+      { speaker: '主人公', text: '（仮・真エンド）やった……本当に、終わったんだ。' },
+      { speaker: '???', text: '（仮）チヌとクエが倒れた場所に、無数の骨の魚が蠢く塊が残されていた。' },
+    ],
+    assistOutro: [
+      { speaker: 'サーティー', text: '（仮・バッドエンド）終わったな、坊主。……おい、目が変だぞ。' },
+      { speaker: '主人公', text: '（仮）……この海は、俺のものだ。' },
+      { speaker: '???', text: '（仮）チヌの瘴気に当てられた主人公は、やがて新たな独裁者として海に君臨した。――もし、誰の助けも借りずに王を討てていたなら。' },
+    ],
+    midBattleAssist: {
+      enemyAssetsLeadAtLeast: 3000,
+      ally: {
+        name: 'サーティー',
+        color: 0x232323,
+        deckKey: 'thirty',
+        theme: { elements: [Element.NEUTRAL, Element.THUNDER] },
+      },
+      lines: [
+        { speaker: 'サーティー', text: '（仮）おいおい、王様が二人がかりか。フェアじゃねえな。' },
+        { speaker: 'サーティー', text: '（仮）坊主、背中は預かる。ここからは二対二だ。' },
+      ],
+    },
+    overlaySpeakerSides: {
+      主人公: 'right',
+      サーティー: 'right',
+      チヌ: 'left',
+      クエ: 'left',
+    },
+    opponents: [
+      {
+        name: 'チヌ',
+        color: 0x1a237e,
+        deckKey: 'chinu',
+        theme: { elements: [Element.THUNDER] },
+        // ⑱はLv2だが⑲は2vs1なので狩りをLv3以上に絞る（仮）。Lv2のままだと真エンド
+        // 経路（1vs2）が主人公5%・サーティー参戦後の2vs2でも15%で両経路とも
+        // ほぼ勝てない。Lv3で真エンド15%／2vs2で50%（CLAUDE.md「⑲」）。
+        aiProfile: { ofudaStyle: 'fixer', huntMinLandLevel: 3 },
+      },
+      {
+        name: 'クエ',
+        color: 0x9e9d24,
+        // ⑬の決戦版をそのまま流用（fixer型のお札運用は名前「クエ」で自動有効）。
+        deckKey: 'queKessan',
+        theme: { elements: [Element.THUNDER] },
+      },
+    ],
+  },
 ];
 
 export function isStageUnlocked(character, index) {
