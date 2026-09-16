@@ -1,0 +1,6 @@
+# wrangler dev 用のローカル変数（.dev.vars にコピーして使う。.dev.vars は .gitignore 済み）。
+# ローカルでは Firebase の本物の署名鍵で ID トークンを検証できないので、
+# ?uid= を信用する開発モードを有効にする。本番の vars には絶対に入れないこと。
+DEV_ALLOW_UNVERIFIED_UID=1
+ALLOWED_ORIGINS=
+PVP_DEBUG_LOG=1

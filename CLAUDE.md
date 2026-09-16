@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v302`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v303`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ### BGMコレクション `/bgm/`（2026-09）
@@ -2075,6 +2075,11 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   [7]chin-harbor(⑧朕と酢の花火港)。
 - `src/breedParts.js` — ブリードモンスター(`breedMonster`, 既定属性NEUTRAL)。
 - `src/scene.js` — Three.js。`tween`(utils)ベースのカメラ演出。
+- `src/sceneConstants.js` — 駒/アイコンのY座標定数（game.js が three.js 無しで読むため）。
+- `src/customCardStore.js` — カスタムカードの localStorage 読み書き（Firebase非依存）。
+- `src/pvpCloud.js` — Cloudflare対戦のクライアント（WebSocket、FIFO再生、再接続）。
+- `cloudflare/` — 対戦サーバー: `roomCore.js`（権威コア）/ `room.js`（DO）/
+  `worker.js`（ルーター）/ `firebaseAuth.js`（IDトークン検証）。`wrangler.jsonc`。
 
 ## カード / 戦闘モデル
 - Rarity {N,S,R,EX}。Element含NEUTRAL。`catalogId`はデッキ投入時に保持される
@@ -2807,6 +2812,108 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   `pvpQueueAnimationScale`でゲストの歩行尺だけを短縮し、順序を変えず追いつく。
   ACKは`PvpContiguousAckTracker`で「連続して処理済みの水位」だけを返す。
 
+## 対人戦のCloudflare移行 (2026-09、通信エンジン＝Durable Object)
+**ログイン／ロビー（部屋作成・参加・招待・フレンド）は Firebase のまま。対戦開始
+以降だけ Cloudflare Workers + Durable Objects で動く。** Firestore 中継の旧構成は
+`VITE_PVP_SERVER_URL` 未設定ならそのまま動く（両経路が共存している）。
+
+### 構成
+- `cloudflare/roomCore.js` — **サーバー権威コア**。DO の中で唯一の `Game` を回し、
+  参加者全員（**ホスト含む**）を WebSocket の薄いクライアントとして扱う。Cloudflare
+  API に一切依存しない（`io.send/persist/onFinished/log/now` を注入）ので
+  `node --test` で完全にヘッドレスに検証できる。
+  - `ASK_HOOKS`（本人への質問、回答値が返る）／`BROADCAST_HOOKS`（全員への演出）は
+    `main.js` の `startBattle` が `relayable(...)` で張っている対応表と**同一**。
+    game.js に `onXxx` を足したら**ここにも足す**（無いと `async () => {}` で
+    埋められ、その演出は誰にも届かない）。
+  - 演出待ちは `speedState.multiplier = 20000` で実質ゼロ。進行を律速するのは
+    「操作する本人の歩行 ACK（`pieceMove`, `awaitMover`）」「`shrineEffect`
+    （`awaitDone`）」「質問の回答」だけ。旧 HostGuestRelay と同じタイムアウト
+    （質問45秒／演出同期4秒、`degraded` で以後の done を待たない）。
+  - **開始ゲート**: `/start` 直後は `game.init()` せず、人間参加者全員が一度
+    WebSocket でつながるか `START_GRACE_MS`（20秒）経過で最初の手番を始める。
+    まだ来ていない相手（`everConnected=false`）への質問は「オフライン」扱いで
+    捨てず、アウトボックスに積んで `welcome` で届ける（⚠️ これが無いと、Firestore
+    の status 伝播より先に飛んだ `cardReveal` で参加者が即 AI 化する。テストで
+    実際に踏んだ）。対戦中の切断（`everConnected=true` かつ offline）だけが即 AI。
+  - 切断（WS close）→ 即 `pvpAutoCpu` で AI 代行、再接続で `pvpHumanRestorePending`
+    → `onTurnBoundary` で人間へ戻す（Firestore版と同じ境界）。ハートビートは不要。
+  - 公開状態は `_notifyState` ごとに層別差分（tiles / turnHand / 軽い項目）で送る。
+    Firestore と違い 400ms 間引きは無い。`tilesRevision` は時刻起点（DO 再起動後の
+    衝突回避）。手札は本人にだけ `hand` で送る。
+  - `onResumeCheckpoint`（サイコロ／スペルを選べる安全地点）で `exportState()` を
+    `io.persist`。DO 再起動（再デプロイ・障害）は `resume(config, snapshot)` で復帰。
+  - 終了 `finish()` は各参加者の `endingAssetsShare`（同盟は人数割り）を**サーバーで
+    確定**して `finished` で配る。クライアントの報酬計算はこの値を使う。
+- `cloudflare/room.js` — `PvpRoomDO`。`idFromName(部屋コード)` なので同じ3桁コードは
+  同じ DO（ディレクトリ不要）。WebSocket は **hibernation API ではなく通常の
+  `accept()`**（Game が Promise チェーンで進行するため休止させない）。
+  `/init`（開始）・`/ws`・`/status`。終了後10分で storage を消す alarm、
+  30分誰も来ない対戦は放棄扱い。同じコードへの `/init` は、対戦中で誰か接続中かつ
+  別ホストなら 409、それ以外は前の試合を終了して置き換える。
+- `cloudflare/worker.js` — ルーター。`POST /api/rooms/{code}/start`、
+  `GET /ws?room=&token=`、`GET /health`。**Firebase ID トークンを
+  `cloudflare/firebaseAuth.js` で RS256 検証**（Google の JWK を max-age でキャッシュ、
+  iss/aud/exp/sub 確認）して uid を `x-uid` ヘッダで DO へ渡す。CORS/Origin は
+  `ALLOWED_ORIGINS`（空なら全許可＝ローカル用）。
+  `DEV_ALLOW_UNVERIFIED_UID=1`（`.dev.vars` のみ）の時だけ `?uid=` を信用する。
+  **本番 vars に絶対に入れない。**
+- `wrangler.jsonc` — name `chinu-quest2-pvp`、binding `ROOM`、
+  `vars.FIREBASE_PROJECT_ID` / `ALLOWED_ORIGINS`。静的サイトは GitHub Pages のままなので
+  assets は無い。バンドルは約780KB（three.js / Firebase を含まない）。
+- `src/pvpCloud.js` — クライアント。`CloudPvpConnection` は旧 `GuestHostListener` と
+  同じ意味論（FIFO 再生・`PvpContiguousAckTracker`・回答同梱 ACK）＋指数バックオフ
+  再接続（`welcome` で完全状態＋未ACK分を再送）。`startCloudPvpRoom` は
+  `auth.currentUser.getIdToken()` を Bearer で送る。
+
+### エンジンをヘッドレスで束ねるための分離（既存の import 元は不変）
+- `src/sceneConstants.js` — `PIECE_REST_Y` / `UNIT_ICON_REST_Y`。game.js は
+  scene.js（three.js）ではなくここから読む。scene.js は re-export する。
+- `src/customCardStore.js` — `loadCustomCards`（localStorage のみ、無ければ0件）。
+  cardCatalog.js はここから読む（customCards.js は firebase/firestore を import
+  するため）。customCards.js は同名関数を re-export。
+- これで `import('./src/game.js')` が素の Node / esbuild で通る。
+  `tests/pvpCloud.test.mjs` が「three.js / Firebase に依存しない」ことを静的に見張る。
+
+### main.js の配線
+- **`pvpBoardIsRemote()`** ＝ ローカルに Game を持たない参加者（Firestore版ゲスト、
+  または Cloudflare版の全員）。旧 `pvpMatch && !pvpMatch.isHost` はすべて置換済み。
+  `pvpMatch.isHost` は Cloudflare版では「BAN／待機カット／退出で終了」の権限にだけ使う。
+- ホストの「対戦開始」: `pvpCloudEnabled()` なら `startCloudPvpHost()` →
+  `startCloudPvpRoom`（POST）→ `beginPvpMatch(code, { engine:'cloud', engineUrl })`。
+  部屋リスナー（`enterPvpRoomScreen`）が `engine==='cloud'` を見て**ホストも**
+  `ensureCloudPvpMatch` → `startPvpGuestBattle()` → `startCloudPvpConnection()`。
+  参加者は `engineUrl` を優先するので、ホストだけ新ビルドでもつながる。
+- 演出・質問の受け口は Firestore版と同じ `pvpGuestHandlers` / `applyPvpPublicState`。
+  終了は `endRemotePvpSession({headline, share})`（Firestore版の finished 検知も同関数）。
+  Cloudflare版のホストは終了時に `finishPvpRoom` で部屋文書も finished にする。
+- 復帰（`refreshPvpRejoinOffer`）: `engine==='cloud'` ならホストも対象
+  （`pvpRejoinAsHost`）。`forceTerminateBoardSession` / `pageshow` も
+  `pvpBoardIsRemote()` なら破棄しない。
+- `.github/workflows/deploy-pages.yml` は `VITE_PVP_SERVER_URL: ${{ vars.VITE_PVP_SERVER_URL }}`
+  を渡す。**リポジトリの Variables に登録した時点で有効化**、未登録なら旧構成。
+
+### デプロイ手順
+1. `npx wrangler login`（初回）→ `npm run cf:deploy`（`wrangler deploy`）。
+   出力の `https://chinu-quest2-pvp.<account>.workers.dev` が対戦サーバーURL。
+2. GitHub リポジトリ Settings → Secrets and variables → Actions → **Variables** に
+   `VITE_PVP_SERVER_URL` を登録 → master に push（または workflow_dispatch）。
+3. `wrangler.jsonc` の `ALLOWED_ORIGINS` はサイトの Origin（既定
+   `https://saint-chinu.github.io`）。独自ドメインにしたら足す。
+4. 再デプロイ中の対戦は DO 再起動→安全地点から `resume`。中断させたくなければ
+   人のいない時間に。
+- ローカル: `cp .dev.vars.example .dev.vars && npm run cf:dev`（8787）、
+  `.env` に `VITE_PVP_SERVER_URL=http://127.0.0.1:8787`。localhost 宛ては
+  `?uid=` で接続する（`pvpCloud.js` の `isLocalDev`）。
+
+### テスト
+- `npm run test:cloud` — `tests/pvpCloud.test.mjs`（ボットクライアントで実 Game を
+  決着まで完走／切断→AI代行→復帰／ACK 水位と再送／権限／resume／配線の静的チェック）
+  ＋ `tests/pvpCloudAuth.test.mjs`（自前鍵で RS256 検証の正否）。
+- `npm run cf:dry-run` — Worker のバンドル確認。
+- 疎通: `wrangler dev` に対して Node 22 の `WebSocket` でボット1人＋CPU1体を
+  回すと 200ms 前後で決着する（実施済み）。**実機（2ブラウザ）の通し確認は未実施**。
+
 ## PvP体感速度のチューニング (2026-08、「めっちゃ重い」対応)
 重さの主因は2つで、どちらもホストの進行がFirestore往復に直列ブロック
 される構造だった。**ゲーム進行の因果順序はFIFOのまま維持し、送信量・重複
@@ -3015,6 +3122,9 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
   `.mjs`は**プロジェクト直下**に置いて`node`実行（`node_modules`のvite解決のため）。
   `Object.create(Game.prototype)`＋必要メソッドbind＋callbackモックで部分テスト可。
   フルGameは`requestAnimationFrame`/`performance`のNodeポリフィルが必要。
+- **`npm run test:cloud`**（`tests/pvpCloud.test.mjs` + `tests/pvpCloudAuth.test.mjs`）:
+  Cloudflare対戦の権威コアをボットで完走させる／IDトークン検証。game.js は
+  素の `import` で読める（three.js / Firebase 非依存）。
 - **`npm run test:cards`**（`tests/newCards.test.mjs`）: 新カード7枚の回帰テスト。
   上のSSRローダ＋`Object.create(Game.prototype)`の実例でもある。カード効果を
   触った時はこれを回す。

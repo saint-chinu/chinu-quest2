@@ -29,4 +29,21 @@ export default [
     },
     rules: { 'no-undef': 'error' },
   },
+  {
+    // Cloudflare Workers / Durable Objects（cloudflare/*.js）。ブラウザ用の
+    // グローバルは無いので、Workers ランタイムにあるものだけを許す。
+    files: ['cloudflare/**/*.js'],
+    languageOptions: {
+      ecmaVersion: 2023,
+      sourceType: 'module',
+      globals: {
+        console: 'readonly', setTimeout: 'readonly', clearTimeout: 'readonly', setInterval: 'readonly',
+        clearInterval: 'readonly', queueMicrotask: 'readonly', fetch: 'readonly', Request: 'readonly',
+        Response: 'readonly', Headers: 'readonly', URL: 'readonly', crypto: 'readonly', TextEncoder: 'readonly',
+        TextDecoder: 'readonly', atob: 'readonly', btoa: 'readonly', WebSocketPair: 'readonly',
+        WebSocket: 'readonly', globalThis: 'readonly', performance: 'readonly', structuredClone: 'readonly',
+      },
+    },
+    rules: { 'no-undef': 'error' },
+  },
 ];

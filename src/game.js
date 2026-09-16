@@ -1,5 +1,5 @@
 import { TileType, mapRequiresAllCheckpoints, mapCheckpointBonus, mapUsesAlternateGoalStarts, mapHasOfuda, mapOfudaSettings } from './board.js';
-import { PIECE_REST_Y, UNIT_ICON_REST_Y } from './scene.js';
+import { PIECE_REST_Y, UNIT_ICON_REST_Y } from './sceneConstants.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity } from './cards.js';
 import { buildStarterCardList, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf, isRewardOnlyCard } from './battleCards.js';
 import { createFieldUnit, resolveBattle, applyPreAttackItemEffects, abortPreAttackItemEffects, equipItem, applyCurse, applyPoison, GoldLedger, hasTrait, strikeOrderScore, statTotals, previewBattleEntryHp } from './battle.js';

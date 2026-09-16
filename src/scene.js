@@ -4,6 +4,7 @@ import { CARD_COLOR } from './cards.js';
 import { tween, easeInOutQuad } from './utils.js';
 import { assetUrl } from './assetUrl.js';
 import { defaultCardArtUrl } from './cardArt.js';
+import { PIECE_HEIGHT, PIECE_REST_Y, UNIT_ICON_REST_Y } from './sceneConstants.js';
 
 const TILE_COLOR = {
   [TileType.START]: 0xffd166,
@@ -89,19 +90,11 @@ const FREE_PAN_DURATION_MS = 350;
 // the edges of the screen.
 const DEADZONE_MARGIN = 0.65;
 
-// 全ステージ共通: 2026-08-13にプレイヤー駒をさらに1.2倍（2.88→3.456）。
-// 下端の沈み込み量を従来と同じ0.1に保つため、高さ/2-0.1でY位置を算出。
-const PIECE_HEIGHT = 4.1472;
-export const PIECE_REST_Y = PIECE_HEIGHT / 2 - 0.1;
+// プレイヤー駒・モンスターアイコンのY座標定数は sceneConstants.js に置く
+// （game.js が three.js 無しで読めるように）。既存の import 元のためここで
+// re-export する。
+export { PIECE_REST_Y, UNIT_ICON_REST_Y };
 
-// 配置モンスターの盤上アイコン用。プレイヤー駒より低く小さくして、通行中の
-// プレイヤー駒と土地に常駐するモンスターアイコンを見分けられるようにする。
-// Y位置はカードの下端がタイル表面(y=0)よりわずかに高い位置(0.05)に来る
-// よう、高さ(UNIT_ICON_HEIGHT)の半分を足して算出する（2026-08-12調整前は
-// 下端が-0.15とタイル面より下に沈み込み、急な俯瞰カメラ角度だとカードが
-// タイルに埋まって「張り付いて」見えていた - ユーザー指摘により修正）。
-// 2026-08-13に盤上表示を8%縮小した後も、下端の高さ0.05を維持する。
-export const UNIT_ICON_REST_Y = 2.05008;
 
 // 土地レベルの縁取り。tile.mesh(2.6四方)より少し内側(2.5)に、レベルが
 // 上がるほど太い黒枠を重ねる - Lv5だけ「太くする」路線から外れて二重の

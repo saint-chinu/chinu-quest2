@@ -3,7 +3,7 @@
 // these carry no unique `id`/`catalogId` semantics of their own; the deck
 // editor keys on `catalogId || name` (see main.js's cardKey).
 import { MONSTER_CATALOG, ITEM_CATALOG, SPELL_CATALOG } from './battleCards.js';
-import { loadCustomCards } from './customCards.js';
+import { loadCustomCards } from './customCardStore.js';
 
 let cached = null;
 

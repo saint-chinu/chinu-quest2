@@ -1,10 +1,12 @@
 import { CardType, Element, Rarity } from './cards.js';
 import { doc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db, firebaseReady } from './firebase.js';
+// 端末側キャッシュの読み書きは customCardStore.js（Firebase非依存）に分離。
+// 図鑑・game.js は loadCustomCards だけを使うので、そちらは store から読む。
+import { loadCustomCards, saveCustomCardsLocally } from './customCardStore.js';
 
-// ユーザーごとに独立したキーに保存する（以前はアカウント横断の共通キー
-// 1本で、別アカウントでも同じカスタムカード一覧が見えてしまっていた）。
-const STORAGE_KEY_PREFIX = 'chinuquest2_custom_cards_';
+export { loadCustomCards };
+
 let cloudUserId = null;
 
 function syncCustomCards(userId, cards) {
@@ -19,8 +21,7 @@ function syncCustomCards(userId, cards) {
 export function setCloudCustomCardUser(userId, cards = []) {
   cloudUserId = userId || null;
   if (!cloudUserId) return;
-  const safeCards = Array.isArray(cards) ? cards : [];
-  localStorage.setItem(STORAGE_KEY_PREFIX + cloudUserId, JSON.stringify(safeCards));
+  saveCustomCardsLocally(cloudUserId, Array.isArray(cards) ? cards : []);
 }
 
 export const CARD_EFFECTS = [
@@ -30,16 +31,6 @@ export const CARD_EFFECTS = [
   { id: 'phoenix', label: '不死鳥', types: [CardType.MONSTER, CardType.GEAR, CardType.SPELL] },
   { id: 'robber', label: '強盗', types: [CardType.MONSTER, CardType.GEAR, CardType.SPELL] },
 ];
-
-export function loadCustomCards(userId) {
-  if (!userId) return [];
-  try {
-    const value = JSON.parse(localStorage.getItem(STORAGE_KEY_PREFIX + userId) || '[]');
-    return Array.isArray(value) ? value : [];
-  } catch {
-    return [];
-  }
-}
 
 let bulkSlugCounter = 0;
 
@@ -78,7 +69,7 @@ export function saveCustomCard(userId, input) {
   const cards = loadCustomCards(userId);
   const card = buildCustomCard(input);
   cards.push(card);
-  localStorage.setItem(STORAGE_KEY_PREFIX + userId, JSON.stringify(cards));
+  saveCustomCardsLocally(userId, cards);
   if (userId === cloudUserId) syncCustomCards(userId, cards);
   return card;
 }
@@ -88,7 +79,7 @@ export function saveCustomCardsBulk(userId, inputs) {
   const cards = loadCustomCards(userId);
   const saved = inputs.map((input) => buildCustomCard(input));
   cards.push(...saved);
-  localStorage.setItem(STORAGE_KEY_PREFIX + userId, JSON.stringify(cards));
+  saveCustomCardsLocally(userId, cards);
   if (userId === cloudUserId) syncCustomCards(userId, cards);
   return saved;
 }

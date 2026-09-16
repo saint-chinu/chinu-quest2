@@ -144,8 +144,10 @@ export async function joinPvpRoom(roomCodeInput, { name, color, iconDataUrl = ''
 }
 
 /** ホスト専用: ロビーの「対戦開始」クリックと同時に呼ぶ。ゲスト側で購読中のroomリスナーがstatus:'battling'への変化を検知し、それを合図にゲスト側の盤面構築(startPvpGuestBattle)を始める。 */
-export function beginPvpMatch(roomCode) {
-  return updateDoc(roomRef(roomCode), { status: 'battling' });
+export function beginPvpMatch(roomCode, extra = {}) {
+  // extra: Cloudflare対戦なら { engine: 'cloud', engineUrl } を同時に書く
+  // （ホストの update はキー制限が無いので既存ルールのまま通る）。
+  return updateDoc(roomRef(roomCode), { status: 'battling', ...extra });
 }
 
 /** Subscribes to the room document. `onChange(room|null)` fires on every update; call the returned function to unsubscribe. */

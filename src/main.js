@@ -64,6 +64,7 @@ import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted, playSfx
 import { computePlayerSlots } from './playerPanels.js';
 import { getSpeedMultiplier, setSpeedMultiplier, getWaitCutRate, setWaitCutRate, tween, easeInOutQuad } from './utils.js';
 import { pvpQueueAnimationScale } from './pvpQueue.js';
+import { pvpCloudEnabled, pvpCloudServerUrl, startCloudPvpRoom, CloudPvpConnection } from './pvpCloud.js';
 
 // 盤面メニューの速度調整（1倍/1.5倍/2倍/3倍）: game.js/scene.jsはtween/delay
 // （utils.js）経由で既に倍率がかかるが、main.js自身のメッセージ表示・演出待ちは
@@ -1606,7 +1607,7 @@ function renderHand(hand, spellUsable = false) {
       showCardDetail(card, canUseThis ? () => {
         el.classList.add('blinking');
         setTimeout(() => {
-          if (pvpMatch && !pvpMatch.isHost) {
+          if (pvpBoardIsRemote()) {
             pvpMatch.actionSender.send({ type: 'useSpell', cardId: card.id, playerId: pvpMatch.localPlayerId });
           } else {
             game.useSpell(card);
@@ -1784,7 +1785,7 @@ async function playPandemicBoardEffect() {
 async function promptSpellCastEffect({ targetPlayerId, targetTileId, targetPosition, effectMessage, effectType }) {
   if (!scene) return;
   const savedFocus = { x: scene.focus.x, z: scene.focus.z };
-  const isPvpGuest = pvpMatch && !pvpMatch.isHost;
+  const isPvpGuest = pvpBoardIsRemote();
 
   if (targetPosition) {
     await scene.focusAndZoom(targetPosition.x, targetPosition.z);
@@ -1867,7 +1868,7 @@ async function promptShrineEffect({ position, title, message }) {
 /** ワープ停止時: 発動地点へ寄り、駒を飛ばしながらカメラで追って結果を表示する。 */
 async function promptWarpEffect({ playerId, sourcePosition, targetPosition, label = 'ワープ' }) {
   if (!scene || !sourcePosition || !targetPosition) return;
-  const isPvpGuest = pvpMatch && !pvpMatch.isHost;
+  const isPvpGuest = pvpBoardIsRemote();
   const sprite = isPvpGuest
     ? findPvpGuestPieceSprite(playerId)
     : game?.players?.find((player) => player.id === playerId)?.mesh;
@@ -1911,7 +1912,7 @@ async function showBankruptcyText(position) {
  */
 async function promptBankruptcy({ playerId, playerName, position, startPosition = null, restartCurrency = 500 }) {
   if (!scene) return;
-  const isPvpGuest = pvpMatch && !pvpMatch.isHost;
+  const isPvpGuest = pvpBoardIsRemote();
   const mesh = isPvpGuest ? findPvpGuestPieceSprite(playerId) : game?.players?.find((p) => p.id === playerId)?.mesh;
   const pos = position ?? (mesh ? { x: mesh.position.x, z: mesh.position.z } : null);
   if (!pos) return;
@@ -3204,7 +3205,7 @@ function beginDiceMove(result) {
   // Game.rollDiceのstate通知を待たず、このクリックと同じイベント内で即ロック。
   diceButton.disabled = true;
   syncCenterVisibility();
-  if (pvpMatch && !pvpMatch.isHost) {
+  if (pvpBoardIsRemote()) {
     pvpMatch.actionSender.send({ type: 'rollDice', steps: result, playerId: pvpMatch.localPlayerId });
     return;
   }
@@ -3250,7 +3251,7 @@ diceButton.addEventListener('click', () => {
  * cpuRollDice/クリック経由で描画済みなので、ここではゲスト側だけが働く。
  */
 async function promptDiceResult({ playerId, steps, reverse = false }) {
-  if (!pvpMatch || pvpMatch.isHost) return;
+  if (!pvpBoardIsRemote()) return;
   if (playerId === pvpMatch.localPlayerId) return; // 自分の出目は自分の画面で見た
   if (!Number.isFinite(steps)) return;
   showCenterState = true;
@@ -3664,6 +3665,8 @@ gameMenuPvpWait.addEventListener('click', () => {
   setWaitCutRate(pvpMatch ? selectedPvpWaitCutRate : 0);
   syncPvpWaitButtonLabel();
   game?._notifyState?.();
+  // Cloudflare対戦: サーバーが公開状態に載せて全員へ配る。
+  if (pvpMatch?.cloud) pvpMatch.connection?.sendCommand({ t: 'waitCut', rate: selectedPvpWaitCutRate });
 });
 
 menuButton.addEventListener('click', () => {
@@ -3671,29 +3674,44 @@ menuButton.addEventListener('click', () => {
   if (diceState === 'spinning') resetDice();
   gameMenuModal.classList.remove('hidden');
   syncBattleMessageButtons();
-  gameMenuBan.classList.toggle('hidden', !(pvpMatch?.isHost && game));
+  gameMenuBan.classList.toggle('hidden', !(pvpMatch?.isHost && (game || pvpMatch.cloud)));
   // 進行速度の混線を避けるため変更権限はホストだけ。参加者へは公開状態で
   // 同じ率を同期し、全端末の表示待ちを揃える。
   gameMenuPvpWait.classList.toggle('hidden', !pvpMatch?.isHost);
 });
 
-gameMenuBan.addEventListener('click', () => {
-  if (!pvpMatch?.isHost || !game) return;
-  const candidates = game.players.filter((p) => !p.isCPU && p.id !== 0 && !p.defeated);
-  if (!candidates.length) return;
-  // 名前の完全一致で選ぶと同名プレイヤーがいた場合に別人をBANしてしまう
-  // ため、番号入力に変更（idではなくリスト内の表示順で選ばせる - IDは
-  // ユーザーに見せていないため）。
+/** BAN対象を番号入力で選ぶ（同名プレイヤーの取り違えを避けるため名前一致では選ばない）。 */
+function pickBanTarget(candidates) {
+  if (!candidates.length) return null;
   const listText = candidates.map((p, i) => `${i + 1}: ${p.name}`).join('\n');
   const input = window.prompt(`BANするプレイヤーの番号を入力：\n${listText}`);
-  if (input == null) return;
+  if (input == null) return null;
   const index = Number(input) - 1;
   const target = Number.isInteger(index) ? candidates[index] : undefined;
   if (!target) {
     window.alert('番号が正しくありません。BANを中止しました。');
+    return null;
+  }
+  if (!window.confirm(`${target.name}をBANしてAIに切り替えますか？`)) return null;
+  return target;
+}
+
+gameMenuBan.addEventListener('click', () => {
+  if (!pvpMatch?.isHost) return;
+  if (pvpMatch.cloud) {
+    // Cloudflare対戦: Gameはサーバーにあるので、公開状態の一覧から選んで
+    // サーバーへ依頼する（人間参加者かどうかは welcome の参加者一覧で判定）。
+    const humanIds = new Set((pvpMatch.cloudPlayers || []).filter((p) => !p.isCPU).map((p) => p.playerId));
+    const candidates = (pvpMatch.latestPublicState?.players || []).filter((p) => humanIds.has(p.id) && p.id !== 0 && !p.defeated && !p.banned);
+    const target = pickBanTarget(candidates);
+    if (target) pvpMatch.connection?.sendCommand({ t: 'ban', playerId: target.id });
+    gameMenuModal.classList.add('hidden');
     return;
   }
-  if (!window.confirm(`${target.name}をBANしてAIに切り替えますか？`)) return;
+  if (!game) return;
+  const candidates = game.players.filter((p) => !p.isCPU && p.id !== 0 && !p.defeated);
+  const target = pickBanTarget(candidates);
+  if (!target) return;
   target.isCPU = true;
   target.banned = true;
   game.onLog(`${target.name}はホストにBANされ、AI操作へ切り替わった`);
@@ -5224,7 +5242,7 @@ function promptCheckpointSound() {
 async function promptGoalBonus({ playerId, playerName, amount, detail, position } = {}) {
   playSfx('goal');
   if (!(amount > 0)) return;
-  const isPvpGuest = pvpMatch && !pvpMatch.isHost;
+  const isPvpGuest = pvpBoardIsRemote();
   const fallbackTile = !isPvpGuest && playerId != null
     ? tiles?.[game?.players?.find((p) => p.id === playerId)?.tileId]?.position
     : null;
@@ -8497,6 +8515,14 @@ battleCpuButton.addEventListener('click', async () => {
 let pvpUnsubscribe = null;
 let pvpMatch = null;
 let pvpSession = null; // { roomCode, uid, isHost }
+/**
+ * ローカルに Game を持たず、publicState と演出イベントの受信で盤面を描く
+ * 参加者か。Firestore版のゲスト、または Cloudflare版の全員（ホスト含む）。
+ * 旧コードの `pvpMatch && !pvpMatch.isHost` はすべてこれに置き換えた。
+ */
+function pvpBoardIsRemote() {
+  return !!pvpMatch && (!pvpMatch.isHost || !!pvpMatch.cloud);
+}
 // Firestoreのfinished通知や決着コールバックが重複しても、報酬付与と
 // メニュー復帰を各端末で一度だけ実行するためのガード。
 let pvpBattleEndHandled = false;
@@ -8711,6 +8737,7 @@ function stopPvpRoomListener() {
 }
 
 let pvpRejoinCheckToken = 0;
+let pvpRejoinAsHost = false;
 
 /**
  * 進行中のPvP対戦（ゲスト参加分）が復帰可能なら、メニュー上部の
@@ -8737,9 +8764,11 @@ async function refreshPvpRejoinOffer() {
     console.warn('PvP復帰チェックに失敗しました', error);
     return;
   }
+  // Cloudflare対戦（engine==='cloud'）は Game がサーバーにあるので、ホスト
+  // 自身も復帰できる。Firestore版はホストのGameが失われているので除外。
   const rejoinable = room
     && room.status === 'battling'
-    && room.hostUid !== currentUserId
+    && (room.hostUid !== currentUserId || room.engine === 'cloud')
     && (room.participantUids || []).includes(currentUserId);
   if (!rejoinable) {
     clearPvpRejoinSession(currentUserId);
@@ -8748,6 +8777,7 @@ async function refreshPvpRejoinOffer() {
   // 待っている間に別の画面へ移った／もう一度チェックが走った場合は出さない。
   if (token !== pvpRejoinCheckToken || pvpMenuScreen.classList.contains('hidden')) return;
   pvpRejoinButton.textContent = `進行中の対戦に復帰する（部屋 ${saved.roomCode}）`;
+  pvpRejoinAsHost = room.hostUid === currentUserId;
   pvpRejoinButton.classList.remove('hidden');
 }
 
@@ -8771,7 +8801,7 @@ pvpRejoinButton.addEventListener('click', () => {
   const saved = loadPvpRejoinSession(currentUserId);
   pvpRejoinButton.classList.add('hidden');
   if (!saved) return;
-  enterPvpRoomScreen({ roomCode: saved.roomCode, uid: currentUserId, isHost: false });
+  enterPvpRoomScreen({ roomCode: saved.roomCode, uid: currentUserId, isHost: pvpRejoinAsHost });
 });
 
 battlePvpButton.addEventListener('click', showPvpMenuScreen);
@@ -8842,8 +8872,12 @@ function enterPvpRoomScreen(session) {
         session.friendshipsRegistered = true;
         registerPvpFriends(room).catch((error) => console.warn('フレンド自動登録に失敗しました', error));
       }
-      if (!session.isHost && !pvpGuestBattleStarted) {
+      // Cloudflare対戦（room.engine==='cloud'）ではホストも「参加者」として
+      // サーバーへつなぐので、同じ経路で盤面を構築する。
+      const cloudRoom = room.engine === 'cloud';
+      if (!pvpGuestBattleStarted && (!session.isHost || cloudRoom)) {
         pvpGuestBattleStarted = true;
+        if (cloudRoom) ensureCloudPvpMatch(session, room);
         startPvpGuestBattle();
       }
       return;
@@ -9001,6 +9035,7 @@ pvpRoomLeave.addEventListener('click', async () => {
   if (pvpMatch && !pvpMatch.isHost) {
     pvpMatch.listener?.destroy?.();
     pvpMatch.actionSender?.destroy();
+    pvpMatch.connection?.destroy?.();
     pvpMatch = null;
   }
   if (pvpSession) {
@@ -9419,7 +9454,7 @@ function clearPvpPieces() {
  * 何もしない（駒はgame.jsが直接動かしている）。
  */
 async function promptPieceMove({ playerId, from, path }, { queueDepth = 0 } = {}) {
-  if (!(pvpMatch && !pvpMatch.isHost)) return;
+  if (!pvpBoardIsRemote()) return;
   if (!scene || !Array.isArray(path) || path.length === 0) return;
   const piece = pvpPieces.get(playerId);
   if (!piece) return; // まだ駒が生成されていなければ次のスナップに任せる
@@ -9479,7 +9514,7 @@ async function promptPieceMove({ playerId, from, path }, { queueDepth = 0 } = {}
  * 1歩tweenが重なって走ることはない。
  */
 async function promptPieceStep({ playerId, from, to }, { queueDepth = 0 } = {}) {
-  if (!(pvpMatch && !pvpMatch.isHost)) return;
+  if (!pvpBoardIsRemote()) return;
   if (!scene || !to || !Number.isFinite(to.x) || !Number.isFinite(to.z)) return;
   const piece = pvpPieces.get(playerId);
   if (!piece) return;
@@ -9716,7 +9751,7 @@ function clearGuestPendingWalk(playerId) {
 function applyPvpPublicState(publicState) {
   if (!publicState || !pvpMatch) return;
   pvpMatch.latestPublicState = publicState;
-  if (!pvpMatch.isHost && publicState.waitCutRate != null) {
+  if (pvpBoardIsRemote() && publicState.waitCutRate != null) {
     selectedPvpWaitCutRate = publicState.waitCutRate;
     setWaitCutRate(selectedPvpWaitCutRate);
     syncPvpWaitButtonLabel();
@@ -9791,6 +9826,7 @@ function applyPvpPublicState(publicState) {
       pvpMatch.stopHandListener?.();
       pvpMatch.listener?.destroy();
       pvpMatch.actionSender?.destroy();
+      pvpMatch.connection?.destroy?.();
       pvpMatch = null;
       pvpSession = null;
       game = undefined;
@@ -9894,7 +9930,7 @@ async function startPvpGuestBattle() {
   await confirmLandscapeReady();
   // 横持ち確認中にpagehide等でセッションが破棄された場合、古い非同期処理から
   // 盤面を復活させない。
-  if (!pvpMatch || pvpMatch !== startingMatch || pvpMatch.isHost) return;
+  if (!pvpMatch || pvpMatch !== startingMatch || (pvpMatch.isHost && !pvpMatch.cloud)) return;
   preGame.classList.add('hidden');
   appEl.classList.remove('hidden');
 
@@ -9938,30 +9974,18 @@ async function startPvpGuestBattle() {
   pvpMatch.listener?.destroy?.();
   pvpMatch.listener = null;
 
+  if (pvpMatch.cloud) {
+    startCloudPvpConnection();
+    return;
+  }
+
   pvpMatch.stopPublicListener = listenToRoom(pvpMatch.roomCode, (room) => {
     if (!room || room.status === 'finished') {
-      if (pvpBattleEndHandled) return;
-      pvpBattleEndHandled = true;
       // ホストが退出した（部屋を消した/finishedにした） - こちらも対戦を終える。
       // ホストの退出はgameMenuExit経由の報酬確認を通らないため、ここで
       // 代わりに直近のpublicStateから自分の取り分を換算して付与する
       // （でなければゲストは無報酬のまま追い出されてしまう）。
-      const endingAssetsShare = (pvpMatch?.lastAssets ?? pvpMatch?.lastCurrency ?? 0) / (pvpMatch?.lastAllianceSize || 1);
-      const { earnedM } = grantExitReward(endingAssetsShare);
-      clearPvpRejoinSession(pvpMatch?.uid);
-      pvpMatch?.stopPublicListener?.();
-      pvpMatch?.stopHandListener?.();
-      pvpMatch?.listener?.destroy();
-      pvpMatch?.actionSender?.destroy();
-      clearPvpPieces();
-      setWaitCutRate(0);
-      pvpMatch = null;
-      pvpSession = null;
-      blockMusicPlayback();
-      appEl.classList.add('hidden');
-      preGame.classList.remove('hidden');
-      window.alert(`対戦が終了しました。獲得報酬：${earnedM}M`);
-      showHubScreen();
+      endRemotePvpSession();
       return;
     }
     if (room.publicState) {
@@ -9971,18 +9995,7 @@ async function startPvpGuestBattle() {
           pvpMatch.roomCode,
           pvpMatch.uid,
           pvpGuestHandlers,
-          {
-            onFastForward: () => {
-              cancelActiveBattleItemPicker?.();
-              cancelActiveBattleItemPicker = null;
-              cancelAllActivePrompts();
-              // spellCastEffect/spellCompleteはfire配信（オフライン中は
-              // 破棄され得る）なので、開始だけ届いて終了が届かないと
-              // 手札パネルが隠れたまま・演出モーダルが出たままになる。
-              // 復帰・打ち切り時は必ず閉じておく。
-              finishSpellPresentation();
-            },
-          },
+          { onFastForward: fastForwardRemotePrompts },
         );
       }
     }
@@ -9993,6 +10006,189 @@ async function startPvpGuestBattle() {
   });
 }
 
+/**
+ * サーバーが未回答の質問を打ち切った（切断中のAI代行など）時に、開いた
+ * ままの選択UIを閉じて公開状態へ追いつく。spellCastEffect/spellCompleteは
+ * fire配信（オフライン中は破棄され得る）なので、開始だけ届いて終了が
+ * 届かないと手札パネルが隠れたまま・演出モーダルが出たままになる。
+ */
+function fastForwardRemotePrompts() {
+  cancelActiveBattleItemPicker?.();
+  cancelActiveBattleItemPicker = null;
+  cancelAllActivePrompts();
+  finishSpellPresentation();
+}
+
+/** Firestore版ゲスト／Cloudflare版の全員に共通の、盤面と購読の後片付け。 */
+function teardownRemotePvpMatch() {
+  pvpMatch?.stopPublicListener?.();
+  pvpMatch?.stopHandListener?.();
+  pvpMatch?.listener?.destroy?.();
+  pvpMatch?.actionSender?.destroy?.();
+  pvpMatch?.connection?.destroy?.();
+  clearPvpPieces();
+  setWaitCutRate(0);
+  pvpMatch = null;
+  pvpSession = null;
+}
+
+/**
+ * ホスト側／サーバー側から「対戦終了」が届いた時の共通処理。直近の
+ * publicState（またはサーバーが確定した取り分）から報酬を付与してハブへ戻る。
+ * `share` はサーバーが確定した自分の取り分（Cloudflare版）。無ければ
+ * 直近の publicState から換算する（Firestore版）。
+ */
+function endRemotePvpSession({ headline = null, share = null } = {}) {
+  if (pvpBattleEndHandled) return;
+  pvpBattleEndHandled = true;
+  const endingAssetsShare = Number.isFinite(share)
+    ? share
+    : (pvpMatch?.lastAssets ?? pvpMatch?.lastCurrency ?? 0) / (pvpMatch?.lastAllianceSize || 1);
+  const { earnedM } = grantExitReward(endingAssetsShare);
+  clearPvpRejoinSession(pvpMatch?.uid);
+  const wasCloudHost = !!(pvpMatch?.cloud && pvpMatch.isHost);
+  const roomCode = pvpMatch?.roomCode;
+  teardownRemotePvpMatch();
+  // Cloudflare対戦のホストは、ロビー／復帰判定用の部屋文書も終了にしておく。
+  if (wasCloudHost && roomCode) Promise.resolve(finishPvpRoom(roomCode)).catch(() => {});
+  blockMusicPlayback();
+  appEl.classList.add('hidden');
+  preGame.classList.remove('hidden');
+  window.alert(`${headline ? `${headline}\n` : ''}対戦が終了しました。獲得報酬：${earnedM}M`);
+  showHubScreen();
+}
+
+/**
+ * Cloudflare対戦: サーバーの Game へ WebSocket で接続する（ホストも参加者も
+ * 同じ経路）。演出・質問の受け口は Firestore 版ゲストと同じ pvpGuestHandlers。
+ */
+function startCloudPvpConnection() {
+  const match = pvpMatch;
+  const serverUrl = match.cloudUrl || pvpCloudServerUrl();
+  if (!serverUrl) {
+    window.alert('対戦サーバーのURLが設定されていません（VITE_PVP_SERVER_URL）。');
+    endRemotePvpSession();
+    return;
+  }
+  const connection = new CloudPvpConnection(serverUrl, match.roomCode, match.uid, pvpGuestHandlers, {
+    onWelcome: ({ playerId, room }) => {
+      if (pvpMatch !== match) return;
+      if (Number.isInteger(playerId)) match.localPlayerId = playerId;
+      match.cloudPlayers = room?.players || [];
+      // 待機カットはホストが決めた値をサーバーが保持している。
+      if (room?.waitCutRate != null) {
+        selectedPvpWaitCutRate = room.waitCutRate;
+        setWaitCutRate(selectedPvpWaitCutRate);
+        syncPvpWaitButtonLabel();
+      }
+    },
+    onState: (publicState) => { if (pvpMatch === match) applyPvpPublicState(publicState); },
+    onHand: (hand) => {
+      if (pvpMatch !== match) return;
+      match.myHand = hand || [];
+      if (match.latestPublicState) applyPvpPublicState(match.latestPublicState);
+    },
+    onFinished: (result) => {
+      if (pvpMatch !== match) return;
+      const me = result?.players?.find((p) => p.id === match.localPlayerId);
+      let headline = null;
+      if (result?.reason === 'settled') headline = me?.won ? '勝利！🎉' : '敗北…';
+      else if (result?.reason === 'hostLeft') headline = 'ホストが退出しました';
+      else if (result?.reason === 'abandoned') headline = '全員が退出したため対戦を終了しました';
+      endRemotePvpSession({ headline, share: Number.isFinite(me?.endingAssetsShare) ? me.endingAssetsShare : null });
+    },
+    onStatus: (text) => { if (pvpMatch === match && text) showToast(text, 1800); },
+    onFastForward: fastForwardRemotePrompts,
+  });
+  match.connection = connection;
+  match.actionSender?.destroy?.();
+  match.actionSender = { send: (action) => Promise.resolve(connection.sendAction(action)), destroy() {} };
+  void connection.connect();
+}
+
+/**
+ * Cloudflare対戦の実行時状態（pvpMatch）を用意する。ホストは開始設定を
+ * 送った側だが、盤面の描画・入力はゲストと全く同じ経路なので isHost は
+ * 「BAN／待機カット／退出で終了」の権限表示にだけ使う。
+ */
+function ensureCloudPvpMatch(session, room) {
+  const cloudUrl = room?.engineUrl || pvpCloudServerUrl();
+  if (pvpMatch && pvpMatch.roomCode === session.roomCode && pvpMatch.uid === session.uid) {
+    pvpMatch.cloud = true;
+    pvpMatch.cloudUrl = cloudUrl;
+    return pvpMatch;
+  }
+  pvpMatch?.listener?.destroy?.();
+  pvpMatch?.actionSender?.destroy?.();
+  pvpMatch?.connection?.destroy?.();
+  pvpMatch = {
+    isHost: !!session.isHost,
+    cloud: true,
+    cloudUrl,
+    roomCode: session.roomCode,
+    uid: session.uid,
+    localPlayerId: session.isHost ? 0 : 1,
+    myHand: [],
+    listener: null,
+    actionSender: null,
+  };
+  return pvpMatch;
+}
+
+/** ホスト専用: 開始設定をサーバーへ送り、部屋を'battling'へ進める（盤面構築は部屋リスナー経由で startPvpGuestBattle）。 */
+async function startCloudPvpHost(hostDeck) {
+  const roster = normalizePvpParticipants(pvpLastRoom);
+  const serverUrl = pvpCloudServerUrl();
+  const playerConfigs = [{
+    uid: pvpSession.uid,
+    name: currentCharacter.name,
+    isCPU: false,
+    color: currentCharacter.color,
+    deckList: hostDeck.deckList,
+    iconDataUrl: roster.find((p) => p.uid === pvpSession.uid)?.iconDataUrl || '',
+  }];
+  for (const participant of roster.filter((entry) => entry.uid !== pvpSession.uid)) {
+    if (Array.isArray(participant.deckList) && participant.deckList.length === 40) {
+      playerConfigs.push({ uid: participant.uid, name: participant.name, isCPU: false, color: participant.color, deckList: participant.deckList, iconDataUrl: participant.iconDataUrl || '' });
+    }
+  }
+  const cpuNames = Array.isArray(pvpLastRoom.cpuNames) ? pvpLastRoom.cpuNames : [];
+  const usedCpuNames = new Set();
+  for (const cpuName of cpuNames) {
+    if (usedCpuNames.has(cpuName) || playerConfigs.length >= (pvpLastRoom.playerCount || 2)) continue;
+    const npc = STORY_STAGES.flatMap((stage) => [stage.ally, ...(stage.opponents || [])]).find((entry) => entry?.name === cpuName);
+    if (!npc) continue;
+    usedCpuNames.add(cpuName);
+    playerConfigs.push({
+      name: cpuName,
+      isCPU: true,
+      color: npc.color,
+      deckList: npc.deckKey ? buildCharacterDeckList(npc.deckKey) : buildThemedDeckList(npc.theme),
+      elements: npc.theme?.elements,
+    });
+  }
+  if (pvpLastRoom.allianceMode) {
+    if (playerConfigs.length === 4) {
+      const teams = pvpLastRoom.randomAlliance ? [0, 1, 0, 1].sort(() => Math.random() - 0.5) : [0, 1, 0, 1];
+      playerConfigs.forEach((config, index) => { config.allianceId = teams[index]; });
+    } else {
+      console.warn(`PvP同盟モードだが参加者が${playerConfigs.length}人（4人ではない）のため同盟を割り当てられません`);
+    }
+  }
+  await startCloudPvpRoom(serverUrl, pvpSession.roomCode, {
+    mapId: pvpLastRoom.mapId,
+    goalCurrency: pvpLastRoom.goalCurrency || 5000,
+    bgmTrack: pvpLastRoom.bgmTrack || null,
+    playerConfigs,
+  }, { uid: pvpSession.uid });
+  await registerPvpFriends(pvpLastRoom).catch((error) => console.warn('フレンド自動登録に失敗しました', error));
+  await clearSentPvpInvites();
+  // engine/engineUrl を部屋文書に書くと、部屋リスナー（enterPvpRoomScreen）が
+  // ホスト・参加者の両方で startPvpGuestBattle を起こす。参加者は
+  // engineUrl を優先するので、ホストだけが新ビルドでもつながる。
+  await beginPvpMatch(pvpSession.roomCode, { engine: 'cloud', engineUrl: serverUrl });
+}
+
 pvpRoomStart.addEventListener('click', async () => {
   if (!pvpSession?.isHost || (!pvpLastRoom?.guestUid && !(pvpLastRoom?.cpuNames?.length))) return;
   pvpRoomStart.disabled = true;
@@ -10000,6 +10196,19 @@ pvpRoomStart.addEventListener('click', async () => {
   const hostDeck = await promptDeckSelection();
   if (!hostDeck) { pvpRoomStart.disabled = false; return; }
   await confirmLandscapeReady();
+
+  if (pvpCloudEnabled()) {
+    // Cloudflare対戦: Game はサーバー（Durable Object）が持つ。ホストは
+    // 開始設定を送ったあと、参加者と同じ WebSocket クライアントになる。
+    try {
+      await startCloudPvpHost(hostDeck);
+    } catch (error) {
+      console.error('Cloudflare対戦の開始に失敗しました', error);
+      window.alert(pvpErrorMessage(error, '対戦サーバーへ接続できませんでした'));
+    }
+    pvpRoomStart.disabled = false;
+    return;
+  }
 
   // ゲストのデッキは入室と同時にguestDeckListとしてもう届いている
   // （joinPvpRoom参照）ので、ここで改めて尋ねる必要はない。
@@ -10266,7 +10475,7 @@ gameMenuExit.addEventListener('click', async () => {
     if (confirmed) await finishTutorial(false);
     return;
   }
-  const isPvpGuest = pvpMatch && !pvpMatch.isHost;
+  const isPvpGuest = pvpBoardIsRemote();
   if (!game && !isPvpGuest) return;
 
   // ストーリーモードは通常の対戦(CPU戦/対人戦)と違い、M報酬の対象外
@@ -10334,7 +10543,20 @@ gameMenuExit.addEventListener('click', async () => {
   battleItemNoneNotice.classList.add('hidden');
   battleMessageText.classList.add('hidden');
 
-  if (pvpMatch?.isHost) {
+  if (pvpMatch?.cloud) {
+    // Cloudflare対戦: ホストの退出はサーバー側で対戦終了（全員へ finished）。
+    // 参加者の退出は切断扱いで、以後はAIが代行する。
+    pvpBattleEndHandled = true;
+    clearPvpRejoinSession(pvpMatch.uid);
+    if (pvpMatch.isHost) {
+      pvpMatch.connection?.sendCommand({ t: 'leave' });
+      Promise.resolve(finishPvpRoom(pvpMatch.roomCode)).catch(() => {});
+    }
+    pvpMatch.connection?.destroy?.();
+    pvpMatch.actionSender?.destroy?.();
+    clearPvpPieces();
+    pvpSession = null;
+  } else if (pvpMatch?.isHost) {
     pvpMatch.relay.destroy();
     pvpMatch.participantActionListener?.destroy();
     finishPvpRoom(pvpMatch.roomCode);
@@ -10381,7 +10603,8 @@ function forceTerminateBoardSession() {
   // 画面まで戻され、部屋コードを知らないゲストは復帰する手段を失う。
   // ホストは本物のGameエンジンそのものを手放すことになり復帰手段が無いため、
   // これまで通り破棄してfinishPvpRoomで部屋を終わらせる。
-  if (pvpMatch && !pvpMatch.isHost) return;
+  // Cloudflare対戦はホストも Game を持たない（サーバーにある）ので同様に残す。
+  if (pvpBoardIsRemote()) return;
   // ブラウザ終了・pagehideでは新規保存を作らない。既に「途中退室」で確定保存
   // されたデータも削除しない。盤面/BGMを破棄するだけに限定する。
   game?.cancel?.();
@@ -10424,7 +10647,7 @@ window.addEventListener('pageshow', (event) => {
   // 参照）。JSの状態(game/pvpMatch/リスナー類)はbfcache中も保持されている
   // ので、ここで手を出さなければハートビートも含めて何事もなかったように
   // 動き続ける。
-  if (pvpMatch && !pvpMatch.isHost) return;
+  if (pvpBoardIsRemote()) return;
   if (!appEl?.classList.contains('hidden')) {
     forceTerminateBoardSession();
     showScreen(loginScreen);

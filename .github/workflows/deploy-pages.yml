@@ -32,6 +32,9 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: chinuquest-87b81.firebasestorage.app
           VITE_FIREBASE_MESSAGING_SENDER_ID: '546856004041'
           VITE_FIREBASE_APP_ID: 1:546856004041:web:1bfc48e4d7d6418324a018
+          # 対人戦サーバー（Cloudflare Workers）のURL。リポジトリの Variables に
+          # VITE_PVP_SERVER_URL を登録すると有効化される（未登録なら従来のFirestore中継）。
+          VITE_PVP_SERVER_URL: ${{ vars.VITE_PVP_SERVER_URL }}
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:

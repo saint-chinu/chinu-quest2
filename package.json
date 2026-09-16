@@ -8,19 +8,25 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:rules": "firebase emulators:exec --only firestore --project demo-chinuquest2 \"node --test tests/firestore.rules.test.mjs\"",
-    "lint": "eslint src public",
+    "lint": "eslint src public cloudflare",
     "test:cards": "node --test tests/newCards.test.mjs",
     "test:pvp": "node --test tests/pvpSync.test.mjs",
-    "simulate": "node tools/simulate.mjs"
+    "test:cloud": "node --test tests/pvpCloud.test.mjs tests/pvpCloudAuth.test.mjs",
+    "simulate": "node tools/simulate.mjs",
+    "cf:dev": "wrangler dev",
+    "cf:dry-run": "wrangler deploy --dry-run --outdir .wrangler/dry-run",
+    "cf:deploy": "wrangler deploy"
   },
   "dependencies": {
     "firebase": "^12.17.1",
     "three": "^0.169.0"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260916.1",
     "@firebase/rules-unit-testing": "^5.0.1",
     "eslint": "^10.9.0",
     "firebase-tools": "^15.26.0",
-    "vite": "^5.4.0"
+    "vite": "^5.4.0",
+    "wrangler": "^4.132.0"
   }
 }
