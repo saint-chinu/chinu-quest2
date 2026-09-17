@@ -176,6 +176,13 @@ export class CloudPvpConnection {
           this.callbacks.onState?.(this.state);
         }
         if (Array.isArray(message.hand)) this.callbacks.onHand?.(message.hand);
+        // 切断中に処理・回答したイベントの ACK は届いていない可能性がある。
+        // 現在の水位と直近の回答を送り直し、サーバー側で待っている質問を
+        // 45秒のタイムアウト前に解決させる（サーバーは切断猶予中も質問を
+        // 保持している）。
+        if (this.tracker.ackedThrough > 0 || this.lastInteractiveAnswer) {
+          this._send({ t: 'ack', through: this.tracker.ackedThrough, value: this.lastInteractiveAnswer });
+        }
         this._enqueueEvents(message.events || []);
         break;
       }

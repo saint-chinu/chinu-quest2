@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v303`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v305`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ### BGMコレクション `/bgm/`（2026-09）
@@ -2836,7 +2836,15 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
     捨てず、アウトボックスに積んで `welcome` で届ける（⚠️ これが無いと、Firestore
     の status 伝播より先に飛んだ `cardReveal` で参加者が即 AI 化する。テストで
     実際に踏んだ）。対戦中の切断（`everConnected=true` かつ offline）だけが即 AI。
-  - 切断（WS close）→ 即 `pvpAutoCpu` で AI 代行、再接続で `pvpHumanRestorePending`
+  - **切断猶予** `DISCONNECT_GRACE_MS`（15秒）: WS が切れても猶予中は「まだ来て
+    いない」と同じ扱いで演出・質問をアウトボックスに積んで待ち、戻れば welcome
+    で届ける（AI 化しない）。猶予切れ／明示的 leave で `_abandon` → AI 代行。
+    クライアントは welcome 直後に現在の ACK 水位と直近の回答を送り直す
+    （切断中に答えた回答が失われない）。
+  - **AI 化直後の停止防止** `_kickCpuIfStalled`: サイコロ待ちの本人が AI 化
+    （猶予切れ・BAN）されると Game は `_beginTurn` でしか `_runCPUTurn` を起動
+    しないので、ここで起動する（旧 Firestore 版から潜在していた停止）。
+  - 切断（WS close）→ 猶予後に `pvpAutoCpu` で AI 代行、再接続で `pvpHumanRestorePending`
     → `onTurnBoundary` で人間へ戻す（Firestore版と同じ境界）。ハートビートは不要。
   - 公開状態は `_notifyState` ごとに層別差分（tiles / turnHand / 軽い項目）で送る。
     Firestore と違い 400ms 間引きは無い。`tilesRevision` は時刻起点（DO 再起動後の

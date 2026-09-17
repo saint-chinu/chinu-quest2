@@ -91,6 +91,7 @@ function makeRoom(config, bots, extraIo = {}) {
   const byUid = new Map(bots.map((bot) => [bot.uid, bot]));
   const persisted = [];
   const core = new PvpRoomCore({
+    disconnectGraceMs: 300, // テストでは猶予を短くする（本番15秒）
     // 本番は WebSocket なので受信は必ず非同期。同期に配ると Game の
     // _notifyState の最中にボットが rollDice を呼ぶ再入が起きてしまう。
     send: (uid, message) => {
@@ -192,12 +193,14 @@ test('切断でAI代行へ切り替わり、再接続で次の手番境界に人
   await waitFor(() => core.game.turnCount >= 2, { timeoutMs: 30000 });
   b.disconnect();
   const playerB = core.game.players[1];
-  assert.equal(playerB.isCPU, true);
-  assert.equal(playerB.pvpAutoCpu, true);
   const channel = core.channels.get('u1');
   assert.equal(channel.offline, true);
-  assert.equal(channel.outbox.length, 0, '切断時は未ACKの演出列を捨てる');
-  // 切断中の fire 演出は積まれない・value は即 reject される
+  assert.equal(playerB.isCPU, false, '切断直後は猶予中でまだ人間のまま');
+  await waitFor(() => channel.abandoned === true, { timeoutMs: 5000 });
+  assert.equal(playerB.isCPU, true, '猶予が切れたら AI 代行');
+  assert.equal(playerB.pvpAutoCpu, true);
+  assert.equal(channel.outbox.length, 0, '猶予切れで未ACKの演出列を捨てる');
+  // 猶予切れ後の fire 演出は積まれない・value は即 reject される
   await assert.rejects(core._enqueue('u1', 'landCommand', {}, 'value'), /オフライン/);
   b.connect();
   await waitFor(() => b.received.some((m) => m.t === 'welcome'));
@@ -206,6 +209,51 @@ test('切断でAI代行へ切り替わり、再接続で次の手番境界に人
   await waitFor(() => core.game.turnCount >= turnAtReconnect + 3 || playerB.isCPU === false, { timeoutMs: 30000 });
   assert.equal(playerB.isCPU, false, '手番境界で人間操作へ戻る');
   assert.equal(playerB.pvpAutoCpu, false);
+  core.destroy();
+});
+
+test('切断猶予内に戻れば AI 化せず、保留していた質問がそのまま届く', async () => {
+  const a = new BotClient('u0');
+  const b = new BotClient('u1');
+  const core = makeRoom(makeConfig({ humans: 2, goalCurrency: 50000 }), [a, b]);
+  core.start(core.pendingConfig);
+  a.connect();
+  b.connect();
+  await waitFor(() => core.started);
+  b.disconnect();
+  const playerB = core.game.players[1];
+  // 猶予中の質問は捨てられず保留される
+  const pending = core._enqueue('u1', 'confirmMove', { x: 1 }, 'value');
+  assert.equal(core.channels.get('u1').outbox.some((e) => e.type === 'confirmMove'), true);
+  await sleep(50);
+  assert.equal(playerB.isCPU, false);
+  b.connect();
+  assert.equal(await pending, false, '再接続後にボットが答えた');
+  assert.equal(core.channels.get('u1').abandoned, false);
+  assert.equal(playerB.isCPU, false, '猶予内の復帰では AI 化しない');
+  core.handleMessage('u1', { t: 'leave' });
+  assert.equal(playerB.isCPU, true, '明示的な退出は猶予なしで AI 代行');
+  core.destroy();
+});
+
+test('サイコロ待ちで切断→AI化しても盤面が止まらない（CPU手番を起動する）', async () => {
+  const a = new BotClient('u0');
+  const b = new BotClient('u1');
+  const core = makeRoom(makeConfig({ humans: 2, goalCurrency: 50000 }), [a, b]);
+  core.start(core.pendingConfig);
+  a.connect();
+  b.connect();
+  await waitFor(() => core.started);
+  // b の手番でサイコロ待ちになるまで待ち、その瞬間に b のボットを黙らせて切断する
+  b.connected = false; // 以後サイコロを振らない
+  await waitFor(() => core.game.currentPlayer.id === 1 && core.game.awaitingRoll && !core.game.isBusy, { timeoutMs: 30000 });
+  const turn = core.game.turnCount;
+  core.disconnect('u1');
+  await waitFor(() => core.channels.get('u1').abandoned, { timeoutMs: 5000 });
+  assert.equal(core.game.players[1].isCPU, true);
+  await waitFor(() => core.game.turnCount > turn, { timeoutMs: 15000 });
+  assert.ok(core.game.turnCount > turn, 'AI がサイコロを振って手番が進んだ');
+  // BAN でも同じ（ホストがサイコロ待ちの相手を BAN）
   core.destroy();
 });
 
@@ -321,6 +369,7 @@ test('pvpCloud.js: 演出と質問を到着順に1件ずつ再生し、ACK と�
   assert.ok(cloudSrc.includes("if (event.wantValue) this.lastInteractiveAnswer = { id: event.id, v: result ?? null };"));
   assert.ok(cloudSrc.includes('VITE_PVP_SERVER_URL'));
   assert.ok(cloudSrc.includes("url.searchParams.set('token', await idToken())"), '本番は Firebase ID トークンで接続する');
+  assert.ok(cloudSrc.includes("this._send({ t: 'ack', through: this.tracker.ackedThrough, value: this.lastInteractiveAnswer });"), '再接続時に水位と回答を送り直す');
 });
 
 test('worker.js: 開始・WebSocket は認証必須、部屋コードで DO へ振り分ける', () => {

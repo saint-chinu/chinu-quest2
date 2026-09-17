@@ -135,6 +135,12 @@ export const DONE_TIMEOUT_MS = 4000;
 // この時間が過ぎたら最初の手番を始める。つながらなかった人は初回の質問で
 // 45秒待ったのち AI 代行になる。
 export const START_GRACE_MS = 20000;
+// 切断猶予: スマホのアプリ切替や電波の揺れで WebSocket は数秒単位で切れる。
+// 切れた瞬間に AI 代行へ切り替えると、自分の手番が「何もしない」で流れて
+// しまう（旧 Firestore 版には30秒のハートビート猶予があった）。この間は
+// 演出・質問をアウトボックスに積んだまま待ち、戻ってきたら welcome で
+// まとめて届ける。過ぎたら未回答の質問を諦めて AI 代行にする。
+export const DISCONNECT_GRACE_MS = 15000;
 
 /** JSON に載せる前に undefined を null へ均す（キーは保つ。受信側は ?? で既定値を取る）。 */
 export function stripUndefined(value) {
@@ -180,7 +186,8 @@ export function normalizeRoomConfig(input, { hostUid }) {
       deckList: clone(deckList),
       elements: Array.isArray(cfg.elements) ? clone(cfg.elements) : undefined,
       aiProfile: cfg.aiProfile && typeof cfg.aiProfile === 'object' ? clone(cfg.aiProfile) : undefined,
-      iconDataUrl: typeof cfg.iconDataUrl === 'string' ? cfg.iconDataUrl.slice(0, 20000) : '',
+      // 途中で切ると data URL が壊れるので、大きすぎるものは載せない。
+      iconDataUrl: typeof cfg.iconDataUrl === 'string' && cfg.iconDataUrl.length <= 20000 ? cfg.iconDataUrl : '',
     };
   });
   if (playerConfigs[0].uid !== hostUid) throw new Error('先頭の参加者はホスト本人である必要があります');
@@ -215,6 +222,7 @@ export class PvpRoomCore {
       onFinished: () => {},
       log: () => {},
       now: () => Date.now(),
+      disconnectGraceMs: DISCONNECT_GRACE_MS,
       ...io,
     };
     this.config = null;
@@ -348,6 +356,9 @@ export class PvpRoomCore {
       // で、質問は捨てずにアウトボックスへ積んで welcome で届ける。
       offline: true,
       everConnected: false,
+      // 切断猶予中（再接続を待っている）。過ぎると abandoned=true で AI 代行。
+      graceTimer: null,
+      abandoned: false,
     };
     this.channels.set(uid, channel);
     return channel;
@@ -357,8 +368,10 @@ export class PvpRoomCore {
   connect(uid) {
     if (!this.isParticipant(uid)) throw new Error('この部屋の参加者ではありません');
     const channel = this._channel(uid);
+    if (channel.graceTimer) { clearTimeout(channel.graceTimer); channel.graceTimer = null; }
     channel.offline = false;
     channel.everConnected = true;
+    channel.abandoned = false;
     channel.degraded = false;
     this.online.add(uid);
     const player = this.playerOf(uid);
@@ -384,11 +397,34 @@ export class PvpRoomCore {
     this._maybeLaunch();
   }
 
-  /** WebSocket が閉じた。発行済みの質問を即座に解除し、以後は AI が代行する。 */
-  disconnect(uid) {
+  /**
+   * WebSocket が閉じた。すぐには諦めず、猶予の間は「まだ来ていない」扱いで
+   * 演出・質問を積んで待つ（再接続の welcome で届く）。猶予を過ぎたら
+   * _abandon で未回答の質問を解除し、以後は AI が代行する。
+   */
+  disconnect(uid, { immediate = false } = {}) {
     if (!this.channels.has(uid) && !this.online.has(uid)) return;
     this.online.delete(uid);
     const channel = this._channel(uid);
+    channel.offline = true;
+    channel.degraded = true;
+    if (immediate || this.status !== 'battling' || !(this.io.disconnectGraceMs > 0)) {
+      this._abandon(uid);
+      return;
+    }
+    if (channel.graceTimer) return;
+    channel.graceTimer = setTimeout(() => {
+      channel.graceTimer = null;
+      if (!channel.offline) return; // 猶予内に戻ってきた
+      this._abandon(uid);
+    }, this.io.disconnectGraceMs);
+  }
+
+  /** 猶予切れ／明示的な退出: 発行済みの質問を解除し、演出列を捨て、AI 代行へ。 */
+  _abandon(uid) {
+    const channel = this._channel(uid);
+    if (channel.graceTimer) { clearTimeout(channel.graceTimer); channel.graceTimer = null; }
+    channel.abandoned = true;
     const resetThrough = Math.max(channel.ackedThrough, channel.outbox[channel.outbox.length - 1]?.id || 0);
     const error = new Error('参加者の通信が切断されました');
     for (const waiter of channel.doneWaiters) { clearTimeout(waiter.timer); waiter.resolve(); }
@@ -397,8 +433,6 @@ export class PvpRoomCore {
     channel.valueWaiters.clear();
     channel.outbox = [];
     channel.ackedThrough = resetThrough;
-    channel.degraded = true;
-    channel.offline = true;
     const player = this.playerOf(uid);
     if (player && this.status === 'battling') {
       if (player.pvpAutoCpu) player.pvpHumanRestorePending = false;
@@ -408,8 +442,22 @@ export class PvpRoomCore {
         player.pvpHumanRestorePending = false;
         this.game.onLog(`${player.name}の通信が切断されたためAIへ切り替え`);
         this.game._notifyState();
+        this._kickCpuIfStalled(player);
       }
     }
+  }
+
+  /**
+   * 人間を AI へ切り替えた直後の停止防止。サイコロ待ち（awaitingRoll）の
+   * 本人が AI 化されると、Game 側は _beginTurn でしか _runCPUTurn を起動
+   * しないため誰もサイコロを振らず盤面が永久に止まる（旧 Firestore 版でも
+   * 30秒切断→AI化で同じ状況になり得た）。ここで CPU の手番を起動する。
+   */
+  _kickCpuIfStalled(player) {
+    const game = this.game;
+    if (!game || this.status !== 'battling' || !player?.isCPU) return;
+    if (game.currentPlayer !== player || !game.awaitingRoll || game.isBusy) return;
+    void game._runCPUTurn();
   }
 
   _onTurnBoundary(player) {
@@ -501,6 +549,7 @@ export class PvpRoomCore {
     target.banned = true;
     this.game.onLog(`${target.name}はホストにBANされ、AI操作へ切り替わった`);
     this.game._notifyState();
+    this._kickCpuIfStalled(target);
   }
 
   _handleWaitCut(uid, rate) {
@@ -515,8 +564,8 @@ export class PvpRoomCore {
       // ホストの退出は対戦終了（旧 finishPvpRoom と同じ意味）。
       this.finish({ reason: 'hostLeft' });
     } else {
-      // ゲストの自発的退出は切断扱い（以後AI代行）。
-      this.disconnect(uid);
+      // ゲストの自発的退出は猶予なしの切断（以後AI代行）。
+      this.disconnect(uid, { immediate: true });
     }
   }
 
@@ -578,12 +627,14 @@ export class PvpRoomCore {
   _enqueue(uid, type, payload, mode) {
     if (this._destroyed) return Promise.reject(new Error('対戦リレーが終了しました'));
     const channel = this._channel(uid);
-    const notYetJoined = channel.offline && !channel.everConnected;
-    if (channel.offline && !notYetJoined) {
-      // 対戦中に切れた相手: 演出は捨て、質問は即座に諦める（AI代行へ）。
+    if (channel.offline && channel.abandoned) {
+      // 猶予切れ／退出した相手: 演出は捨て、質問は即座に諦める（AI代行へ）。
       if (mode === 'fire') return Promise.resolve();
       return Promise.reject(new Error('参加者はオフラインです'));
     }
+    // まだ来ていない、または切断猶予中の相手: 送らずに積んでおく
+    // （connect の welcome で届く）。演出の完了待ちはしない。
+    const notYetJoined = channel.offline;
     if (mode === 'done' && (channel.degraded || notYetJoined)) mode = 'fire';
     const id = this._nextEventId++;
     const event = { id, type, payload: stripUndefined(payload), ack: mode !== 'fire', wantValue: mode === 'value' };
@@ -713,6 +764,7 @@ export class PvpRoomCore {
     try { game?.cancel?.(); } catch { /* noop */ }
     for (const uid of this.online) this.io.send(uid, { t: 'finished', result: this.finishResult });
     for (const channel of this.channels.values()) {
+      if (channel.graceTimer) { clearTimeout(channel.graceTimer); channel.graceTimer = null; }
       for (const waiter of channel.doneWaiters) { clearTimeout(waiter.timer); waiter.resolve(); }
       for (const waiter of channel.valueWaiters.values()) { clearTimeout(waiter.timer); waiter.reject(new Error('対戦は終了しました')); }
       channel.doneWaiters = [];
@@ -727,6 +779,7 @@ export class PvpRoomCore {
     if (this._pendingStart) { clearTimeout(this._pendingStart.timer); this._pendingStart = null; }
     try { this.game?.cancel?.(); } catch { /* noop */ }
     for (const channel of this.channels.values()) {
+      if (channel.graceTimer) { clearTimeout(channel.graceTimer); channel.graceTimer = null; }
       for (const waiter of channel.doneWaiters) { clearTimeout(waiter.timer); waiter.resolve(); }
       for (const waiter of channel.valueWaiters.values()) { clearTimeout(waiter.timer); waiter.reject(new Error('対戦リレーが終了しました')); }
       channel.doneWaiters = [];

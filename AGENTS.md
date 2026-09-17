@@ -30,7 +30,7 @@
 - `src/game.js` は three.js / Firebase を import しない状態を保つ
   （`tests/pvpCloud.test.mjs` が静的に見張っている）。
 - `wrangler.jsonc` の `vars` に `DEV_ALLOW_UNVERIFIED_UID` を入れない（`.dev.vars` 専用）。
-- デプロイに影響する変更では `public/sw.js` の `CACHE_NAME` を bump する（現在 v304）。
+- デプロイに影響する変更では `public/sw.js` の `CACHE_NAME` を bump する（現在 v305）。
 
 ### 確認コマンド
 ```
@@ -45,3 +45,10 @@ npm run cf:dry-run
 - lint/build、カード162件、PvP5件、Cloudflare15件、cf:dry-runを通過。
 - Windows CRLFで静的検査が失敗したため、テストのソース比較をLFに正規化。
 - 2ブラウザの実ログイン対戦（演出・復帰・報酬）は未確認。ヘッドレス検証とは区別する。
+## 2026-09-17 公開後のレビュー（Claude）
+- 切断猶予15秒（`DISCONNECT_GRACE_MS`）を追加。以前は WS が切れた瞬間に AI 化していた。
+- 再接続時に ACK 水位と直近の回答を送り直す（切断中の回答が失われない）。
+- サイコロ待ちで AI 化した時に CPU 手番を起動する `_kickCpuIfStalled`（停止バグ）。
+- iconDataUrl の途中切り詰めをやめた（壊れた data URL を載せない）。
+- CLAUDE.md「対人戦のCloudflare移行」節に反映済み。**Worker の再デプロイ
+  （`npm run cf:deploy`）が必要**。クライアント側も変わったので Pages も再デプロイ（push で自動）。
