@@ -438,6 +438,10 @@ function promptChooseBranch(options) {
   return new Promise((resolve) => {
     closeLandInfoCamera?.();
     branchChoiceActive = true;
+    // 対戦サーバー経由の盤面では、分岐に気づかないまま質問がタイムアウトすると
+    // そのターンは AI 代行になる（roomCore の ask timeout）。点滅だけでは
+    // スマホで見落とされやすいので、何をすべきかを文字でも出す。
+    if (pvpBoardIsRemote()) showToast('分岐: 進みたいマスをタップしてください', 2600);
     const remaining = Math.max(0, Number(options[0]?.remainingSteps) || 0);
     branchRemainingSteps.querySelector('span').textContent = String(remaining);
     branchRemainingSteps.classList.remove('hidden');
@@ -3311,6 +3315,11 @@ function onMoveComplete() {
 let scene;
 let tiles;
 let game;
+// 開発ビルド限定のデバッグ窓口（E2Eテスト／実機の切り分け用）。本番ビルドでは
+// import.meta.env.DEV が false になりこの行ごと落ちる。
+if (import.meta.env.DEV) {
+  window.__chinuDebug = () => ({ scene, tiles, game, pvpMatch, currentMapId });
+}
 // 現在の対戦のマップid（CPU戦などmapId無指定なら null）。盤面BGMがマップ
 // ごとの専用曲（audio.jsのplayMapTheme）を選ぶ分岐と、#appの背景画像
 // （applyMapBackground）に使う（バトルシーン終了後に盤面BGMへ戻る
@@ -10109,6 +10118,7 @@ function startCloudPvpConnection() {
       if (match.latestPublicState) applyPvpPublicState(match.latestPublicState);
       showToast('画面表示を復旧しました', 2000);
     },
+    onNotice: (text) => { if (pvpMatch === match && text) showToast(text, 3200); },
     onFastForward: fastForwardRemotePrompts,
   });
   match.connection = connection;

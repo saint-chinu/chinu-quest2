@@ -127,9 +127,12 @@ export const BROADCAST_HOOKS = {
 };
 
 // 質問の回答待ち（人が考える時間）と、演出の同期待ち（画面合わせだけ）。
-// 旧 HostGuestRelay と同じ値。done が一度時間切れした相手は degraded と
-// して以後の done を待たず、応答が届いた時点で自動復帰する。
-export const ASK_TIMEOUT_MS = 45000;
+// done（演出の同期待ち）は旧 HostGuestRelay と同じ4秒。一度時間切れした相手は
+// degraded として以後の done を待たず、応答が届いた時点で自動復帰する。
+// 質問の回答待ち。旧 Firestore 版のゲストは45秒だったが、ホストは無制限だった。
+// WS 版では全員がこの制限を受けるので、召喚カードを読み比べる時間を見て少し長め。
+// 過ぎても接続中なら次の手番で人間へ戻る（_askHook 参照）。
+export const ASK_TIMEOUT_MS = 60000;
 export const DONE_TIMEOUT_MS = 4000;
 // 開始猶予: ホストが /start を叩いてから参加者が WebSocket でつなぐまで
 // （Firestore の status 伝播＋盤面構築）数秒かかる。全員が一度つながるか、
@@ -224,6 +227,7 @@ export class PvpRoomCore {
       log: () => {},
       now: () => Date.now(),
       disconnectGraceMs: DISCONNECT_GRACE_MS,
+      askTimeoutMs: ASK_TIMEOUT_MS,
       ...io,
     };
     this.config = null;
@@ -588,11 +592,23 @@ export class PvpRoomCore {
       if (!uid || player.isCPU) return Promise.resolve(this._defaultAnswer(type));
       return this._enqueue(uid, type, payload, 'value').catch((error) => {
         this.io.log(`ask timeout: type=${type} playerId=${forPlayerId} (${error?.message})`);
-        // 応答が来ない相手は即 AI へ切り替える（以後の質問で毎回45秒止めない）。
+        // 応答が来ない相手はこのターンの残りを AI へ切り替える（以後の質問で
+        // 毎回タイムアウトまで全員を止めない）。
         if (player && !player.isCPU) {
           player.isCPU = true;
           player.pvpAutoCpu = true;
           this.game.onLog(`${player.name}の応答がタイムアウトしたためAI操作へ切り替えました`);
+          // ⚠️ 接続したままの相手（切断ではなく、単に質問に気づかなかった／
+          // 迷っていた）は次の手番から必ず人間へ戻す。旧 Firestore 版は
+          // ハートビートが届き続けることで pvpHumanRestorePending が立ち
+          // 次の手番で復帰していたが、WS 版にはハートビートが無いので、
+          // ここで立てないと永久に AI のまま＝サイコロもスペルも出ない
+          // 「フリーズ」に見える（実機報告で踏んだ）。
+          if (this.online.has(uid)) {
+            player.pvpHumanRestorePending = true;
+            this.game.onLog(`${player.name}は次の手番から操作へ復帰します`);
+            this.io.send(uid, { t: 'notice', text: '応答がなかったため、このターンはAIが代行します。次の手番から操作に戻ります' });
+          }
           this.game._notifyState();
         }
         return this._defaultAnswer(type);
@@ -648,7 +664,7 @@ export class PvpRoomCore {
     // まだ来ていない相手には送らず積んでおく（connect の welcome で届く）。
     if (!notYetJoined) this.io.send(uid, { t: 'events', events: [event], ackedThrough: channel.ackedThrough });
     if (mode === 'fire') return Promise.resolve();
-    const timeoutMs = mode === 'value' ? ASK_TIMEOUT_MS : DONE_TIMEOUT_MS;
+    const timeoutMs = mode === 'value' ? this.io.askTimeoutMs : DONE_TIMEOUT_MS;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         channel.doneWaiters = channel.doneWaiters.filter((waiter) => waiter.id !== id);

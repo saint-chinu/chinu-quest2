@@ -8,7 +8,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v305`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v307`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ### BGMコレクション `/bgm/`（2026-09）
@@ -2841,6 +2841,17 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
     で届ける（AI 化しない）。猶予切れ／明示的 leave で `_abandon` → AI 代行。
     クライアントは welcome 直後に現在の ACK 水位と直近の回答を送り直す
     （切断中に答えた回答が失われない）。
+  - **質問タイムアウト（60秒）で AI 化しても、接続中なら次の手番で人間へ戻す**
+    （`_askHook` の catch で `pvpHumanRestorePending` を立て、`notice` で通知）。
+    ⚠️ 初版はここが無く、分岐タップに気づかず45秒過ぎた人が**永久に AI のまま**
+    （サイコロもスペルも出ない＝「フリーズ」）になっていた。旧 Firestore 版は
+    ハートビートで復帰予約が立っていたが WS 版にはハートビートが無い。
+    実機報告「ホストがサイコロ5で1マス進んで止まった／スペルが使えない」の正体。
+    クライアント側も `promptChooseBranch` で「分岐: 進みたいマスをタップ」の
+    トーストを出す（リモート盤面のみ）。
+  - **2ブラウザ E2E**（Firebase エミュレータ + `wrangler dev` + `vite` +
+    playwright-core、`window.__chinuDebug` は DEV ビルド限定のフック）で
+    ログイン→部屋→開始→分岐タップ→着地→召喚→手番交代→G減算 まで通ることを確認済み。
   - **AI 化直後の停止防止** `_kickCpuIfStalled`: サイコロ待ちの本人が AI 化
     （猶予切れ・BAN）されると Game は `_beginTurn` でしか `_runCPUTurn` を起動
     しないので、ここで起動する（旧 Firestore 版から潜在していた停止）。

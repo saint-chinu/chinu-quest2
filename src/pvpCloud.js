@@ -65,6 +65,7 @@ export async function startCloudPvpRoom(serverUrl, roomCode, config, { uid } = {
  *   onHand(hand)                 自分の手札
  *   onFinished(result)           決着／終了
  *   onStatus(text|null)          接続状態の表示用（切断中など）
+ *   onNotice(text)               サーバーからの通知（AI代行への切替など）
  *   onFastForward()              未回答の質問をサーバーが打ち切った時
  */
 export class CloudPvpConnection {
@@ -199,6 +200,9 @@ export class CloudPvpConnection {
       case 'events':
         this.tracker.advanceBase(Number(message.ackedThrough) || 0);
         this._enqueueEvents(message.events || []);
+        break;
+      case 'notice':
+        this.callbacks.onNotice?.(String(message.text || ''));
         break;
       case 'finished':
         this.finished = message.result;

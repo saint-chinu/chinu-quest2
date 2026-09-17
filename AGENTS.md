@@ -30,7 +30,7 @@
 - `src/game.js` は three.js / Firebase を import しない状態を保つ
   （`tests/pvpCloud.test.mjs` が静的に見張っている）。
 - `wrangler.jsonc` の `vars` に `DEV_ALLOW_UNVERIFIED_UID` を入れない（`.dev.vars` 専用）。
-- デプロイに影響する変更では `public/sw.js` の `CACHE_NAME` を bump する（現在 v306）。
+- デプロイに影響する変更では `public/sw.js` の `CACHE_NAME` を bump する（現在 v307）。
 
 ### 確認コマンド
 ```
@@ -61,3 +61,12 @@ npm run cf:dry-run
 - 回帰: tests/pvpAnimation.test.mjs、tests/pvpCloud.test.mjs のステージ8/初手5。実WS: `node tools/cloud-smoke.mjs`（先にlocalhost:8791でwrangler dev、ローカル限定DEV_ALLOW_UNVERIFIED_UID=1）。
 - キャッシュ v306。今回ロビー/アカウントのデータ移行はしていない。対戦開始後は既にCloudflare単一路。
 - 次回同症状があれば発生時刻・部屋番号・端末と pvp-client-playback-error を照合。実端末の原因確認が残る。
+
+## 2026-09-17 実機報告「サイコロ5で1マス進んで止まる／スペルが使えない」の対応（Claude）
+- 原因: 分岐選択の質問に45秒答えないとサーバーがそのプレイヤーを AI 化し、
+  接続したままだと**二度と人間に戻らなかった**（旧版はハートビートで復帰していた）。
+  AI が代行するので本人の画面ではサイコロもスペルも出ず、フリーズに見える。
+- 修正: タイムアウト60秒に延長、接続中なら次の手番で人間へ復帰＋通知トースト、
+  分岐時に「進みたいマスをタップ」のトースト。
+- 2ブラウザ E2E で分岐タップ→着地→召喚→手番交代を確認済み。
+- **`npm run cf:deploy` で Worker を更新しないと直らない**（Pages は push で自動）。

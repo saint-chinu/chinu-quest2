@@ -257,6 +257,33 @@ test('サイコロ待ちで切断→AI化しても盤面が止まらない（CPU
   core.destroy();
 });
 
+test('接続したまま質問に答えなかった人は、このターンだけAI代行で次の手番に人間へ戻る', async () => {
+  const a = new BotClient('u0');
+  const b = new BotClient('u1', { answer: (event) => (event.type === 'chooseBranch' ? undefined : defaultAnswer(event.type)) });
+  // b は chooseBranch に「答えない」（undefined を返すと value ACK を送らないようにする）
+  b._handleEvent = function (event) {
+    if (!this.tracker.noteReceived(event.id)) return;
+    if (event.wantValue && event.type === 'chooseBranch') { this.tracker.markProcessed(event.id); return; } // 無応答
+    let value = null;
+    if (event.wantValue) value = defaultAnswer(event.type);
+    const through = this.tracker.markProcessed(event.id);
+    if (event.ack) this.core.handleMessage(this.uid, { t: 'ack', through, value: event.wantValue ? { id: event.id, v: value } : null });
+  };
+  const core = makeRoom(makeConfig({ humans: 2, goalCurrency: 50000 }), [a, b], { askTimeoutMs: 400 });
+  core.start(core.pendingConfig);
+  a.connect(); b.connect();
+  await waitFor(() => core.started);
+  const playerB = core.game.players[1];
+  // b の手番で分岐（hitode はスタート直後に分岐がある）→ 無応答 → タイムアウト
+  await waitFor(() => playerB.isCPU === true, { timeoutMs: 30000 });
+  assert.equal(playerB.pvpAutoCpu, true);
+  assert.equal(playerB.pvpHumanRestorePending, true, '接続中なので復帰予約が立つ');
+  assert.ok(b.received.some((m) => m.t === 'notice'), 'クライアントへ通知が届く');
+  await waitFor(() => playerB.isCPU === false, { timeoutMs: 30000 });
+  assert.equal(playerB.pvpAutoCpu, false, '次の手番境界で人間へ戻る');
+  core.destroy();
+});
+
 test('ACK 水位でアウトボックスが痩せ、再接続時は未ACK分だけ再送される', async () => {
   const sent = [];
   const core = new PvpRoomCore({ send: (uid, message) => sent.push({ uid, message: JSON.parse(JSON.stringify(message)) }) });
