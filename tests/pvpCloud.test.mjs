@@ -292,7 +292,7 @@ test('保存した安全地点から resume して進行を続けられる', asy
 });
 
 // ── 配線の静的チェック（main.js / pvpCloud.js / worker.js） ─────────────
-const mainSrc = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+const mainSrc = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
 const cloudSrc = readFileSync(new URL('../src/pvpCloud.js', import.meta.url), 'utf8');
 const workerSrc = readFileSync(new URL('../cloudflare/worker.js', import.meta.url), 'utf8');
 const gameSrc = readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');

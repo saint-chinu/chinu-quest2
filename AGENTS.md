@@ -10,7 +10,7 @@
 
 ### 状態
 - 実装・ヘッドレステスト・`wrangler dev` 上のボット対戦まで完了。
-- `VITE_PVP_SERVER_URL` 未設定のため、本番サイトは今も従来の Firestore 中継で動く。
+- 2026-09-17: Worker公開・GitHub Actions変数設定済み。接続先は `https://chinu-quest2-pvp.doppel-tag.workers.dev`。
 - **実機（2ブラウザ）の通し確認は未実施。**
 
 ### 残作業（この順）
@@ -30,7 +30,7 @@
 - `src/game.js` は three.js / Firebase を import しない状態を保つ
   （`tests/pvpCloud.test.mjs` が静的に見張っている）。
 - `wrangler.jsonc` の `vars` に `DEV_ALLOW_UNVERIFIED_UID` を入れない（`.dev.vars` 専用）。
-- デプロイに影響する変更では `public/sw.js` の `CACHE_NAME` を bump する（現在 v303）。
+- デプロイに影響する変更では `public/sw.js` の `CACHE_NAME` を bump する（現在 v304）。
 
 ### 確認コマンド
 ```
@@ -38,3 +38,10 @@ npm run lint && npm run build
 npm run test:cards && npm run test:pvp && npm run test:cloud
 npm run cf:dry-run
 ```
+
+## 2026-09-17 公開作業
+- Worker version: `3b00be5e-3822-4c18-89e4-3ee64e80a132`。`/health` 正常応答確認済み。
+- GitHub Actionsの `VITE_PVP_SERVER_URL` は上記URLを登録済み。Pagesビルドがこの値を取り込む。
+- lint/build、カード162件、PvP5件、Cloudflare15件、cf:dry-runを通過。
+- Windows CRLFで静的検査が失敗したため、テストのソース比較をLFに正規化。
+- 2ブラウザの実ログイン対戦（演出・復帰・報酬）は未確認。ヘッドレス検証とは区別する。
