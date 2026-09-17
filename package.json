@@ -11,7 +11,7 @@
     "lint": "eslint src public cloudflare",
     "test:cards": "node --test tests/newCards.test.mjs",
     "test:pvp": "node --test tests/pvpSync.test.mjs",
-    "test:cloud": "node --test tests/pvpCloud.test.mjs tests/pvpCloudAuth.test.mjs",
+    "test:cloud": "node --test tests/pvpCloud.test.mjs tests/pvpCloudAuth.test.mjs tests/pvpAnimation.test.mjs tests/pvpCloudClient.test.mjs",
     "simulate": "node tools/simulate.mjs",
     "cf:dev": "wrangler dev",
     "cf:dry-run": "wrangler deploy --dry-run --outdir .wrangler/dry-run",

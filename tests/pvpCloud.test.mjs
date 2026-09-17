@@ -386,3 +386,24 @@ test('game.js は three.js / Firebase に依存せず読み込める（Worker �
   assert.ok(catalogSrc.includes("from './customCardStore.js'"));
   assert.ok(!catalogSrc.includes("from './customCards.js'"));
 });
+
+
+test('ステージ8・人間2人・ホスト初手5: 5歩→移動完了→土地コマンドの順で届く', async () => {
+  const a = new BotClient('u0');
+  const b = new BotClient('u1');
+  const core = makeRoom(makeConfig({ humans: 2, goalCurrency: 50000, mapId: 'chin-harbor' }), [a,b]);
+  const handle = core.handleMessage.bind(core);
+  core.handleMessage = (uid, message) => handle(uid, message.t === 'action' && message.action?.type === 'rollDice'
+    ? {...message, action: {...message.action, steps:5}} : message);
+  try {
+    core.start(core.pendingConfig);
+    core.game.currentPlayerIndex = 0;
+    a.connect(); b.connect();
+    await waitFor(() => a.received.some(m => m.events?.some(e => e.type === 'landCommand')));
+    const events = a.received.flatMap(m => m.events || []);
+    const land = events.findIndex(e => e.type === 'landCommand');
+    const before = events.slice(0,land);
+    assert.equal(before.filter(e => e.type === 'pieceStep').length, 5);
+    assert.ok(before.findIndex(e => e.type === 'moveComplete') > before.findLastIndex(e => e.type === 'pieceMove'));
+  } finally { core.destroy(); }
+});

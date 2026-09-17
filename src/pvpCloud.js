@@ -230,7 +230,12 @@ export class CloudPvpConnection {
           result = this.handlers[event.type]
             ? await this.handlers[event.type](event.payload, { queueDepth: this.queue.length })
             : null;
-        } catch { /* 演出の失敗で列全体を止めない */ }
+        }
+        catch (error) {
+          console.error('PvP event failed', event.type, error);
+          this._send({ t: 'clientError', eventType: event.type, eventId: event.id });
+          try { this.callbacks.onPlaybackError?.({ type: event.type, id: event.id }); } catch { /* Continue the queue. */ }
+        }
         if (event.wantValue) this.lastInteractiveAnswer = { id: event.id, v: result ?? null };
         const ackedThrough = this.tracker.markProcessed(event.id);
         this.currentEventId = null;

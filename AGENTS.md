@@ -30,7 +30,7 @@
 - `src/game.js` は three.js / Firebase を import しない状態を保つ
   （`tests/pvpCloud.test.mjs` が静的に見張っている）。
 - `wrangler.jsonc` の `vars` に `DEV_ALLOW_UNVERIFIED_UID` を入れない（`.dev.vars` 専用）。
-- デプロイに影響する変更では `public/sw.js` の `CACHE_NAME` を bump する（現在 v305）。
+- デプロイに影響する変更では `public/sw.js` の `CACHE_NAME` を bump する（現在 v306）。
 
 ### 確認コマンド
 ```
@@ -52,3 +52,12 @@ npm run cf:dry-run
 - iconDataUrl の途中切り詰めをやめた（壊れた data URL を載せない）。
 - CLAUDE.md「対人戦のCloudflare移行」節に反映済み。**Worker の再デプロイ
   （`npm run cf:deploy`）が必要**。クライアント側も変わったので Pages も再デプロイ（push で自動）。
+## 2026-09-17 ホスト初手停止の調査（未解決の再現差あり）
+- 報告条件: ステージ8（chin-harbor）、人間2人、ホストの最初のサイコロ5。ホストだけ1マスで止まる。
+- ローカルWorkers + 実WebSocket 2接続、および実UIの2タブではホストが土地コマンドまで到達。報告端末の停止そのものは再現できておらず、完全解消とは扱わない。
+- 確認できた別の不具合: Cloudflareの onMoveComplete 配信が無く、サイコロの移動中表示が残る。配信とUI受信を追加。
+- tween の onUpdate 例外で Promise が永久に未解決になる経路を修正。途中/最終/保険タイマーの例外を reject してキュー側で復旧する。
+- クライアント再生エラーを握りつぶさず、イベント種別・ID・部屋コードだけをWorkerの警告ログに送る（カード内容/トークンは送らない）。
+- 回帰: tests/pvpAnimation.test.mjs、tests/pvpCloud.test.mjs のステージ8/初手5。実WS: `node tools/cloud-smoke.mjs`（先にlocalhost:8791でwrangler dev、ローカル限定DEV_ALLOW_UNVERIFIED_UID=1）。
+- キャッシュ v306。今回ロビー/アカウントのデータ移行はしていない。対戦開始後は既にCloudflare単一路。
+- 次回同症状があれば発生時刻・部屋番号・端末と pvp-client-playback-error を照合。実端末の原因確認が残る。

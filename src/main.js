@@ -9395,6 +9395,7 @@ const pvpGuestHandlers = {
   tollPayment: serializedCamera(promptTollPayment),
   moveDestination: promptMoveDestination,
   pieceMove: promptPieceMove,
+  moveComplete: onMoveComplete,
   pieceStep: promptPieceStep,
   diceResult: promptDiceResult,
   landLoss: serializedCamera(promptLandLoss),
@@ -10098,6 +10099,16 @@ function startCloudPvpConnection() {
       endRemotePvpSession({ headline, share: Number.isFinite(me?.endingAssetsShare) ? me.endingAssetsShare : null });
     },
     onStatus: (text) => { if (pvpMatch === match && text) showToast(text, 1800); },
+    onPlaybackError: () => {
+      if (pvpMatch !== match) return;
+      fastForwardRemotePrompts();
+      onMoveComplete();
+      for (const id of movingGuestPieces) pieceMoveGen.set(id, (pieceMoveGen.get(id) || 0) + 1);
+      movingGuestPieces.clear();
+      guestWalkWindow.clear();
+      if (match.latestPublicState) applyPvpPublicState(match.latestPublicState);
+      showToast('画面表示を復旧しました', 2000);
+    },
     onFastForward: fastForwardRemotePrompts,
   });
   match.connection = connection;

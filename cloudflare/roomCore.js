@@ -103,6 +103,7 @@ export const BROADCAST_HOOKS = {
   // awaitOnlyUid と同じ）。観戦側まで待つと本人の土地コマンド表示が遅れる。
   onPieceMove: { type: 'pieceMove', awaitMover: true },
   onPieceStep: { type: 'pieceStep' },
+  onMoveComplete: { type: 'moveComplete' },
   onDiceResult: { type: 'diceResult' },
   onLandLoss: { type: 'landLoss' },
   onLandSale: { type: 'landSale' },
@@ -500,6 +501,11 @@ export class PvpRoomCore {
       case 'ban': return this._handleBan(uid, message.playerId);
       case 'waitCut': return this._handleWaitCut(uid, message.rate);
       case 'leave': return this._handleLeave(uid);
+      case 'clientError': {
+        const type = String(message.eventType || '').slice(0, 48).replace(/[^a-zA-Z0-9]/g, '');
+        console.warn('pvp-client-playback-error', { room: this.config?.roomCode, type, eventId: Number(message.eventId) || 0 });
+        return;
+      }
       case 'ping': return this.io.send(uid, { t: 'pong' });
       default: return undefined;
     }

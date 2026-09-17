@@ -36,16 +36,27 @@ export function getWaitCutRate() {
  * 最終状態へスナップして解決させる。通常時はrAF側が先に完走し保険は解除される。
  */
 export function tween(durationMs, onUpdate) {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     const scaledDuration = durationMs / speedState.multiplier;
     const start = performance.now();
     let settled = false;
     let watchdog = null;
-    const finish = () => {
+    let frame = null;
+    const cleanup = () => {
+      if (watchdog !== null) clearTimeout(watchdog);
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+    const fail = (error) => {
       if (settled) return;
       settled = true;
-      if (watchdog !== null) clearTimeout(watchdog);
-      onUpdate(1);
+      cleanup();
+      reject(error);
+    };
+    const finish = () => {
+      if (settled) return;
+      try { onUpdate(1); } catch (error) { fail(error); return; }
+      settled = true;
+      cleanup();
       resolve();
     };
     watchdog = setTimeout(finish, scaledDuration + 500);
@@ -53,13 +64,11 @@ export function tween(durationMs, onUpdate) {
       if (settled) return;
       const t = scaledDuration <= 0 ? 1 : Math.min(1, (now - start) / scaledDuration);
       if (t < 1) {
-        onUpdate(t);
-        requestAnimationFrame(step);
-      } else {
-        finish();
-      }
+        try { onUpdate(t); frame = requestAnimationFrame(step); }
+        catch (error) { fail(error); }
+      } else finish();
     }
-    requestAnimationFrame(step);
+    try { frame = requestAnimationFrame(step); } catch (error) { fail(error); }
   });
 }
 
