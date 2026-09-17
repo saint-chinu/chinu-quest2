@@ -7,8 +7,19 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 - Vite + Three.js + Firebase(Auth/Firestore) + PWA。
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
+- **Cloudflare 一本化（2026-09-17）**: `.github/workflows/deploy-cloudflare.yml` が
+  master への push で `npm run build:cf`（`base:'/'`、`scripts/build-cf.mjs`）→
+  `wrangler deploy` を実行し、**静的サイト（dist/）と対人戦 Worker を同じ Worker
+  から配信**する（`wrangler.jsonc` の `assets`。`/api/*` `/ws` `/health` だけ
+  Worker、他は静的ファイル）。URL は `https://chinu-quest2-pvp.doppel-tag.workers.dev/`。
+  Secrets `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` が無ければスキップ。
+  GitHub Pages 側のビルドは従来どおり残る（両方生きる）。
+  ⚠️ Cloudflare 用 dist は base '/'。GitHub Pages 用 dist（`/chinu-quest2/`）を
+  `wrangler deploy` に混ぜると画像パスが全部壊れる。必ず `npm run cf:deploy`
+  （build:cf 込み）を使う。Firebase の App Check を有効化する時は reCAPTCHA の
+  許可ドメインに workers.dev（独自ドメインならそれ）を足すこと。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v307`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v308`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ### BGMコレクション `/bgm/`（2026-09）
@@ -2849,6 +2860,12 @@ riskyedge7366@gmail.com）が**同じmasterで同時に作業している**。�
     実機報告「ホストがサイコロ5で1マス進んで止まった／スペルが使えない」の正体。
     クライアント側も `promptChooseBranch` で「分岐: 進みたいマスをタップ」の
     トーストを出す（リモート盤面のみ）。
+  - **演出の番犬** `PLAYBACK_STALL_MS`（12秒、`src/pvpCloud.js`）: 回答を返さない
+    演出イベントがこの時間内に終わらなければ飛ばして次へ進み、`clientStall`
+    （イベント種別・id のみ）をサーバーへ送る（`wrangler tail` で
+    `pvp-client-playback-stall` として見える）。main.js 側は `onPlaybackStall` で
+    歩行フラグ解除・公開状態の再適用・トースト。画像や音声の読み込み待ち、tween
+    の未解決など**原因が何でも盤面は止まらない**ようにするための保険。
   - **2ブラウザ E2E**（Firebase エミュレータ + `wrangler dev` + `vite` +
     playwright-core、`window.__chinuDebug` は DEV ビルド限定のフック）で
     ログイン→部屋→開始→分岐タップ→着地→召喚→手番交代→G減算 まで通ることを確認済み。

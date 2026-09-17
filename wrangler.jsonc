@@ -5,6 +5,15 @@
   "name": "chinu-quest2-pvp",
   "main": "cloudflare/worker.js",
   "compatibility_date": "2026-09-01",
+  // 静的サイト本体（dist/）も同じ Worker から配信する（Cloudflare 一本化）。
+  // /api/*, /ws, /health だけ Worker が受け、それ以外は静的ファイルをそのまま返す。
+  // dist は `npm run build:cf`（base '/'）で作る。GitHub Pages 用の dist（base
+  // '/chinu-quest2/'）を置くと画像パスが壊れるので混ぜないこと。
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/ws", "/health"]
+  },
   "durable_objects": {
     "bindings": [{ "name": "ROOM", "class_name": "PvpRoomDO" }]
   },
@@ -14,7 +23,7 @@
     // Firebase プロジェクトID（ID トークンの aud / iss 検証に使う）。
     "FIREBASE_PROJECT_ID": "chinuquest-87b81",
     // 接続を許す Origin（カンマ区切り）。空なら全許可（ローカル開発向け）。
-    "ALLOWED_ORIGINS": "https://saint-chinu.github.io"
+    "ALLOWED_ORIGINS": "https://saint-chinu.github.io,https://chinu-quest2-pvp.doppel-tag.workers.dev"
   },
   "dev": { "port": 8787 }
 }

@@ -1,0 +1,52 @@
+name: Deploy Cloudflare (site + PvP worker)
+
+# master へ push するたびに、静的サイト（dist/）と対人戦 Worker を一緒に
+# Cloudflare へデプロイする。リポジトリの Secrets に
+#   CLOUDFLARE_API_TOKEN  （Workers Scripts:Edit / Account Settings:Read 権限）
+#   CLOUDFLARE_ACCOUNT_ID
+# を登録した時だけ実行される（未登録ならスキップして緑のまま）。
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cloudflare-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      HAS_CF_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build (base '/')
+        if: env.HAS_CF_TOKEN == 'true'
+        run: npm run build:cf
+        env:
+          VITE_FIREBASE_API_KEY: AIzaSyC9ncbemina3ur2F-e7vX07OtqiPEu0EmE
+          VITE_FIREBASE_AUTH_DOMAIN: chinuquest-87b81.firebaseapp.com
+          VITE_FIREBASE_PROJECT_ID: chinuquest-87b81
+          VITE_FIREBASE_STORAGE_BUCKET: chinuquest-87b81.firebasestorage.app
+          VITE_FIREBASE_MESSAGING_SENDER_ID: '546856004041'
+          VITE_FIREBASE_APP_ID: 1:546856004041:web:1bfc48e4d7d6418324a018
+          # 同じ Worker が対戦サーバーなので同一オリジン。Variables 未設定なら workers.dev。
+          VITE_PVP_SERVER_URL: ${{ vars.VITE_PVP_SERVER_URL || 'https://chinu-quest2-pvp.doppel-tag.workers.dev' }}
+      - name: Deploy
+        if: env.HAS_CF_TOKEN == 'true'
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - name: Skipped
+        if: env.HAS_CF_TOKEN != 'true'
+        run: echo "CLOUDFLARE_API_TOKEN が未登録のためスキップ（Settings → Secrets → Actions）"

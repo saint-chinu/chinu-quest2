@@ -141,6 +141,9 @@ export default {
       return stub.fetch(new Request('https://room/ws', { method: 'GET', headers }));
     }
 
+    // 上記以外は静的サイト（dist/）。run_worker_first に無いパスは通常ここへ
+    // 来ないが、assets 未設定のデプロイでも壊れないよう保険で分岐しておく。
+    if (env.ASSETS) return env.ASSETS.fetch(request);
     return json({ error: 'Not found' }, 404, cors);
   },
 };

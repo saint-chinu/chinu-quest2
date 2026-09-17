@@ -13,9 +13,10 @@
     "test:pvp": "node --test tests/pvpSync.test.mjs",
     "test:cloud": "node --test --test-force-exit tests/pvpCloud.test.mjs tests/pvpCloudAuth.test.mjs tests/pvpAnimation.test.mjs tests/pvpCloudClient.test.mjs",
     "simulate": "node tools/simulate.mjs",
+    "build:cf": "node scripts/build-cf.mjs",
     "cf:dev": "wrangler dev",
-    "cf:dry-run": "wrangler deploy --dry-run --outdir .wrangler/dry-run",
-    "cf:deploy": "wrangler deploy"
+    "cf:dry-run": "npm run build:cf && wrangler deploy --dry-run --outdir .wrangler/dry-run",
+    "cf:deploy": "npm run build:cf && wrangler deploy"
   },
   "dependencies": {
     "firebase": "^12.17.1",

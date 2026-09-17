@@ -30,7 +30,7 @@
 - `src/game.js` は three.js / Firebase を import しない状態を保つ
   （`tests/pvpCloud.test.mjs` が静的に見張っている）。
 - `wrangler.jsonc` の `vars` に `DEV_ALLOW_UNVERIFIED_UID` を入れない（`.dev.vars` 専用）。
-- デプロイに影響する変更では `public/sw.js` の `CACHE_NAME` を bump する（現在 v307）。
+- デプロイに影響する変更では `public/sw.js` の `CACHE_NAME` を bump する（現在 v308）。
 
 ### 確認コマンド
 ```
@@ -70,3 +70,14 @@ npm run cf:dry-run
   分岐時に「進みたいマスをタップ」のトースト。
 - 2ブラウザ E2E で分岐タップ→着地→召喚→手番交代を確認済み。
 - **`npm run cf:deploy` で Worker を更新しないと直らない**（Pages は push で自動）。
+
+## 2026-09-17 「やはり止まった」への対応（Claude）
+- 演出の番犬 `PLAYBACK_STALL_MS`（12秒）: 演出イベントが終わらなければ飛ばして進み、
+  `clientStall` を Worker のログへ送る。原因が画像／音声／tween のどれでも盤面は止まらない。
+  次に止まったら `npx wrangler tail` で `pvp-client-playback-stall` の `type` を見る。
+- 静的サイトも同じ Worker から配信（`wrangler.jsonc` の `assets`、`npm run build:cf`）。
+  `.github/workflows/deploy-cloudflare.yml` が push で Worker + サイトを自動デプロイ
+  （Secrets `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` が必要）。
+  対戦は `https://chinu-quest2-pvp.doppel-tag.workers.dev/` から遊ぶ（GitHub Pages も残る）。
+- ⚠️ **Secrets を登録するまでは Worker は更新されない。** それまでは手元で
+  `npm run cf:deploy`（build:cf 込み）。

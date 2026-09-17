@@ -14,6 +14,13 @@
 import { auth, firebaseReady } from './firebase.js';
 import { PvpContiguousAckTracker } from './pvpQueue.js';
 
+// 演出イベント（回答を返さないもの）の再生が、この時間を過ぎても終わらなければ
+// 「詰まり」とみなして飛ばし、次のイベントへ進む。画像・音声が GitHub Pages 等から
+// 届かない／tween が解けない等、原因が何であれ盤面全体を止めないための番犬。
+// どのイベントで詰まったかはサーバーへ `clientStall` として送り、Worker のログで
+// 追える。質問（wantValue）には適用しない（人が考える時間はサーバー側で管理）。
+export const PLAYBACK_STALL_MS = 12000;
+
 export function pvpCloudServerUrl() {
   const raw = import.meta.env?.VITE_PVP_SERVER_URL;
   return typeof raw === 'string' ? raw.trim().replace(/\/+$/, '') : '';
@@ -66,6 +73,7 @@ export async function startCloudPvpRoom(serverUrl, roomCode, config, { uid } = {
  *   onFinished(result)           決着／終了
  *   onStatus(text|null)          接続状態の表示用（切断中など）
  *   onNotice(text)               サーバーからの通知（AI代行への切替など）
+ *   onPlaybackStall({type,id})   演出が PLAYBACK_STALL_MS 以内に終わらず飛ばした時
  *   onFastForward()              未回答の質問をサーバーが打ち切った時
  */
 export class CloudPvpConnection {
@@ -88,6 +96,7 @@ export class CloudPvpConnection {
     this.retryMs = 500;
     this.reconnectTimer = null;
     this.pingTimer = null;
+    this.stallMs = Number(callbacks.stallMs) > 0 ? Number(callbacks.stallMs) : PLAYBACK_STALL_MS;
     this._onVisible = () => {
       // モバイルはバックグラウンドで接続が切れやすい。前面復帰の瞬間に再接続する。
       if (!document.hidden && !this.destroyed && (!this.socket || this.socket.readyState > 1)) this._connect();
@@ -231,9 +240,15 @@ export class CloudPvpConnection {
         this.currentEventId = event.id;
         let result = null;
         try {
-          result = this.handlers[event.type]
-            ? await this.handlers[event.type](event.payload, { queueDepth: this.queue.length })
-            : null;
+          const handler = this.handlers[event.type];
+          if (!handler) {
+            result = null;
+          } else if (event.wantValue) {
+            result = await handler(event.payload, { queueDepth: this.queue.length });
+          } else {
+            // 演出は番犬付きで待つ。時間切れなら飛ばして進む（結果は不要）。
+            result = await this._withStallGuard(event, handler(event.payload, { queueDepth: this.queue.length }));
+          }
         }
         catch (error) {
           console.error('PvP event failed', event.type, error);
@@ -254,6 +269,19 @@ export class CloudPvpConnection {
       this.pumping = false;
     }
     if (this.queue.length > 0) void this._pump();
+  }
+
+  _withStallGuard(event, promise) {
+    let timer = null;
+    const guard = new Promise((resolve) => {
+      timer = setTimeout(() => {
+        console.warn('PvP playback stalled, skipping', event.type, event.id);
+        this._send({ t: 'clientStall', eventType: event.type, eventId: event.id });
+        try { this.callbacks.onPlaybackStall?.({ type: event.type, id: event.id }); } catch { /* 続行 */ }
+        resolve(null);
+      }, this.stallMs);
+    });
+    return Promise.race([Promise.resolve(promise).finally(() => clearTimeout(timer)), guard]);
   }
 
   _send(message) {

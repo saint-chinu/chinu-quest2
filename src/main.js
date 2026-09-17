@@ -10119,6 +10119,19 @@ function startCloudPvpConnection() {
       showToast('画面表示を復旧しました', 2000);
     },
     onNotice: (text) => { if (pvpMatch === match && text) showToast(text, 3200); },
+    // 演出が時間内に終わらず飛ばした時も、例外時と同じ復旧（歩行中フラグの解除・
+    // 公開状態の再適用）を行う。原因（画像や音声の読み込み待ちなど）が何であれ
+    // 盤面は止めない。
+    onPlaybackStall: () => {
+      if (pvpMatch !== match) return;
+      fastForwardRemotePrompts();
+      onMoveComplete();
+      for (const id of movingGuestPieces) pieceMoveGen.set(id, (pieceMoveGen.get(id) || 0) + 1);
+      movingGuestPieces.clear();
+      guestWalkWindow.clear();
+      if (match.latestPublicState) applyPvpPublicState(match.latestPublicState);
+      showToast('演出をスキップしました', 1800);
+    },
     onFastForward: fastForwardRemotePrompts,
   });
   match.connection = connection;

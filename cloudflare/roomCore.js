@@ -510,6 +510,13 @@ export class PvpRoomCore {
         console.warn('pvp-client-playback-error', { room: this.config?.roomCode, type, eventId: Number(message.eventId) || 0 });
         return;
       }
+      case 'clientStall': {
+        // クライアントの演出が PLAYBACK_STALL_MS 以内に終わらず飛ばした。
+        // どの演出が詰まるかは `wrangler tail` で追える（カード内容は送らない）。
+        const type = String(message.eventType || '').slice(0, 48).replace(/[^a-zA-Z0-9]/g, '');
+        console.warn('pvp-client-playback-stall', { room: this.config?.roomCode, uid, type, eventId: Number(message.eventId) || 0 });
+        return;
+      }
       case 'ping': return this.io.send(uid, { t: 'pong' });
       default: return undefined;
     }
