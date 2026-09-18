@@ -39,8 +39,10 @@ jobs:
           VITE_FIREBASE_STORAGE_BUCKET: chinuquest-87b81.firebasestorage.app
           VITE_FIREBASE_MESSAGING_SENDER_ID: '546856004041'
           VITE_FIREBASE_APP_ID: 1:546856004041:web:1bfc48e4d7d6418324a018
-          # 同じ Worker が対戦サーバーなので同一オリジン。Variables 未設定なら workers.dev。
-          VITE_PVP_SERVER_URL: ${{ vars.VITE_PVP_SERVER_URL || 'https://chinu-quest2-pvp.doppel-tag.workers.dev' }}
+          # 同じ Worker がサイトも対戦サーバーも配信するので、未設定なら実行時の
+          # location.origin を使う（独自ドメインでもそのまま動く）。上書きしたい時だけ
+          # リポジトリ Variables に VITE_PVP_SERVER_URL を入れる。
+          VITE_PVP_SERVER_URL: ${{ vars.VITE_PVP_SERVER_URL }}
       - name: Deploy
         if: env.HAS_CF_TOKEN == 'true'
         run: npx wrangler deploy

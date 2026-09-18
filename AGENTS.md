@@ -30,7 +30,7 @@
 - `src/game.js` は three.js / Firebase を import しない状態を保つ
   （`tests/pvpCloud.test.mjs` が静的に見張っている）。
 - `wrangler.jsonc` の `vars` に `DEV_ALLOW_UNVERIFIED_UID` を入れない（`.dev.vars` 専用）。
-- デプロイに影響する変更では `public/sw.js` の `CACHE_NAME` を bump する（現在 v308）。
+- デプロイに影響する変更では `public/sw.js` の `CACHE_NAME` を bump する（現在 v309）。
 
 ### 確認コマンド
 ```
@@ -81,3 +81,15 @@ npm run cf:dry-run
   対戦は `https://chinu-quest2-pvp.doppel-tag.workers.dev/` から遊ぶ（GitHub Pages も残る）。
 - ⚠️ **Secrets を登録するまでは Worker は更新されない。** それまでは手元で
   `npm run cf:deploy`（build:cf 込み）。
+
+## 2026-09-18 Cloudflare配信の実地検証（Claude）
+- **Worker がサイトもWSも配信する構成（本番と同じ同一オリジン）で、2ブラウザの対戦が
+  最後まで通ることを確認**（18ロール・分岐2・召喚4、停止なし、コンソールエラー0）。
+  手順: `CF_BUILD=1` でビルド → `npx wrangler dev --port 8790` → playwright で2タブ。
+- Worker は音声（6.7MBのmp3も）・画像を200で配信。`/bgm/` も開く。
+- 接続先URLの埋め込みをやめ、Cloudflareビルドは `location.origin` を使う
+  （`__PVP_SAME_ORIGIN__`）。独自ドメインに移しても設定変更不要。CIの
+  `VITE_PVP_SERVER_URL` は任意になった。
+- ⚠️ `wrangler dev` は起動時に assets 一覧を読む。再ビルドしたら dev も再起動する。
+- **デプロイはこの環境からは不可**（egressポリシーで `*.cloudflare.com` / `*.workers.dev`
+  が遮断、Cloudflareトークンも無い）。実行するのは `npm run cf:deploy` の1コマンド。

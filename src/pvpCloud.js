@@ -21,9 +21,23 @@ import { PvpContiguousAckTracker } from './pvpQueue.js';
 // 追える。質問（wantValue）には適用しない（人が考える時間はサーバー側で管理）。
 export const PLAYBACK_STALL_MS = 12000;
 
+/**
+ * 対戦サーバーのURL。優先順位:
+ *  1. VITE_PVP_SERVER_URL（明示指定。ローカル開発や別オリジン運用向け）
+ *  2. Cloudflare ビルド（__PVP_SAME_ORIGIN__）なら、このページを配信している
+ *     オリジンそのもの。サイトと Worker が同一なので、独自ドメインに移しても
+ *     設定変更なしでつながる。
+ *  3. どちらも無ければ空文字（＝従来の Firestore 中継で対戦する）。
+ */
 export function pvpCloudServerUrl() {
   const raw = import.meta.env?.VITE_PVP_SERVER_URL;
-  return typeof raw === 'string' ? raw.trim().replace(/\/+$/, '') : '';
+  const explicit = typeof raw === 'string' ? raw.trim().replace(/\/+$/, '') : '';
+  if (explicit) return explicit;
+  const sameOrigin = typeof __PVP_SAME_ORIGIN__ !== 'undefined' && __PVP_SAME_ORIGIN__;
+  if (sameOrigin && typeof location !== 'undefined' && /^https?:$/.test(location.protocol || '')) {
+    return location.origin;
+  }
+  return '';
 }
 
 export function pvpCloudEnabled() {

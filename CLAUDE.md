@@ -12,6 +12,12 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
   `wrangler deploy` を実行し、**静的サイト（dist/）と対人戦 Worker を同じ Worker
   から配信**する（`wrangler.jsonc` の `assets`。`/api/*` `/ws` `/health` だけ
   Worker、他は静的ファイル）。URL は `https://chinu-quest2-pvp.doppel-tag.workers.dev/`。
+  **接続先は埋め込まない**: Cloudflare ビルドは `__PVP_SAME_ORIGIN__`（vite.config.js の
+  define、`CF_BUILD` で true）により実行時の `location.origin` を対戦サーバーとして使う。
+  独自ドメインへ移しても再ビルドも CORS 設定も要らない。`VITE_PVP_SERVER_URL` を
+  明示した時だけそちらが優先（ローカル開発・別オリジン運用向け）。
+  ⚠️ `wrangler dev` は**起動時に assets のファイル一覧を読む**。dev を起動したまま
+  再ビルドすると新しいハッシュのJSが404になる。ビルドし直したら dev も再起動する。
   Secrets `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` が無ければスキップ。
   GitHub Pages 側のビルドは従来どおり残る（両方生きる）。
   ⚠️ Cloudflare 用 dist は base '/'。GitHub Pages 用 dist（`/chinu-quest2/`）を
@@ -19,7 +25,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
   （build:cf 込み）を使う。Firebase の App Check を有効化する時は reCAPTCHA の
   許可ドメインに workers.dev（独自ドメインならそれ）を足すこと。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v308`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v309`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ### BGMコレクション `/bgm/`（2026-09）

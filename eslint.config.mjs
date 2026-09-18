@@ -25,6 +25,8 @@ export default [
         caches: 'readonly', self: 'readonly', clients: 'readonly', indexedDB: 'readonly',
         OffscreenCanvas: 'readonly', createImageBitmap: 'readonly', WebSocket: 'readonly',
         AbortController: 'readonly', queueMicrotask: 'readonly', reportError: 'readonly',
+        // Vite の define で注入（vite.config.js）。Cloudflare ビルドでのみ true。
+        __PVP_SAME_ORIGIN__: 'readonly',
       },
     },
     rules: { 'no-undef': 'error' },
