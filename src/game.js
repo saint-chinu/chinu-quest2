@@ -4555,6 +4555,9 @@ export class Game {
       price: this._ofudaPrice(element),
       basePrice: this._ofudaBasePrice(element),
       pressure: Math.trunc(this.ofudaPressure[element] || 0),
+      // 丸め前の売買圧を含む、UIの読み取り専用見積もり用データ。
+      quoteModel: { pressure: this.ofudaPressure[element] || 0,
+        min: OFUDA_MIN_PRICE, max: OFUDA_MAX_PRICE, unitG: OFUDA_TRADE_UNIT_G },
     }));
   }
 

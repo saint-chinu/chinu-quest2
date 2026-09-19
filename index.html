@@ -737,11 +737,12 @@
         </div>
       </div>
       <div id="ofuda-market-modal" class="hidden">
-        <div id="ofuda-market-box">
-          <p id="ofuda-market-title">お札相場</p>
-          <p id="ofuda-market-note"></p>
+        <div id="ofuda-market-box" role="dialog" aria-modal="true" aria-labelledby="ofuda-market-title">
+          <header class="ofuda-header">
+            <div><p id="ofuda-market-title">お札相場</p><p id="ofuda-market-note"></p></div>
+            <button id="ofuda-market-close" aria-label="お札相場を閉じる">閉じる ✕</button>
+          </header>
           <div id="ofuda-market-choices"></div>
-          <button id="ofuda-market-close">閉じる</button>
         </div>
       </div>
       <div id="camera-work-overlay" class="hidden">

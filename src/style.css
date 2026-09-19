@@ -3556,51 +3556,116 @@ html, body {
 }
 
 #ofuda-market-box {
-  width: min(92vw, 540px);
+  width: min(94vw, 850px);
+  max-width: 94vw;
+  max-height: 92vh;
+  max-height: 92dvh;
+  padding: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  text-align: left;
+  border: 1px solid #40546e;
+  background: linear-gradient(140deg, #18283c, #121927);
+  box-shadow: 0 22px 70px #000a;
 }
 
 #ofuda-market-title {
-  margin: 0 0 8px;
-  color: #ffd866;
-  font-size: 22px;
-  font-weight: 900;
+  margin: 0 0 4px;
+  color: #f0dba9;
+  font-size: 21px;
+  font-weight: 800;
 }
 
 #ofuda-market-note {
-  margin: 0 0 14px;
-  color: #d9e8ef;
-  font-size: 14px;
+  margin: 0;
+  color: #b6c9dd;
+  font-size: 12px;
 }
 
 #ofuda-market-choices {
   display: grid;
-  gap: 10px;
-  margin-bottom: 16px;
+  grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr);
+  gap: 18px;
+  padding: 18px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
+  min-height: 0;
 }
-
-.ofuda-market-row {
-  display: grid;
-  grid-template-columns: 1fr auto auto auto; /* 情報+200G買う+500G買う+売る */
-  gap: 8px;
+.ofuda-header {
+  display: flex;
   align-items: center;
-  padding: 10px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.08);
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 18px;
+  flex-shrink: 0;
+  border-bottom: 1px solid #35455c;
+  background: #182335;
 }
-
-.ofuda-market-info {
-  display: grid;
-  gap: 3px;
-  text-align: left;
+#ofuda-market-box button {
+  margin: 0;
+  padding: 9px 10px;
+  min-height: 40px;
+  border-radius: 9px;
+  border: 1px solid #415771;
+  background: #23334b;
+  color: #f2f7ff;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
 }
-
-.ofuda-market-info strong {
-  color: #fff;
+#ofuda-market-box button:disabled { opacity: .4; cursor: not-allowed; }
+#ofuda-market-box button:focus-visible, .ofuda-quantity-input:focus-visible { outline: 2px solid #87e4db; outline-offset: 2px; }
+#ofuda-market-box #ofuda-market-close { flex-shrink: 0; min-width: 90px; background: #334359; }
+.ofuda-portfolio { display: flex; justify-content: space-between; align-items: center; color: #bfcee0; margin-bottom: 12px; }
+.ofuda-portfolio strong { font-size: 24px; color: #f0dba9; font-variant-numeric: tabular-nums; }
+.ofuda-quotes { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+#ofuda-market-box .ofuda-quote { display: grid; gap: 7px; text-align: left; padding: 13px; border-top: 3px solid var(--ofuda-color, #789); }
+.ofuda-quote[data-element="fire"] { --ofuda-color: #f38c79; }
+.ofuda-quote[data-element="water"] { --ofuda-color: #78bcf3; }
+.ofuda-quote[data-element="forest"] { --ofuda-color: #80c9a1; }
+.ofuda-quote[data-element="thunder"] { --ofuda-color: #e4c96f; }
+#ofuda-market-box .ofuda-quote[aria-pressed="true"] { border-color: var(--ofuda-color); background: #30475f; box-shadow: inset 0 0 0 1px var(--ofuda-color); }
+.ofuda-quote-price { font-size: 25px; font-variant-numeric: tabular-nums; }
+.ofuda-quote small { font-size: 12px; color: #c3d1e4; }
+.ofuda-ticket { min-width: 0; padding: 14px; border: 1px solid #3b5068; border-radius: 12px; background: #0d1725; }
+.ofuda-ticket h3 { margin: 0 0 12px; font-size: 17px; }
+.ofuda-segments { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 12px; }
+#ofuda-market-box .ofuda-segments [aria-pressed="true"] { background: #40746e; border-color: #83d5c9; }
+.ofuda-quantity { display: flex; gap: 8px; align-items: center; }
+.ofuda-quantity-input { width: 70px; min-width: 0; flex: 1; border: 1px solid #56708d; border-radius: 8px; padding: 9px; background: #192b40; color: #fff; text-align: center; font-size: 20px; }
+.ofuda-quick { display: flex; flex-wrap: wrap; gap: 6px; margin: 10px 0; }
+#ofuda-market-box .ofuda-quick button { font-size: 12px; padding: 6px 9px; }
+.ofuda-summary { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 9px; margin: 15px 0 10px; font-size: 13px; }
+.ofuda-summary dt { color: #b0c3d7; }
+.ofuda-summary dd { margin: 0; text-align: right; color: #f0e4c7; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ofuda-hint { color: #a9c0d4; font-size: 12px; line-height: 1.6; margin: 10px 0; }
+.ofuda-actions { display: flex; gap: 8px; }
+#ofuda-market-box .ofuda-submit { flex: 1; background: #37766e; border-color: #89cabb; font-weight: 700; }
+.ofuda-confirm-title { font-size: 18px; color: #f1d8a0; }
+.ofuda-valuation { font-size: 24px; }
+@media (max-width: 540px) {
+  #ofuda-market-choices { grid-template-columns: 1fr; padding: 12px; gap: 12px; }
+  .ofuda-header { padding: 10px 12px; }
 }
-
-.ofuda-market-info span {
-  color: #b8cce0;
-  font-size: 13px;
+@media (max-height: 480px) and (min-width: 541px) {
+  #ofuda-market-box { max-height: 96dvh; }
+  .ofuda-header { padding: 8px 14px; }
+  #ofuda-market-choices { padding: 12px; gap: 12px; }
+  #ofuda-market-box button { min-height: 34px; padding: 6px 8px; }
+  .ofuda-ticket { padding: 10px; }
+  .ofuda-ticket h3 { margin-bottom: 6px; font-size: 14px; }
+  .ofuda-segments { margin-bottom: 6px; }
+  .ofuda-quantity-input { padding: 5px; font-size: 17px; }
+  .ofuda-quick { margin: 6px 0; gap: 4px; }
+  #ofuda-market-box .ofuda-quick button { padding: 4px 6px; font-size: 11px; }
+  #ofuda-market-box .ofuda-quote { height: 98px; padding: 8px; gap: 3px; }
+  .ofuda-quotes { align-content: start; }
+  .ofuda-summary { grid-template-columns: auto 1fr auto 1fr; gap: 6px; margin: 8px 0; font-size: 11px; }
+  .ofuda-hint { margin: 6px 0; font-size: 11px; line-height: 1.4; }
 }
 
 /* 停止した土地で表示する「召喚／侵略・土地・終了」コマンドだけを、

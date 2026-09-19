@@ -1,5 +1,6 @@
 import './style.css';
 import './pwa.js';
+import { mountOfudaMarket } from './ofudaMarketUi.js';
 import { prepareBattleAssets, cancelBattlePreparation } from './battlePreparation.js';
 import { GameScene, PIECE_REST_Y } from './scene.js';
 import { createBoard, MAPS, PVP_MAPS, TileType, createMapThumbnailCanvas, getMapBackground } from './board.js';
@@ -812,69 +813,48 @@ function promptPickSellLandForDebt({ tiles, deficit }) {
   });
 }
 
-// お札は5枚単位で売買し、1回の購入は50枚まで（game.jsのOFUDA_TRADE_LOT /
-// OFUDA_MAX_BUY_PER_TRADEと対応。表示用にこちらでも持つ）。
-const OFUDA_TRADE_LOT = 5;
-const OFUDA_BUY_CHOICES = [5, 20, 50];
-
-function buildOfudaRows({ market = [], holdings = {}, currency = 0, interactive = false, resolve = null } = {}) {
-  ofudaMarketChoices.replaceChildren();
-  for (const entry of market) {
-    const row = document.createElement('div');
-    row.className = 'ofuda-market-row';
-    const owned = holdings?.[entry.element] || 0;
-    const info = document.createElement('div');
-    info.className = 'ofuda-market-info';
-    info.innerHTML = `<strong>${entry.label}のお札</strong><span>${entry.price}G / 枚　所持${owned}枚</span>`;
-    row.appendChild(info);
-    if (interactive) {
-      // 売買は5枚単位、1回の購入は50枚まで。枚数を指定して買う形にして、
-      // 「何枚買えるのか・いくら掛かるのか」を押す前に分かるようにする
-      // （相場が動くので表示額は概算＝押し上げ前の単価×枚数）。
-      for (const sheets of OFUDA_BUY_CHOICES) {
-        const buy = document.createElement('button');
-        const estimate = entry.price * sheets;
-        buy.textContent = `${sheets}枚買う`;
-        buy.title = `目安 約${estimate}G（買うほど値上がりします）`;
-        buy.disabled = entry.price <= 0 || currency < estimate;
-        buy.addEventListener('click', () => resolve?.({
-          action: 'buy', element: entry.element, sheets, amountG: currency,
-        }));
-        row.append(buy);
-      }
-      const sellable = Math.floor(owned / OFUDA_TRADE_LOT) * OFUDA_TRADE_LOT;
-      const sell = document.createElement('button');
-      sell.textContent = sellable > 0 ? `${sellable}枚売る` : '売る';
-      sell.disabled = sellable <= 0;
-      sell.addEventListener('click', async () => {
-        const ok = await confirmYesNo(`${entry.label}のお札を${sellable}枚売却しますか？（現在${entry.price}G/枚・売るほど値下がりします）`);
-        if (ok) resolve?.({ action: 'sell', element: entry.element, count: sellable });
-      });
-      row.append(sell);
-    }
-    ofudaMarketChoices.appendChild(row);
-  }
-}
-
+let closeActiveOfudaMarket = null;
 function promptOfudaMarket(payload, forcedPlayerId = null) {
+  closeActiveOfudaMarket?.();
   return new Promise((resolve) => {
     const localPlayerId = pvpMatch?.localPlayerId ?? game?.players.find((player) => !player.isCPU)?.id;
     const interactive = forcedPlayerId == null || forcedPlayerId === localPlayerId;
+    let settled = false;
+    let dispose = () => {};
     function cleanup(result) {
+      if (settled) return;
+      settled = true;
+      dispose();
       ofudaMarketModal.classList.add('hidden');
       ofudaMarketClose.removeEventListener('click', onClose);
+      document.removeEventListener('keydown', onKey);
+      if (closeActiveOfudaMarket === cancelSelf) closeActiveOfudaMarket = null;
       unregisterPromptCanceller(cancelSelf);
       resolve(result);
     }
     function onClose() { cleanup({ action: 'close' }); }
     function cancelSelf() { cleanup({ action: 'close' }); }
+    function onKey(event) {
+      if (event.key === 'Escape') { event.preventDefault(); onClose(); }
+      if (event.key === 'Tab') {
+        const controls = [...ofudaMarketModal.querySelectorAll('button:not(:disabled), input:not(:disabled)')];
+        const index = controls.indexOf(document.activeElement);
+        if (index < 0 || (event.shiftKey ? index === 0 : index === controls.length - 1)) {
+          event.preventDefault(); controls[event.shiftKey ? controls.length - 1 : 0]?.focus();
+        }
+      }
+    }
+    closeActiveOfudaMarket = cancelSelf;
     ofudaMarketTitle.textContent = 'お札相場';
     ofudaMarketNote.textContent = interactive
-      ? `${payload.playerName}：所持${payload.currency}G。5枚単位で売買（1回の購入は50枚まで）、売買は1ターンに1回だけです。`
+      ? `${payload.playerName}の取引所 · 属性を選んで枚数を指定`
       : '現在のお札相場です。売買はゴールとCPでできます。';
-    buildOfudaRows({ ...payload, interactive, resolve: cleanup });
+    dispose = mountOfudaMarket(ofudaMarketChoices, { ...payload, interactive, resolve: cleanup });
     ofudaMarketModal.classList.remove('hidden');
+    ofudaMarketChoices.scrollTop = 0;
     ofudaMarketClose.addEventListener('click', onClose);
+    document.addEventListener('keydown', onKey);
+    ofudaMarketClose.focus({ preventScroll: true });
     registerPromptCanceller(cancelSelf);
   });
 }

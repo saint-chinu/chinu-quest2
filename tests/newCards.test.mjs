@@ -7,6 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
 import { createServer } from 'vite';
+import { quoteOfuda, ofudaLimit } from '../src/ofudaMarketUi.js';
 
 const vite = await createServer({ server: { middlewareMode: true }, appType: 'custom', logLevel: 'error' });
 const { ITEM_CATALOG, SPELL_CATALOG, MONSTER_CATALOG, buildCharacterCardList, isRewardOnlyCard, buildCharacterDeckList } = await vite.ssrLoadModule('/src/battleCards.js');
@@ -3827,6 +3828,36 @@ test('⑲のチヌは経済連携40枚でもパンデミック封じを維持し
   // ターン内はキャンセルカルチャー（破壊）→言論封殺（封じ）の順で判定される。
   const src = readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');
   assert.ok(src.indexOf('await this._cpuMaybeUseCancelCultureSpell(this.currentPlayer);') < src.indexOf('await this._cpuMaybeUseSpellBanSpell(this.currentPlayer);'), '破壊より先に封じてしまう');
+});
+
+test('お札UIの見積もりは逐次約定と一致し、実際の市場を変更しない', () => {
+  for (const base of [0, 3, 12, 119, 120]) {
+    for (const pressure of [-2.8, 0, 2.95]) {
+      for (const action of ['buy', 'sell']) {
+        for (const sheets of [5, 20, 50, 100]) {
+          if (action === 'buy' && sheets > 50) continue;
+          const g = makeStub([], []);
+          Object.assign(g, { hasOfuda: true, ofudaPressure: { fire: pressure }, _ofudaBasePrice: () => base });
+          const p = { currency: 100000, ofuda: { fire: 100 }, ofudaAvgCost: { fire: 10 } };
+          const entry = g._ofudaMarketSummary().find((e) => e.element === 'fire');
+          const preview = quoteOfuda(entry, action, sheets);
+          assert.equal(g.ofudaPressure.fire, pressure);
+          const result = action === 'buy' ? g._buyOfuda(p, 'fire', 100000, { maxSheets: sheets }) : g._sellOfuda(p, 'fire', sheets);
+          assert.equal(preview.amount, action === 'buy' ? result.spent : result.revenue);
+          assert.equal(preview.afterPrice, g._ofudaPrice('fire'));
+          if (base > 0) {
+            const budget = 100;
+            const n = ofudaLimit(entry, 'buy', 100, budget);
+            assert.ok(quoteOfuda(entry, 'buy', n).amount <= budget);
+            if (n < 50) assert.ok(quoteOfuda(entry, 'buy', n + 5).amount > budget);
+          }
+        }
+      }
+    }
+  }
+  assert.equal(ofudaLimit({ price: 12 }, 'sell', 23, 0), 20);
+  assert.equal(ofudaLimit({ price: 12 }, 'sell', 4, 0), 0);
+  assert.equal(ofudaLimit({ price: 0 }, 'sell', 100, 0), 0);
 });
 
 test('クエの余剰現金は割安な別属性へ少額分散し、本命と軍資金を残す', async () => {
