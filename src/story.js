@@ -1516,9 +1516,16 @@ export const STORY_STAGES = [
       {
         name: 'クエ',
         color: 0x9e9d24,
-        // ⑬の決戦版をそのまま流用（fixer型のお札運用は名前「クエ」で自動有効）。
-        deckKey: 'queKessan',
+        // ⑲専用の周回・雷お札経済。⑫⑬のクエやチヌのAIは変更しない。
+        deckKey: 'queFinal',
         theme: { elements: [Element.THUNDER] },
+        aiProfile: {
+          ofudaStyle: 'fixer',
+          lapRacer: true,
+          minWinProbabilityToInvade: 0.9,
+          highValueAvoidance: 0.9,
+          ofudaAllyPumpElements: [Element.THUNDER],
+        },
       },
     ],
   },

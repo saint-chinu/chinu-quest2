@@ -3638,6 +3638,68 @@ test('エンディングロールは⑲の結末の後に流れ、全ステー�
   assert.equal((end.match(/if \(stage\.endingRoll\) await playEndingRoll\(\);/g) || []).length, 2, '勝利の2経路（盤面オーバーレイ／全画面会話）の両方で流す');
 });
 
+test('⑲のクエは専用の経済40枚で、⑫⑬と盤面・救援条件を壊さない', () => {
+  const stage = STORY_STAGES.find((s) => s.key === 'ou-final');
+  const que = stage.opponents.find((p) => p.name === 'クエ');
+  assert.equal(que.deckKey, 'queFinal');
+  assert.deepEqual(que.aiProfile, {
+    ofudaStyle: 'fixer', lapRacer: true, minWinProbabilityToInvade: 0.9,
+    highValueAvoidance: 0.9, ofudaAllyPumpElements: ['thunder'],
+  });
+  const deck = buildCharacterCardList(que.deckKey);
+  assert.equal(deck.length, 40);
+  assert.equal(deck.filter((c) => c.type === CardType.MONSTER).length, 16);
+  assert.equal(deck.filter((c) => c.type === CardType.GEAR).length, 6);
+  assert.equal(deck.filter((c) => c.type === CardType.SPELL).length, 18);
+  const expected = {
+    koutetsuYousai: 4, tetsuo: 4, thunderbird: 4, freelancer: 2, tenhou: 2,
+    nankaNoOmamori: 4, lifeJacket: 2, iCanFly: 4, homingInstinct: 4,
+    sideIncome: 4, capitalismIncarnate: 2, walletVacuum: 2, electrify: 1, horizon: 1,
+  };
+  for (const [key, count] of Object.entries(expected)) {
+    const def = MONSTER_CATALOG[key] || ITEM_CATALOG[key] || SPELL_CATALOG[key];
+    assert.equal(deck.filter((c) => c.name === def.name).length, count, key);
+    assert.ok(count <= 4);
+  }
+  assert.equal(buildCharacterCardList('queKessan').filter((c) => c.name === '最適化').length, 2);
+  assert.equal(STORY_STAGES[12].opponents.find((p) => p.name === 'クエ').deckKey, 'queKessan');
+  assert.equal(stage.mapId, 'ou');
+  assert.ok(MAPS.find((m) => m.id === stage.mapId).hasOfuda);
+  assert.equal(createBoard(stage.mapId).length, 46);
+  assert.equal(stage.midBattleAssist.enemyAssetsLeadAtLeast, 3000);
+});
+
+test('経済クエは全CP回収後なら資金十分でも帰巣本能で周回を短縮する', async () => {
+  const g = Object.create(Game.prototype);
+  const player = { id: 0, currency: 1000, hand: [SPELL_CATALOG.homingInstinct], tileId: 1, previousTileId: 2,
+    aiProfile: { lapRacer: true }, spellUsedThisTurn: false };
+  const casts = [];
+  Object.assign(g, {
+    players: [player], tiles: [{ id: 0, type: TileType.START }],
+    _remainingCheckpointTiles: () => [{ id: 3, checkpointKind: 1 }],
+    _forwardTileDistance: () => 10,
+    _cpuCastSpell: async (_p, _c, target) => { casts.push(target); },
+  });
+  await g._cpuMaybeUseHomingInstinctSpell(player);
+  assert.equal(casts.length, 0, 'CP未回収時に無駄帰還しない');
+  g._remainingCheckpointTiles = () => [];
+  await g._cpuMaybeUseHomingInstinctSpell(player);
+  assert.deepEqual(casts, [{ targetPlayerId: player.id }]);
+});
+
+test('フリーランサーは周回の土地・お札利回りにも作用するが2体で重複しない', () => {
+  const g = Object.create(Game.prototype);
+  const player = { id: 0, lapsCompleted: 3 };
+  Object.assign(g, { players: [player, {}, {}], tiles: [], hasOfuda: true,
+    _summonCountOf: () => 10, _ofudaValueOf: () => 4000 });
+  const base = g._computeLapBonus(player);
+  g.tiles = [{ unit: { ownerId: 0, def: MONSTER_CATALOG.freelancer } }];
+  const bonus = g._computeLapBonus(player);
+  for (const key of ['base', 'land', 'ofuda']) assert.equal(bonus[key], Math.round(base[key] * 1.3));
+  g.tiles.push({ unit: { ownerId: 0, def: MONSTER_CATALOG.freelancer } });
+  assert.deepEqual(g._computeLapBonus(player), bonus);
+});
+
 test('⑲のチヌ決戦デッキ(chinuFinal)は⑱と同じ骨格でパンデミック封じ（言論封殺2・キャンセルカルチャー4）', () => {
   const deck = buildCharacterCardList('chinuFinal');
   assert.equal(deck.length, 40);

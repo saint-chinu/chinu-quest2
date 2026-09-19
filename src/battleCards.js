@@ -1725,6 +1725,35 @@ export const CHARACTER_DECKS = {
       ],
     },
   },
+  /** ⑲のクエ専用。チヌの雷領地によるお札の値上がりを活かす経済役（40枚）。
+   * 13の無属性盤面向け最適化は抜き、周回収入・廉価な土地確保・投資へ集中。
+   * フリーランサーは周回ボーナス全体を1.3倍（複数配置しても非重複）。
+   * 2枚は引き込みと再配置用。侵略はチヌに任せ、装備は安価な防御用だけ。
+   */
+  queFinal: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.koutetsuYousai, count: 4 },
+        { def: MONSTER_CATALOG.tetsuo, count: 4 },
+        { def: MONSTER_CATALOG.thunderbird, count: 4 },
+        { def: MONSTER_CATALOG.freelancer, count: 2 },
+        { def: MONSTER_CATALOG.tenhou, count: 2 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 4 },
+        { def: ITEM_CATALOG.lifeJacket, count: 2 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.iCanFly, count: 4 },
+        { def: SPELL_CATALOG.homingInstinct, count: 4 },
+        { def: SPELL_CATALOG.sideIncome, count: 4 },
+        { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },
+        { def: SPELL_CATALOG.walletVacuum, count: 2 },
+        { def: SPELL_CATALOG.electrify, count: 1 },
+        { def: SPELL_CATALOG.horizon, count: 1 },
+      ],
+    },
+  },
   /** ⑭王都の番人？？。盤面へ数を撒き、パンデミック→ホライズン→灰塵の
    * 一連だけで資金化する専用構成。固定40枚。 */
   fusagikonda: {

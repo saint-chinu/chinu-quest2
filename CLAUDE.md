@@ -33,7 +33,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
   （build:cf 込み）を使う。Firebase の App Check を有効化する時は reCAPTCHA の
   許可ドメインに workers.dev（独自ドメインならそれ）を足すこと。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v315`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v316`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ### BGMコレクション `/bgm/`（2026-09）
@@ -1118,8 +1118,8 @@ story.jsの`ou`に会話（ユーザー指定全文）・目標22,000G・チヌ(
 story.js `ou-final`（`mapId:'ou'`で⑱と同じ盤面。**keyと盤面idが違う初のステージ**なので、
 main.jsは`stage.mapId ?? stage.key`で盤面と背景を引く。他所で`stage.key`を盤面idとして
 使う箇所を足さないこと）。主人公1人（red） vs チヌ＆クエ（white、同盟合算）。
-両者1,000Gスタート。チヌは⑱と同じデッキ・AI、クエは⑬の`queKessan`流用
-（fixerは名前「クエ」で自動）。
+各人1,000Gスタート。チヌは決戦用`chinuFinal`、クエは⑲専用`queFinal`
+（2026-09-19、下記の経済デッキ。⑫⑬には影響しない）。
 - **サーティー参戦**: `midBattleAssist.enemyAssetsLeadAtLeast: 3000`。敵陣営の合算総資産が
   主人公を3,000G以上上回った時点で1回だけ発火し、サーティー（deck`thirty`）が
   紅組に加わって2vs2になる（⑪の`ratio`と同じ`_maybeTriggerStoryAssistEvent`に
@@ -1173,7 +1173,39 @@ main.jsは`stage.mapId ?? stage.key`で盤面と背景を引く。他所で`stag
 | **huntMinLandLevel 3（⑲仮採用）** | 主人公 3/20 = **15%**（seed21） | 主人公側 10/20 = **50%**（seed21） |
 
   Lv3で「真エンドは難しい・サーティーが来れば五分」の形になる。⑲の目標総資産・
-  狩りの絞り・サーティー参戦の差(3,000G)の最終値は**ユーザー判断待ち**。
+  狩りの絞りの最終値は**ユーザー判断待ち**。サーティーの差3,000Gは2026-09-19に維持確定。
+
+### ⑲クエの経済デッキ（2026-09-19）
+- 盤面は⑱と同じ修正済み`ou`（46マス・お札あり）。盤面・チヌ・救援条件は変更しない。
+- `queFinal`固定40枚＝モンスター16／アイテム6／スペル18。
+  - 甲鉄要塞4、鉄男4、サンダーバード4、フリーランサー2、テンホウ2。
+  - ナンカのお守り4、ライフジャケット2。
+  - アイキャンフライ4、帰巣本能4、副業収入4、資本主義の権化2、財布チューチュー2、放電1、ホライズン1。
+- 安価な召喚→フリーランサーの周回総額1.3倍（重複不可）→お札投資を軸にする。
+  資本主義は既存仕様どおり自分の手札だけ。財布は同盟者を奪わず、期待額がコスト2倍以上で使う。
+  ホライズンは同盟資産差が有利になる場合だけ使う既存AI。カード性能・共通AI処理は変更しない。
+- ⑲クエだけ`ofudaStyle:fixer / lapRacer:true / minWinProbabilityToInvade:0.9 /
+  highValueAvoidance:0.9 / ofudaAllyPumpElements:[thunder]`。CP後は帰巣で周回短縮、
+  チヌと同色の雷お札へ投資。13専用の無属性8体待ち・最適化300Gは持ち込まない。
+- 比較: `tools/simulate.mjs`、主人公役`@tools/decks/hinanjo-deck2.json`、
+  B=`chinuFinal`+クエ、`--allyA=none --map=ou --goal=24000 --start=1000
+  --maxTurns=400 --timeout=45000`、seed101/201各6戦。チヌは`ofudaStyle:fixer,huntMinLandLevel:3`。
+  **救援は発火しないCPU比較で、人間の実勝率や真エンド到達率ではない**。
+  旧`queKessan`を比較するときはシミュレータが⑬のpersonaを自動付与するため、
+  `--elementsB2=thunder`と、`--aiB2`でlapRacer/scatterSummonsをfalse、
+  minWinProbabilityToInvade=.3、itemGambleChance=.85、highValueAvoidance=.15、
+  ofudaAllyPumpElements=[]、counterOfudaBuy=null、neutralRepaintAfter=nullに上書きする。
+  これをしない旧デッキ比較は「旧⑲」ではない。
+- 結果（旧→新）: seed101は4/6勝→5/6勝、seed201は3/6勝→5/6勝。
+  敵チーム合計7/12勝(58.3%)→10/12勝(83.3%)、平均決着手番187.2→152.3。
+  旧signature: `6d7191bc21b81fb1` / `d0570f40ec73df15`。
+  新signature: `e96fe983d7448028` / `d7b306843ba72727`。
+  新候補のJSONはqueFinalと同じカード順・枚数・AI設定。少数試合・1種類の対戦デッキなので
+  あらゆる相手への最強保証ではなく、この条件での改善確認。
+- 追加確認: 実装後の`--allyB=queFinal --allyA=thirty --seed=301 --games=4`で
+  敵4/4勝、異常・時間切れなし（`b013271d2bb3e693`）。サーティーが最初からいる2vs2の
+  動作確認であり、3,000G差で途中加入する実プレイの難度測定とは区別する。
+- 回帰: 40枚・他ステージ維持・お札/46マス共有・CP回収後の帰巣・フリーランサー非重複をテスト。
 
 
 ### 構成（ユーザー指定）
