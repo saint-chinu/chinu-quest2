@@ -472,12 +472,12 @@ export const MAPS = [
   { id: 'chinu', name: '⑯ 魚群の王チヌ', wip: true, rows: CHINU_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, background: assetUrl('/images/stage/king-room.png'), spacing: 2.8 },
   // ⑰はストーリー専用。海底収容所の専用背景を使用する。
   { id: 'roudou', name: '⑰ 海底労働施設', wip: true, rows: ROUDOU_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/stage17-underwater-prison.png'), spacing: 2.8 },
-  // ⑱はストーリー専用。**ステージ名は仮題**（ユーザー確定待ち）。
+  // ⑱はストーリー専用。正式タイトル「一騎討ち」。
   // ⚠️ 背景は⑯の「王の間」を流用中。`getMapBackground`はフォールバックを持たず
   // undefinedをそのままCSSへ入れるので、専用絵ができるまでここを空にしないこと。
   // ⚠️ お札あり（ユーザー指定「お札ありの長期戦想定」）。⑲チヌ＆クエ戦も**この盤面を
   // そのまま使う**（ユーザー指定「クリアしたら同じステージでチヌ＆クエのコンビがラスボス」）。
-  { id: 'ou', name: '⑱ 王の間（仮題）', wip: true, rows: OU_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/king-room.png'), spacing: 2.8 },
+  { id: 'ou', name: '⑱ 一騎討ち', wip: true, rows: OU_ROWS, requireAllCheckpoints: true, checkpointBonus: 150, hasOfuda: true, background: assetUrl('/images/stage/king-room.png'), spacing: 2.8 },
 ];
 
 const HITODE_FIRST_MAP = {

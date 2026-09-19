@@ -3601,7 +3601,7 @@ test('怨念の集合体の狩りAIは毎手番サイコロ前に発火し、対
   assert.equal((body.split('tile.level >= HUNT_MIN_LAND_LEVEL').length - 1) + (body.split('t.level >= HUNT_MIN_LAND_LEVEL').length - 1), 2);
 });
 
-test('⑲は⑱と同じ盤面で主人公 vs チヌ＆クエ、3,000G差でサーティー参戦、真エンドだけ怨念の集合体', () => {
+test('⑲は⑱と同じ盤面で主人公 vs チヌ＆クエ、5,000G差でサーティー参戦、真エンドだけ怨念の集合体', () => {
   const stage = STORY_STAGES.find((s) => s.key === 'ou-final');
   assert.ok(stage, 'story.jsに⑲が無い');
   assert.equal(STORY_STAGES.indexOf(stage), STORY_STAGES.findIndex((s) => s.key === 'ou') + 1, '⑱の直後に並べる');
@@ -3619,11 +3619,11 @@ test('⑲は⑱と同じ盤面で主人公 vs チヌ＆クエ、3,000G差でサ�
   }, '⑲専用の狩り下限と雷お札の投資連携');
   for (const o of stage.opponents) assert.equal(o.startingCurrency, undefined, '片寄せの初期資金補正は置かない');
   // サーティー参戦は「絶対差」で発火する（⑪のratioとは別条件）。
-  assert.equal(stage.midBattleAssist.enemyAssetsLeadAtLeast, 3000);
+  assert.equal(stage.midBattleAssist.enemyAssetsLeadAtLeast, 5000);
   assert.equal(stage.midBattleAssist.ratio, undefined);
   assert.equal(stage.midBattleAssist.ally.name, 'サーティー');
-  assert.equal(stage.midBattleAssist.ally.deckKey, 'thirty');
-  assert.equal(buildCharacterCardList('thirty').length, 40);
+  assert.equal(stage.midBattleAssist.ally.deckKey, 'thirtyFinal');
+  assert.equal(buildCharacterCardList('thirtyFinal').length, 40);
   // マルチエンド: 真エンド報酬とバッドエンドの会話が分かれている。
   assert.equal(stage.trueEndReward, 'onnenNoShuugoutai');
   assert.ok(MONSTER_CATALOG[stage.trueEndReward]);
@@ -3675,18 +3675,18 @@ test('途中参戦の絶対差トリガー(enemyAssetsLeadAtLeast)は敵陣営�
   const fired = [];
   Object.assign(g, {
     players: [human, chinu, que], storyAssistTriggered: false, storyEnded: false, _isCancelled: false,
-    storyAssistEvent: { enemyAssetsLeadAtLeast: 3000, allyConfig: { name: 'サーティー' }, lines: [] },
+    storyAssistEvent: { enemyAssetsLeadAtLeast: 5000, allyConfig: { name: 'サーティー' }, lines: [] },
     // _totalAssetsOfは同盟合算（本物と同じ契約）。
     _totalAssetsOf: (p) => (p.allianceId === 'white' ? assets[1] + assets[2] : assets[p.id]),
     onStoryAssistEvent: async (e) => { fired.push(e); },
     _addStoryAssistPlayer: () => { joined += 1; return { name: 'サーティー' }; },
     onLog: () => {},
   });
-  assets[1] = 4000; assets[2] = 3999; // 合算7999、差2999 → まだ
+  assets[1] = 5000; assets[2] = 4999; // 合算9999、差4999 → まだ
   await g._maybeTriggerStoryAssistEvent();
   assert.equal(joined, 0);
   assert.equal(g.storyAssistTriggered, false);
-  assets[2] = 4000; // 合算8000、差3000 → 発火
+  assets[2] = 5000; // 合算10000、差5000 → 発火
   await g._maybeTriggerStoryAssistEvent();
   assert.equal(joined, 1);
   assert.equal(fired.length, 1);
@@ -3763,7 +3763,37 @@ test('⑲のクエは専用の経済40枚で、⑫⑬と盤面・救援条件を
   assert.equal(stage.mapId, 'ou');
   assert.ok(MAPS.find((m) => m.id === stage.mapId).hasOfuda);
   assert.equal(createBoard(stage.mapId).length, 46);
-  assert.equal(stage.midBattleAssist.enemyAssetsLeadAtLeast, 3000);
+  assert.equal(stage.midBattleAssist.enemyAssetsLeadAtLeast, 5000);
+});
+
+test('⑱⑲は正式タイトルで、⑲のサーティーだけ救援40枚へ強化する', () => {
+  assert.equal(STORY_STAGES.find((s) => s.key === 'ou').title, '⑱ 一騎討ち');
+  assert.equal(STORY_STAGES.find((s) => s.key === 'ou-final').title, '⑲ ２人の王');
+  assert.equal(MAPS.find((m) => m.id === 'ou').name, '⑱ 一騎討ち');
+  const deck = buildCharacterCardList('thirtyFinal');
+  assert.equal(deck.length, 40);
+  const count = (key) => deck.filter((c) => c.name === (MONSTER_CATALOG[key] || ITEM_CATALOG[key] || SPELL_CATALOG[key]).name).length;
+  for (const [key, n] of Object.entries({ ninja: 4, lifeJacket: 3, shinkenShirahadori: 3,
+    dimensionalSocket: 2, raiheishinZamurai: 2, freelancer: 2, thirtyBreedMonster: 1, homingInstinct: 3 })) assert.equal(count(key), n, key);
+  assert.equal(buildCharacterCardList('thirty').filter((c) => c.name === 'Ninja').length, 0);
+  const prior = STORY_STAGES.slice(0, 18).flatMap((s) => [s.ally, s.extraAlly, s.midBattleAssist?.ally]).filter((p) => p?.name === 'サーティー');
+  assert.ok(prior.length > 0);
+  assert.ok(prior.every((p) => p.deckKey === 'thirty'));
+});
+
+test('クエは帰巣本能と副業収入があれば帰巣を先に自分へ使う', async () => {
+  const p = { id: 0, name: 'クエ', currency: 1000, spellUsedThisTurn: false,
+    hand: [SPELL_CATALOG.sideIncome, SPELL_CATALOG.homingInstinct] };
+  const g = makeCpuStub([], [p]);
+  assert.equal(await g._cpuMaybeUseHomingInstinctSpell(p), true);
+  assert.equal(g.casts.length, 1);
+  assert.equal(g.casts[0].name, SPELL_CATALOG.homingInstinct.name);
+  assert.deepEqual(g.casts[0].cast, { targetPlayerId: 0 });
+  p.spellUsedThisTurn = false;
+  p.currency = 49;
+  assert.equal(await g._cpuMaybeUseHomingInstinctSpell(p), false);
+  p.currency = 1000; p.spellUsedThisTurn = true;
+  assert.equal(await g._cpuMaybeUseHomingInstinctSpell(p), false);
 });
 
 test('経済クエは全CP回収後なら資金十分でも帰巣本能で周回を短縮する', async () => {
@@ -3790,11 +3820,14 @@ test('フリーランサーは周回の土地・お札利回りにも作用す�
   Object.assign(g, { players: [player, {}, {}], tiles: [], hasOfuda: true,
     _summonCountOf: () => 10, _ofudaValueOf: () => 4000 });
   const base = g._computeLapBonus(player);
+  assert.equal(base.ofuda, 640, '全対応マップで保有評価額4000Gの16%');
   g.tiles = [{ unit: { ownerId: 0, def: MONSTER_CATALOG.freelancer } }];
   const bonus = g._computeLapBonus(player);
   for (const key of ['base', 'land', 'ofuda']) assert.equal(bonus[key], Math.round(base[key] * 1.3));
   g.tiles.push({ unit: { ownerId: 0, def: MONSTER_CATALOG.freelancer } });
   assert.deepEqual(g._computeLapBonus(player), bonus);
+  g.hasOfuda = false;
+  assert.equal(g._computeLapBonus(player).ofuda, 0, 'お札なしの盤面にボーナスを追加しない');
 });
 
 test('⑲のチヌは経済連携40枚でもパンデミック封じを維持し、⑱には影響しない', () => {

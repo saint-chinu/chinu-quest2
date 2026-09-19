@@ -189,8 +189,8 @@ function allyPumpElementsOf(player) {
 }
 const OFUDA_LEVEL_SCORE = { 1: 0.5, 2: 1.625, 3: 2.75, 4: 3.875, 5: 5 };
 // 周回ボーナスに乗るお札利回り（評価額×この率）。土地の領地ボーナスと
-// 並ぶ収入源になるよう5%→8%へ。保有2,000G分で周160G＝土地3枚弱に相当。
-const OFUDA_LAP_YIELD = 0.08;
+// 全対応ステージで8%→16%。保有2,000G分なら周320G（倍率前）。
+const OFUDA_LAP_YIELD = 0.16;
 
 // 速度違反はご愛嬌（ほこら効果）で強制されるサイコロ目。
 const FORCED_DICE_STEPS = 10;
@@ -685,7 +685,7 @@ export class Game {
    * - `enemyAssetsAtLeast`（⑯のmidBattleEvent）: 敵の**誰か1人**の総資産が
    *   その絶対値に届いた時。⑯は目標5,000Gに対して4,000Gで発火する。
    * - `enemyAssetsLeadAtLeast`（⑲のmidBattleAssist）: 敵陣営の総資産（同盟合算）が
-   *   主人公の総資産を**その絶対差以上**上回った時。⑲は3,000G差でサーティーが来る。
+   *   主人公の総資産を**その絶対差以上**上回った時。⑲は5,000G差でサーティーが来る。
    * `allyConfig`が無いイベントは会話だけで終わる（味方は参戦しない）。
    */
   async _maybeTriggerStoryAssistEvent() {
@@ -2806,7 +2806,7 @@ export class Game {
    * - 基本ボーナス: (周回数+1)×START_BONUS。周を重ねるほど増える。
    * - 領地ボーナス: 所持土地数×LAND_BONUS_RATE（2人戦）/
    *   LAND_BONUS_RATE_MULTI（3人以上）。連鎖数・土地レベルは影響しない。
-   * - お札利回り: 保有お札の評価額×OFUDA_LAP_YIELD（⑫のみ）。
+   * - お札利回り: 保有お札の評価額×OFUDA_LAP_YIELD（お札対応マップ共通）。
    * フリーランサーが盤上にいれば、上記3つの合計すべてに倍率が乗る
    * （以前は基本ボーナスだけだったが、領地・お札で稼ぐ盤面では実入りが
    * 小さすぎたため周回収入の総額補正へ拡張した）。
@@ -9016,6 +9016,13 @@ export class Game {
     if (player.spellUsedThisTurn) return false;
     const card = player.hand.find((candidate) => candidate.effect?.type === 'returnPlayerToStart');
     if (!card || player.currency < (card.cost || 0)) return false;
+
+    // クエは両方持っていれば、副業収入より帰還・250G獲得を先に行う。
+    // 手番冒頭で処理するので、帰還後にサイコロを振る二重行動はしない。
+    if (player.name === 'クエ' && player.hand.some((c) => c.effect?.type === 'lapCountGold')) {
+      await this._cpuCastSpell(player, card, { targetPlayerId: player.id });
+      return true;
+    }
 
     const remainingFor = (target) => this._remainingCheckpointTiles(target);
     // 「残り1つ」はタイル数ではなく種別の数で数える。⑬のように同じ番号の

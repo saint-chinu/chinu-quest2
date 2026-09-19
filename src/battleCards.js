@@ -1557,6 +1557,38 @@ export const CHARACTER_DECKS = {
       ],
     },
   },
+  // ⑲の救援専用。既存の⑪等のthirtyを変えず、先制・生存装備・収入を強化。
+  thirtyFinal: {
+    composition: {
+      monsters: [
+        { def: MONSTER_CATALOG.classicDragon, count: 2 },
+        { def: MONSTER_CATALOG.sekaiju, count: 2 },
+        { def: MONSTER_CATALOG.tenhou, count: 2 },
+        { def: MONSTER_CATALOG.ninja, count: 4 },
+        { def: MONSTER_CATALOG.kunekune, count: 2 },
+        { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 },
+        { def: MONSTER_CATALOG.freelancer, count: 2 },
+        { def: MONSTER_CATALOG.kyousenshi, count: 2 },
+        { def: MONSTER_CATALOG.mysteriousInvader, count: 1 },
+        { def: MONSTER_CATALOG.thirtyBreedMonster, count: 1 },
+      ],
+      items: [
+        { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
+        { def: ITEM_CATALOG.fushichoNoTate, count: 1 },
+        { def: ITEM_CATALOG.lifeJacket, count: 3 },
+        { def: ITEM_CATALOG.shinkenShirahadori, count: 3 },
+        { def: ITEM_CATALOG.dimensionalSocket, count: 2 },
+      ],
+      spells: [
+        { def: SPELL_CATALOG.homingInstinct, count: 3 },
+        { def: SPELL_CATALOG.sideIncome, count: 2 },
+        { def: SPELL_CATALOG.cancelCulture, count: 2 },
+        { def: SPELL_CATALOG.genronFuusatsu, count: 1 },
+        { def: SPELL_CATALOG.optimize, count: 1 },
+        { def: SPELL_CATALOG.phoenixCurse, count: 1 },
+      ],
+    },
+  },
   // ⑫海上金融街のフィクサー。盤面は火・水・雷・森が各10マス、しかも一辺
   // ごとに連続しているので連鎖が伸びる＝地価もお札の相場も跳ねる。
   // 森で連鎖を固めて資産を膨らませ、金で殴る（マウントゴリラ）・通行料を

@@ -873,7 +873,7 @@ export const STORY_STAGES = [
       { speaker: '???', text: 'この街では火・水・雷・森それぞれの「お札」が売買されている。土地と並ぶ、もうひとつの資産だ。' },
       { speaker: '???', text: 'お札の値段を決めるのは盤面そのもの。その属性の土地が増え、レベルが上がるほど値上がりする。開始時はどれも1枚12G、上限は120G――最大10倍だ。' },
       { speaker: '???', text: '売買でも相場は動く。150Gぶん買えば1G上がり、同じだけ売れば1G下がる。買い占めて自分で高値を作ることもできる。' },
-      { speaker: '???', text: '取引所はゴールと各チェックポイントにある。通過するたびに相場が開き、売買できる。持っているお札は時価で総資産に加算され、周回ボーナスにも評価額の8%が上乗せされる。' },
+      { speaker: '???', text: '取引所はゴールと各チェックポイントにある。通過するたびに相場が開き、売買できる。持っているお札は時価で総資産に加算され、周回ボーナスにも評価額の16%が上乗せされる。' },
       { speaker: '???', text: '相場そのものは画面右の「相場」ボタンでいつでも確認できる。安い属性を仕込み、自分の土地を育てて吊り上げろ。' },
       { speaker: '???', text: '土地とお札の両方で総資産15,000Gを目指せ！　ただしここはサドンデス、破産した時点で敗北が確定する。' },
     ],
@@ -1349,8 +1349,7 @@ export const STORY_STAGES = [
   },
   {
     key: 'ou',
-    // ⚠️ ステージ名は仮題（ユーザー確定待ち）。board.jsのMAPS名と揃えること。
-    title: '⑱ 王の間（仮題）',
+    title: '⑱ 一騎討ち',
     // ⑲と盤面ouを共有するため、BGMはマップではなくステージ単位で指定する。
     bgmTrack: 'kingDuel',
     // ⑰で施設を解放した主人公が追手を振り切って王の間へ辿り着き、魚群の王チヌと
@@ -1402,8 +1401,7 @@ export const STORY_STAGES = [
     // ⑱と同じ盤面（ユーザー指定「クリアしたら同じステージでチヌ＆クエのコンビが
     // ラスボス」）。keyは盤面idと別なので、main.jsはmapIdで盤面を引く。
     mapId: 'ou',
-    // ⚠️ ステージ名は仮題（ユーザー確定待ち）。
-    title: '⑲ 王の真の姿（仮題）',
+    title: '⑲ ２人の王',
     // 主人公1人 vs チヌ＆クエ（同盟）。3,000G以上引き離されるとサーティーが
     // 味方に来て2vs2になる（midBattleAssist）。
     format: '1vs2→2vs2',
@@ -1472,7 +1470,7 @@ export const STORY_STAGES = [
       { speaker: 'チヌ', text: '...クク、ククク...怨念の連鎖は...終わらない...お前には...真の強さを...見せてもらいたかった...' },
     ],
     midBattleAssist: {
-      enemyAssetsLeadAtLeast: 3000,
+      enemyAssetsLeadAtLeast: 5000,
       overlay: {
         leftName: '主人公',
         rightName: 'サーティー',
@@ -1481,8 +1479,9 @@ export const STORY_STAGES = [
       ally: {
         name: 'サーティー',
         color: 0x232323,
-        deckKey: 'thirty',
+        deckKey: 'thirtyFinal',
         theme: { elements: [Element.NEUTRAL, Element.THUNDER] },
+        aiProfile: { lapRacer: true, ofudaStyle: 'fixer', cancelCultureDenyOptions: true },
       },
       lines: [
         { speaker: 'サーティー', text: 'クエを追ってきたらすげぇところに出くわしちまったな。' },

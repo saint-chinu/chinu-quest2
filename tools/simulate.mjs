@@ -196,7 +196,7 @@ for (const catalog of CATALOGS) {
 const PERSONA_BY_DECK_KEY = new Map();
 for (const stage of STORY_STAGES) {
   for (const variant of [stage, stage.replay, stage.secretReplay].filter(Boolean)) {
-    const roster = [...(variant.opponents ?? []), variant.ally, variant.extraAlly].filter(Boolean);
+    const roster = [...(variant.opponents ?? []), variant.ally, variant.extraAlly, variant.midBattleAssist?.ally].filter(Boolean);
     for (const who of roster) {
       if (who.deckKey && !PERSONA_BY_DECK_KEY.has(who.deckKey)) {
         PERSONA_BY_DECK_KEY.set(who.deckKey, {
