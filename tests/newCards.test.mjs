@@ -3365,7 +3365,8 @@ test('⑱のチヌ専用デッキ(chinu)は主人公役デッキの合法ミラ�
   // ⚠️ 計測で決めた骨格（CLAUDE.md「⑱の数値調整」⑨）。主人公役デッキと同じ
   // 先制トリオ＋Ninja4＋アイテム12枚。エンジン型(くぐつ3・放電2・国士2)より強かった。
   for (const [name, n] of [['テンホウ', 4], ['エレキ輝', 4], ['サンダーバード', 4], ['Ninja', 4],
-    ['イカサマのサイコロ', 4], ['ナンカのお守り', 4], ['真剣白刃取り', 2]]) {
+    ['イカサマのサイコロ', 4], ['ナンカのお守り', 1], ['ライフジャケット', 2],
+    ['異次元ソケット', 1], ['真剣白刃取り', 2]]) {
     assert.equal(countOf(name), n, `${name}は${n}枚`);
   }
   assert.ok(deck.filter((c) => c.type === CardType.MONSTER && (c.cost || 0) <= 50).length >= 18,
@@ -3783,7 +3784,8 @@ test('⑲のチヌは経済連携40枚でもパンデミック封じを維持し
   const expected = {
     tenhou: 4, thunderbird: 4, ninja: 4, raiheishinZamurai: 2, metaOn: 1,
     freelancer: 2, onnenNoShuugoutai: 4, peeStaff: 4, ikasamaNoSaikoro: 3,
-    nankaNoOmamori: 3, shinkenShirahadori: 2, genronFuusatsu: 2, cancelCulture: 4,
+    nankaNoOmamori: 0, lifeJacket: 2, dimensionalSocket: 1,
+    shinkenShirahadori: 2, genronFuusatsu: 2, cancelCulture: 4,
     capitalismIncarnate: 1,
   };
   for (const [key, count] of Object.entries(expected)) {

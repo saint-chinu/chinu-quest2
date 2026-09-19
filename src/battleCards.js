@@ -1920,7 +1920,9 @@ export const CHARACTER_DECKS = {
       ],
       items: [
         { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 4 },       // 40G ATK+出目×5・貫通
-        { def: ITEM_CATALOG.nankaNoOmamori, count: 4 },         // 45G ダメージ1回無効化
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 1 },         // 40枚維持のため⑱のみ1枚残す
+        { def: ITEM_CATALOG.lifeJacket, count: 2 },
+        { def: ITEM_CATALOG.dimensionalSocket, count: 1 },
         { def: ITEM_CATALOG.shinkenShirahadori, count: 2 },     // 110G 相手のアイテムを奪う
         { def: ITEM_CATALOG.peeStaff, count: 1 },               // EX 20G 先制・ATK+25〜50
         { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
@@ -1961,7 +1963,8 @@ export const CHARACTER_DECKS = {
       items: [
         { def: ITEM_CATALOG.peeStaff, count: 4 },
         { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 3 },
-        { def: ITEM_CATALOG.nankaNoOmamori, count: 3 },
+        { def: ITEM_CATALOG.lifeJacket, count: 2 },
+        { def: ITEM_CATALOG.dimensionalSocket, count: 1 },
         { def: ITEM_CATALOG.shinkenShirahadori, count: 2 },
       ],
       spells: [
