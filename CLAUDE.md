@@ -33,14 +33,34 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
   （build:cf 込み）を使う。Firebase の App Check を有効化する時は reCAPTCHA の
   許可ドメインに workers.dev（独自ドメインならそれ）を足すこと。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v319`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v320`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ### BGMコレクション `/bgm/`（2026-09）
 2026-09-20: 提供音源`stage19bgm.mp3`を`public/audio/`へ無加工で収録。
 ⑲`ou-final`の`bgmTrack:'twoKings'`（初戦・再戦共通）とサウンドルームに
 「♪２人の王」を追加。約180.024秒。盤面は⑱と共有だが、⑱の`kingDuel`は変更しない。
-サムネは共有背景の`s18.jpg`。対人BGM選択にも登録。エンディング曲`chinu`は維持。
+サムネは共有背景の`s18.jpg`。対人BGM選択にも登録。
+
+#### エンディングロールのBGM（2026-09-19、Claude）
+**エンディングロールは長らく完全な無音だった。** `playEndingRoll`は
+`setBgmOverride('chinu') + playMapTheme('ou')`と書いてあったが、`playTrack`の
+門番が「`#app`（盤面）が表示されている時だけ鳴らす」なのに対し、この演出は
+盤面を閉じた**後**に動く。さらに`#app`が隠れた瞬間のMutationObserverが
+`blockMusicPlayback()`を呼ぶので、`allowMusicPlayback()`を呼び直しても通らない。
+
+- カットシーン専用の入口 `startCinematicMusic(track)` / `endCinematicMusic()` を
+  audio.jsへ追加。`cinematicTrack`が非nullの間だけ盤面表示の条件を外す代わりに、
+  **その曲以外への切り替えを拒否**する（遅れて届いた`playMapTheme`／
+  `playBattleTheme`にエンディング曲を上書きさせない）。終了は`finally`で必ず通す。
+- 専用トラック `ending` → `public/audio/ending.mp3`。**音源はまだ未着**。
+  `PENDING_TRACK_FILES`に入れてあるので「mp3が実在するか」の回帰テストは免除され、
+  代わりに`TRACK_FALLBACK.ending = 'chinu'`で**404の間は⑯「玉座の重み」が鳴る**
+  （無音には戻らない）。
+- ⚠️ **`public/audio/ending.mp3`を置いたら、`PENDING_TRACK_FILES`から`ending`を
+  外すこと。** 外した瞬間にテストが実在チェックを始める。同時に
+  サウンドルーム（`public/bgm/sound-room.js`の行と`dur`の実測値）と、
+  必要なら`SELECTABLE_BGM`（対人BGM選択）にも足す。曲名は未定。
 
 全BGMを聴ける単体ページ。`public/bgm/`（index.html + sound-room.css +
 sound-room.js）に置いてあり、**Viteは`public/`を素通しでコピーするだけ**なので
@@ -1306,7 +1326,20 @@ signature: `0f75c1857005eeab` / `0dbdca89d4e5d021` / `2db4d857a5b5ea3d` / `d53ba
   6.7%→43.3%へ戻る**（seed7777・30戦・`8af067686b4c76e2`、平均214.5手番、
   主人公側16,539G）。デッキ・盤面・目標24,000G・救援条件3,000G差は一切変えない。
   真エンド経路はLv3でも15%前後（旧記録）なので「激ムズ」は維持される。
-- ⚠️ **未変更**。救援経路も6.7%のままにするかはユーザー判断待ち。
+- ✅ **2026-09-19、ユーザー指定でLv3へ戻した。** 上の表はLv2時点の記録。
+  戻した後の同条件・同シードでの実測:
+
+  | 経路 | seed7777 | seed3407 | Lv2の時 |
+  |---|---|---|---|
+  | 真エンド（1vs2） | 2/30 = 6.7% | （Lv2で10.0%） | 6.7% |
+  | バッドエンド（2vs2） | **13/30 = 43.3%** | **8/30 = 26.7%** | 6.7% |
+
+  signature: `8af067686b4c76e2` / `7a59834eaf7475a3` / `c26d23cbaf056338`。
+  救援経路は6.7%→**26.7〜43.3%**（平均35%）に戻り、逃げ道として機能する。
+  真エンドは6.7%のまま＝「激ムズ」は変わらない。決着手番も141→230手番に伸びて、
+  一方的な刈り取りではなく殴り合いになる（主人公側の最終総資産 6,189→13,356G）。
+  回帰テストでLv3を固定してある（`newCards.test.mjs`「⑲は⑱と同じ盤面で…」の
+  `aiProfile` deepEqual）。**ここを2に戻す変更は救援経路を殺すので入れない。**
 - 教訓: 1シードで詰めた勝率は当てにならない。⑲の調整をする時は必ず
   **2シード以上**で、真エンド経路と救援経路の**両方**を測る。
 

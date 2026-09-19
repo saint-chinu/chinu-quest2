@@ -1508,11 +1508,15 @@ export const STORY_STAGES = [
         // ⑲はパンデミック封じの決戦版（言論封殺2・キャンセルカルチャー4）。
         deckKey: 'chinuFinal',
         theme: { elements: [Element.THUNDER] },
-        // ⑲の連携強化: Lv2から怨念で敵の経済基盤を崩す（勝算・資金の既存判定は維持）。
-        // クエの雷お札が20枚になるまではLv2まで、仕込み後に本格投資する。
+        // ⑲の連携: 怨念で敵の経済基盤を崩す（勝算・資金の既存判定は維持）。
+        // クエの雷お札が20枚になるまでは土地投資をLv2まで、仕込み後に本格投資する。
         // 0枚でもLv2は許可し、相方が買えない時に土地投資を完全停止させない。
+        // ⚠️ huntMinLandLevelは3から動かさない（CLAUDE.md「⑲の救援経路」）。
+        // 2にすると怨念4枚の狩りが主人公とサーティーの土地を序盤から刈り尽くし、
+        // サーティーが来ても勝率が6.7%のまま＝救援が逃げ道として機能しなくなる。
+        // 3なら救援経路43.3%・真エンド経路は激ムズのまま。
         aiProfile: {
-          ofudaStyle: 'fixer', huntMinLandLevel: 2,
+          ofudaStyle: 'fixer', huntMinLandLevel: 3,
           levelPumpSignal: { allyName: 'クエ', elements: [Element.THUNDER], toLevel2: 0, unleash: 20 },
         },
       },

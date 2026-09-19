@@ -20,7 +20,7 @@ const { NPC_PORTRAIT_URL, NPC_TOKEN_URL } = await vite.ssrLoadModule('/src/npcAr
 // 直後に必ず消す（他モジュールのtypeof window判定を汚さないため）。
 const hadWindow = 'window' in globalThis;
 if (!hadWindow) globalThis.window = { addEventListener() {} };
-const { TRACK_SRC, MAP_TRACK, SELECTABLE_BGM } = await vite.ssrLoadModule('/src/audio.js');
+const { TRACK_SRC, MAP_TRACK, SELECTABLE_BGM, PENDING_TRACK_FILES } = await vite.ssrLoadModule('/src/audio.js');
 const { computePlayerSlots } = await vite.ssrLoadModule('/src/playerPanels.js');
 const { CardType } = await vite.ssrLoadModule('/src/cards.js');
 if (!hadWindow) delete globalThis.window;
@@ -2230,6 +2230,12 @@ test('BGMの参照先mp3はすべてpublic/audio/に実在する', () => {
   // （例外も出ないので気づきにくい）。参照とファイルのズレをここで止める。
   for (const [track, url] of Object.entries(TRACK_SRC)) {
     const file = new URL(`../public${new URL(url, 'http://x').pathname}`, import.meta.url);
+    if (PENDING_TRACK_FILES.has(track)) {
+      // 音源提供待ちのトラック。届いたらPENDING_TRACK_FILESから外すこと
+      // （外した瞬間にこのテストが実在チェックを始める）。
+      assert.ok(!existsSync(file), `${track}のmp3は届いている。audio.jsのPENDING_TRACK_FILESから外す: ${url}`);
+      continue;
+    }
     assert.ok(existsSync(file), `${track}のBGMが存在しない: ${url}`);
   }
   // MAP_TRACK・対人戦の選択肢が実在しないキーを指していないこと。
@@ -2240,6 +2246,22 @@ test('BGMの参照先mp3はすべてpublic/audio/に実在する', () => {
     assert.ok(TRACK_SRC[entry.track], `対人戦のBGM選択'${entry.title}'のトラックがTRACK_SRCに無い`);
     assert.match(entry.title, /^♪/, '曲名は♪始まりで揃える');
   }
+});
+
+test('エンディングロールは盤面を閉じた後でもBGMが鳴る（無音バグの回帰）', () => {
+  // playTrackは「#appが見えている時だけ」鳴らす門番を持つ。エンディング
+  // ロールはその#appを閉じた後に動くので、playMapTheme系で鳴らそうとすると
+  // 黙って無音になる（実際にそうなっていた）。カットシーン専用の入口を使う。
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const roll = main.slice(main.indexOf('async function playEndingRoll()'));
+  const body = roll.slice(0, roll.indexOf('\n}\n'));
+  assert.ok(body.includes("startCinematicMusic('ending')"), 'エンディング専用曲をカットシーン再生する');
+  assert.ok(body.includes('endCinematicMusic()'), '終了時（finally）に必ず解除する');
+  assert.ok(!body.includes('playMapTheme('), '盤面用のBGM関数は使わない（無音になる）');
+  assert.ok(!body.includes('setBgmOverride('), '盤面用のBGM上書きも使わない');
+  // ending.mp3が未着でも無音にしない代替経路。
+  const audio = readFileSync(new URL('../src/audio.js', import.meta.url), 'utf8');
+  assert.match(audio, /const TRACK_FALLBACK = \{[^}]*ending: 'chinu'/);
 });
 
 test('⑲の２人の王は専用BGMで、⑱の王手・エンディング曲を変えない', () => {
@@ -2253,7 +2275,7 @@ test('⑲の２人の王は専用BGMで、⑱の王手・エンディング曲�
   assert.ok(existsSync(new URL('../public/images/stage/thumb/s18.jpg', import.meta.url)));
   const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
   assert.ok(main.includes('bgmTrack: variant.bgmTrack ?? stage.bgmTrack ?? null'), '初戦・再戦でステージ指定曲を引き継ぐ');
-  assert.ok(main.includes("setBgmOverride('chinu')"), 'エンディング曲は従来どおり');
+  assert.ok(main.includes("startCinematicMusic('ending')"), 'エンディングロールは専用曲をカットシーン再生で鳴らす');
 });
 
 test('⑯のステージBGMは専用曲（stage16bgm.mp3）', () => {
@@ -3561,9 +3583,9 @@ test('⑲は⑱と同じ盤面で主人公 vs チヌ＆クエ、3,000G差でサ�
   assert.deepEqual(stage.opponents.map((o) => o.name), ['チヌ', 'クエ']);
   assert.equal(stage.opponents[0].deckKey, 'chinuFinal', '⑲はパンデミック封じの決戦版');
   assert.deepEqual(stage.opponents[0].aiProfile, {
-    ofudaStyle: 'fixer', huntMinLandLevel: 2,
+    ofudaStyle: 'fixer', huntMinLandLevel: 3,
     levelPumpSignal: { allyName: 'クエ', elements: ['thunder'], toLevel2: 0, unleash: 20 },
-  }, '⑲専用の早期侵略と雷お札の投資連携');
+  }, '⑲専用の狩り下限と雷お札の投資連携');
   for (const o of stage.opponents) assert.equal(o.startingCurrency, undefined, '片寄せの初期資金補正は置かない');
   // サーティー参戦は「絶対差」で発火する（⑪のratioとは別条件）。
   assert.equal(stage.midBattleAssist.enemyAssetsLeadAtLeast, 3000);

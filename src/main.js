@@ -61,7 +61,7 @@ import {
   sendPvpInvite,
   updatePvpPresence,
 } from './pvpFriends.js';
-import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted, playSfx, allowMusicPlayback, blockMusicPlayback, setBgmOverride, SELECTABLE_BGM, bgmTitleOf } from './audio.js';
+import { playMapTheme, playBattleTheme, stopMusic, toggleMuted, isMuted, playSfx, allowMusicPlayback, blockMusicPlayback, setBgmOverride, startCinematicMusic, endCinematicMusic, SELECTABLE_BGM, bgmTitleOf } from './audio.js';
 import { computePlayerSlots } from './playerPanels.js';
 import { getSpeedMultiplier, setSpeedMultiplier, getWaitCutRate, setWaitCutRate, tween, easeInOutQuad } from './utils.js';
 import { pvpQueueAnimationScale } from './pvpQueue.js';
@@ -6204,7 +6204,12 @@ async function handleStoryBattleEnd(index, result = {}) {
  * エンディングロール（⑲の結末の後、ユーザー指定 2026-09）。
  * 各ステージの背景と登場NPCの立ち絵が浮かんでは消えていくムービー風の
  * シーン送り→クレジット→「チヌクエスト2 Fin」。クリック/タップで次のシーンへ、
- * 「スキップ」で全部飛ばせる。BGMは⑯「玉座の重み」（王のテーマ）。
+ * 「スキップ」で全部飛ばせる。BGMはエンディング専用曲`ending`。
+ *
+ * ⚠️ ここは盤面(#app)を閉じた後に動く。`playMapTheme`系は「盤面が見えている
+ * 時だけ」の門番を通れず、実際この演出は長らく**無音のまま**だった
+ * （`setBgmOverride('chinu') + playMapTheme('ou')`と書いてあっても鳴らない）。
+ * カットシーン専用の`startCinematicMusic`を使うこと。
  * 演出中に例外が出ても必ずオーバーレイを外して戻る（盤面に取り残さない）。
  */
 async function playEndingRoll() {
@@ -6235,9 +6240,7 @@ async function playEndingRoll() {
   const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
 
   try {
-    allowMusicPlayback();
-    setBgmOverride('chinu');
-    playMapTheme('ou');
+    startCinematicMusic('ending');
     await nextFrame();
     overlay.classList.add('show');
     await wait(900);
@@ -6317,7 +6320,7 @@ async function playEndingRoll() {
   } catch (error) {
     console.error('エンディングロールに失敗しました', error);
   } finally {
-    blockMusicPlayback();
+    endCinematicMusic();
     overlay.classList.remove('show');
     await new Promise((resolve) => setTimeout(resolve, 700));
     overlay.remove();

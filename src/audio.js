@@ -35,6 +35,24 @@ export const TRACK_SRC = {
   seaLabor: assetUrl('/audio/stage17bgm.mp3'), // ⑰海底労働施設・レジスタンスの反乱
   kingDuel: assetUrl('/audio/stage18bgm.mp3'), // ⑱チヌとの決戦（ストーリー側で指定）
   twoKings: assetUrl('/audio/stage19bgm.mp3'), // ⑲２人の王（⑱と盤面共有なのでストーリー側で指定）
+  ending: assetUrl('/audio/ending.mp3'), // エンディングロール専用（startCinematicMusic）
+};
+
+/**
+ * 音源がまだリポジトリに入っていないトラック。ユーザー提供待ちの曲をここへ
+ * 書いておくと、「参照先mp3が実在するか」の回帰テスト（tests/newCards.test.mjs）
+ * だけを免除する。ファイルを`public/audio/`へ置いたらこの集合から必ず外すこと
+ * （外し忘れると、本当にファイルが消えた時に誰も気づけなくなる）。
+ */
+export const PENDING_TRACK_FILES = new Set(['ending']);
+
+/**
+ * 音源の読み込みに失敗した時の代替曲。mp3が404でもplay()は例外を投げず
+ * 黙って無音になるので、代わりに既存曲へ逃がす。`ending.mp3`が届くまでの間、
+ * エンディングロールは従来の想定どおり⑯「玉座の重み」で鳴る。
+ */
+const TRACK_FALLBACK = {
+  ending: 'chinu',
 };
 
 // mapId(board.jsのMAPS)→専用トラック。無いキーはplayMapTheme側でboardに
@@ -118,6 +136,11 @@ let musicPlaybackAllowed = false;
 // 専用曲ではなくこの曲を鳴らす。盤面を閉じる（blockMusicPlayback）と必ず
 // 解除されるので、次のストーリー／CPU戦へ持ち越さない。
 let bgmOverride = null;
+// 読み込みに失敗したトラック（TRACK_FALLBACKで代替曲へ差し替える）。
+const failedTracks = new Set();
+// カットシーン（エンディングロール）中に鳴らす曲。非nullの間だけ「盤面が
+// 見えていること」の条件を外す代わりに、この曲以外への切り替えを拒否する。
+let cinematicTrack = null;
 
 /** 盤面BGMを指定の曲で上書きする。nullでマップ標準へ戻す。 */
 export function setBgmOverride(track) {
@@ -149,6 +172,18 @@ function getAudioEl(track) {
     el.loop = true;
     el.muted = muted;
     el.volume = muted ? 0 : volumeFor(track);
+    // 音源が404／壊れている時は代替曲へ逃がす（無音にしない）。失敗を集合へ
+    // 記録しておくのは、errorが「最初のタップでの一括アンロック時」に出て
+    // しまい、本番の再生時にはもう発火しないため（要素は使い回すので
+    // networkStateがNO_SOURCEのままplay()だけが静かに失敗する）。
+    if (TRACK_FALLBACK[track]) {
+      el.addEventListener('error', () => {
+        failedTracks.add(track);
+        if (currentTrack !== track) return;
+        currentTrack = null;
+        playTrack(track); // resolveTrackが代替曲へ差し替える
+      }, { once: true });
+    }
     audioEls[track] = el;
   }
   return audioEls[track];
@@ -225,9 +260,21 @@ function boardIsVisible() {
   return !!app && !app.classList.contains('hidden');
 }
 
-function playTrack(track) {
+/** 音源が読めなかった曲は代替曲へ読み替える（無ければそのまま）。 */
+function resolveTrack(track) {
+  return failedTracks.has(track) ? (TRACK_FALLBACK[track] ?? track) : track;
+}
+
+function playTrack(requested) {
   // pagehide後に古い戦闘演出Promiseが完了してplayMapThemeを呼んでも再生しない。
-  if (pageExited || !musicPlaybackAllowed || !boardIsVisible()) return;
+  if (pageExited) return;
+  const track = resolveTrack(requested);
+  if (cinematicTrack) {
+    // カットシーン中は盤面が閉じているので boardIsVisible() は使えない。
+    // 代わりに「指定した曲以外は鳴らさない」で守る（遅れて届いた
+    // playMapTheme／playBattleThemeがエンディング曲を上書きしない）。
+    if (track !== resolveTrack(cinematicTrack)) return;
+  } else if (!musicPlaybackAllowed || !boardIsVisible()) return;
   if (muted) {
     if (currentTrack && currentTrack !== track) getAudioEl(currentTrack).pause();
     currentTrack = track;
@@ -274,7 +321,25 @@ export function allowMusicPlayback() {
 export function blockMusicPlayback() {
   musicPlaybackAllowed = false;
   bgmOverride = null;
+  cinematicTrack = null;
   stopMusic();
+}
+
+/**
+ * カットシーン（エンディングロール）用のBGM。盤面(#app)を閉じた後に流す曲
+ * なので、`playTrack`の「盤面が見えている時だけ」の門番を通れない
+ * （通せないままだとエンディングロールが無音になる）。この関数だけが例外で、
+ * 明示的に指定された1曲を鳴らす。必ず`endCinematicMusic()`で終わらせること。
+ */
+export function startCinematicMusic(track) {
+  if (!TRACK_SRC[track]) return;
+  cinematicTrack = track;
+  playTrack(track);
+}
+
+/** カットシーンの終わり。例外・スキップ時も必ず通す（finallyで呼ぶ）。 */
+export function endCinematicMusic() {
+  blockMusicPlayback();
 }
 
 window.addEventListener('pagehide', () => {
