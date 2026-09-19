@@ -30,12 +30,15 @@
 - `src/game.js` は three.js / Firebase を import しない状態を保つ
   （`tests/pvpCloud.test.mjs` が静的に見張っている）。
 - `wrangler.jsonc` の `vars` に `DEV_ALLOW_UNVERIFIED_UID` を入れない（`.dev.vars` 専用）。
-- デプロイに影響する変更では `public/sw.js` の `CACHE_NAME` を bump する（現在 v312）。
+- デプロイに影響する変更では `public/sw.js` の `CACHE_NAME` を bump する
+  （**数字の正はこのファイルではなく `public/sw.js`**。ここは古くなるので見ない）。
+- テストを新設したら `package.json` の `test:*` のどれかに必ず足す。
+  スクリプトに入っていないテストファイルは `npm run test:all` でも走らず、そのまま腐る。
 
 ### 確認コマンド
 ```
 npm run lint && npm run build
-npm run test:cards && npm run test:pvp && npm run test:cloud
+npm run test:all        # cards / pvp / cloud / story をまとめて
 npm run cf:dry-run
 ```
 
