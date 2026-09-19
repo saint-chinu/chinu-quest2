@@ -1914,18 +1914,19 @@ export const CHARACTER_DECKS = {
    *   最優先で破壊し、対象プレイヤーもパンデミック保持者を先に見る。
    * - 言論封殺2: `_cpuMaybeUseSpellBanSpell`はパンデミック保持者を優先して3ターン封じる。
    *   ターン内の呼び出し順は破壊→封殺なので、手札に両方あれば先に破壊する。
-   * 枠はアイキャンフライ2・財布チューチュー1・ホライズン1から。モンスター・アイテムは⑱と同一。
+   * スペルの枠はアイキャンフライ2・財布チューチュー1・ホライズン1から。
+   * ⑲のみエレキ輝1枚を怨念の集合体に変更（計3枚）。アイテムは⑱と同一。
    * 真エンドは「激ムズでいい」（ユーザー指定）ので難度は絞らない。固定40枚。
    */
   chinuFinal: {
     composition: {
       monsters: [
         { def: MONSTER_CATALOG.tenhou, count: 4 },
-        { def: MONSTER_CATALOG.erekiKagayaki, count: 4 },
+        { def: MONSTER_CATALOG.erekiKagayaki, count: 3 },
         { def: MONSTER_CATALOG.thunderbird, count: 4 },
         { def: MONSTER_CATALOG.ninja, count: 4 },
         { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 },
-        { def: MONSTER_CATALOG.onnenNoShuugoutai, count: 2 },
+        { def: MONSTER_CATALOG.onnenNoShuugoutai, count: 3 },
         { def: MONSTER_CATALOG.metaOn, count: 1 },
       ],
       items: [

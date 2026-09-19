@@ -3633,14 +3633,18 @@ test('⑲のチヌ決戦デッキ(chinuFinal)は⑱と同じ骨格でパンデ�
   const countOf = (name) => deck.filter((c) => c.name === name).length;
   assert.equal(countOf('言論封殺'), 2);
   assert.equal(countOf('キャンセルカルチャー'), 4);
-  assert.equal(countOf('怨念の集合体'), 2);
+  assert.equal(countOf('怨念の集合体'), 3);
+  assert.equal(countOf('エレキ輝'), 3);
   assert.equal(countOf('合体ロボ・ガシャーン'), 0, '合体系は禁止');
-  // モンスター・アイテムは⑱のchinuと同一（差はスペルだけ）。
+  // ⑱は変更せず、⑲だけエレキ輝1枚を怨念の集合体へ差し替える。
   const key = (c) => c.name;
   const base = buildCharacterCardList('chinu');
-  for (const type of [CardType.MONSTER, CardType.GEAR]) {
-    assert.deepEqual(deck.filter((c) => c.type === type).map(key).sort(), base.filter((c) => c.type === type).map(key).sort(), `${type}が⑱と違う`);
-  }
+  assert.equal(base.filter((c) => c.name === '怨念の集合体').length, 2);
+  assert.equal(base.filter((c) => c.name === 'エレキ輝').length, 4);
+  const expectedMonsters = base.filter((c) => c.type === CardType.MONSTER).map(key);
+  expectedMonsters.splice(expectedMonsters.indexOf('エレキ輝'), 1, '怨念の集合体');
+  assert.deepEqual(deck.filter((c) => c.type === CardType.MONSTER).map(key).sort(), expectedMonsters.sort());
+  assert.deepEqual(deck.filter((c) => c.type === CardType.GEAR).map(key).sort(), base.filter((c) => c.type === CardType.GEAR).map(key).sort());
   // ターン内はキャンセルカルチャー（破壊）→言論封殺（封じ）の順で判定される。
   const src = readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');
   assert.ok(src.indexOf('await this._cpuMaybeUseCancelCultureSpell(this.currentPlayer);') < src.indexOf('await this._cpuMaybeUseSpellBanSpell(this.currentPlayer);'), '破壊より先に封じてしまう');
