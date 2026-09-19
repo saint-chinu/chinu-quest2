@@ -33,10 +33,15 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
   （build:cf 込み）を使う。Firebase の App Check を有効化する時は reCAPTCHA の
   許可ドメインに workers.dev（独自ドメインならそれ）を足すこと。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v318`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v319`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ### BGMコレクション `/bgm/`（2026-09）
+2026-09-20: 提供音源`stage19bgm.mp3`を`public/audio/`へ無加工で収録。
+⑲`ou-final`の`bgmTrack:'twoKings'`（初戦・再戦共通）とサウンドルームに
+「♪２人の王」を追加。約180.024秒。盤面は⑱と共有だが、⑱の`kingDuel`は変更しない。
+サムネは共有背景の`s18.jpg`。対人BGM選択にも登録。エンディング曲`chinu`は維持。
+
 全BGMを聴ける単体ページ。`public/bgm/`（index.html + sound-room.css +
 sound-room.js）に置いてあり、**Viteは`public/`を素通しでコピーするだけ**なので
 バンドルもパス書き換えもされない。

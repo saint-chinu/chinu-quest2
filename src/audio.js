@@ -34,6 +34,7 @@ export const TRACK_SRC = {
   chinu: assetUrl('/audio/stage16bgm.mp3'), // ⑯魚群の王チヌ
   seaLabor: assetUrl('/audio/stage17bgm.mp3'), // ⑰海底労働施設・レジスタンスの反乱
   kingDuel: assetUrl('/audio/stage18bgm.mp3'), // ⑱チヌとの決戦（ストーリー側で指定）
+  twoKings: assetUrl('/audio/stage19bgm.mp3'), // ⑲２人の王（⑱と盤面共有なのでストーリー側で指定）
 };
 
 // mapId(board.jsのMAPS)→専用トラック。無いキーはplayMapTheme側でboardに
@@ -84,6 +85,7 @@ export const SELECTABLE_BGM = [
   { track: 'chinu', title: '♪玉座の重み' },
   { track: 'seaLabor', title: '♪海底労働施設の反乱' },
   { track: 'kingDuel', title: '♪王手' },
+  { track: 'twoKings', title: '♪２人の王' },
   { track: 'battle', title: '♪一触即発' },
 ];
 

@@ -1402,6 +1402,7 @@ export const STORY_STAGES = [
   },
   {
     key: 'ou-final',
+    bgmTrack: 'twoKings',
     // ⑱と同じ盤面（ユーザー指定「クリアしたら同じステージでチヌ＆クエのコンビが
     // ラスボス」）。keyは盤面idと別なので、main.jsはmapIdで盤面を引く。
     mapId: 'ou',

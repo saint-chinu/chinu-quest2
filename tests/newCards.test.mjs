@@ -2242,6 +2242,20 @@ test('BGMの参照先mp3はすべてpublic/audio/に実在する', () => {
   }
 });
 
+test('⑲の２人の王は専用BGMで、⑱の王手・エンディング曲を変えない', () => {
+  const stage = STORY_STAGES.find((s) => s.key === 'ou-final');
+  assert.equal(stage.bgmTrack, 'twoKings');
+  assert.equal(STORY_STAGES.find((s) => s.key === 'ou').bgmTrack, 'kingDuel');
+  assert.match(TRACK_SRC.twoKings, /\/audio\/stage19bgm\.mp3$/);
+  assert.ok(SELECTABLE_BGM.some((entry) => entry.track === 'twoKings' && entry.title === '♪２人の王'));
+  const room = readFileSync(new URL('../public/bgm/sound-room.js', import.meta.url), 'utf8');
+  assert.match(room, /no: '⑲', file: 'stage19bgm\.mp3', title: '♪２人の王'/);
+  assert.ok(existsSync(new URL('../public/images/stage/thumb/s18.jpg', import.meta.url)));
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  assert.ok(main.includes('bgmTrack: variant.bgmTrack ?? stage.bgmTrack ?? null'), '初戦・再戦でステージ指定曲を引き継ぐ');
+  assert.ok(main.includes("setBgmOverride('chinu')"), 'エンディング曲は従来どおり');
+});
+
 test('⑯のステージBGMは専用曲（stage16bgm.mp3）', () => {
   assert.equal(MAP_TRACK.chinu, 'chinu');
   assert.match(TRACK_SRC.chinu, /\/audio\/stage16bgm\.mp3$/);
