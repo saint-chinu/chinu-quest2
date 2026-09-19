@@ -3251,9 +3251,9 @@ test('⑰の敵AIは両方ともお札のfixer（片方だけでは効かない�
   assert.ok(MAPS.find((m) => m.id === 'roudou').hasOfuda);
 });
 
-test('⑱の盤面は「王」の字・94マス・CP4・行き止まり0', () => {
+test('⑱の盤面は細い「王」の字・46マス・CP4', () => {
   const tiles = createBoard('ou');
-  assert.equal(tiles.length, 94, '土地85＋スタート1＋CP4＋…現行最大（⑤の85マス超え）');
+  assert.equal(tiles.length, 46, '細い王型の土地41＋スタート1＋CP4');
 
   // スタートは下の横棒の左端、CPは上の横棒の両端・中央の玉座・下の横棒の右端。
   const start = tiles.filter((t) => t.type === TileType.START);
@@ -3261,7 +3261,7 @@ test('⑱の盤面は「王」の字・94マス・CP4・行き止まり0', () =>
   assert.deepEqual([start[0].gridZ, start[0].gridX], [13, 0]);
   const cps = tiles.filter((t) => t.type === TileType.EVENT);
   assert.deepEqual(cps.map((t) => t.checkpointNumber), [1, 2, 3, 4], 'ユーザー指定「CPは4つまで」');
-  assert.deepEqual(cps.map((t) => [t.gridZ, t.gridX]), [[0, 2], [0, 12], [7, 7], [13, 14]]);
+  assert.deepEqual(cps.map((t) => [t.gridZ, t.gridX]), [[0, 2], [0, 12], [6, 7], [13, 14]]);
 
   // 全マスがスタートから到達できること。
   const seen = new Set([start[0].id]);
@@ -3269,14 +3269,13 @@ test('⑱の盤面は「王」の字・94マス・CP4・行き止まり0', () =>
   while (stack.length) for (const n of tiles[stack.pop()].neighbors) if (!seen.has(n)) { seen.add(n); stack.push(n); }
   assert.equal(seen.size, tiles.length, '孤立したマスがある');
 
-  // ⚠️ ここが「王」の字を成立させている条件。横棒を1マス幅にすると端6か所が
-  // 行き止まりになり、往復専用の盤面へ退化する。2行厚・3列厚を崩さないこと。
-  assert.deepEqual(tiles.filter((t) => t.neighbors.length === 1).map((t) => t.id), [], '行き止まりを作らない');
+  // 細い棒の端は行き止まりになるが、_movePlayerが折り返せるため正常。
+  assert.equal(tiles.filter((t) => t.neighbors.length === 1).length, 6, '王型の端6か所');
 
-  // 属性は4種各21マス＋無属性5マス。
+  // 属性は4種各10マス＋無属性1マス。
   const counts = {};
   for (const t of tiles.filter((t) => t.type === TileType.LAND)) counts[t.element] = (counts[t.element] || 0) + 1;
-  assert.deepEqual(counts, { fire: 21, water: 21, forest: 21, thunder: 21, neutral: 5 });
+  assert.deepEqual(counts, { fire: 10, water: 10, forest: 10, thunder: 10, neutral: 1 });
 
   // ⚠️ 最大連鎖3。チヌの国士無双！！は「連鎖数×4」なので、素の盤面で連鎖が
   // 伸びていると初手から跳ねてしまう。放水で塗って初めて伸びる前提を守る。
