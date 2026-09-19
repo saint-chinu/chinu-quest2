@@ -9978,19 +9978,33 @@ export class Game {
     const isDestroyable = (c) => c.type === CardType.SPELL || c.type === CardType.GEAR;
     const isPriority = (c) => CANCEL_CULTURE_PRIORITY_IDS.has(catalogIdOf(c));
     const holdsPriority = (p) => p.hand.some((c) => isDestroyable(c) && isPriority(c));
+    // ⑲コンビ: 1種類しかないスペル/装備を削り、行動の選択肢を断つ。
+    // 同名複数枚も「1種類」。両方なら最後の1枚を優先し、同数なら装備。
+    const denyOptions = !!player.aiProfile?.cancelCultureDenyOptions;
+    const scarceCards = (p) => [CardType.GEAR, CardType.SPELL].flatMap((type) => {
+      const cards = p.hand.filter((c) => c.type === type);
+      return new Set(cards.map(catalogIdOf)).size === 1 ? cards : [];
+    });
     const targetPlayer = this.players
       .filter((p) => !p.defeated && p.id !== player.id
         && !(p.allianceId != null && p.allianceId === player.allianceId)
         && p.hand.some(isDestroyable))
       // パンデミックを握っている相手を、総資産より先に見る。
       .sort((a, b) => (holdsPriority(b) ? 1 : 0) - (holdsPriority(a) ? 1 : 0)
+        || (denyOptions ? Number(b.isCPU === false) - Number(a.isCPU === false) : 0)
+        || (denyOptions ? Number(scarceCards(b).length > 0) - Number(scarceCards(a).length > 0) : 0)
         || this._totalAssetsOf(b) - this._totalAssetsOf(a))[0];
     if (!targetPlayer) return;
 
     const destroyable = targetPlayer.hand.filter(isDestroyable);
     const priority = destroyable.filter(isPriority);
     const items = destroyable.filter((c) => c.type === CardType.GEAR);
-    const targetCard = (priority.length > 0 ? priority : items.length > 0 ? items : destroyable)
+    const scarce = denyOptions ? scarceCards(targetPlayer).sort((a, b) =>
+      destroyable.filter((c) => c.type === a.type).length - destroyable.filter((c) => c.type === b.type).length
+      || Number(b.type === CardType.GEAR) - Number(a.type === CardType.GEAR)
+      || (b.cost || 0) - (a.cost || 0)) : [];
+    const targetCard = priority.length === 0 && scarce.length > 0 ? scarce[0]
+      : (priority.length > 0 ? priority : items.length > 0 ? items : destroyable)
       .sort((a, b) => (b.cost || 0) - (a.cost || 0))[0];
     if (!targetCard) return;
 

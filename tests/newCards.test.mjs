@@ -2705,6 +2705,31 @@ function makeCancelCultureGame() {
 const asItem = (def, id) => ({ ...def, catalogId: def.id, id, type: CardType.GEAR });
 const asSpell = (def, id) => ({ ...def, catalogId: def.id, id, type: CardType.SPELL });
 
+test('⑲の手札破壊は唯一のスペル・装備を狙い、同名複数枚も1種類と数える', async () => {
+  for (const spellCount of [1, 2]) {
+    const { g, casts, hero } = makeCancelCultureGame();
+    g.players[0].aiProfile = { cancelCultureDenyOptions: true };
+    hero.hand = [asItem(ITEM_CATALOG.knife, 'i1'), asItem(ITEM_CATALOG.zangokuKen, 'i2'),
+      ...Array.from({ length: spellCount }, (_, i) => asSpell(SPELL_CATALOG.iCanFly, `s${i}`))];
+    await g._cpuMaybeUseCancelCultureSpell(g.players[0]);
+    assert.equal(casts.at(-1).targetCardId, 's0');
+    hero.hand = [asItem(ITEM_CATALOG.knife, 'i1'), asSpell(SPELL_CATALOG.iCanFly, 's1'),
+      asSpell(SPELL_CATALOG.senbonZakura, 's2')];
+    await g._cpuMaybeUseCancelCultureSpell(g.players[0]);
+    assert.equal(casts.at(-1).targetCardId, 'i1');
+  }
+});
+
+test('⑲の手札破壊は敵CPUより人間を優先し、同盟者は狙わない', async () => {
+  const { g, casts, hero } = makeCancelCultureGame();
+  g.players[0].aiProfile = { cancelCultureDenyOptions: true };
+  hero.hand = [asSpell(SPELL_CATALOG.iCanFly, 'hero-spell')];
+  g.players.push({ id: 3, isCPU: true, hand: [asItem(ITEM_CATALOG.zangokuKen, 'cpu-item')] });
+  g._totalAssetsOf = (p) => p.id === 3 ? 10000 : 1000;
+  await g._cpuMaybeUseCancelCultureSpell(g.players[0]);
+  assert.equal(casts.at(-1).targetPlayerId, hero.id);
+});
+
 test('キャンセルカルチャーは高コストのスペルより先にアイテムを潰す', async () => {
   const { g, casts, hero } = makeCancelCultureGame();
   // 千本桜100G（スペル）とナイフ5G（アイテム）。コスト順ならスペルを狙うが、
@@ -3585,6 +3610,7 @@ test('⑲は⑱と同じ盤面で主人公 vs チヌ＆クエ、3,000G差でサ�
   assert.equal(stage.opponents[0].deckKey, 'chinuFinal', '⑲はパンデミック封じの決戦版');
   assert.deepEqual(stage.opponents[0].aiProfile, {
     ofudaStyle: 'fixer', huntMinLandLevel: 3,
+    cancelCultureDenyOptions: true,
     levelPumpSignal: { allyName: 'クエ', elements: ['thunder'], toLevel2: 0, unleash: 20 },
   }, '⑲専用の狩り下限と雷お札の投資連携');
   for (const o of stage.opponents) assert.equal(o.startingCurrency, undefined, '片寄せの初期資金補正は置かない');
@@ -3709,6 +3735,7 @@ test('⑲のクエは専用の経済40枚で、⑫⑬と盤面・救援条件を
   assert.deepEqual(que.aiProfile, {
     ofudaStyle: 'fixer', lapRacer: true, minWinProbabilityToInvade: 0.9,
     highValueAvoidance: 0.9, ofudaAllyPumpElements: ['thunder'],
+    cancelCultureDenyOptions: true,
     scatterSummons: true,
   });
   const deck = buildCharacterCardList(que.deckKey);
@@ -3718,7 +3745,7 @@ test('⑲のクエは専用の経済40枚で、⑫⑬と盤面・救援条件を
   assert.equal(deck.filter((c) => c.type === CardType.SPELL).length, 18);
   const expected = {
     koutetsuYousai: 4, tetsuo: 4, thunderbird: 4, freelancer: 2, tenhou: 2,
-    raijinNoTate: 4, lifeJacket: 2, iCanFly: 4, homingInstinct: 4,
+    raijinNoTate: 4, lifeJacket: 2, iCanFly: 2, cancelCulture: 2, homingInstinct: 4,
     sideIncome: 4, capitalismIncarnate: 2, genronFuusatsu: 1, electrify: 1, horizon: 2,
   };
   for (const [key, count] of Object.entries(expected)) {

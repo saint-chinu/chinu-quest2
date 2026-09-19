@@ -1517,6 +1517,7 @@ export const STORY_STAGES = [
         // 3なら救援経路43.3%・真エンド経路は激ムズのまま。
         aiProfile: {
           ofudaStyle: 'fixer', huntMinLandLevel: 3,
+          cancelCultureDenyOptions: true,
           levelPumpSignal: { allyName: 'クエ', elements: [Element.THUNDER], toLevel2: 0, unleash: 20 },
         },
       },
@@ -1532,6 +1533,7 @@ export const STORY_STAGES = [
           minWinProbabilityToInvade: 0.9,
           highValueAvoidance: 0.9,
           ofudaAllyPumpElements: [Element.THUNDER],
+          cancelCultureDenyOptions: true,
           scatterSummons: true, // ⑲のみ無属性空地で廉価な展開。通常価格帯は軍資金450Gを基準にお札投資。
         },
       },

@@ -1744,7 +1744,8 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.lifeJacket, count: 2 },
       ],
       spells: [
-        { def: SPELL_CATALOG.iCanFly, count: 4 },
+        { def: SPELL_CATALOG.iCanFly, count: 2 },
+        { def: SPELL_CATALOG.cancelCulture, count: 2 },
         { def: SPELL_CATALOG.homingInstinct, count: 4 },
         { def: SPELL_CATALOG.sideIncome, count: 4 },
         { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },
