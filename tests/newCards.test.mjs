@@ -3421,8 +3421,8 @@ test('⑱はチヌとの1vs1・対等500G・お札あり・fixer付きで、会�
   assert.equal(stage.opponents[0].name, 'チヌ');
   assert.equal(stage.opponents[0].deckKey, 'chinu');
   assert.equal(stage.opponents[0].startingCurrency, undefined);
-  assert.deepEqual(stage.opponents[0].aiProfile, { ofudaStyle: 'fixer', huntMinLandLevel: 2 },
-    'fixerが無いと50%→25%。huntMinLandLevel:2が無いと親衛隊がLv1まで刈って97.5%になる');
+  assert.deepEqual(stage.opponents[0].aiProfile, { ofudaStyle: 'fixer', huntMinLandLevel: 1 },
+    '狩り強化の指定によりLv1から対象にする');
   assert.ok(MAPS.find((m) => m.id === 'ou').hasOfuda, 'お札あり（ユーザー指定）');
   // 会話（ユーザー指定の全文）。
   assert.equal(stage.intro.length, 6);
@@ -3612,7 +3612,7 @@ test('⑲は⑱と同じ盤面で主人公 vs チヌ＆クエ、3,000G差でサ�
   assert.deepEqual(stage.opponents.map((o) => o.name), ['チヌ', 'クエ']);
   assert.equal(stage.opponents[0].deckKey, 'chinuFinal', '⑲はパンデミック封じの決戦版');
   assert.deepEqual(stage.opponents[0].aiProfile, {
-    ofudaStyle: 'fixer', huntMinLandLevel: 3,
+    ofudaStyle: 'fixer', huntMinLandLevel: 1,
     cancelCultureDenyOptions: true,
     levelPumpSignal: { allyName: 'クエ', elements: ['thunder'], toLevel2: 0, unleash: 20 },
   }, '⑲専用の狩り下限と雷お札の投資連携');
@@ -3738,6 +3738,7 @@ test('⑲のクエは専用の経済40枚で、⑫⑬と盤面・救援条件を
   assert.deepEqual(que.aiProfile, {
     ofudaStyle: 'fixer', lapRacer: true, minWinProbabilityToInvade: 0.9,
     highValueAvoidance: 0.9, ofudaAllyPumpElements: ['thunder'],
+    levelUpElements: ['thunder'],
     cancelCultureDenyOptions: true,
     scatterSummons: true,
   });
@@ -3749,7 +3750,7 @@ test('⑲のクエは専用の経済40枚で、⑫⑬と盤面・救援条件を
   const expected = {
     koutetsuYousai: 4, tetsuo: 4, thunderbird: 4, freelancer: 2, tenhou: 2,
     raijinNoTate: 4, lifeJacket: 2, iCanFly: 2, cancelCulture: 2, homingInstinct: 4,
-    sideIncome: 4, capitalismIncarnate: 2, genronFuusatsu: 1, electrify: 1, horizon: 2,
+    sideIncome: 4, capitalismIncarnate: 2, genronFuusatsu: 1, electrify: 1, delayTactics: 1, psychokinesis: 1,
   };
   for (const [key, count] of Object.entries(expected)) {
     const def = MONSTER_CATALOG[key] || ITEM_CATALOG[key] || SPELL_CATALOG[key];
@@ -3828,11 +3829,97 @@ test('⑲のチヌは経済連携40枚でもパンデミック封じを維持し
   assert.ok(src.indexOf('await this._cpuMaybeUseCancelCultureSpell(this.currentPlayer);') < src.indexOf('await this._cpuMaybeUseSpellBanSpell(this.currentPlayer);'), '破壊より先に封じてしまう');
 });
 
+test('クエの余剰現金は割安な別属性へ少額分散し、本命と軍資金を残す', async () => {
+  for (const cash of [999, 1000, 2000]) {
+    const player = { id: 0, name: 'クエ', currency: cash, hand: [], aiProfile: {} };
+    const g = makeStub([], [player]);
+    const market = [{ element: 'thunder', price: 40, basePrice: 20 }, { element: 'water', price: 10, basePrice: 10 }];
+    const buys = [];
+    Object.assign(g, {
+      _ofudaMarketSummary: () => market, _ofudaOwnElementsOf: () => ['thunder'],
+      _ofudaPrice: () => 40, _cpuMaxEnemyToll: () => 0,
+      _rankOfudaBuyCandidates: () => market, _presentOfudaPriceChange: async () => {},
+      _buyOfuda: (p, element, budget, options = {}) => {
+        const price = market.find((e) => e.element === element).price;
+        const bought = Math.min(options.maxSheets ?? Infinity, Math.floor(budget / price));
+        const spent = bought * price;
+        p.currency -= spent;
+        buys.push({ element, spent, bought });
+        return { spent, bought, before: price };
+      },
+    });
+    await g._cpuMaybeTradeOfuda(player);
+    assert.equal(buys.some((b) => b.element === 'water'), cash >= 1000);
+    assert.ok(buys.filter((b) => b.element === 'water').every((b) => b.spent <= 200 && b.bought <= 10));
+    assert.equal(buys.at(-1).element, 'thunder');
+    assert.ok(player.currency >= 600);
+  }
+});
+
+test('CPUは相手が無装備なら架空の装備を想定して浪費しない', () => {
+  const attacker = unit(mon('攻', 40, 40), 'A');
+  const defender = unit(mon('守', 20, 10), 'B');
+  const g = makeStub([], [{ id: 'A' }, { id: 'B', currency: 500, hand: [] }]);
+  const sword = ITEM_CATALOG.osafune;
+  assert.equal(g._assumedOpponentItem([sword], defender), null);
+  assert.equal(g._chooseBattleItemByOutcome([sword], 'チヌ', attacker, defender, makeTile(0), false), null);
+  g.players[1].hand = [sword];
+  assert.equal(g._assumedOpponentItem([], defender), sword);
+  g.players[1].currency = -1;
+  assert.equal(g._assumedOpponentItem([sword], defender), null);
+});
+
+test('戦闘予測は怨念の恒久成長を保存し、実体のHP・呪い・装備を変えない', () => {
+  const original = unit(MONSTER_CATALOG.onnenNoShuugoutai, 'A');
+  Object.assign(original, { lapGrowthAtkBonus: 25, lapGrowthHpBonus: 25, regenAtkBonus: 5 });
+  const g = makeStub([], []);
+  const copy = g._cloneFieldUnitForSim(original);
+  assert.equal(copy.lapGrowthAtkBonus, 25);
+  assert.equal(copy.lapGrowthHpBonus, 25);
+  assert.equal(copy.regenAtkBonus, 5);
+  copy.items.push({}); copy.curses.push({}); copy.currentHp = 1;
+  assert.equal(original.items.length, 0);
+  assert.equal(original.curses.length, 0);
+  assert.notEqual(original.currentHp, 1);
+});
+
+test('CPU投資は高HPの属性一致を優先し、⑲クエは雷以外に投資しない', async () => {
+  const player = { id: 0, name: 'クエ', currency: 3000, aiProfile: { levelUpElements: ['thunder'] } };
+  const land = (id, element, hp, monsterElement = element) => makeTile(id, {
+    owner: 0, element, unit: unit(mon('守備', hp, 20, { element: monsterElement }), 0),
+  });
+  const neutralUnit = land(0, 'thunder', 80, 'neutral');
+  const weak = land(1, 'thunder', 20);
+  const good = land(2, 'thunder', 40);
+  const best = land(3, 'thunder', 60);
+  const fire = land(4, 'fire', 80);
+  const g = makeStub([neutralUnit, weak, good, best, fire], [player]);
+  g._chainCount = () => 2;
+  assert.equal(g._cpuChooseLevelUpTile(player, g.tiles), best);
+  for (const tile of [neutralUnit, weak, fire]) assert.equal(await g._cpuMaybeLevelUp(player, tile), false);
+  assert.equal(g._cpuChooseLevelUpTile(player, [neutralUnit, weak, fire]), null);
+});
+
+test('怨念は最優先の強敵が倒せなくても隣の勝てる敵を狩る', async () => {
+  const player = { id: 0, name: 'チヌ', currency: 500, aiProfile: { huntMinLandLevel: 1 } };
+  const source = makeTile(0, { owner: 0, unit: unit(MONSTER_CATALOG.onnenNoShuugoutai, 0) });
+  const tough = makeTile(1, { owner: 1, unit: unit(mon('強敵', 100, 100), 1) });
+  const prey = makeTile(2, { owner: 1, unit: unit(mon('獲物', 10, 10), 1) });
+  const g = makeStub([source, tough, prey], [player, { id: 1 }]);
+  g._moveCommandCandidates = () => [{ tile: tough }, { tile: prey }];
+  g._rankAutoInvadeTargets = () => [tough, prey];
+  g._estimateUnitBattleWinProbability = (u, t, target) => target === prey ? 1 : 0;
+  let attacked = null;
+  g._cpuMoveOwnedUnit = async (p, s, target) => { attacked = target; };
+  await g._runKillGrowthHunters(player);
+  assert.equal(attacked, prey);
+});
+
 test('⑲チヌの投資連携は仕込み前もLv2まで許可し、雷お札20枚で解放する', async () => {
   const stage = STORY_STAGES.find((s) => s.key === 'ou-final');
   const player = { id: 0, name: 'チヌ', currency: 3000, aiProfile: stage.opponents[0].aiProfile };
   const ally = { id: 1, name: 'クエ', ofuda: { thunder: 0, water: 99 } };
-  const tile = makeTile(0, { owner: 0, element: 'thunder' });
+  const tile = makeTile(0, { owner: 0, element: 'thunder', unit: unit(mon('守備', 40, 30, { element: 'thunder' }), 0) });
   const g = Object.create(Game.prototype);
   Object.assign(g, {
     players: [player, ally], tiles: [tile], hasOfuda: true,

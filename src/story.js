@@ -1391,11 +1391,8 @@ export const STORY_STAGES = [
         color: 0x1a237e,
         deckKey: 'chinu',
         theme: { elements: [Element.THUNDER] },
-        // ⚠️ fixerは必須（無いと同seedで50%→25%）。huntMinLandLevelは怨念の集合体の
-        // 狩り（game.jsの_runKillGrowthHunters）の絞り: Lv1の敵地まで狩ると主人公が
-        // 土地1枚まで刈られて97.5%になるので、Lv2以上に限定して85%（n=100）へ落とした。
-        // 難度を動かす時はこの2つだけ触る（CLAUDE.md「⑱の数値調整」⑩）。
-        aiProfile: { ofudaStyle: 'fixer', huntMinLandLevel: 2 },
+        // 2026-09-20: ユーザー指定で低レベル地も狩り、怨念を成長させる。
+        aiProfile: { ofudaStyle: 'fixer', huntMinLandLevel: 1 },
       },
     ],
   },
@@ -1511,12 +1508,10 @@ export const STORY_STAGES = [
         // ⑲の連携: 怨念で敵の経済基盤を崩す（勝算・資金の既存判定は維持）。
         // クエの雷お札が20枚になるまでは土地投資をLv2まで、仕込み後に本格投資する。
         // 0枚でもLv2は許可し、相方が買えない時に土地投資を完全停止させない。
-        // ⚠️ huntMinLandLevelは3から動かさない（CLAUDE.md「⑲の救援経路」）。
-        // 2にすると怨念4枚の狩りが主人公とサーティーの土地を序盤から刈り尽くし、
-        // サーティーが来ても勝率が6.7%のまま＝救援が逃げ道として機能しなくなる。
-        // 3なら救援経路43.3%・真エンド経路は激ムズのまま。
+        // 2026-09-20の狩り強化依頼が以前の難易度制限を上書き。
+        // Lv1から倒せる敵を狙う。勝率・軍資金・同盟除外の条件は維持。
         aiProfile: {
-          ofudaStyle: 'fixer', huntMinLandLevel: 3,
+          ofudaStyle: 'fixer', huntMinLandLevel: 1,
           cancelCultureDenyOptions: true,
           levelPumpSignal: { allyName: 'クエ', elements: [Element.THUNDER], toLevel2: 0, unleash: 20 },
         },
@@ -1533,6 +1528,7 @@ export const STORY_STAGES = [
           minWinProbabilityToInvade: 0.9,
           highValueAvoidance: 0.9,
           ofudaAllyPumpElements: [Element.THUNDER],
+          levelUpElements: [Element.THUNDER],
           cancelCultureDenyOptions: true,
           scatterSummons: true, // ⑲のみ無属性空地で廉価な展開。通常価格帯は軍資金450Gを基準にお札投資。
         },

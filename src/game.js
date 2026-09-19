@@ -3044,12 +3044,32 @@ export class Game {
 
     const preferred = this._rankOfudaBuyCandidates(player, market)[0];
     if (!preferred) return;
+    // 余剰現金の一部だけを割安な別属性へ分散。本命のお札・召喚用の資金は残す。
+    // 取引可能なゴール/CPでのみ実行し、ターン中の任意売買は追加しない。
+    let bargainSpent = 0;
+    if (player.name === 'クエ' && player.currency >= 1000) {
+      const bargain = [...market]
+        .filter((entry) => entry.element !== preferred.element
+          && entry.price < preferred.price && entry.price <= entry.basePrice + 5)
+        .sort((a, b) => a.price - b.price)[0];
+      const bargainBudget = Math.min(200, Math.floor(budget / 4), Math.max(0, player.currency - fixerReserve));
+      if (bargain && bargainBudget >= bargain.price) {
+        const extra = this._buyOfuda(player, bargain.element, bargainBudget, { maxSheets: 10 });
+        bargainSpent = extra.spent;
+        if (extra.bought > 0) {
+          this.onLog(`${player.name}は割安な${ELEMENT_LABEL[bargain.element]}のお札を${extra.bought}枚買い足した (-${extra.spent}G)`);
+          this._notifyState();
+          await this._presentOfudaPriceChange(bargain.element, extra.before);
+        }
+      }
+    }
     // 逐次約定では買うほど自分の取得単価が上がる。基礎価格から10G以上
     // 乖離している（＝すでに買い上がった後の）相場を全力で追いかけると
     // 高値掴み＋スリッページの二重払いになるので、打診買いに抑える。
     // 安いうちに厚く・高くなったら薄く、が公正な市場でのフィクサーの型。
     const chase = preferred.price - preferred.basePrice;
-    const spendBudget = isFixer && chase > 10 ? Math.floor(budget * 0.3) : budget;
+    const remainingBudget = Math.max(0, budget - bargainSpent);
+    const spendBudget = isFixer && chase > 10 ? Math.floor(remainingBudget * 0.3) : remainingBudget;
     const result = this._buyOfuda(player, preferred.element, spendBudget);
     if (result.bought <= 0) return;
     this.onLog(`${player.name}は${ELEMENT_LABEL[preferred.element]}のお札を${result.bought}枚購入した (-${result.spent}G)`);
@@ -6216,16 +6236,25 @@ export class Game {
 
   /**
    * CPUの投資先を優先順位順に選ぶ。無属性土地はレベルアップしない。
-   * ①2連鎖以上かつ土地と同属性のモンスター、②同属性モンスターがいる
-   * Lv1土地、③そのほかの同属性配置、④そのほかの有属性土地の順。
+   * 土地HPを受け、残りHP30以上ある配置だけに投資する。
    */
+  _cpuCanInvestInTile(player, tile) {
+    if (!tile.unit || tile.owner !== player.id || tile.element === Element.NEUTRAL) return false;
+    // 無属性のばら撒き札など、土地HPを受けない配置は投資しない。
+    if (!this._cardBenefitsFromLandElement(tile.unit.def, tile)) return false;
+    if ((tile.unit.currentHp ?? this._baseStats(tile.unit).hp) < 30) return false;
+    const focus = player.aiProfile?.levelUpElements;
+    return !focus?.length || focus.includes(tile.element);
+  }
+
   _cpuChooseLevelUpTile(player, candidates) {
     if (player.currency < 300) return null;
     const eligible = candidates.filter((tile) =>
       tile.type === TileType.LAND
       && tile.owner === player.id
       && tile.element !== Element.NEUTRAL
-      && tile.level < LEVEL_CAP,
+      && tile.level < LEVEL_CAP
+      && this._cpuCanInvestInTile(player, tile),
     );
     if (eligible.length === 0) return null;
 
@@ -6237,9 +6266,9 @@ export class Game {
       this.hasOfuda && player.name === 'クエ' && (player.ofuda?.[tile.element] || 0) > 0 ? 120 : 0
     );
     const score = (tile) => {
-      const sameElementUnit = tile.unit?.def?.element === tile.element;
+      const sameElementUnit = this._cardBenefitsFromLandElement(tile.unit.def, tile);
       const chainCount = this._chainCount(player.id, tile.element);
-      const bonus = ofudaBonus(tile);
+      const bonus = ofudaBonus(tile) + Math.min(100, tile.unit.currentHp ?? this._baseStats(tile.unit).hp);
       if (sameElementUnit && chainCount >= 2) return 400 + chainCount * 10 - tile.level + bonus;
       if (sameElementUnit && tile.level === 1) return 300 + bonus;
       if (sameElementUnit) return 200 - tile.level + bonus;
@@ -6362,9 +6391,9 @@ export class Game {
           .filter((tile) => tile.unit && tile.owner != null && tile.owner !== player.id
             && tile.level >= HUNT_MIN_LAND_LEVEL);
         const ranked = this._rankAutoInvadeTargets(source, player, adjacent);
-        const best = ranked[0];
-        if (!best) return null;
-        return this._estimateUnitBattleWinProbability(unit, null, best) >= HUNT_MIN_WIN ? best : null;
+        // 第一候補が強敵でも、別の倒せる相手がいれば狩りを止めない。
+        return ranked.find((candidate) =>
+          this._estimateUnitBattleWinProbability(unit, null, candidate) >= HUNT_MIN_WIN) ?? null;
       };
       let target = bestAdjacent();
       if (!target) {
@@ -6451,6 +6480,7 @@ export class Game {
     // 初心者が通行料で消耗するうえ、CPUの総資産が目標へ一直線に伸びる。
     // 塞ぎ込んだ男はホライズンで一律Lv2にする以外、土地へ一切投資しない。
     if (player.name === '塞ぎ込んだ男') return false;
+    if (!this._cpuCanInvestInTile(player, tile)) return false;
     const cpuLevelCap = this.tutorialMode ? 2 : LEVEL_CAP;
     // aiProfile.levelPumpSignal（コンビ戦の役割分担用）: 相方が自分の属性の
     // お札をどれだけ買い集めたかを合図にして、土地への投資を2段階で解禁する。
@@ -7285,10 +7315,12 @@ export class Game {
           }
           return good / trials;
         };
+        if (!assumedOpponentItem) return runWith(null);
         return (1 - CPU_OPPONENT_ARMED_CHANCE) * runWith(null)
           + CPU_OPPONENT_ARMED_CHANCE * runWith(assumedOpponentItem);
       };
       const noItemScore = scoreOf(null);
+      if (noItemScore === 1) return null;
       let best = null;
       let bestScore = noItemScore;
       for (const item of candidates) {
@@ -7325,14 +7357,21 @@ export class Game {
   /**
    * 装備を選ぶ時に「相手はこれを着けてくるだろう」と仮定する1枚。
    *
-   * 相手の手札は覗かない（人間が相手の時に不公平になるうえ、互いに伏せて
-   * 同時に選ぶという戦闘の建て付けにも反する）。代わりに自分の手札の中で
-   * 一番強い通常装備を「相手も同程度には武装している」代表として使う。
-   * 奪取・破壊系そのものは除く（相手も真剣白刃取りを構えている前提にすると
-   * 奪い合いの読み合いになり、1手先の見積もりでは収束しない）。
-   * 手札に通常装備が無い時は、標準的な武器としてオサフネ(ATK+30/HP+10)を置く。
+   * 戦闘で公開される所持候補から選ぶ。実際に何を選択したかは参照しない。
+   * 所有者データがない予測専用の仮ユニットだけ、従来の一般装備を仮定する。
    */
   _assumedOpponentItem(hand, opponentUnit) {
+    // アイテム候補は戦闘開始時に公開される。選択済み装備は読まず、
+    // 相手が持っていて費用を払える候補だけを仮定する。
+    const opponent = this.players?.find((player) => player.id === opponentUnit.ownerId);
+    if (Array.isArray(opponent?.hand)) {
+      if (opponentUnit.def.effect?.type === 'sacrificeWithoutItem') return null;
+      const available = opponent.hand.filter(isBattleItemCard)
+        .filter((card) => (card.cost || 0) <= (opponent.currency ?? Infinity));
+      if (!available.length) return null;
+      return available.reduce((best, card) =>
+        this._itemPowerScore(card, opponentUnit) > this._itemPowerScore(best, opponentUnit) ? card : best);
+    }
     const plain = (hand || []).filter(isBattleItemCard).filter((card) => (
       card.effect?.type !== 'stealItemBeforeAttack' && card.effect?.type !== 'destroyItemBeforeAttack'
     ));
@@ -7345,6 +7384,7 @@ export class Game {
   /** シミュレーション専用: 本物のユニットには一切触れず、items/cursesだけ独立コピーした複製を作る（resolveBattleは渡された引数を直接書き換えるため、実物を渡すと本当に装備/呪いが消し飛んでしまう）。 */
   _cloneFieldUnitForSim(unit) {
     return {
+      ...unit,
       ownerId: unit.ownerId,
       def: unit.def,
       items: unit.items.map((i) => ({ ...i })),
