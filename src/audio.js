@@ -44,12 +44,12 @@ export const TRACK_SRC = {
  * だけを免除する。ファイルを`public/audio/`へ置いたらこの集合から必ず外すこと
  * （外し忘れると、本当にファイルが消えた時に誰も気づけなくなる）。
  */
-export const PENDING_TRACK_FILES = new Set(['ending']);
+export const PENDING_TRACK_FILES = new Set();
 
 /**
  * 音源の読み込みに失敗した時の代替曲。mp3が404でもplay()は例外を投げず
- * 黙って無音になるので、代わりに既存曲へ逃がす。`ending.mp3`が届くまでの間、
- * エンディングロールは従来の想定どおり⑯「玉座の重み」で鳴る。
+ * 黙って無音になるので、代わりに既存曲へ逃がす。専用音源は収録済みだが、
+ * 読み込み失敗時の安全策として⑯「玉座の重み」を残す。
  */
 const TRACK_FALLBACK = {
   ending: 'chinu',

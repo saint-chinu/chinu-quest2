@@ -24,6 +24,7 @@ const TRACKS = [
   { no: '⑰', file: 'stage17bgm.mp3', title: '♪海底労働施設の反乱', stage: '⑰ 海底労働施設', art: 's17', dur: 119.616, wip: true },
   { no: '⑱', file: 'stage18bgm.mp3', title: '♪王手', stage: '⑱ 王の間', art: 's18', dur: 269.856, wip: true },
   { no: '⑲', file: 'stage19bgm.mp3', title: '♪２人の王', stage: '⑲ 王の真の姿（仮題）', art: 's18', dur: 180.024 },
+  { no: 'ED', file: 'ending.mp3', title: '♪エンディング', stage: 'エンディングロール', art: 's18', dur: 120.050, common: true },
   { no: '─', file: 'board-theme.mp3', title: '♪果てなき海図', stage: '専用曲の無いマップの既定曲', art: null, dur: 73.874, common: true },
   { no: '─', file: 'newbattle.mp3', title: '♪一触即発', stage: '全マップ共通の戦闘シーン曲', art: null, dur: 32.914, common: true },
 ];

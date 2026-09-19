@@ -2253,7 +2253,7 @@ test('エンディングロールは盤面を閉じた後でもBGMが鳴る（�
   // ロールはその#appを閉じた後に動くので、playMapTheme系で鳴らそうとすると
   // 黙って無音になる（実際にそうなっていた）。カットシーン専用の入口を使う。
   const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
-  const roll = main.slice(main.indexOf('async function playEndingRoll()'));
+  const roll = main.slice(main.indexOf('async function playEndingRoll()')).replace(/\r\n/g, '\n');
   const body = roll.slice(0, roll.indexOf('\n}\n'));
   assert.ok(body.includes("startCinematicMusic('ending')"), 'エンディング専用曲をカットシーン再生する');
   assert.ok(body.includes('endCinematicMusic()'), '終了時（finally）に必ず解除する');
