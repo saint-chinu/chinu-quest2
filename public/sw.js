@@ -1,4 +1,4 @@
-const CACHE_NAME = 'chinuquest2-v314';
+const CACHE_NAME = 'chinuquest2-v315';
 const APP_SHELL = ['./', './manifest.webmanifest', './icons/danballman-icon-192.png', './icons/danballman-icon-512.png'];
 
 self.addEventListener('install', (event) => {

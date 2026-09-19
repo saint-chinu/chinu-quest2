@@ -28,20 +28,25 @@ function context() {
   vm.runInContext(fn, ctx);
   return ctx;
 }
-test('rescue dialogue returns to board after four lines and clears portrait sizing markers', async () => {
+test('rescue dialogue shows Chinu last, then returns to board and clears portrait sizing markers', async () => {
   const ctx = context();
   let returned = false;
-  const lines = ['サーティー', '主人公', 'サーティー', '主人公'].map((speaker, i) => ({ speaker, text: String(i) }));
+  const lines = ['サーティー', '主人公', 'サーティー', '主人公', 'チヌ'].map((speaker, i) => ({ speaker, text: String(i) }));
   const done = ctx.playOverlayDialogueLines(lines, {
     leftName: '主人公', rightName: 'サーティー', leftPortraitUrl: 'hero', rightPortraitUrl: 'thirty',
     heroPortraitUrl: 'hero', stageKey: 'ou-final',
-    speakerSides: { 主人公: 'left', サーティー: 'right' },
-    speakerPortraitUrls: { 主人公: 'hero', サーティー: 'thirty' },
+    speakerSides: { 主人公: 'left', サーティー: 'right', チヌ: 'left' },
+    speakerPortraitUrls: { 主人公: 'hero', サーティー: 'thirty', チヌ: 'chinu' },
   }).then(() => { returned = true; });
-  for (let i = 0; i < 4; i++) {
+  for (let i = 0; i < 5; i++) {
     assert.equal(returned, false);
     assert.equal(ctx.storyOverlayText.textContent, String(i));
-    assert.equal(ctx.storyOverlayImgLeft.src, 'hero');
+    assert.equal(ctx.storyOverlayImgLeft.src, i === 4 ? 'chinu' : 'hero');
+    if (i === 4) {
+      assert.equal(ctx.storyOverlayPortraitLeft.dataset.hero, undefined);
+      assert.ok(ctx.storyOverlayBubble.classList.contains('side-left'));
+      assert.equal(ctx.storyOverlaySpeaker.textContent, 'チヌ');
+    }
     assert.equal(ctx.storyOverlayImgRight.src, 'thirty');
     assert.equal(ctx.storyOverlayPortraitRight.dataset.character, 'サーティー');
     ctx.storyOverlayDialogue.click();

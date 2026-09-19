@@ -1479,7 +1479,7 @@ export const STORY_STAGES = [
       overlay: {
         leftName: '主人公',
         rightName: 'サーティー',
-        speakerSides: { 主人公: 'left', サーティー: 'right' },
+        speakerSides: { 主人公: 'left', サーティー: 'right', チヌ: 'left' },
       },
       ally: {
         name: 'サーティー',
@@ -1492,6 +1492,7 @@ export const STORY_STAGES = [
         { speaker: '主人公', text: 'だれだ！？...ん？？アンタ、どっかで...？' },
         { speaker: 'サーティー', text: 'さぁな。ただ、俺は多勢で一人を叩くのが好きじゃねえんだ。助太刀させてもらうぜ。' },
         { speaker: '主人公', text: 'なんだかわかんねえけど、チャンスだ！' },
+        { speaker: 'チヌ', text: '...フン、おまえもその程度だったか。' },
       ],
     },
     overlaySpeakerSides: {

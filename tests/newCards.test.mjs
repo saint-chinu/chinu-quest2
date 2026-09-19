@@ -3555,10 +3555,11 @@ test('⑲は⑱と同じ盤面で主人公 vs チヌ＆クエ、3,000G差でサ�
     { speaker: '主人公', text: 'だれだ！？...ん？？アンタ、どっかで...？' },
     { speaker: 'サーティー', text: 'さぁな。ただ、俺は多勢で一人を叩くのが好きじゃねえんだ。助太刀させてもらうぜ。' },
     { speaker: '主人公', text: 'なんだかわかんねえけど、チャンスだ！' },
-  ], '救援は指定の4行だけで盤面へ戻る');
+    { speaker: 'チヌ', text: '...フン、おまえもその程度だったか。' },
+  ], '主人公の2つ目のセリフの後にチヌが発言して盤面へ戻る');
   assert.deepEqual(stage.midBattleAssist.overlay, {
     leftName: '主人公', rightName: 'サーティー',
-    speakerSides: { 主人公: 'left', サーティー: 'right' },
+    speakerSides: { 主人公: 'left', サーティー: 'right', チヌ: 'left' },
   }, '⑪の闇ホフクを⑲の救援に表示しない');
   // 設定: クエはチヌの表の姿（ユーザー指定）。主人公のツッコミで明示する。
   assert.ok(texts(stage.intro).includes('表の顔が既にフィクサーかよ！！'), 'クエ＝チヌの表の姿のくだりが無い');
