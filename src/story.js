@@ -1476,6 +1476,11 @@ export const STORY_STAGES = [
     ],
     midBattleAssist: {
       enemyAssetsLeadAtLeast: 3000,
+      overlay: {
+        leftName: '主人公',
+        rightName: 'サーティー',
+        speakerSides: { 主人公: 'left', サーティー: 'right' },
+      },
       ally: {
         name: 'サーティー',
         color: 0x232323,
@@ -1483,13 +1488,10 @@ export const STORY_STAGES = [
         theme: { elements: [Element.NEUTRAL, Element.THUNDER] },
       },
       lines: [
-        { speaker: '???', text: '王の間の扉が、静かに開く。煙草の煙と共に、見覚えのある影が入ってきた。' },
-        { speaker: 'サーティー', text: 'おいおい。王様が二人がかりで、ガキ一人を袋叩きか。フェアじゃねえな。' },
-        { speaker: 'クエ', text: '誰や、あんた。ここは部外者立ち入り禁止やで。' },
-        { speaker: 'サーティー', text: '俺はサーティー。しがない暗殺者だ。夢の中で会った坊主が、ずいぶん追い詰められてるって聞いてな。' },
-        { speaker: '主人公', text: 'サーティー……！でも、これは俺の……' },
-        { speaker: 'サーティー', text: '御託はいい。死んだら何も守れねえ。坊主、背中は預かる。ここからは二対二だ。' },
-        { speaker: 'チヌ', text: 'フン、何匹来ようが同じこと。まとめて骨にしてくれる。' },
+        { speaker: 'サーティー', text: 'クエを追ってきたらすげぇところに出くわしちまったな。' },
+        { speaker: '主人公', text: 'だれだ！？...ん？？アンタ、どっかで...？' },
+        { speaker: 'サーティー', text: 'さぁな。ただ、俺は多勢で一人を叩くのが好きじゃねえんだ。助太刀させてもらうぜ。' },
+        { speaker: '主人公', text: 'なんだかわかんねえけど、チャンスだ！' },
       ],
     },
     overlaySpeakerSides: {

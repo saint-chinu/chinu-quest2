@@ -1991,8 +1991,7 @@ html, body {
   width: 100%;
   /* 全ストーリー共通の立ち絵サイズ。42vhでは画面に対して小さすぎたため
      引き上げた（⑪の闇・ホフク等が小さいという指摘。実測で画面高の42%
-     しかなかった）。ステージ別・キャラ別に上書きしないこと - ここ一箇所で
-     全ステージの見た目を揃える。 */
+     しかなかった）。基本は全ステージ共通。サーティーのみユーザー指定で15%拡大。 */
   max-height: 76vh;
   object-fit: contain;
   filter: drop-shadow(0 10px 18px rgba(0, 0, 0, 0.5));
@@ -2316,6 +2315,23 @@ html, body {
   max-height: 64vh;
   object-fit: contain;
   filter: drop-shadow(0 12px 20px rgba(0, 0, 0, 0.55));
+}
+
+/* ⑪・⑲のサーティー。駒は変えず会話の立ち絵だけ約15%拡大する。
+   characterは画像差し替えと同時に更新し、主人公等へ拡大を持ち越さない。 */
+.story-overlay-portrait[data-character="サーティー"],
+.story-dialogue-portrait[data-character="サーティー"] {
+  width: 71.3vw;
+  max-width: 736px;
+}
+.story-overlay-portrait[data-character="サーティー"] img {
+  max-height: min(87.4vh, calc(100dvh - 40px));
+}
+.story-dialogue-portrait[data-character="サーティー"] {
+  bottom: clamp(100px, 25vh, 150px);
+}
+.story-dialogue-portrait[data-character="サーティー"] img {
+  max-height: min(73.6vh, calc(100dvh - clamp(100px, 25vh, 150px) - 18px));
 }
 
 #story-dialogue-portrait-left {

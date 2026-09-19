@@ -5444,6 +5444,8 @@ function playDialogueLines(lines, { background, stageBadgeText } = {}) {
   storyDialoguePortraitRight.classList.remove('active');
   storyDialogueImgLeft.src = '';
   storyDialogueImgRight.src = '';
+  delete storyDialoguePortraitLeft.dataset.character;
+  delete storyDialoguePortraitRight.dataset.character;
 
   return new Promise((resolve) => {
     let i = 0;
@@ -5473,12 +5475,14 @@ function playDialogueLines(lines, { background, stageBadgeText } = {}) {
         }
         // 左枠は常に主人公のキャラクターアイコン（NPCの縦長立ち絵とは別物）。
         storyDialoguePortraitLeft.dataset.hero = 'true';
+        storyDialoguePortraitLeft.dataset.character = '主人公';
         storyDialoguePortraitLeft.classList.add('active');
         storyDialoguePortraitRight.classList.remove('active');
       } else {
         const portraitUrl = npcPortraitUrl(line.speaker);
         if (portraitUrl) {
           storyDialogueImgRight.src = portraitUrl;
+          storyDialoguePortraitRight.dataset.character = line.speaker;
           storyDialoguePortraitRight.classList.remove('hidden');
         }
         storyDialoguePortraitRight.classList.toggle('active', !!portraitUrl);
@@ -5536,6 +5540,8 @@ function playOverlayDialogueLines(lines, {
     else delete box.dataset.hero;
   };
   storyOverlayDialogue.dataset.stage = stageKey || '';
+  storyOverlayPortraitLeft.dataset.character = leftName || '';
+  storyOverlayPortraitRight.dataset.character = rightName || '';
   storyOverlayImgLeft.src = leftPortraitUrl || '';
   storyOverlayNameLeft.textContent = withHeroName(leftName);
   storyOverlayImgRight.src = rightPortraitUrl || '';
@@ -5812,7 +5818,7 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
       );
       // 左右の立ち絵はステージごとに違う（⑪＝闇・ホフク／サーティー、
       // ⑯＝魚群の王／主人公）。指定が無ければ従来の⑪の並びのまま。
-      const overlay = stage.midBattleEvent?.overlay;
+      const overlay = stage.midBattleAssist?.overlay ?? stage.midBattleEvent?.overlay;
       const leftName = overlay?.leftName ?? '闇・ホフク';
       const rightName = overlay?.rightName ?? 'サーティー';
       await playOverlayDialogueLines(event.lines || [], {
@@ -5820,7 +5826,7 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
         leftPortraitUrl: leftName === '主人公' ? iconDataUrl : npcPortraitUrl(leftName),
         rightName,
         rightPortraitUrl: rightName === '主人公' ? iconDataUrl : npcPortraitUrl(rightName),
-        speakerSides: stage.overlaySpeakerSides,
+        speakerSides: overlay?.speakerSides ?? stage.overlaySpeakerSides,
         speakerPortraitUrls,
         heroPortraitUrl: iconDataUrl,
         stageKey: stage.key,
