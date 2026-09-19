@@ -1,5 +1,6 @@
 import './style.css';
 import './pwa.js';
+import { prepareBattleAssets, cancelBattlePreparation } from './battlePreparation.js';
 import { GameScene, PIECE_REST_Y } from './scene.js';
 import { createBoard, MAPS, PVP_MAPS, TileType, createMapThumbnailCanvas, getMapBackground } from './board.js';
 import { Game } from './game.js';
@@ -4238,6 +4239,7 @@ const storyOverlaySkip = document.getElementById('story-overlay-skip');
 
 const ALL_PG_SCREENS = [loginScreen, charmakeScreen, characterIconScreen, hubScreen, adminScreen, catalogScreen, cardEditorScreen, deckScreen, deckSelectScreen, shopScreen, battleMenuScreen, breedScreen, stubScreen, storyScreen, storyDialogueScreen, pvpMenuScreen, pvpRoomScreen, pvpMapSelectScreen];
 function showScreen(el) {
+  cancelBattlePreparation();
   // showScreenで表示するのは全てログイン／メニュー系の盤面外画面。
   // 古い戦闘演出の遅延コールバックが残っていてもBGMを再開させない。
   blockMusicPlayback();
@@ -5660,7 +5662,7 @@ async function playStoryReplay(index) {
  * 値にフォールバックする（例: ダンボール男戦の再戦はopponents/ally/format
  * を一切上書きせず、introだけ差し替えた1vs1のまま）。
  */
-async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList) {
+async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList, character = currentCharacter) {
   // 再戦データでnullを明示した場合は、本編の同盟設定を引き継がず無効化する。
   const ally = Object.hasOwn(variant, 'ally') ? variant.ally : stage.ally;
   const opponents = variant.opponents ?? stage.opponents;
@@ -5669,9 +5671,9 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
 
   const configs = [
     {
-      name: currentCharacter.name,
+      name: character.name,
       isCPU: false,
-      color: currentCharacter.color,
+      color: character.color,
       allianceId: heroAllianceId,
       deckList: heroDeckList,
       iconImage,
@@ -5689,7 +5691,7 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
       color: allyDef.color,
       allianceId: heroAllianceId,
       deckList: allyDef.deckKey ? buildCharacterDeckList(allyDef.deckKey) : buildThemedDeckList(allyDef.theme),
-      iconImage: await loadNpcTokenImage(allyDef.name),
+      iconImage: loadNpcTokenImage(allyDef.name),
       elements: allyDef.theme.elements,
       aiProfile: allyDef.aiProfile,
       startingCurrency: allyDef.startingCurrency ?? stage.startingCurrency,
@@ -5705,7 +5707,7 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
       deckList: variant.copyHeroDeck
         ? heroDeckList
         : opponent.deckKey ? buildCharacterDeckList(opponent.deckKey) : buildThemedDeckList(opponent.theme),
-      iconImage: await loadNpcTokenImage(opponent.name),
+      iconImage: loadNpcTokenImage(opponent.name),
       elements: opponent.theme.elements,
       // ステージ固有のAI性格の部分上書き（story.jsのopponent.aiProfile）。
       // 同名キャラをステージごとに別の戦い方で出すために使う。
@@ -5714,22 +5716,33 @@ async function buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList)
       startGoalIndex: opponent.startGoalIndex,
     });
   }
-  return configs;
+  return Promise.all(configs.map(async (config) => ({ ...config, iconImage: await config.iconImage })));
 }
 
 async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = null, resumeState = null) {
   const stage = STORY_STAGES[index];
   const variant = isReplay ? (replayVariant || stage.replay) : stage;
-  activeStoryStageIndex = index;
-  activeStorySessionMeta = { heroDeckList, isReplay };
-  latestStoryCheckpoint = null;
-  startStoryBattleLog();
-
-  const characterIcon = await resolveCharacterIcon(currentCharacter);
-  const iconImage = characterIcon?.canvas ?? null;
+  const character = currentCharacter;
+  const prepared = await prepareBattleAssets(async () => {
+    const [characterIcon, playerConfigs, assistIcon] = await Promise.all([
+      resolveCharacterIcon(character).catch(() => null),
+      buildBattlePlayerConfigs(stage, variant, null, heroDeckList, character),
+      !isReplay && stage.midBattleAssist?.ally
+        ? loadNpcTokenImage(stage.midBattleAssist.ally.name) : null,
+    ]);
+    playerConfigs[0].iconImage = characterIcon?.canvas ?? null;
+    return { characterIcon, playerConfigs, assistIcon };
+  });
+  if (!prepared.ok) {
+    // Navigation/new preparation already owns the screen. Never reopen an old menu.
+    if (prepared.reason !== 'navigation' && prepared.reason !== 'superseded') {
+      showHubScreen();
+      if (prepared.reason !== 'cancelled') showToast('読み込みに時間がかかっています。通信状態を確認して再度お試しください。', 5000);
+    }
+    return;
+  }
+  const { characterIcon, playerConfigs, assistIcon } = prepared.value;
   const iconDataUrl = characterIcon?.dataUrl ?? null;
-
-  const playerConfigs = await buildBattlePlayerConfigs(stage, variant, iconImage, heroDeckList);
   let storyAssistEvent = null;
   if (!isReplay && stage.midBattleAssist?.ally) {
     const allyDef = stage.midBattleAssist.ally;
@@ -5739,7 +5752,7 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
       color: allyDef.color,
       allianceId: stage.heroAllianceId ?? null,
       deckList: allyDef.deckKey ? buildCharacterDeckList(allyDef.deckKey) : buildThemedDeckList(allyDef.theme),
-      iconImage: await loadNpcTokenImage(allyDef.name),
+      iconImage: assistIcon,
       elements: allyDef.theme?.elements,
       startGoalIndex: allyDef.startGoalIndex,
     };
@@ -5772,9 +5785,13 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
 
   await confirmLandscapeReady();
 
+  activeStoryStageIndex = index;
+  activeStorySessionMeta = { heroDeckList, isReplay };
+  latestStoryCheckpoint = null;
+  startStoryBattleLog();
   preGame.classList.add('hidden');
   appEl.classList.remove('hidden');
-  const startedGame = startBattle(currentCharacter, {
+  const startedGame = startBattle(character, {
     storyMode: true,
     // ヒトデ初戦だけ短い導入用マップ。再戦は従来の長いhitodeマップを使う。
     // ⑲(ou-final)のように別ステージが同じ盤面を使う場合はstage.mapIdで指定する。

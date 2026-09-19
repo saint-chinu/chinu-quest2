@@ -1,5 +1,6 @@
 import { assetUrl } from './assetUrl.js';
 import { loadPlayerIcons } from './iconSheet.js';
+import { loadImage } from './imageLoader.js';
 
 export const CHARACTER_ICON_PRESETS = [
   { id: 'chinu', name: 'チヌ', url: assetUrl('/images/player/chinu.png') },
@@ -53,18 +54,22 @@ function imageSourceToIcon(source, size = 512) {
 }
 
 function loadImageUrl(url) {
-  return new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(imageSourceToIcon(image));
-    image.onerror = () => reject(new Error(`キャラクター画像を読み込めません: ${url}`));
-    image.src = url;
-  });
+  return loadImage(url).then((image) => imageSourceToIcon(image));
+}
+
+function loadPreset(preset) {
+  if (!presetCache.has(preset.id)) {
+    presetCache.set(preset.id, loadImageUrl(preset.url).catch((error) => {
+      presetCache.delete(preset.id);
+      throw error;
+    }));
+  }
+  return presetCache.get(preset.id);
 }
 
 export function loadCharacterIconPresets() {
   return Promise.all(CHARACTER_ICON_PRESETS.map(async (preset) => {
-    if (!presetCache.has(preset.id)) presetCache.set(preset.id, loadImageUrl(preset.url));
-    return { ...preset, ...(await presetCache.get(preset.id)) };
+    return { ...preset, ...(await loadPreset(preset)) };
   }));
 }
 
@@ -106,8 +111,8 @@ export function compactCharacterIconDataUrl(icon, size = 160) {
 export async function resolveCharacterIcon(character) {
   if (character.iconImageDataUrl) return iconFromDataUrl(character.iconImageDataUrl);
   if (character.iconPreset) {
-    const presets = await loadCharacterIconPresets();
-    return presets.find((preset) => preset.id === character.iconPreset) || null;
+    const preset = CHARACTER_ICON_PRESETS.find((entry) => entry.id === character.iconPreset);
+    return preset ? { ...preset, ...(await loadPreset(preset)) } : null;
   }
   if (character.iconIndex != null) {
     const legacyIcons = await loadPlayerIcons();

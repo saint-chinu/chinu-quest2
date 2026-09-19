@@ -4,6 +4,14 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
 ストーリーモード＋CPU戦＋オンライン対人戦(PvP)。
 
 ## Stack / deploy
+
+### 2026-09-19: ストーリーのデッキ確定後の待ち固まり
+- 確定ボタンのイベント解除後に画像を無期限に逐次ロードしていたため、一覧のスクロールだけ可能で戻れない状態になっていた。
+- `battlePreparation.js` で読み込み表示／メニューに戻る／12秒上限を管理。画面遷移や新しい準備で古い準備を無効化し、遅い応答では盤面・BGMを開始しない。準備コールバック内は読み取りだけにする。
+- ストーリーの主人公・CPU・途中参戦画像は並列ロード。主人公プリセットは選択した1枚だけ取得。画像取得は5秒で打ち切り、NPCは1度再試行して失敗キャッシュを破棄する。キャンバス変換エラーもPromiseの失敗として扱う。
+- 回帰テスト: `node --test tests/battlePreparation.test.mjs`。公開先・接続設定・Worker通信処理は変更していない。
+
+### 既存の公開構成
 - Vite + Three.js + Firebase(Auth/Firestore) + PWA。
 - GitHub Pages へ `.github/workflows/deploy-pages.yml` が **`master` ブランチ**から
   自動デプロイ。masterへpushするとデプロイが走る。
@@ -25,7 +33,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
   （build:cf 込み）を使う。Firebase の App Check を有効化する時は reCAPTCHA の
   許可ドメインに workers.dev（独自ドメインならそれ）を足すこと。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v312`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v313`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ### BGMコレクション `/bgm/`（2026-09）
