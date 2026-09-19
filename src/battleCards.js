@@ -1747,9 +1747,10 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.iCanFly, count: 4 },
         { def: SPELL_CATALOG.homingInstinct, count: 4 },
         { def: SPELL_CATALOG.sideIncome, count: 4 },
-        { def: SPELL_CATALOG.capitalismIncarnate, count: 4 }, // ⑲: 財布2枚を展開札へ。チヌが空けた土地も確保する。
+        { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },
+        { def: SPELL_CATALOG.genronFuusatsu, count: 1 }, // ⑲: 展開札2枚を封殺とホライズン追加へ。
         { def: SPELL_CATALOG.electrify, count: 1 },
-        { def: SPELL_CATALOG.horizon, count: 1 },
+        { def: SPELL_CATALOG.horizon, count: 2 },
       ],
     },
   },

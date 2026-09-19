@@ -914,6 +914,26 @@ test('CPUのホライズンは自分の伸びが首位の伸びを上回る時�
   assert.deepEqual(bad.map((t) => t.level), [5, 1]);
 });
 
+test('クエのホライズンはチヌの土地も同盟資産として評価して自損を避ける', async () => {
+  for (const favorable of [true, false]) {
+    const players = [
+      { id: 'Q', name: 'クエ', allianceId: 'white', currency: 1000, hand: [spellCopy(SPELL_CATALOG.horizon)] },
+      { id: 'C', name: 'チヌ', allianceId: 'white', currency: 1000, hand: [] },
+      { id: 'H', name: '主人公', allianceId: 'red', currency: 1000, hand: [] },
+    ];
+    const tiles = [
+      makeTile(0, { owner: 'Q', level: 1 }),
+      makeTile(1, { owner: 'C', level: favorable ? 1 : 5 }),
+      makeTile(2, { owner: 'H', level: favorable ? 5 : 1 }),
+    ];
+    const levels = tiles.map((t) => t.level);
+    const g = makeCpuStub(tiles, players);
+    await g._cpuMaybeUseHorizonSpell(players[0]);
+    assert.equal(g.casts.length, favorable ? 1 : 0, '敵の高額地は下げるが、チヌの高額地だけを潰さない');
+    assert.deepEqual(tiles.map((t) => t.level), levels, '検討だけで土地を変えない');
+  }
+});
+
 test('CPUの鋼体は高価な土地の薄い守備を選び、手元が寂しければ撃たない', async () => {
   const cheap = makeTile(0, { owner: 'A', level: 1, price: 60 });
   cheap.unit = unit(mon('厚い', 60, 10), 'A');
@@ -3451,6 +3471,11 @@ test('CPUの言論封殺はスペルを一番多く握る敵へ撃ち、スペ�
   await g._cpuMaybeUseSpellBanSpell(me);
   assert.deepEqual(casts, [2], 'パンデミック保持者（1枚）を、素のスペル2枚の相手より先に封じる');
 
+  casts.length = 0;
+  me.name = 'クエ';
+  await g._cpuMaybeUseSpellBanSpell(me);
+  assert.deepEqual(casts, [2], '⑲クエも同じ封殺AIを使い、同盟相手へは撃たない');
+
   // 既に封殺済みの敵と、スペルを持たない敵しか居なければ温存。
   casts.length = 0;
   many.spellBanTurnsRemaining = 2;
@@ -3657,7 +3682,7 @@ test('⑲のクエは専用の経済40枚で、⑫⑬と盤面・救援条件を
   const expected = {
     koutetsuYousai: 4, tetsuo: 4, thunderbird: 4, freelancer: 2, tenhou: 2,
     nankaNoOmamori: 4, lifeJacket: 2, iCanFly: 4, homingInstinct: 4,
-    sideIncome: 4, capitalismIncarnate: 4, electrify: 1, horizon: 1,
+    sideIncome: 4, capitalismIncarnate: 2, genronFuusatsu: 1, electrify: 1, horizon: 2,
   };
   for (const [key, count] of Object.entries(expected)) {
     const def = MONSTER_CATALOG[key] || ITEM_CATALOG[key] || SPELL_CATALOG[key];
