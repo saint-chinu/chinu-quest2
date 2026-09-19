@@ -22,6 +22,7 @@ const TRACKS = [
   { no: '⑮', file: 'stage15bgm.mp3', title: '♪路地裏のレジスタンス', stage: '⑮ 是々非々のマーモット（自称）', art: 's15', dur: 242.160, wip: true },
   { no: '⑯', file: 'stage16bgm.mp3', title: '♪玉座の重み', stage: '⑯ 魚群の王チヌ', art: 's16', dur: 263.496, wip: true },
   { no: '⑰', file: 'stage17bgm.mp3', title: '♪海底労働施設の反乱', stage: '⑰ 海底労働施設', art: 's17', dur: 119.616, wip: true },
+  { no: '⑱', file: 'stage18bgm.mp3', title: '♪王手', stage: '⑱ 王の間', art: 's18', dur: 269.856, wip: true },
   { no: '─', file: 'board-theme.mp3', title: '♪果てなき海図', stage: '専用曲の無いマップの既定曲', art: null, dur: 73.874, common: true },
   { no: '─', file: 'newbattle.mp3', title: '♪一触即発', stage: '全マップ共通の戦闘シーン曲', art: null, dur: 32.914, common: true },
 ];
@@ -39,11 +40,30 @@ function mmss(sec) {
 }
 
 // ── 見出しの数字は全部実データから出す（曲を足しても手で直さない） ──
+// ⚠️ 曲数・内訳・範囲表示はすべてここで TRACKS から流し込む。index.html に
+// 書いてある数字は「JSが動かなかった時の見た目」用の初期値でしかないので、
+// 曲を足した時に手で直す必要はない（⑱追加時、内訳だけ手書きのままで
+// 「ステージ曲17」と古い数字が残っていたため、全部ここへ寄せた）。
 const total = TRACKS.reduce((a, t) => a + t.dur, 0);
 const longestTrack = TRACKS.reduce((a, t) => (t.dur > a.dur ? t : a), TRACKS[0]);
-document.getElementById('statCount').textContent = String(TRACKS.length);
-document.getElementById('statTime').textContent = mmss(total);
-document.getElementById('statLongest').textContent = `${longestTrack.no} ${mmss(longestTrack.dur)}`;
+const stageTracks = TRACKS.filter((t) => !t.common);
+const commonTracks = TRACKS.filter((t) => t.common);
+const setText = (id, value) => {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+};
+setText('statCount', String(TRACKS.length));
+setText('statTime', mmss(total));
+setText('statLongest', `${longestTrack.no} ${mmss(longestTrack.dur)}`);
+setText('statStage', String(stageTracks.length));
+setText('statCommon', String(commonTracks.length));
+if (stageTracks.length > 0) {
+  const first = stageTracks[0].no;
+  const last = stageTracks[stageTracks.length - 1].no;
+  setText('stageRange', `${first} — ${last} ／ 物語順`);
+  setText('ledeRange', `${first}から${last}`);
+}
+setText('ledeCommon', String(commonTracks.length));
 
 // ── 曲リスト ──────────────────────────────────────────
 const rows = [];

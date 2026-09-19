@@ -278,7 +278,9 @@ test('接続したまま質問に答えなかった人は、このターンだ�
   await waitFor(() => playerB.isCPU === true, { timeoutMs: 30000 });
   assert.equal(playerB.pvpAutoCpu, true);
   assert.equal(playerB.pvpHumanRestorePending, true, '接続中なので復帰予約が立つ');
-  assert.ok(b.received.some((m) => m.t === 'notice'), 'クライアントへ通知が届く');
+  // notice は io.send 経由＝本番と同じく非同期に届くので、isCPU の反転だけを見て
+  // 即座に assert すると取りこぼす（実際に間欠failした）。到着まで待ってから見る。
+  await waitFor(() => b.received.some((m) => m.t === 'notice'), { timeoutMs: 5000 });
   await waitFor(() => playerB.isCPU === false, { timeoutMs: 30000 });
   assert.equal(playerB.pvpAutoCpu, false, '次の手番境界で人間へ戻る');
   core.destroy();

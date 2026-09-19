@@ -22,12 +22,12 @@
     <h1>チヌクエスト<br>サウンドルーム</h1>
     <p class="lede">
       ボード×カードの海洋RPG「チヌクエスト2」で実際に鳴っている曲を、ゲーム内と同じ並びで全曲収録。
-      ステージ曲は①から⑰まで物語順、下に全マップ共通の2曲。曲名はゲーム内BGM選択画面の表記そのままです。
+      ステージ曲は<span id="ledeRange">①から⑰</span>まで物語順、下に全マップ共通の<span id="ledeCommon">2</span>曲。曲名はゲーム内BGM選択画面の表記そのままです。
     </p>
     <div class="stats">
       <span><b id="statCount">19</b> 曲</span>
       <span>総再生時間 <b id="statTime">46:46</b></span>
-      <span>ステージ曲 <b>17</b> / 共通曲 <b>2</b></span>
+      <span>ステージ曲 <b id="statStage">17</b> / 共通曲 <b id="statCommon">2</b></span>
       <span>最長 <b id="statLongest">⑭ 4:46</b></span>
       <a class="back" href="../">ゲームへ →</a>
     </div>
@@ -69,7 +69,7 @@
   <section class="group">
     <div class="group-head">
       <h2>ステージ曲</h2>
-      <span class="count">① — ⑰ ／ 物語順</span>
+      <span class="count" id="stageRange">① — ⑰ ／ 物語順</span>
     </div>
     <p class="group-note">
       尺のバーは実ファイルの長さ。②③④⑥が30秒ちょうどなのは初期の仮素材で、⑧以降はステージごとの書き下ろしに切り替わっています。

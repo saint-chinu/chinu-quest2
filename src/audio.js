@@ -83,7 +83,7 @@ export const SELECTABLE_BGM = [
   { track: 'kawada', title: '♪路地裏のレジスタンス' },
   { track: 'chinu', title: '♪玉座の重み' },
   { track: 'seaLabor', title: '♪海底労働施設の反乱' },
-  { track: 'kingDuel', title: '♪ステージ18' },
+  { track: 'kingDuel', title: '♪王手' },
   { track: 'battle', title: '♪一触即発' },
 ];
 
