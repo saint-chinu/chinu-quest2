@@ -33,6 +33,7 @@ export const TRACK_SRC = {
   kawada: assetUrl('/audio/stage15bgm.mp3'), // ⑮是々非々のマーモット（自称）
   chinu: assetUrl('/audio/stage16bgm.mp3'), // ⑯魚群の王チヌ
   seaLabor: assetUrl('/audio/stage17bgm.mp3'), // ⑰海底労働施設・レジスタンスの反乱
+  kingDuel: assetUrl('/audio/stage18bgm.mp3'), // ⑱チヌとの決戦（ストーリー側で指定）
 };
 
 // mapId(board.jsのMAPS)→専用トラック。無いキーはplayMapTheme側でboardに
@@ -82,6 +83,7 @@ export const SELECTABLE_BGM = [
   { track: 'kawada', title: '♪路地裏のレジスタンス' },
   { track: 'chinu', title: '♪玉座の重み' },
   { track: 'seaLabor', title: '♪海底労働施設の反乱' },
+  { track: 'kingDuel', title: '♪ステージ18' },
   { track: 'battle', title: '♪一触即発' },
 ];
 

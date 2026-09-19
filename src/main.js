@@ -3584,8 +3584,8 @@ function startBattle(character, storyOptions = {}) {
 
   if (!storyOptions.deferInit) startedGame.init(storyOptions.resumeState || null);
   allowMusicPlayback();
-  // 対人戦だけホストが選んだ曲で上書きする。ストーリー／CPU戦はbgmTrackを
-  // 渡さない＝必ずnullで呼ばれ、前の対戦の選曲を持ち越さない。
+  // 対人戦の選曲、またはストーリー固有曲。指定が無ければnullに戻し、
+  // 前の対戦の選曲を持ち越さずマップ標準曲を使う。
   setBgmOverride(storyOptions.bgmTrack ?? null);
   playMapTheme(currentMapId);
   requestAnimationFrame(animate);
@@ -5779,6 +5779,7 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
     // ヒトデ初戦だけ短い導入用マップ。再戦は従来の長いhitodeマップを使う。
     // ⑲(ou-final)のように別ステージが同じ盤面を使う場合はstage.mapIdで指定する。
     mapId: !isReplay && stage.key === 'hitode' ? 'hitode-first' : (stage.mapId ?? stage.key),
+    bgmTrack: variant.bgmTrack ?? stage.bgmTrack ?? null,
     // replay/secretReplayが独自のgoalCurrencyを持つ場合はそちらを優先する
     // （現状の再戦データは全て本編を継承しているが、将来の再戦調整用）。
     goalCurrency: variant.goalCurrency ?? stage.goalCurrency,
