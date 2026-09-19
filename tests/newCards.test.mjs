@@ -3365,7 +3365,7 @@ test('⑱はチヌとの1vs1・対等500G・お札あり・fixer付きで、会�
   assert.ok(stage, 'story.jsに⑱が無い');
   assert.equal(STORY_STAGES.indexOf(stage), STORY_STAGES.findIndex((s) => s.key === 'roudou') + 1, '⑰の直後に並べる');
   assert.equal(stage.format, '1vs1');
-  assert.equal(stage.goalCurrency, 22000);
+  assert.equal(stage.goalCurrency, 16000);
   // ⚠️ 対等スタート（ユーザー指定「1000スタートでよくね？」）。stageで両者1,000G、
   // opponent側の片寄せ補正は置かない。
   assert.equal(stage.startingCurrency, 1000);
