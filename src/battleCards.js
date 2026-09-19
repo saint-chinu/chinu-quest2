@@ -1747,8 +1747,7 @@ export const CHARACTER_DECKS = {
         { def: SPELL_CATALOG.iCanFly, count: 4 },
         { def: SPELL_CATALOG.homingInstinct, count: 4 },
         { def: SPELL_CATALOG.sideIncome, count: 4 },
-        { def: SPELL_CATALOG.capitalismIncarnate, count: 2 },
-        { def: SPELL_CATALOG.walletVacuum, count: 2 },
+        { def: SPELL_CATALOG.capitalismIncarnate, count: 4 }, // ⑲: 財布2枚を展開札へ。チヌが空けた土地も確保する。
         { def: SPELL_CATALOG.electrify, count: 1 },
         { def: SPELL_CATALOG.horizon, count: 1 },
       ],
@@ -1943,27 +1942,26 @@ export const CHARACTER_DECKS = {
    *   最優先で破壊し、対象プレイヤーもパンデミック保持者を先に見る。
    * - 言論封殺2: `_cpuMaybeUseSpellBanSpell`はパンデミック保持者を優先して3ターン封じる。
    *   ターン内の呼び出し順は破壊→封殺なので、手札に両方あれば先に破壊する。
-   * スペルの枠はアイキャンフライ2・財布チューチュー1・ホライズン1から。
-   * ⑲のみエレキ輝1枚を怨念の集合体に変更（計3枚）。アイテムは⑱と同一。
+   * 2026-09-20 ⑲専用の経済連携: 怨念4・フリーランサー2で侵略と周回収入を両立。
+   * ぺーの杖4でNinjaの装備倍化を安価に活かす。⑱のデッキは変更しない。
    * 真エンドは「激ムズでいい」（ユーザー指定）ので難度は絞らない。固定40枚。
    */
   chinuFinal: {
     composition: {
       monsters: [
         { def: MONSTER_CATALOG.tenhou, count: 4 },
-        { def: MONSTER_CATALOG.erekiKagayaki, count: 3 },
         { def: MONSTER_CATALOG.thunderbird, count: 4 },
         { def: MONSTER_CATALOG.ninja, count: 4 },
         { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 },
-        { def: MONSTER_CATALOG.onnenNoShuugoutai, count: 3 },
         { def: MONSTER_CATALOG.metaOn, count: 1 },
+        { def: MONSTER_CATALOG.freelancer, count: 2 },
+        { def: MONSTER_CATALOG.onnenNoShuugoutai, count: 4 },
       ],
       items: [
-        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 4 },
-        { def: ITEM_CATALOG.nankaNoOmamori, count: 4 },
+        { def: ITEM_CATALOG.peeStaff, count: 4 },
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 3 },
+        { def: ITEM_CATALOG.nankaNoOmamori, count: 3 },
         { def: ITEM_CATALOG.shinkenShirahadori, count: 2 },
-        { def: ITEM_CATALOG.peeStaff, count: 1 },
-        { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
       ],
       spells: [
         { def: SPELL_CATALOG.genronFuusatsu, count: 2 },        // チヌ専用EX。パンデミック保持者を優先して封じる

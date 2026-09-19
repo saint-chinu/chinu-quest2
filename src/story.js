@@ -1508,15 +1508,18 @@ export const STORY_STAGES = [
         // ⑲はパンデミック封じの決戦版（言論封殺2・キャンセルカルチャー4）。
         deckKey: 'chinuFinal',
         theme: { elements: [Element.THUNDER] },
-        // ⑱はLv2だが⑲は2vs1なので狩りをLv3以上に絞る（仮）。Lv2のままだと真エンド
-        // 経路（1vs2）が主人公5%・サーティー参戦後の2vs2でも15%で両経路とも
-        // ほぼ勝てない。Lv3で真エンド15%／2vs2で50%（CLAUDE.md「⑲」）。
-        aiProfile: { ofudaStyle: 'fixer', huntMinLandLevel: 3 },
+        // ⑲の連携強化: Lv2から怨念で敵の経済基盤を崩す（勝算・資金の既存判定は維持）。
+        // クエの雷お札が20枚になるまではLv2まで、仕込み後に本格投資する。
+        // 0枚でもLv2は許可し、相方が買えない時に土地投資を完全停止させない。
+        aiProfile: {
+          ofudaStyle: 'fixer', huntMinLandLevel: 2,
+          levelPumpSignal: { allyName: 'クエ', elements: [Element.THUNDER], toLevel2: 0, unleash: 20 },
+        },
       },
       {
         name: 'クエ',
         color: 0x9e9d24,
-        // ⑲専用の周回・雷お札経済。⑫⑬のクエやチヌのAIは変更しない。
+        // ⑲専用の周回・雷お札経済。⑫⑬のクエには適用しない。
         deckKey: 'queFinal',
         theme: { elements: [Element.THUNDER] },
         aiProfile: {
@@ -1525,6 +1528,7 @@ export const STORY_STAGES = [
           minWinProbabilityToInvade: 0.9,
           highValueAvoidance: 0.9,
           ofudaAllyPumpElements: [Element.THUNDER],
+          scatterSummons: true, // ⑲のみ無属性空地で廉価な展開。通常価格帯は軍資金450Gを基準にお札投資。
         },
       },
     ],

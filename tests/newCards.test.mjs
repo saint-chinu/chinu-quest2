@@ -3521,8 +3521,10 @@ test('⑲は⑱と同じ盤面で主人公 vs チヌ＆クエ、3,000G差でサ�
   assert.equal(stage.startingCurrency, 1000);
   assert.deepEqual(stage.opponents.map((o) => o.name), ['チヌ', 'クエ']);
   assert.equal(stage.opponents[0].deckKey, 'chinuFinal', '⑲はパンデミック封じの決戦版');
-  assert.deepEqual(stage.opponents[0].aiProfile, { ofudaStyle: 'fixer', huntMinLandLevel: 3 },
-    '⑲は2vs1なので狩りをLv3以上に絞る（Lv2だと真エンド経路5%・2vs2でも15%）');
+  assert.deepEqual(stage.opponents[0].aiProfile, {
+    ofudaStyle: 'fixer', huntMinLandLevel: 2,
+    levelPumpSignal: { allyName: 'クエ', elements: ['thunder'], toLevel2: 0, unleash: 20 },
+  }, '⑲専用の早期侵略と雷お札の投資連携');
   for (const o of stage.opponents) assert.equal(o.startingCurrency, undefined, '片寄せの初期資金補正は置かない');
   // サーティー参戦は「絶対差」で発火する（⑪のratioとは別条件）。
   assert.equal(stage.midBattleAssist.enemyAssetsLeadAtLeast, 3000);
@@ -3645,6 +3647,7 @@ test('⑲のクエは専用の経済40枚で、⑫⑬と盤面・救援条件を
   assert.deepEqual(que.aiProfile, {
     ofudaStyle: 'fixer', lapRacer: true, minWinProbabilityToInvade: 0.9,
     highValueAvoidance: 0.9, ofudaAllyPumpElements: ['thunder'],
+    scatterSummons: true,
   });
   const deck = buildCharacterCardList(que.deckKey);
   assert.equal(deck.length, 40);
@@ -3654,7 +3657,7 @@ test('⑲のクエは専用の経済40枚で、⑫⑬と盤面・救援条件を
   const expected = {
     koutetsuYousai: 4, tetsuo: 4, thunderbird: 4, freelancer: 2, tenhou: 2,
     nankaNoOmamori: 4, lifeJacket: 2, iCanFly: 4, homingInstinct: 4,
-    sideIncome: 4, capitalismIncarnate: 2, walletVacuum: 2, electrify: 1, horizon: 1,
+    sideIncome: 4, capitalismIncarnate: 4, electrify: 1, horizon: 1,
   };
   for (const [key, count] of Object.entries(expected)) {
     const def = MONSTER_CATALOG[key] || ITEM_CATALOG[key] || SPELL_CATALOG[key];
@@ -3700,25 +3703,61 @@ test('フリーランサーは周回の土地・お札利回りにも作用す�
   assert.deepEqual(g._computeLapBonus(player), bonus);
 });
 
-test('⑲のチヌ決戦デッキ(chinuFinal)は⑱と同じ骨格でパンデミック封じ（言論封殺2・キャンセルカルチャー4）', () => {
+test('⑲のチヌは経済連携40枚でもパンデミック封じを維持し、⑱には影響しない', () => {
   const deck = buildCharacterCardList('chinuFinal');
   assert.equal(deck.length, 40);
   const countOf = (name) => deck.filter((c) => c.name === name).length;
   assert.equal(countOf('言論封殺'), 2);
   assert.equal(countOf('キャンセルカルチャー'), 4);
-  assert.equal(countOf('怨念の集合体'), 3);
-  assert.equal(countOf('エレキ輝'), 3);
+  assert.equal(countOf('怨念の集合体'), 4);
+  assert.equal(countOf('エレキ輝'), 0);
+  assert.equal(countOf('フリーランサー'), 2);
   assert.equal(countOf('合体ロボ・ガシャーン'), 0, '合体系は禁止');
-  // ⑱は変更せず、⑲だけエレキ輝1枚を怨念の集合体へ差し替える。
-  const key = (c) => c.name;
+  // ⑱の怨念2・エレキ4・従来装備は変えない。
   const base = buildCharacterCardList('chinu');
   assert.equal(base.filter((c) => c.name === '怨念の集合体').length, 2);
   assert.equal(base.filter((c) => c.name === 'エレキ輝').length, 4);
-  const expectedMonsters = base.filter((c) => c.type === CardType.MONSTER).map(key);
-  expectedMonsters.splice(expectedMonsters.indexOf('エレキ輝'), 1, '怨念の集合体');
-  assert.deepEqual(deck.filter((c) => c.type === CardType.MONSTER).map(key).sort(), expectedMonsters.sort());
-  assert.deepEqual(deck.filter((c) => c.type === CardType.GEAR).map(key).sort(), base.filter((c) => c.type === CardType.GEAR).map(key).sort());
+  assert.equal(base.filter((c) => c.name === ITEM_CATALOG.peeStaff.name).length, 1);
+  assert.equal(base.filter((c) => c.name === ITEM_CATALOG.fushichoNoKen.name).length, 1);
+  const expected = {
+    tenhou: 4, thunderbird: 4, ninja: 4, raiheishinZamurai: 2, metaOn: 1,
+    freelancer: 2, onnenNoShuugoutai: 4, peeStaff: 4, ikasamaNoSaikoro: 3,
+    nankaNoOmamori: 3, shinkenShirahadori: 2, genronFuusatsu: 2, cancelCulture: 4,
+    capitalismIncarnate: 1,
+  };
+  for (const [key, count] of Object.entries(expected)) {
+    const def = MONSTER_CATALOG[key] || ITEM_CATALOG[key] || SPELL_CATALOG[key];
+    assert.equal(countOf(def.name), count, key);
+    assert.ok(count <= 4);
+  }
   // ターン内はキャンセルカルチャー（破壊）→言論封殺（封じ）の順で判定される。
   const src = readFileSync(new URL('../src/game.js', import.meta.url), 'utf8');
   assert.ok(src.indexOf('await this._cpuMaybeUseCancelCultureSpell(this.currentPlayer);') < src.indexOf('await this._cpuMaybeUseSpellBanSpell(this.currentPlayer);'), '破壊より先に封じてしまう');
+});
+
+test('⑲チヌの投資連携は仕込み前もLv2まで許可し、雷お札20枚で解放する', async () => {
+  const stage = STORY_STAGES.find((s) => s.key === 'ou-final');
+  const player = { id: 0, name: 'チヌ', currency: 3000, aiProfile: stage.opponents[0].aiProfile };
+  const ally = { id: 1, name: 'クエ', ofuda: { thunder: 0, water: 99 } };
+  const tile = makeTile(0, { owner: 0, element: 'thunder' });
+  const g = Object.create(Game.prototype);
+  Object.assign(g, {
+    players: [player, ally], tiles: [tile], hasOfuda: true,
+    scene: { updateTileLevelBorder() {} }, _cpuMaxEnemyToll: () => 0,
+    _cpuLiquidity: (p) => p.currency, _tollOfTile: () => 0, _ofudaPrice: () => 10,
+    onLog() {}, _notifyState() {}, onLandLevelUp: async () => {}, _presentOfudaPriceChange: async () => {},
+  });
+  for (const sheets of [0, 19, 20]) {
+    player.currency = 3000;
+    tile.level = 1;
+    ally.ofuda.thunder = sheets;
+    assert.equal(await g._cpuMaybeLevelUp(player, tile), true);
+    assert.equal(tile.level, sheets < 20 ? 2 : 4);
+  }
+  tile.level = 1;
+  player.currency = 299;
+  assert.equal(await g._cpuMaybeLevelUp(player, tile), false, '連携しても必要資金は免除しない');
+  player.currency = 3000;
+  tile.element = 'neutral';
+  assert.equal(await g._cpuMaybeLevelUp(player, tile), false, '無属性土地は上げない');
 });
