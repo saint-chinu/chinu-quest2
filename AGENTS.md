@@ -30,7 +30,7 @@
 - `src/game.js` は three.js / Firebase を import しない状態を保つ
   （`tests/pvpCloud.test.mjs` が静的に見張っている）。
 - `wrangler.jsonc` の `vars` に `DEV_ALLOW_UNVERIFIED_UID` を入れない（`.dev.vars` 専用）。
-- デプロイに影響する変更では `public/sw.js` の `CACHE_NAME` を bump する（現在 v311）。
+- デプロイに影響する変更では `public/sw.js` の `CACHE_NAME` を bump する（現在 v312）。
 
 ### 確認コマンド
 ```

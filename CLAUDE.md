@@ -25,7 +25,7 @@ Culdcept／桃鉄風の3Dボード×カードゲーム。魚群の王を目指�
   （build:cf 込み）を使う。Firebase の App Check を有効化する時は reCAPTCHA の
   許可ドメインに workers.dev（独自ドメインならそれ）を足すこと。
 - Service Worker (`public/sw.js`) の `CACHE_NAME` を**毎デプロイbumpする**
-  （現在 `chinuquest2-v311`）。bumpしないと古いJS/CSSがキャッシュから配信される。
+  （現在 `chinuquest2-v312`）。bumpしないと古いJS/CSSがキャッシュから配信される。
 - ビルド確認: `npx vite build`。
 
 ### BGMコレクション `/bgm/`（2026-09）
