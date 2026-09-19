@@ -87,6 +87,20 @@ export const GASHAAN_FIELD_MONSTER = {
 
 /** 無属性モンスター一覧。画像未指定時はcardArt.jsの無属性共通画像を使う。 */
 export const NEUTRAL_MONSTER_CATALOG = {
+  // ユーザー指定で無属性へ修正。IDは維持し、既存の所持カード・デッキを保つ。
+  // 撃破時の恒久成長はkillGrowth、CPU試算は複製と使い捨て台帳で処理する。
+  onnenNoShuugoutai: {
+    ...neutralMonster('onnenNoShuugoutai', '怨念の集合体', Rarity.EX, 40, 40, {
+      cost: 100,
+      traits: ['firstStrike', 'pierce'],
+      commandCost: 30,
+      ability: { type: 'warpToAnyEmptyLand' },
+      effect: { type: 'killGrowth', gold: 100, atk: 5, hp: 5 },
+      effectDescription: '殺された魚たちの骨が蠢く怨念の塊。先制・貫通。相手モンスターを倒すたびに骨を取り込み、+100Gを得てATK/HPが+5ずつ恒久上昇する。土地コマンド（30G）: 任意の空き地へ移動する',
+      imageDataUrl: assetUrl('/images/card-art/onnenNoShuugoutai.png'),
+    }),
+    rewardOnly: true,
+  },
   // カタログのキーはcatalogIdと一致させる必要がある
   // （game.jsが MONSTER_CATALOG[catalogId] で引く箇所があるため）。
   'gashaan-field': GASHAAN_FIELD_MONSTER,

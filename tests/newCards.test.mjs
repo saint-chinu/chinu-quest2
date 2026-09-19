@@ -3549,6 +3549,9 @@ test('CPUの言論封殺はスペルを一番多く握る敵へ撃ち、スペ�
 test('怨念の集合体は40/40先制貫通で、相手を倒すたびに+100G・ATK/HP+5が恒久で積み上がる', () => {
   const def = MONSTER_CATALOG.onnenNoShuugoutai;
   assert.equal(def.name, '怨念の集合体');
+  assert.equal(def.element, 'neutral');
+  assert.match(def.imageDataUrl, /onnenNoShuugoutai\.png$/);
+  assert.ok(existsSync(new URL('../public/images/card-art/onnenNoShuugoutai.png', import.meta.url)));
   assert.equal(def.atk, 40); assert.equal(def.hp, 40);
   assert.deepEqual(def.traits, ['firstStrike', 'pierce']);
   assert.deepEqual(def.ability, { type: 'warpToAnyEmptyLand' }, '土地コマンドで任意の空き地へ');
