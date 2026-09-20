@@ -3750,7 +3750,7 @@ test('⑲のクエは専用の経済40枚で、⑫⑬と盤面・救援条件を
   assert.equal(deck.filter((c) => c.type === CardType.SPELL).length, 18);
   const expected = {
     koutetsuYousai: 4, tetsuo: 4, thunderbird: 4, freelancer: 2, tenhou: 2,
-    raijinNoTate: 4, lifeJacket: 2, iCanFly: 2, cancelCulture: 2, homingInstinct: 4,
+    raijinNoTate: 4, lifeJacket: 2, iCanFly: 3, cancelCulture: 1, homingInstinct: 4,
     sideIncome: 4, capitalismIncarnate: 2, genronFuusatsu: 1, electrify: 1, delayTactics: 1, psychokinesis: 1,
   };
   for (const [key, count] of Object.entries(expected)) {
