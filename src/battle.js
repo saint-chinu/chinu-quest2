@@ -235,6 +235,15 @@ export function statTotals(unit, bonus = {}) {
   };
 }
 
+/** 装備公開用。実計算と同じ能力で、既に公開した装備からの差分を得る。
+ * 強奪で複数装備になった場合も、HP増加不可やATK0を累計で正しく扱う。
+ * 能力交換後のunitを渡す。unit/カード定義は変更しない。 */
+export function equipmentStatDelta(unit, shownItems, item) {
+  const before = statTotals({ ...unit, items: shownItems });
+  const after = statTotals({ ...unit, items: [...shownItems, item] });
+  return { appliedAtkBonus: after.atk - before.atk, appliedHpBonus: after.maxHp - before.maxHp };
+}
+
 /** カード自身の効果、または装備中アイテムの効果から、指定typeのものを1つ返す（無ければnull）。目出し帽/斬〇剣のような「モンスター効果としても既存だがアイテムとしても同じ効果を持たせたい」ケースをまとめて拾うためのヘルパー。 */
 function getEffect(unit, type) {
   if (unit.def.effect?.type === type) return unit.def.effect;

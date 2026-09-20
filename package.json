@@ -12,7 +12,7 @@
     "test:cards": "node --test tests/newCards.test.mjs",
     "test:pvp": "node --test tests/pvpSync.test.mjs",
     "test:cloud": "node --test --test-force-exit tests/pvpCloud.test.mjs tests/pvpCloudAuth.test.mjs tests/pvpAnimation.test.mjs tests/pvpCloudClient.test.mjs",
-    "test:story": "node --test --test-force-exit tests/battlePreparation.test.mjs tests/storyRescueDialogue.test.mjs tests/breedParts.test.mjs tests/growthMonsters.test.mjs tests/ofudaMarketUi.test.mjs",
+    "test:story": "node --test --test-force-exit tests/battlePreparation.test.mjs tests/storyRescueDialogue.test.mjs tests/breedParts.test.mjs tests/growthMonsters.test.mjs tests/ofudaMarketUi.test.mjs tests/battleEquipmentDisplay.test.mjs",
     "test:all": "npm run test:cards && npm run test:pvp && npm run test:cloud && npm run test:story",
     "simulate": "node tools/simulate.mjs",
     "build:cf": "node scripts/build-cf.mjs",

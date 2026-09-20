@@ -2,7 +2,7 @@ import { TileType, mapRequiresAllCheckpoints, mapCheckpointBonus, mapUsesAlterna
 import { PIECE_REST_Y, UNIT_ICON_REST_Y } from './sceneConstants.js';
 import { CardType, CARD_COLOR, Element, ELEMENT_LABEL, Deck, Rarity } from './cards.js';
 import { buildStarterCardList, WEAK_AGAINST, ITEM_CATALOG, MONSTER_CATALOG, SPELL_CATALOG, catalogIdOf, isRewardOnlyCard } from './battleCards.js';
-import { createFieldUnit, resolveBattle, applyPreAttackItemEffects, abortPreAttackItemEffects, equipItem, applyCurse, applyPoison, GoldLedger, hasTrait, strikeOrderScore, statTotals, previewBattleEntryHp } from './battle.js';
+import { createFieldUnit, resolveBattle, applyPreAttackItemEffects, abortPreAttackItemEffects, equipItem, applyCurse, applyPoison, GoldLedger, hasTrait, strikeOrderScore, statTotals, previewBattleEntryHp, equipmentStatDelta } from './battle.js';
 import { getCardCatalog } from './cardCatalog.js';
 import { tween, easeInOutQuad, delay, getWaitCutRate } from './utils.js';
 import { DENCHU_FIELD_MONSTER } from './thunderMonsters.js';
@@ -7746,8 +7746,11 @@ export class Game {
     let attackerShownHpBonus = attackerBonus.hp || 0;
     let defenderShownAtkBonus = defenderBonus.atk || 0;
     let defenderShownHpBonus = defenderBonus.hp || 0;
+    const shownItems = { attacker: [], defender: [] };
     if (equippedAttackerItem && (attackerFusion || attackerUnit.items.includes(equippedAttackerItem))) {
+      const delta = equipmentStatDelta(attackerUnit, shownItems.attacker, equippedAttackerItem);
       await this.onBattleEquip({
+        ...delta,
         side: 'attacker', item: equippedAttackerItem, unitName: attackerUnit.def.name,
         baseAtk: attackerBase.atk, baseHp: attackerBase.hp,
         baseCurrentHp: Math.min(attackerUnit.currentHp, attackerBase.hp),
@@ -7755,11 +7758,14 @@ export class Game {
         fusionCard: attackerFusion,
       });
       if (this._isCancelled) return null;
-      attackerShownAtkBonus += Number(equippedAttackerItem.atkBonus || 0);
-      attackerShownHpBonus += Number(equippedAttackerItem.hpBonus || 0);
+      attackerShownAtkBonus += delta.appliedAtkBonus;
+      attackerShownHpBonus += delta.appliedHpBonus;
+      shownItems.attacker.push(equippedAttackerItem);
     }
     if (equippedDefenderItem && (defenderFusion || defenderUnit.items.includes(equippedDefenderItem))) {
+      const delta = equipmentStatDelta(defenderUnit, shownItems.defender, equippedDefenderItem);
       await this.onBattleEquip({
+        ...delta,
         side: 'defender', item: equippedDefenderItem, unitName: defenderUnit.def.name,
         baseAtk: defenderBase.atk, baseHp: defenderBase.hp,
         baseCurrentHp: Math.min(defenderUnit.currentHp, defenderBase.hp),
@@ -7767,8 +7773,9 @@ export class Game {
         fusionCard: defenderFusion,
       });
       if (this._isCancelled) return null;
-      defenderShownAtkBonus += Number(equippedDefenderItem.atkBonus || 0);
-      defenderShownHpBonus += Number(equippedDefenderItem.hpBonus || 0);
+      defenderShownAtkBonus += delta.appliedAtkBonus;
+      defenderShownHpBonus += delta.appliedHpBonus;
+      shownItems.defender.push(equippedDefenderItem);
     }
 
     // 真剣白刃取りで奪ったアイテムぶんの補正演出を、奪った側にもう一段重ねて
@@ -7779,9 +7786,11 @@ export class Game {
       const ownerBase = toAttacker ? attackerBase : defenderBase;
       const ownerFusion = toAttacker ? attackerFusion : defenderFusion;
       for (const stolenItem of steal.items) {
+        const delta = equipmentStatDelta(ownerUnit, shownItems[steal.toSide], stolenItem);
         const existingAtkBonus = toAttacker ? attackerShownAtkBonus : defenderShownAtkBonus;
         const existingHpBonus = toAttacker ? attackerShownHpBonus : defenderShownHpBonus;
         await this.onBattleEquip({
+          ...delta,
           side: steal.toSide, item: stolenItem, unitName: ownerUnit.def.name,
           baseAtk: ownerBase.atk, baseHp: ownerBase.hp,
           baseCurrentHp: Math.min(ownerUnit.currentHp, ownerBase.hp),
@@ -7790,12 +7799,13 @@ export class Game {
         });
         if (this._isCancelled) return null;
         if (toAttacker) {
-          attackerShownAtkBonus += Number(stolenItem.atkBonus || 0);
-          attackerShownHpBonus += Number(stolenItem.hpBonus || 0);
+          attackerShownAtkBonus += delta.appliedAtkBonus;
+          attackerShownHpBonus += delta.appliedHpBonus;
         } else {
-          defenderShownAtkBonus += Number(stolenItem.atkBonus || 0);
-          defenderShownHpBonus += Number(stolenItem.hpBonus || 0);
+          defenderShownAtkBonus += delta.appliedAtkBonus;
+          defenderShownHpBonus += delta.appliedHpBonus;
         }
+        shownItems[steal.toSide].push(stolenItem);
       }
     }
 

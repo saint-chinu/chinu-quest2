@@ -2525,7 +2525,7 @@ async function promptBattleAttack({ side, item, message, damage = 0, element, at
     await new Promise((resolve) => setTimeout(resolve, BATTLE_ACTION_GAP_MS));
 }
 
-async function promptBattleEquip({ side, item, unitName, baseAtk, baseHp, baseCurrentHp = baseHp, existingAtkBonus = 0, existingHpBonus = 0, fusionCard = null }) {
+async function promptBattleEquip({ side, item, unitName, baseAtk, baseHp, baseCurrentHp = baseHp, existingAtkBonus = 0, existingHpBonus = 0, fusionCard = null, appliedAtkBonus = null, appliedHpBonus = null }) {
   const sideEls = battleSide[side];
   if (fusionCard) {
     renderCardEl(sideEls.card, fusionCard);
@@ -2556,23 +2556,24 @@ async function promptBattleEquip({ side, item, unitName, baseAtk, baseHp, baseCu
   sideEls.item.classList.remove('hidden');
   sideEls.item.classList.add('equip-show');
 
-  const itemAtk = Number(item.atkBonus || 0);
-  const itemHp = Number(item.hpBonus || 0);
+  // 新しい戦闘イベントは能力反映済みの実加算量を持つ。旧イベントのみ素値へフォールバック。
+  const itemAtk = Number(appliedAtkBonus ?? item.atkBonus ?? 0);
+  const itemHp = Number(appliedHpBonus ?? item.hpBonus ?? 0);
   const atkBonus = existingAtkBonus + itemAtk;
   const hpBonus = existingHpBonus + itemHp;
   battleMessageText.textContent = `${unitName}は${item.name}を装備した`;
   battleMessageText.classList.remove('hidden');
-  sideEls.atkBonus.textContent = atkBonus > 0 ? `+${atkBonus}` : '';
-  sideEls.atkBonus.classList.toggle('hidden', atkBonus <= 0);
-  sideEls.hpBonus.textContent = hpBonus > 0 ? `+${hpBonus}` : '';
-  sideEls.hpBonus.classList.toggle('hidden', hpBonus <= 0);
+  sideEls.atkBonus.textContent = atkBonus === 0 ? '' : `${atkBonus > 0 ? '+' : ''}${atkBonus}`;
+  sideEls.atkBonus.classList.toggle('hidden', atkBonus === 0);
+  sideEls.hpBonus.textContent = hpBonus === 0 ? '' : `${hpBonus > 0 ? '+' : ''}${hpBonus}`;
+  sideEls.hpBonus.classList.toggle('hidden', hpBonus === 0);
   sideEls.atk.textContent = String(baseAtk);
   sideEls.hp.textContent = String(baseCurrentHp);
   sideEls.atkFill.style.width = `${Math.min(100, ((baseAtk + atkBonus) / 150) * 100)}%`;
 
   const previousCurrent = Number(sideEls.hp.dataset.current) || baseCurrentHp;
   const nextMax = baseHp + hpBonus;
-  const nextCurrent = Math.max(1, baseCurrentHp + hpBonus);
+  const nextCurrent = Math.max(0, baseCurrentHp + hpBonus);
   sideEls.hp.dataset.current = String(nextCurrent);
   sideEls.hp.dataset.max = String(nextMax);
   sideEls.hpFill.style.width = `${Math.max(0, Math.min(100, (previousCurrent / Math.max(nextMax, 1)) * 100))}%`;
@@ -2714,11 +2715,12 @@ async function promptBattleTraitReveal({ side, labels, stripHpBonus = null }) {
       const shownBonus = targetEls.hpBonus.classList.contains('hidden')
         ? 0
         : Number((targetEls.hpBonus.textContent || '').replace('+', '')) || 0;
-      const strip = Math.min(amount, shownBonus);
+      // 装備HPがマイナスでも土地分は全量除く。合計チップの値を上限にしない。
+      const strip = amount;
       if (strip > 0) {
         const remaining = shownBonus - strip;
-        targetEls.hpBonus.textContent = remaining > 0 ? `+${remaining}` : '';
-        targetEls.hpBonus.classList.toggle('hidden', remaining <= 0);
+        targetEls.hpBonus.textContent = remaining === 0 ? '' : `${remaining > 0 ? '+' : ''}${remaining}`;
+        targetEls.hpBonus.classList.toggle('hidden', remaining === 0);
         const current = Math.max(0, (Number(targetEls.hp.dataset.current) || 0) - strip);
         const max = Math.max(1, (Number(targetEls.hp.dataset.max) || 0) - strip);
         targetEls.hp.dataset.current = String(current);
