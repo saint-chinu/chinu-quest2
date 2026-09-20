@@ -5732,14 +5732,18 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
   let storyAssistEvent = null;
   if (!isReplay && stage.midBattleAssist?.ally) {
     const allyDef = stage.midBattleAssist.ally;
+    const heroBreedCard = allyDef.deckKey === 'thirtyFinal'
+      ? heroDeckList.find((card) => catalogIdOf(card) === 'breedMonster') || buildBreedCardDef(character)
+      : null;
     const assistConfig = {
       name: allyDef.name,
       isCPU: true,
       color: allyDef.color,
       allianceId: stage.heroAllianceId ?? null,
-      deckList: allyDef.deckKey ? buildCharacterDeckList(allyDef.deckKey) : buildThemedDeckList(allyDef.theme),
+      deckList: allyDef.deckKey ? buildCharacterDeckList(allyDef.deckKey, { heroBreedCard }) : buildThemedDeckList(allyDef.theme),
       iconImage: assistIcon,
       elements: allyDef.theme?.elements,
+      aiProfile: allyDef.aiProfile,
       startGoalIndex: allyDef.startGoalIndex,
     };
     // 途中参戦後にストーリー保存されたデータはプレイヤー数が1人多い。

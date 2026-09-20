@@ -1,5 +1,6 @@
 import { CardType, Element, Rarity, Deck, DEFAULT_SPELL_COUNT } from './cards.js';
 import { assetUrl } from './assetUrl.js';
+import { buildBreedCardDef, BREED_BASE } from './breedParts.js';
 import { FIRE_MONSTER_CATALOG } from './fireMonsters.js';
 import { WATER_MONSTER_CATALOG } from './waterMonsters.js';
 import { THUNDER_MONSTER_CATALOG } from './thunderMonsters.js';
@@ -1562,15 +1563,15 @@ export const CHARACTER_DECKS = {
     composition: {
       monsters: [
         { def: MONSTER_CATALOG.classicDragon, count: 2 },
-        { def: MONSTER_CATALOG.sekaiju, count: 2 },
         { def: MONSTER_CATALOG.tenhou, count: 2 },
         { def: MONSTER_CATALOG.ninja, count: 4 },
         { def: MONSTER_CATALOG.kunekune, count: 2 },
         { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 },
-        { def: MONSTER_CATALOG.freelancer, count: 2 },
+        { def: MONSTER_CATALOG.kugutsuNoKengou, count: 2 },
         { def: MONSTER_CATALOG.kyousenshi, count: 2 },
         { def: MONSTER_CATALOG.mysteriousInvader, count: 1 },
-        { def: MONSTER_CATALOG.thirtyBreedMonster, count: 1 },
+        // 実戦開始時に主人公のブリモンへ置換。主人公情報なしの一覧では初期形。
+        { def: buildBreedCardDef({ breedMonsters: [{ name: BREED_BASE.defaultName, equippedPartIds: [] }], breedMonsterIndex: 0 }), count: 1 },
       ],
       items: [
         { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
@@ -1578,14 +1579,14 @@ export const CHARACTER_DECKS = {
         { def: ITEM_CATALOG.lifeJacket, count: 3 },
         { def: ITEM_CATALOG.shinkenShirahadori, count: 3 },
         { def: ITEM_CATALOG.dimensionalSocket, count: 2 },
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 2 },
       ],
       spells: [
         { def: SPELL_CATALOG.homingInstinct, count: 3 },
         { def: SPELL_CATALOG.sideIncome, count: 2 },
         { def: SPELL_CATALOG.cancelCulture, count: 2 },
-        { def: SPELL_CATALOG.genronFuusatsu, count: 1 },
+        { def: SPELL_CATALOG.senbonZakura, count: 2 },
         { def: SPELL_CATALOG.optimize, count: 1 },
-        { def: SPELL_CATALOG.phoenixCurse, count: 1 },
       ],
     },
   },
@@ -2090,13 +2091,17 @@ export const CHARACTER_DECKS = {
 };
 
 /** The exact 40-card list for a story-mode character's fixed deck (see CHARACTER_DECKS). */
-export function buildCharacterCardList(deckKey) {
-  return buildCardListFromComposition(CHARACTER_DECKS[deckKey].composition);
+export function buildCharacterCardList(deckKey, { heroBreedCard = null } = {}) {
+  const cards = buildCardListFromComposition(CHARACTER_DECKS[deckKey].composition);
+  if (deckKey !== 'thirtyFinal' || !heroBreedCard) return cards;
+  return cards.map((card) => card.catalogId === 'breedMonster'
+    ? duplicateForDeck(structuredClone({ ...heroBreedCard, id: 'breedMonster', catalogId: 'breedMonster' }), 1)[0]
+    : card);
 }
 
 /** Plain, shuffled 40-card list (same return shape as buildThemedDeckList) for a character's fixed deck. */
-export function buildCharacterDeckList(deckKey) {
-  return Deck.fromCardList(buildCharacterCardList(deckKey)).drawPile;
+export function buildCharacterDeckList(deckKey, options) {
+  return Deck.fromCardList(buildCharacterCardList(deckKey, options)).drawPile;
 }
 
 /**

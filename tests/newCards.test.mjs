@@ -3774,11 +3774,38 @@ test('⑱⑲は正式タイトルで、⑲のサーティーだけ救援40枚へ
   assert.equal(deck.length, 40);
   const count = (key) => deck.filter((c) => c.name === (MONSTER_CATALOG[key] || ITEM_CATALOG[key] || SPELL_CATALOG[key]).name).length;
   for (const [key, n] of Object.entries({ ninja: 4, lifeJacket: 3, shinkenShirahadori: 3,
-    dimensionalSocket: 2, raiheishinZamurai: 2, freelancer: 2, thirtyBreedMonster: 1, homingInstinct: 3 })) assert.equal(count(key), n, key);
+    dimensionalSocket: 2, raiheishinZamurai: 2, freelancer: 0, sekaiju: 0, genronFuusatsu: 0,
+    phoenixCurse: 0, thirtyBreedMonster: 0, homingInstinct: 3, senbonZakura: 2, kugutsuNoKengou: 2,
+    ikasamaNoSaikoro: 2 })) assert.equal(count(key), n, key);
+  assert.equal(deck.filter((c) => c.catalogId === 'breedMonster').length, 1);
   assert.equal(buildCharacterCardList('thirty').filter((c) => c.name === 'Ninja').length, 0);
   const prior = STORY_STAGES.slice(0, 18).flatMap((s) => [s.ally, s.extraAlly, s.midBattleAssist?.ally]).filter((p) => p?.name === 'サーティー');
   assert.ok(prior.length > 0);
   assert.ok(prior.every((p) => p.deckKey === 'thirty'));
+});
+
+test('⑲救援のブリモンは主人公の定義を独立コピーし、主人公や⑪を変えない', () => {
+  const hero = breedParts.buildBreedCardDef({ breedMonsterIndex: 0, breedImageDataUrl: 'data:image/png;base64,test',
+    breedMonsters: [{ name: '主人公のブリ', equippedPartIds: [] }] });
+  hero.traits = ['firstStrike', 'pierce']; hero.hp = 60; hero.atk = 70; hero.cost = 245;
+  hero.element = 'water'; hero.effect = { type: 'test', nested: { value: 1 } };
+  const original = structuredClone(hero);
+  const a = buildCharacterCardList('thirtyFinal', { heroBreedCard: hero });
+  const b = buildCharacterDeckList('thirtyFinal', { heroBreedCard: hero });
+  assert.equal(a.length, 40); assert.equal(b.length, 40);
+  const copy = a.find((c) => c.catalogId === 'breedMonster');
+  const other = b.find((c) => c.catalogId === 'breedMonster');
+  for (const key of ['name', 'hp', 'atk', 'cost', 'element', 'imageDataUrl', 'traits', 'effect']) assert.deepEqual(copy[key], hero[key]);
+  assert.notEqual(copy.id, hero.id); assert.notEqual(copy.id, other.id);
+  copy.traits.push('lastStrike'); copy.effect.nested.value = 2;
+  assert.deepEqual(hero, original); assert.deepEqual(other.traits, original.traits);
+  assert.equal(other.effect.nested.value, 1);
+  assert.equal(buildCharacterCardList('thirty', { heroBreedCard: hero }).filter((c) => c.catalogId === 'breedMonster').length, 0);
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const assist = main.slice(main.indexOf('const heroBreedCard = allyDef.deckKey'), main.indexOf('// 途中参戦後にストーリー保存'));
+  assert.ok(assist.includes("heroDeckList.find((card) => catalogIdOf(card) === 'breedMonster') || buildBreedCardDef(character)"));
+  assert.ok(assist.includes('buildCharacterDeckList(allyDef.deckKey, { heroBreedCard })'));
+  assert.ok(assist.includes('aiProfile: allyDef.aiProfile'));
 });
 
 test('クエは帰巣本能と副業収入があれば帰巣を先に自分へ使う', async () => {

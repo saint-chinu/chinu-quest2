@@ -235,7 +235,7 @@ function inferElements(cardList) {
 }
 
 /** @param {string} spec `<CHARACTER_DECKSのキー>` または `@path/to/deck.json` */
-function resolveDeck(spec, side) {
+function resolveDeck(spec, side, heroBreedCard = null) {
   if (spec.startsWith('@')) {
     const file = path.resolve(process.cwd(), spec.slice(1));
     let parsed;
@@ -289,7 +289,7 @@ function resolveDeck(spec, side) {
   const persona = PERSONA_BY_DECK_KEY.get(spec);
   return {
     label: spec,
-    cards: buildCharacterCardList(spec),
+    cards: buildCharacterCardList(spec, { heroBreedCard }),
     // CPUの性格は aiProfiles.js が「名前」で引く。既定はそのデッキの
     // 持ち主キャラの名前にして、本番のストーリー戦と同じAIを再現する。
     name: FLAGS[`name${side}`] ?? persona?.name ?? spec,
@@ -319,7 +319,7 @@ const deckB = resolveDeck(FLAGS.deckB ?? 'fusagikonda', 'B');
 // 1vs1と同じ数字では早く終わる。--goalは必ずステージの値に合わせること。
 // --allyA=none: A陣営は1人のまま、B陣営だけ2人（⑲の1vs2）。
 const soloA = FLAGS.allyA === 'none';
-const allyA = FLAGS.allyA && !soloA ? resolveDeck(FLAGS.allyA, 'A2') : null;
+const allyA = FLAGS.allyA && !soloA ? resolveDeck(FLAGS.allyA, 'A2', deckA.cards.find((c) => (c.catalogId || c.id) === 'breedMonster')) : null;
 const allyB = FLAGS.allyB ? resolveDeck(FLAGS.allyB, 'B2') : null;
 const teamMode = !!(allyA || allyB);
 // AI性格の部分上書き（story.jsのopponents[].aiProfileと同じ形をJSONで渡す）。
