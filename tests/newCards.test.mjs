@@ -3773,15 +3773,40 @@ test('⑱⑲は正式タイトルで、⑲のサーティーだけ救援40枚へ
   const deck = buildCharacterCardList('thirtyFinal');
   assert.equal(deck.length, 40);
   const count = (key) => deck.filter((c) => c.name === (MONSTER_CATALOG[key] || ITEM_CATALOG[key] || SPELL_CATALOG[key]).name).length;
-  for (const [key, n] of Object.entries({ ninja: 4, lifeJacket: 3, shinkenShirahadori: 3,
-    dimensionalSocket: 2, raiheishinZamurai: 2, freelancer: 0, sekaiju: 0, genronFuusatsu: 0,
-    phoenixCurse: 0, thirtyBreedMonster: 0, homingInstinct: 3, senbonZakura: 2, kugutsuNoKengou: 2,
-    ikasamaNoSaikoro: 2 })) assert.equal(count(key), n, key);
+  // 2026-09-22 森へ全面改装（ユーザー指定）。同一カードは最大3枚（ユーザー指定）。
+  for (const [key, n] of Object.entries({ matagiNoKoshirou: 3, jukaiNoOnryou: 3, abareInoshishi: 3,
+    kyochinhei: 3, sanzokuFukurou: 3, karekiNoKyojin: 2, kugutsuNoKengou: 1,
+    shinrinjinNoTate: 3, lifeJacket: 3, gomuGoNoPistol: 2, dimensionalSocket: 2,
+    fushichoNoTate: 1, ikasamaNoSaikoro: 1,
+    homingInstinct: 3, shakaiFutekigou: 3, cancelCulture: 3,
+    // 旧構成（無属性＋雷）の主力は全て抜けている。
+    ninja: 0, raiheishinZamurai: 0, kunekune: 0, kyousenshi: 0, tenhou: 0, classicDragon: 0,
+    shinkenShirahadori: 0, senbonZakura: 0, sideIncome: 0, optimize: 0,
+    freelancer: 0, sekaiju: 0, genronFuusatsu: 0, phoenixCurse: 0, thirtyBreedMonster: 0,
+  })) assert.equal(count(key), n, key);
+  assert.ok(deck.every((c) => deck.filter((d) => d.name === c.name).length <= 3), '同一カードは3枚まで');
+  // 森神の盾（貫通で消せない反射）と社会不適合（怨念の成長リセット）は森の核。
+  // 山神・世界樹・森林徴税官のような連鎖前提の高コスト森は計測で現行以下だった。
+  for (const key of ['yamagami', 'sekaiju', 'shinrinChouzeikan']) assert.equal(count(key), 0, key);
   assert.equal(deck.filter((c) => c.catalogId === 'breedMonster').length, 1);
   assert.equal(buildCharacterCardList('thirty').filter((c) => c.name === 'Ninja').length, 0);
   const prior = STORY_STAGES.slice(0, 18).flatMap((s) => [s.ally, s.extraAlly, s.midBattleAssist?.ally]).filter((p) => p?.name === 'サーティー');
   assert.ok(prior.length > 0);
   assert.ok(prior.every((p) => p.deckKey === 'thirty'));
+});
+
+test('⑲救援のサーティーは森テーマで、参戦資金が実際に渡る', () => {
+  const ally = STORY_STAGES.find((s) => s.key === 'ou-final').midBattleAssist.ally;
+  assert.deepEqual(ally.theme.elements, ['forest'], '雷はチヌ・クエと取り合いになるので森');
+  // ⚠️ 計測では森デッキ単体では現行と変わらず（18.3%対17.8%）、参戦資金2,000Gで
+  // 初めて28.9%になった。ここを消すとデッキ改装の効果が消える。
+  assert.equal(ally.startingCurrency, 2000);
+  // main.jsのassistConfigがstartingCurrencyを渡していないと、game.jsの既定値
+  // 500Gで参戦する（ステージのstartingCurrency 1,000Gすら届かない不具合だった）。
+  const main = readFileSync(new URL('../src/main.js', import.meta.url), 'utf8');
+  const block = main.slice(main.indexOf('const assistConfig = {'));
+  assert.ok(block.slice(0, block.indexOf('};')).includes('startingCurrency: allyDef.startingCurrency ?? stage.startingCurrency'),
+    '途中参戦の味方にも初期資金を渡す');
 });
 
 test('⑲救援のブリモンは主人公の定義を独立コピーし、主人公や⑪を変えない', () => {

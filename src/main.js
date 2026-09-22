@@ -5747,6 +5747,10 @@ async function startStoryBattle(index, heroDeckList, isReplay, replayVariant = n
       elements: allyDef.theme?.elements,
       aiProfile: allyDef.aiProfile,
       startGoalIndex: allyDef.startGoalIndex,
+      // ⚠️ ここを省くとgame.jsの既定値500Gで参戦する（ステージの
+      // startingCurrencyすら届かない）。buildBattlePlayerConfigsの通常の
+      // allyと同じ解決順に揃える。⑲のサーティーはallyDef側で2,000G。
+      startingCurrency: allyDef.startingCurrency ?? stage.startingCurrency,
     };
     // 途中参戦後にストーリー保存されたデータはプレイヤー数が1人多い。
     // その場合だけ最初から構成に加え、保存データ復元の人数チェックを通す。

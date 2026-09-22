@@ -1558,35 +1558,59 @@ export const CHARACTER_DECKS = {
       ],
     },
   },
-  // ⑲の救援専用。既存の⑪等のthirtyを変えず、先制・生存装備・収入を強化。
+  /** ⑲の救援専用（森。既存の⑪等の`thirty`は変えない）。固定40枚＝19/12/9。
+   *
+   * 2026-09-22にユーザー指定で無属性＋雷から**森**へ全面改装した。⑲の盤面`ou`は
+   * 雷10マスをチヌとクエ（両方とも雷特化）が奪い合っている上に、サーティーは
+   * 総資産5,000G差がついてから参戦するので、雷を狙わせても土地が残っていない。
+   * 火・水・森は敵が触らないので、森なら少なくとも取り合いにならない。
+   *
+   * 森でしか組めない2枚が軸:
+   * - **森神の盾**: 森属性が装備した時の反射は`unpierceable`（battle.jsの
+   *   属性神の盾の扱い）で、怨念の集合体の**貫通では消せない**。無属性デッキには
+   *   絶対に用意できない怨念対策で、不死鳥の盾より10G安い。
+   * - **社会不適合**: 土地と属性が合わないモンスターを手札へ返す。怨念は無属性で
+   *   `ou`の無属性マスは1枚だけなので**ほぼ常に該当**する。しかも撃破成長は
+   *   個体の`lapGrowthAtkBonus`なので、手札へ戻った時点で40/40へ戻る。
+   *   育ち切った怨念を初期化できる唯一の手段。
+   * マタギの小四郎は土地コマンド50Gで射程3マスの敵の基礎HPを10削る
+   * （CPUの使用判断は`_cpuMaybeUseDamageAbility`にあり死に札にならない）。
+   * 怨念が+5ずつ育つのを-10ずつ削り返す担当。
+   *
+   * ⚠️ 高コスト・連鎖前提の森（山神150G・世界樹120G・森林徴税官90G＝要2連鎖）は
+   * 計測で現行以下だった。サーティーは所持Gが1,000G前後しか無く、土地も3〜5枚で
+   * 頭打ちなので連鎖が立たない。**安いカードで枚数を出す構成を崩さないこと。**
+   * ⚠️ 断線事故（全雷モンスターに20ダメージ）は敵2人とも雷・こちらは森で
+   * 同士討ちゼロという理想の1枚に見えるが、`target:'none'`の全体ダメージ系は
+   * CPUの使用判断が無く**一度も詠唱されない死に札**（game.jsの
+   * `_cpuMaybeUseMismatchedLandDamageSpell`のコメント参照）。入れるなら先に
+   * CPU判断を実装すること。
+   */
   thirtyFinal: {
     composition: {
       monsters: [
-        { def: MONSTER_CATALOG.classicDragon, count: 2 },
-        { def: MONSTER_CATALOG.tenhou, count: 2 },
-        { def: MONSTER_CATALOG.ninja, count: 4 },
-        { def: MONSTER_CATALOG.kunekune, count: 2 },
-        { def: MONSTER_CATALOG.raiheishinZamurai, count: 2 },
-        { def: MONSTER_CATALOG.kugutsuNoKengou, count: 2 },
-        { def: MONSTER_CATALOG.kyousenshi, count: 2 },
-        { def: MONSTER_CATALOG.mysteriousInvader, count: 1 },
+        { def: MONSTER_CATALOG.matagiNoKoshirou, count: 3 },
+        { def: MONSTER_CATALOG.jukaiNoOnryou, count: 3 },
+        { def: MONSTER_CATALOG.abareInoshishi, count: 3 },
+        { def: MONSTER_CATALOG.kyochinhei, count: 3 },
+        { def: MONSTER_CATALOG.sanzokuFukurou, count: 3 },
+        { def: MONSTER_CATALOG.karekiNoKyojin, count: 2 },
+        { def: MONSTER_CATALOG.kugutsuNoKengou, count: 1 },
         // 実戦開始時に主人公のブリモンへ置換。主人公情報なしの一覧では初期形。
         { def: buildBreedCardDef({ breedMonsters: [{ name: BREED_BASE.defaultName, equippedPartIds: [] }], breedMonsterIndex: 0 }), count: 1 },
       ],
       items: [
-        { def: ITEM_CATALOG.fushichoNoKen, count: 1 },
-        { def: ITEM_CATALOG.fushichoNoTate, count: 1 },
+        { def: ITEM_CATALOG.shinrinjinNoTate, count: 3 },
         { def: ITEM_CATALOG.lifeJacket, count: 3 },
-        { def: ITEM_CATALOG.shinkenShirahadori, count: 3 },
+        { def: ITEM_CATALOG.gomuGoNoPistol, count: 2 }, // 人食い草（森が持つとATK+50）
         { def: ITEM_CATALOG.dimensionalSocket, count: 2 },
-        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 2 },
+        { def: ITEM_CATALOG.fushichoNoTate, count: 1 },
+        { def: ITEM_CATALOG.ikasamaNoSaikoro, count: 1 },
       ],
       spells: [
         { def: SPELL_CATALOG.homingInstinct, count: 3 },
-        { def: SPELL_CATALOG.sideIncome, count: 2 },
-        { def: SPELL_CATALOG.cancelCulture, count: 2 },
-        { def: SPELL_CATALOG.senbonZakura, count: 2 },
-        { def: SPELL_CATALOG.optimize, count: 1 },
+        { def: SPELL_CATALOG.shakaiFutekigou, count: 3 },
+        { def: SPELL_CATALOG.cancelCulture, count: 3 },
       ],
     },
   },

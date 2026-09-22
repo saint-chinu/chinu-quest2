@@ -1480,7 +1480,15 @@ export const STORY_STAGES = [
         name: 'サーティー',
         color: 0x232323,
         deckKey: 'thirtyFinal',
-        theme: { elements: [Element.NEUTRAL, Element.THUNDER] },
+        // 2026-09-22ユーザー指定で森へ。雷10マスはチヌとクエ（両方とも雷特化）が
+        // 先に埋めてしまい、5,000G差がついてから来るサーティーには残っていない。
+        // 敵が触らない森なら取り合いにならず、森神の盾（貫通で消せない反射）が使える。
+        theme: { elements: [Element.FOREST] },
+        // ⚠️ 参戦資金はここを消すとデッキの強化が効かなくなる。計測では
+        // 森デッキ単体では現行と変わらず（18.3%対17.8%）、2,000Gを付けて初めて
+        // 28.9%になった。サーティーは土地が3〜5枚で頭打ちなので、盤面ではなく
+        // 装備と土地コマンドにGを使わせる必要がある（CLAUDE.md「⑲サーティーの森化」）。
+        startingCurrency: 2000,
         aiProfile: { lapRacer: true, ofudaStyle: 'fixer', cancelCultureDenyOptions: true },
       },
       lines: [
