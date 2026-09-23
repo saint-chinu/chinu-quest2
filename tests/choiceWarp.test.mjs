@@ -114,3 +114,21 @@ test('⑧のぴったりワームホールは2倍呪いを維持し、⑦は停�
   assert.equal(p.diceCurse.type, 'double');
   assert.ok(createBoard('final-alliance').filter(t => t.type === TileType.WARP).every(t => !t.warpOnPass));
 });
+
+test('⑬1回の出目で2つのワープを連続通過しても盤外へ出ない', async () => {
+  // 出口(ゴール島①〜③)自体も通過ワープなので、大きい出目だと1手番で
+  // 2回転移し得る。連鎖しても現在地・履歴・残り歩数が壊れないこと。
+  const { g, p, tiles, events } = setup();
+  const source = tiles.find(t => t.warpLabel === 'CP島①');
+  p.tileId = source.neighbors[0]; p.previousTileId = null; p.tileHistory = [p.tileId];
+  const start = p.tileId;
+  g.onPickAbilityTarget = async options => options[0].id;
+  g._chooseNextTile = async (_p, from, options) => (from.id === start ? source.id : options[0]);
+  await g._movePlayer(p, 12);
+  assert.ok(events.filter(e => e.type === 'warp').length >= 2, '連鎖ワープが起きる出目で検証する');
+  assert.ok(tiles[p.tileId], '盤外のidになっていない');
+  assert.equal(p.tileHistory[0], p.tileId, '履歴の先頭が現在地');
+  assert.equal(p.diceCurse, null, '⑬では2倍呪いを付けない');
+  await g._resolveSpecialTile(p);
+  assert.ok(events.filter(e => e.type === 'warp').length >= 2, '着地処理で余分に転移しない');
+});
