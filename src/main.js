@@ -1850,7 +1850,7 @@ async function promptShrineEffect({ position, title, message }) {
   await scene.focusAndZoom(savedFocus.x, savedFocus.z, 1, 360);
 }
 
-/** ワープ停止時: 発動地点へ寄り、駒を飛ばしながらカメラで追って結果を表示する。 */
+/** ワープ発動時: 発動地点へ寄り、駒を飛ばしながらカメラで追って結果を表示する。 */
 async function promptWarpEffect({ playerId, sourcePosition, targetPosition, label = 'ワープ' }) {
   if (!scene || !sourcePosition || !targetPosition) return;
   const isPvpGuest = pvpBoardIsRemote();
@@ -3737,7 +3737,8 @@ const HELP_TEXT = `【勝敗の目標】
 ・チェックポイント: 通過を記録します。全CP制のマップでは全部通らないと周回ボーナスが出ません
 ・ショップ: Gを払ってカードを1枚買えます
 ・ほこら（マダイの福音書）: 4種類の効果からランダムに1つ発動します（手札を全て捨てて山札ごと切り直し5枚引き直す／盤上のモンスター1体のATKが倍になる／サイコロの目が固定される／強制停止）
-・ワープ: 通過・着地のどちらでも対になっているマスへ飛びます。ちょうど止まった場合は次のサイコロの出目が2倍になります
+・ワープ: 通常はちょうど止まると転移します。ステージ13の選択式ワープは通過時に行き先を選んで転移し、残りの歩数で進みます
+・ワームホール: 通過時に対のマスへ転移し、ちょうど止まった場合は次のサイコロの出目が2倍になります
 ・暴走: ちょうど止まると反対側のマスへ飛ばされ、次のサイコロの出目が2倍になります
 ・誹謗中傷: スペル「開示請求」を1枚手に入れます
 

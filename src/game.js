@@ -860,7 +860,8 @@ export class Game {
       const tile = this.tiles[index];
       if (!tile || saved.id !== tile.id) return;
       for (const [key, value] of Object.entries(saved)) {
-        if (['id', 'type', 'gridX', 'gridZ', 'position', 'neighbors', 'checkpointNumber', 'warpKind'].includes(key)) continue;
+        if (['id', 'type', 'gridX', 'gridZ', 'position', 'neighbors', 'checkpointNumber',
+          'warpKind', 'warpOnPass', 'warpChoices', 'warpTargetId', 'warpLabel', 'randomWarp'].includes(key)) continue;
         tile[key] = value;
       }
     });
@@ -2527,6 +2528,7 @@ export class Game {
   async _movePlayer(player, steps) {
     this._turnPathIds = [];
     this._segmentPathIds = [];
+    player.skipWarpResolveTileId = null;
     const originTileId = player.tileId;
     let movementSegmentOriginTileId = originTileId;
     const triggeredRunawayTiles = new Set();
@@ -2611,8 +2613,8 @@ export class Game {
       }
 
 
-      // ⑧のKは通過した瞬間に対のKへ強制ワープする。最後の1歩でKへ
-      // ちょうど止まった時だけ、転移後に次のサイコロ2倍を付与する。
+      // 通過ワープは踏んだ瞬間に発動。⑬は行き先を選び、残り歩数で続行。
+      // 次のサイコロ2倍は⑧ワームホールへちょうど停止した時だけ。
       if (toTile.type === TileType.WARP && toTile.warpOnPass) {
         const exactStop = i === steps - 1;
         // 対人ゲストには「ここまで歩く→ワープ→残りを歩く」の順で配信する。
@@ -2622,9 +2624,12 @@ export class Game {
         // 通過済みの土地が対象から消えないよう1ターン分を保持し続ける。
         await this._broadcastPieceMove(player, movementSegmentOriginTileId);
         this._segmentPathIds = [];
-        await this._resolveWarpTile(player, toTile, { doubleNextDice: exactStop });
+        await this._resolveWarpTile(player, toTile, {
+          doubleNextDice: exactStop && toTile.warpKind === 'wormhole',
+        });
+        if (this._isCancelled || this.storyEnded) return;
         movementSegmentOriginTileId = player.tileId;
-        player.skipWarpResolveTileId = player.tileId;
+        player.skipWarpResolveTileId = exactStop ? player.tileId : null;
         if (!exactStop) {
           this.onMoveDestination({ tileIds: destinationIds, active: false });
           const updatedIds = this._forwardDestinationIds(player, steps - i - 1);
@@ -2690,11 +2695,19 @@ export class Game {
     return this._forwardDestinationIdsFrom(player, player.tileId, player.previousTileId, steps);
   }
 
+  /** 通過時の転移候補。選択式は全出口を返し、予測・CPU経路を先頭の島に固定しない。 */
+  _passWarpDestinationIds(tile) {
+    if (!tile.warpOnPass || tile.randomWarp) return [tile.id];
+    const ids = tile.warpChoices?.length ? tile.warpChoices : [tile.warpTargetId];
+    const valid = [...new Set(ids)].filter((id) => this.tiles[id]);
+    return valid.length ? valid : [tile.id];
+  }
+
   _forwardDestinationIdsFrom(player, currentId, previousId, steps) {
     let states = [{ currentId, previousId }];
     const destinations = new Set();
     for (let step = 0; step < steps; step++) {
-      const nextStates = [];
+      const nextStates = new Map();
       for (const state of states) {
         const tile = this.tiles[state.currentId];
         const forward = tile.neighbors.filter((id) => id !== state.previousId);
@@ -2713,18 +2726,19 @@ export class Game {
             destinations.add(rawNextId);
             continue;
           }
-          const warped = !!(entered?.warpOnPass && entered.warpTargetId != null);
-          const nextId = warped ? entered.warpTargetId : rawNextId;
-          const nextTile = this.tiles[nextId];
-          if (this._isForcedStopFor(player, nextTile) || step === steps - 1) {
-            destinations.add(nextId);
-          } else {
-            // 転移後は「来た道」の概念が消える（_resolveWarpTileと同じ）。
-            nextStates.push({ currentId: nextId, previousId: warped ? null : state.currentId });
+          for (const nextId of this._passWarpDestinationIds(entered)) {
+            const nextTile = this.tiles[nextId];
+            if (this._isForcedStopFor(player, nextTile) || step === steps - 1) {
+              destinations.add(nextId);
+            } else {
+              // 同一歩数の(current, previous)をまとめ、長い出目でも探索を膨張させない。
+              const previous = entered.warpOnPass ? null : state.currentId;
+              nextStates.set(`${nextId}:${previous}`, { currentId: nextId, previousId: previous });
+            }
           }
         }
       }
-      states = nextStates;
+      states = [...nextStates.values()];
       if (states.length === 0) break;
     }
     return [...destinations];
@@ -2760,6 +2774,7 @@ export class Game {
   async _movePlayerBackward(player, steps) {
     this._turnPathIds = [];
     this._segmentPathIds = [];
+    player.skipWarpResolveTileId = null;
     const originTileId = player.tileId;
     const plannedPath = [];
     for (const tileId of player.tileHistory.slice(1, steps + 1)) {
@@ -4098,7 +4113,7 @@ export class Game {
     } else {
       targetTile = this.tiles.find((t) => t.id === tile.warpTargetId);
     }
-    if (!targetTile) return;
+    if (!targetTile || this._isCancelled || this.storyEnded) return;
     await this.onWarpEffect({
       playerId: player.id,
       playerName: player.name,
@@ -4106,6 +4121,7 @@ export class Game {
       targetPosition: targetTile.position,
       label: tile.warpKind === 'parallel' ? 'パラレルワールド' : tile.warpKind === 'wormhole' ? 'ワームホール' : 'ワープ',
     });
+    if (this._isCancelled || this.storyEnded) return;
     player.previousTileId = null;
     player.tileId = targetTile.id;
     // バックファイア用の着地履歴にもワープ先を積む。ここを積み忘れると
@@ -5432,13 +5448,13 @@ export class Game {
             if (rawNeighborId === toId) return distance;
             continue;
           }
-          const neighborId = entered?.warpOnPass && entered.warpTargetId != null
-            ? entered.warpTargetId
-            : rawNeighborId;
-          if (visited.has(neighborId)) continue;
-          if (neighborId === toId) return distance;
-          visited.add(neighborId);
-          next.push(neighborId);
+          if (rawNeighborId === toId) return distance;
+          for (const neighborId of this._passWarpDestinationIds(entered)) {
+            if (visited.has(neighborId)) continue;
+            if (neighborId === toId) return distance;
+            visited.add(neighborId);
+            next.push(neighborId);
+          }
         }
       }
       frontier = next;
@@ -5467,16 +5483,16 @@ export class Game {
             if (rawNeighborId === targetId) return distance;
             continue;
           }
-          const neighborId = entered?.warpOnPass && entered.warpTargetId != null
-            ? entered.warpTargetId
-            : rawNeighborId;
-          if (neighborId === targetId) return distance;
-          // 強制ワープ後は来た道という概念を失う（実移動の_resolveWarpTileと同じ）。
-          const nextPreviousId = entered?.warpOnPass ? null : state.currentId;
-          const key = keyOf(neighborId, nextPreviousId);
-          if (visited.has(key)) continue;
-          visited.add(key);
-          next.push({ currentId: neighborId, previousId: nextPreviousId });
+          if (rawNeighborId === targetId) return distance;
+          for (const neighborId of this._passWarpDestinationIds(entered)) {
+            if (neighborId === targetId) return distance;
+            // 強制ワープ後は来た道という概念を失う（実移動と同じ）。
+            const nextPreviousId = entered?.warpOnPass ? null : state.currentId;
+            const key = keyOf(neighborId, nextPreviousId);
+            if (visited.has(key)) continue;
+            visited.add(key);
+            next.push({ currentId: neighborId, previousId: nextPreviousId });
+          }
         }
       }
       frontier = next;

@@ -682,13 +682,14 @@ export function createBoard(mapId) {
 
   // ⑬の選択式ワープ(X): ゴール島からはCP島①〜③だけ、CP島からは
   // ゴール島①〜③だけを選択できる。CP島どうしの横移動は許可しない。
-  // 実際にどこへ飛ぶかは停止したプレイヤー（CPUはAI）に選ばせる。
+  // 通過した時点で行き先を選び、転移後は残り歩数で進む（CPUはAI）。
   // あわせてCPへ種別（周回島=2 / ゴール島=1）を焼き込む。
   if (map.id === 'kessan') {
     const warps = tiles.filter((t) => rows[t.gridZ][t.gridX] === 'X');
     for (const tile of warps) {
       const area = kessanAreaOf(tile);
       tile.warpKind = 'choice';
+      tile.warpOnPass = true;
       tile.warpLabel = area === 'goal'
         ? (KESSAN_GOAL_WARP_LABEL[tile.gridX] || 'ゴール島')
         : KESSAN_WARP_LABEL[area];
