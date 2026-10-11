@@ -6194,7 +6194,7 @@ async function handleStoryBattleEnd(index, result = {}) {
 /**
  * エンディングロール（⑲の結末の後、ユーザー指定 2026-09）。
  * 各ステージの背景と登場NPCの立ち絵が浮かんでは消えていくムービー風の
- * シーン送り→クレジット→「チヌクエスト2 Fin」。クリック/タップで次のシーンへ、
+ * シーン送り→クレジット→「チヌクエスト Fin」。クリック/タップで次のシーンへ、
  * 「スキップ」で全部飛ばせる。BGMはエンディング専用曲`ending`。
  *
  * ⚠️ ここは盤面(#app)を閉じた後に動く。`playMapTheme`系は「盤面が見えている
@@ -6298,7 +6298,7 @@ async function playEndingRoll() {
     credits.replaceChildren();
     const title = document.createElement('p');
     title.className = 'ending-roll-title';
-    title.textContent = 'チヌクエスト2';
+    title.textContent = 'チヌクエスト';
     const fin = document.createElement('p');
     fin.className = 'ending-roll-fin';
     fin.textContent = 'Fin';
