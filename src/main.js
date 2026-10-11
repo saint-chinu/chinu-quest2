@@ -1,4 +1,7 @@
 import './style.css';
+import './resultShare.css';
+import { captureBattleResult, captureCloudResult } from './resultShare.js';
+import { showBattleResult } from './resultShareUi.js';
 import './pwa.js';
 import { mountOfudaMarket } from './ofudaMarketUi.js';
 import { prepareBattleAssets, cancelBattlePreparation } from './battlePreparation.js';
@@ -5910,6 +5913,7 @@ async function handleStoryReplayEnd(index, result = {}, replayVariant) {
   const { won } = result;
   const stage = STORY_STAGES[index];
   const mReward = grantStoryBattleReward();
+  const sharedResult = captureBattleResult(game, { mode: `ストーリー ${index + 1}（再戦）`, won, earnedM: mReward.earnedM });
   const queBankruptcy = won ? claimQueBankruptcyReward(stage, result) : null;
   if (queBankruptcy) saveCharacter(currentUserId, currentCharacter);
   clearStoryResume();
@@ -5933,6 +5937,7 @@ async function handleStoryReplayEnd(index, result = {}, replayVariant) {
   }
   showStoryScreen();
   showToast(`再戦報酬として${mReward.earnedM}M獲得しました`, 2400);
+  showBattleResult(sharedResult);
 }
 
 /** 決着後、盤面の上に重ねて流す終幕会話（overlayNpc/boardDialogue持ちのステージの勝利時）。 */
@@ -6054,6 +6059,7 @@ async function handleStoryBattleEnd(index, result = {}) {
   await recordStoryBattleLog(stage, index, won, activeStorySessionMeta?.isReplay);
   // ストーリー本編・再戦共通の「4%＋相手人数×3%」報酬を勝敗にかかわらず付与。
   const mReward = grantStoryBattleReward();
+  const sharedResult = captureBattleResult(game, { mode: `ストーリー ${index + 1}`, won, earnedM: mReward.earnedM });
   // overlayNpc持ちのステージ（①②）の勝利時だけ、盤面をまだ隠さずに決着
   // 直後の会話をオーバーレイで見せる（startStoryBattleのintro演出と対に
   // なる終幕演出）。それ以外（敗北時・他ステージ）は今まで通り即座に
@@ -6088,6 +6094,7 @@ async function handleStoryBattleEnd(index, result = {}) {
       showStoryScreen();
       await blackout.fadeOut();
       showToast(`ストーリー報酬として${mReward.earnedM}M獲得しました`, 2400);
+      showBattleResult(sharedResult);
       return;
     }
     showScreen(storyDialogueScreen);
@@ -6097,6 +6104,7 @@ async function handleStoryBattleEnd(index, result = {}) {
     );
     showStoryScreen();
     showToast(`ストーリー報酬として${mReward.earnedM}M獲得しました`, 2400);
+    showBattleResult(sharedResult);
     return;
   }
 
@@ -6181,6 +6189,7 @@ async function handleStoryBattleEnd(index, result = {}) {
     if (stage.endingRoll) await playEndingRoll();
     showStoryScreen();
     showToast(`ストーリー報酬として${mReward.earnedM}M獲得しました`, 2400);
+    showBattleResult(sharedResult);
     return;
   }
 
@@ -6189,6 +6198,7 @@ async function handleStoryBattleEnd(index, result = {}) {
   if (stage.endingRoll) await playEndingRoll();
   showStoryScreen();
   showToast(`ストーリー報酬として${mReward.earnedM}M獲得しました`, 2400);
+  showBattleResult(sharedResult);
 }
 
 /**
@@ -8506,12 +8516,14 @@ async function handleCasualBattleEnd({ won }) {
   const humanPlayer = game?.players?.find((p) => !p.isCPU);
   const endingAssets = humanPlayer && game ? game._totalAssetsOf(humanPlayer) : 0;
   const mReward = grantExitReward(endingAssets);
+  const sharedResult = captureBattleResult(game, { mode: 'CPU戦', won, earnedM: mReward.earnedM });
   game = undefined;
   blockMusicPlayback();
   appEl.classList.add('hidden');
   preGame.classList.remove('hidden');
   showScreen(battleMenuScreen);
   showToast(`${won ? '勝利！🎉' : '敗北…'}　対戦報酬として${mReward.earnedM}M獲得しました`, 3200);
+  showBattleResult(sharedResult);
 }
 
 battleCpuButton.addEventListener('click', async () => {
@@ -10066,7 +10078,7 @@ function teardownRemotePvpMatch() {
  * `share` はサーバーが確定した自分の取り分（Cloudflare版）。無ければ
  * 直近の publicState から換算する（Firestore版）。
  */
-function endRemotePvpSession({ headline = null, share = null } = {}) {
+function endRemotePvpSession({ headline = null, share = null, sharedResult = null } = {}) {
   if (pvpBattleEndHandled) return;
   pvpBattleEndHandled = true;
   const endingAssetsShare = Number.isFinite(share)
@@ -10082,8 +10094,9 @@ function endRemotePvpSession({ headline = null, share = null } = {}) {
   blockMusicPlayback();
   appEl.classList.add('hidden');
   preGame.classList.remove('hidden');
-  window.alert(`${headline ? `${headline}\n` : ''}対戦が終了しました。獲得報酬：${earnedM}M`);
+  if (!sharedResult) window.alert(`${headline ? `${headline}\n` : ''}対戦が終了しました。獲得報酬：${earnedM}M`);
   showHubScreen();
+  if (sharedResult) showBattleResult({ ...sharedResult, earnedM });
 }
 
 /**
@@ -10120,10 +10133,11 @@ function startCloudPvpConnection() {
       if (pvpMatch !== match) return;
       const me = result?.players?.find((p) => p.id === match.localPlayerId);
       let headline = null;
-      if (result?.reason === 'settled') headline = me?.won ? '勝利！🎉' : '敗北…';
+      if (result?.reason === 'settled' && typeof me?.won === 'boolean') headline = me.won ? '勝利！🎉' : '敗北…';
       else if (result?.reason === 'hostLeft') headline = 'ホストが退出しました';
       else if (result?.reason === 'abandoned') headline = '全員が退出したため対戦を終了しました';
-      endRemotePvpSession({ headline, share: Number.isFinite(me?.endingAssetsShare) ? me.endingAssetsShare : null });
+      endRemotePvpSession({ headline, share: Number.isFinite(me?.endingAssetsShare) ? me.endingAssetsShare : null,
+        sharedResult: captureCloudResult(result, match.localPlayerId) });
     },
     onStatus: (text) => { if (pvpMatch === match && text) showToast(text, 1800); },
     onPlaybackError: () => {
@@ -10463,6 +10477,7 @@ async function handlePvpBattleEnd(result = {}) {
         || (hostPlayer.allianceId != null && winner.allianceId === hostPlayer.allianceId));
   });
 
+  const sharedResult = captureBattleResult(game, { mode: '対人戦', won, earnedM, player: hostPlayer });
   const roomCode = pvpMatch.roomCode;
   game?.cancel?.();
   cancelActiveBattleItemPicker?.();
@@ -10488,6 +10503,7 @@ async function handlePvpBattleEnd(result = {}) {
   preGame.classList.remove('hidden');
   showHubScreen();
   showToast(`${won ? '勝利！🎉' : '敗北…'}　対戦報酬として${earnedM}M獲得しました`, 3200);
+  showBattleResult(sharedResult);
 }
 
 /**
